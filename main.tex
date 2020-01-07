@@ -1,6 +1,6 @@
 \documentclass[conference]{IEEEtran}
 \newif\ifdraft \drafttrue
-\newif\iftext \draftfalse
+\newif\iftext \textfalse
 
 \IEEEoverridecommandlockouts
 % The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
@@ -64,15 +64,46 @@
 \end{IEEEkeywords}
 \fi
 
-\section{Preliminaries}
+\section{Machine model}
+
+(A sketch of) the RISC-V machine model and operational semantics.
+
+Conventions:
+%
+\newcommand{\word}{W}
+\newcommand{\addr}{A}
+\newcommand{\WORDS}{{\mathcal W}}
+\newcommand{\reg}{R}
+\newcommand{\REGS}{{\mathcal R}}
+\newcommand{\mach}{M}
+\newcommand{\MACHS}{{\mathcal M}}
+\newcommand{\PC}[1]{\mathit{PC}(#1)}
+%
+\begin{itemize}
+\item Words / addresses: $\word,\addr \in \WORDS$
+\item Registers: $\reg \in \REGS$
+\item Machine states:
+$\mach \in \MACHS = (\WORDS\rightarrow\WORDS,\, \REGS\rightarrow\WORDS,\,
+\WORDS)$
+\item Abbreviations: \\
+$\mach(\addr) = \mach.1(\addr)$ \\
+$\mach(\reg) = \mach.2(\reg)$ \\
+$\mach(\textsc{pc}) = \mach.3$ \\
+\end{itemize}
+
+\section{Noninterference}
 
 \begin{itemize}
-\item (A sketch of) the RISC-V machine model and operational semantics.
+\item We use the word {\em policy} for any kind of dynamic enforcement
+mechanism (e.g., a runtime taint tracker, heap coloring rules, capability
+hardware, etc.). We use {\em property} for a mathematical predicate on
+programs (or machine states) capturing some useful security goal, e.g. noninterference.
+
 \item Reminder of the standard definition of NI.
 
 \bcp{Write it!}
 
-Designate sets of private and public addresses.
+Designate sets of private, internal, and public addresses.
 
 Begin by defining what it means for two traces to witness interference?
 
@@ -81,7 +112,7 @@ little example of a program that reads from a secret location and writes to
 a public one, just to illustrate the definition of NI.)
 \end{itemize}
 
-\section{Tainting is (a bit less than) noninterference}
+\section{Tainting is noninterference$-$}
 
 \begin{itemize}
 \item First intuition: A program is taint-NI if every pair of runs that don’t
@@ -89,10 +120,18 @@ branch on high data are noninterfering in the standard sense.  (i.e., they
 don't write secret data to public locations and vice versa)
 \item Better alternative: … for every pair of runs that take the same control path (even if they branch on tainted data)...
 \item \bcp{We could even go a step farther: {\em truncate} the runs at the
-  first point where their PCs differ, then demand NI.}
+  first point where their PCs differ, then demand NI.  This is a less
+  demanding property and probably a less desirable one, as it doesn't
+  predict the behavior of actual taint policies.  Discuss.}
+\item (Are there any other variations of tainting that we could present in
+this framework?)
 \end{itemize}
 
-\section{Stack protection is (a bit more than) noninterference}
+\section{Separation is noninterference$+$}
+
+
+
+\section{Stack protection is noninterference$++$}
 
 \begin{itemize}
 \item
@@ -115,12 +154,12 @@ don't write secret data to public locations and vice versa)
   \item Registers other than RA, SP are not affected by calls or returns and hence are the (only) way to pass values between caller and callee.
   \item Instructions serving as calls are statically marked as such in the code.
   \item The code for each procedure is bracketed by fixed entry and exit sequences (details to follow), which save/restore the RA and
-    adjust the SP.  
+    adjust the SP.
   \item During the body of the procedure, the single word of local data is accessed via SP, which does not change (except during a call, of course).  The stored RA in the frame never changes. [I'm confused about these. Are they assumptions, or do they have a different status?  We use tags to check them, but should we?]
   \end {itemize}
 \item
   Describe conjecture 2 property in terms of this model: informally and formally.
-\item 
+\item
   Define abstract state descriptions.
 \item
   Define step consistency.
@@ -129,9 +168,9 @@ don't write secret data to public locations and vice versa)
   too strong that it produces lots of undesired test failures; surely easier to test).
 
 \end{itemize}
-  
 
-    
+
+
 
 
 
@@ -219,7 +258,7 @@ More:
 
 \section*{References}
 \bibliographystyle{IEEEtran}
-\bibliography{bcp,local}
+% \bibliography{bcp,local}
 
 \newpage
 
