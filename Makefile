@@ -5,5 +5,5 @@ all:
 	-pdflatex main
 ifeq ($(USER),bcpierce)
 	-cp -f ~/common/bib/bcp.bib .
-	chmod a-r bcp.bib
+	chmod a-w bcp.bib
 endif
