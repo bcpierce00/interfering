@@ -16,6 +16,8 @@
 % Notational conventions
 \newcommand{\HIGH}{\textsc{h}}
 \newcommand{\LOW}{\textsc{l}}
+\newcommand{\OBS}{\textsc{obs}}
+\newcommand{\HIDDEN}{\textsc{hidden}}
 \newcommand{\word}{W}
 \newcommand{\addr}{A}
 \newcommand{\WORDS}{{\mathcal W}}
@@ -25,17 +27,19 @@
 \newcommand{\MACHS}{{\mathcal M}}
 \newcommand{\PC}[1]{\PCname(#1)}
 \newcommand{\PCname}{\textsc{pc}}
-\newcommand{\polname}{P}
-\newcommand{\pol}[1]{\polname(#1)}
-% \newcommand{\trace}[1]{\overline{#1}}
+\newcommand{\pol}{P}
 \newcommand{\contour}{C}
 \newcommand{\CONTOURS}{{\mathcal C}}
 \newcommand{\component}{K}
 \newcommand{\COMPONENTS}{{\mathcal K}}
+
 \newcommand{\stepsto}{\Longrightarrow}
 \newcommand{\stepstounder}[1]{\stackrel{\mbox{\tiny{$#1$}}}{\Longrightarrow}}
-\newcommand{\stepstounderfull}{\stepstounder{\textsc{full}}}
+\newcommand{\stepstounderfull}{\stepstounder{\textsc{RISCV}}}
 \newcommand{\manystepsto}{\stepsto^\star}
+\newcommand{\obstrace}{\mathit{obstrace}}
+
+\newcommand{\underscore}{\mbox{\_}}
 
 \begin{document}
 
@@ -129,12 +133,7 @@ Conventions:
 % pairs of variant traces being ``distinguishable'' and then go to the full
 % thing?}
 
-The {\em result} of a machine state $\mach$ with respect to a step function
-$\mathord{\stepsto} \in \MACHS \rightharpoonup \MACHS$ is a state $\mach_n$
-such that $\mach \manystepsto \mach_n$ and $\mach_n$ cannot step any
-further.  \bcp{No halting!}
-
-The {\em full} step function, $\mathord{\stepstounderfull} \in \MACHS
+The {\em underlying} step function, $\mathord{\stepstounderfull} \in \MACHS
 \rightharpoonup \MACHS$, embodies the standard RISC-V ISA semantics.
 
 % \bcp{Needed?}A {\em trace} $\trace{M}$ is a nonempty, finite or infinite
@@ -143,13 +142,6 @@ The {\em full} step function, $\mathord{\stepstounderfull} \in \MACHS
 
 \subsection{Policies}
 
-\bcp{Try this:
-  \begin{itemize}
-  \item two separate axes: high/low and observable/hidden
-  \item both part of contours
-  \end{itemize}
-}
-
 Intuitively, we use the word {\em policy} for any kind of dynamic
 enforcement mechanism (e.g., a runtime taint tracker, heap coloring rules,
 capability hardware, etc.). We use {\em property} for a mathematical
@@ -157,38 +149,63 @@ predicate on programs (i.e., machine states) articulating some useful
 security goal, e.g. noninterference.
 
 A {\em contour}
-$\contour \in \CONTOURS = \COMPONENTS \rightarrow \{\HIGH,\LOW\}$ is a
-map from machine components to ``security levels,'' where $\HIGH$ marks
-locations containing secret or low-integrity data and $\LOW$ marks those
-with public or high-integrity data.
+$\contour \in \CONTOURS = \COMPONENTS \rightarrow \{\HIGH,\LOW\}\times
+\{\OBS,\HIDDEN\}$ is a map from machine components to pairs of ``security
+levels,'' where $\HIGH$ marks locations containing secret or low-integrity
+data and $\LOW$ marks those with public or high-integrity data, and
+``observabilities,'' where $\OBS$ marks locations whose contents are
+observable from the outside (by the ``attacker'') and $\HIDDEN$ marks
+internal ``hidden'' state that cannot be observed directly.
 
 Given a machine state $\mach$ and a contour $\contour$, a {\em variant} of
 $\mach$ with respect to $\contour$ is any machine state $\mach'$ whose
 components agree with $\mach$ on all components marked $\LOW$ by
-$\contour$---i.e., if $\contour(\component) = \LOW$, then $\mach(\component)
-= \mach'(\component)$.
+$\contour$---i.e., if $\contour(\component) = (\LOW$,\,\underscore), then
+$\mach(\component) = \mach'(\component)$.
 
 Formally, a {\em policy}
-$\polname \in \CONTOURS \rightarrow (\MACHS \rightarrow \MACHS)$ is a
-function from contours to step functions (partial functions on $\MACHS$)
-that, wherever they are defined, agree with $\stepstounderfull$.  That is,
+$\pol \in (\CONTOURS \times \MACHS) \rightarrow (\CONTOURS \times
+\MACHS)$ is an enriched
+step function that works on pairs of contours and machines---i.e., it is a
+partial function taking a contour and a machine state to an updated contour
+and machine state that, wherever is is defined, agrees with
+$\stepstounderfull$.  That is,
 it represents an enforcement mechanism that sometimes halts programs earlier
 than the bare step relation does, but that agrees with the bare step
 relation when it allows evaluation to proceed.  We write
-$\mach_1 \stepstounder{\pol{\contour}} \mach_2$ for
-$\pol{\contour}(\mach_1) = \mach_2$.  \bcp{It should also return a contour!}
+$(\contour_1,\mach_1) \stepstounder{\pol} (\contour_2,\mach_2)$ for
+$\pol(\contour_1,\mach_1) = (\contour_2,\mach_2)$.
+
+The {\em observation trace} arising from an infinite sequence of contours
+and machine states $(\contour_0,mach_0),\, (\contour_1,\mach_1),\ ldots$,
+written $\obstrace((\contour_0,mach_0),\, (\contour_1,\mach_1),\ ldots)$
+ is
+the (finite or infinite) sequence of {\em distinct} values taken on by the
+{\em observable} components of each state.  \iftext\bcp{Give an example and
+  write it out formally.}\fi \bcp{Question: This could be defined in two
+  ways, and I'm not sure which is better or if it really matters: the
+  observation trace is a sequence of partial maps from components to their
+  values, or the observation trace is a partial maps from components to
+  their sequences of observable values.  This starts getting a bit
+  technically tangled, but I don't see a simpler alternative right now.}
+
 
 \subsection{Noninterference}
 
+\bcp{Proposal: sequences of values of the observable locations are what gets
+  compared.  Fix the following:}
+
 If $\mach$ and $\mach'$ are variant machine states with respect to contour
 $\contour$, then $\mach$ and $\mach'$ are said to be {\em indistinguishable}
-under policy $\polname$ if either (1) one or both of $\mach$ and $\mach'$
-fail to terminate when executed with $\stepstounder{\pol{\contour}}$, or (2)
-both terminate and their results are variants with respect to $\contour$.
+under policy $\pol$ if either (1) one or both of $(\contour,\mach)$ and
+$(\contour,\mach')$ fail to terminate when executed with
+$\stepstounder{\pol}$, or (2) both terminate and the machine-state
+components of their results are variants with respect to the original
+$\contour$.
 
-Policy $\polname$ {\em guarantees noninterference} if, for every $\contour$,
+Policy $\pol$ {\em guarantees noninterference} if, for every $\contour$,
 every pair $(\mach,\mach')$ of variant machine states with respect to
-$\contour$ are indistinguishable under $\polname$.
+$\contour$ are indistinguishable under $\pol$.
 
 \iftext
 \begin{itemize}
@@ -209,18 +226,7 @@ a public one, just to illustrate the definition of NI.)
 
 \section{Tainting is noninterference$-$}
 
-\bcp{I'm having some trouble here.
-%
-  Since the ``high part'' of the world keeps getting extended as
-  tainted data gets written here and there, the only way for something
-  ``bad'' to happen is for high/tainted data to get written to someplace
-  that was designated as an ``output''.  We don't currently have any way of
-  making such a designation.
-%
-  I guess we can add a ``middle'' classification level, and doing that here
-  seems to make pretty good sense, but it's hard to justify adding it to the
-  general definition of NI.  :-(
-}
+\bcp{This needs to be written, now that we have added the hidden/observable stuff.}
 
 \begin{itemize}
 \item First intuition: A program is taint-NI if every pair of runs that don’t
