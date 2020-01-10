@@ -1,45 +1,5 @@
 \documentclass[conference]{IEEEtran}
-\newif\ifdraft \drafttrue
-\newif\iftext \textfalse
-
-\IEEEoverridecommandlockouts
-% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
-\usepackage{cite}
-\usepackage{amsmath,amssymb,amsfonts}
-\usepackage{algorithmic}
-\usepackage{graphicx}
-\usepackage{textcomp}
-\usepackage{cleveref}
-\usepackage{xcolor}
-\newcommand{\bcp}[1]{\ifdraft\textcolor{violet}{{[BCP:~#1]}}\fi}
-
-% Notational conventions
-\newcommand{\HIGH}{\textsc{h}}
-\newcommand{\LOW}{\textsc{l}}
-\newcommand{\OBS}{\textsc{obs}}
-\newcommand{\HIDDEN}{\textsc{hidden}}
-\newcommand{\word}{W}
-\newcommand{\addr}{A}
-\newcommand{\WORDS}{{\mathcal W}}
-\newcommand{\reg}{R}
-\newcommand{\REGS}{{\mathcal R}}
-\newcommand{\mach}{M}
-\newcommand{\MACHS}{{\mathcal M}}
-\newcommand{\PC}[1]{\PCname(#1)}
-\newcommand{\PCname}{\textsc{pc}}
-\newcommand{\pol}{P}
-\newcommand{\contour}{C}
-\newcommand{\CONTOURS}{{\mathcal C}}
-\newcommand{\component}{K}
-\newcommand{\COMPONENTS}{{\mathcal K}}
-
-\newcommand{\stepsto}{\Longrightarrow}
-\newcommand{\stepstounder}[1]{\stackrel{\mbox{\tiny{$#1$}}}{\Longrightarrow}}
-\newcommand{\stepstounderfull}{\stepstounder{\textsc{RISCV}}}
-\newcommand{\manystepsto}{\stepsto^\star}
-\newcommand{\obstrace}{\mathit{obstrace}}
-
-\newcommand{\underscore}{\mbox{\_}}
+\input{macros}
 
 \begin{document}
 
@@ -176,33 +136,78 @@ relation when it allows evaluation to proceed.  We write
 $(\contour_1,\mach_1) \stepstounder{\pol} (\contour_2,\mach_2)$ for
 $\pol(\contour_1,\mach_1) = (\contour_2,\mach_2)$.
 
-The {\em observation trace} arising from an infinite sequence of contours
-and machine states $(\contour_0,\mach_0),\, (\contour_1,\mach_1),\ldots$,
-written $\obstrace((\contour_0,\mach_0),\, (\contour_1,\mach_1),\ldots)$
- is
-the (finite or infinite) sequence of {\em distinct} values taken on by the
-{\em observable} components of each state.  \iftext\bcp{Give an example and
-  write it out formally.}\fi \bcp{Question: This could be defined in two
-  ways, and I'm not sure which is better or if it really matters: the
-  observation trace is a sequence of partial maps from components to their
-  values, or the observation trace is a partial maps from components to
-  their sequences of observable values.  This starts getting a bit
-  technically tangled, but I don't see a simpler alternative right now.
-  Answer: map from components to sequences of words. }
-
+The {\em observation trace} arising from a finite or infinite sequence of
+contours and machine states
+$(\contour_0,\mach_0),\, (\contour_1,\mach_1),\ldots$, written
+$\obstrace((\contour_0,\mach_0),\, (\contour_1,\mach_1),\ldots)$ is a
+partial map taking each machine component to the (finite or infinite)
+sequence of {\em distinct} values taken on by this component at moments when
+it is {\em observable}.  Formally, this map can be constructed as
+follows. For each component $\component$,
+%
+(1) if
+$\contour_i(\component) = (\underscore,\HIDDEN)$ for all $i$, then
+$\obstrace(\component) = \bot$;
+%
+and otherwise (2), $\obstrace(\component)$ is a sequence whose first element
+is $\mach_i(\component)$ for the smallest $i$ such that
+$\contour_i(\component) = (\underscore,\OBS)$ and whose $(m+1)^{th}$ element
+(if any) is $\mach_j(\component)$, where $j$ is the smallest index greater
+than the index $i$ of the $m^{th}$ element and such that
+$\contour_j(\component) = (\underscore,\OBS)$ and
+$\mach_j(\component) \neq \mach_i(\component)$.
+%
+\iftext
+\bcp{Unfinished and horrible...  But maybe the textual description is OK?}
+\newcommand{\aux}{\mathit{aux}}
+\bcp{Don't like the ``rest'' argument and the fact that we don't
+  have a metavariable for sequences of pairs of contours and machines.
+  Consider defining one.}
+%
+\[
+\begin{array}{lcl}
+\aux \; ( [\,] ) \; \trace& = & \trace
+\\
+\aux \; ( (\contour,\mach) \mathrel{::} \mathit{rest} ) \; T
+  & = &
+        \aux \;( \mathit{rest} )
+        \\ && \quad (\lambda k.\; \mbox{\bcp{and so on}}
+\\
+\\
+\obstrace \;( (\contour_0,\mach_0),\, \ldots )
+  &=& \aux \; ( (\contour_0,\mach_0),\, \ldots ) \; (\lambda
+      \component.\, \bot)
+\end{array}
+\]
+\fi
 
 \subsection{Noninterference}
 
-\bcp{Proposal: sequences of values of the observable locations are what gets
-  compared.  Fix the following:}
+\bcp{I'm confused here about policy vs. property -- e.g., which contours are
+  requirements and which are chosen by the micropolicy.}
 
 If $\mach$ and $\mach'$ are variant machine states with respect to contour
 $\contour$, then $\mach$ and $\mach'$ are said to be {\em indistinguishable}
-under policy $\pol$ if either (1) one or both of $(\contour,\mach)$ and
-$(\contour,\mach')$ fail to terminate when executed with
-$\stepstounder{\pol}$, or (2) both terminate and the machine-state
-components of their results are variants with respect to the original
-$\contour$.
+under policy $\pol$ if their observable
+%
+$\obstrace(
+                      (\contour,\mach)
+  \stepstounder{\pol} (\contour_1,\mach_1)
+  \stepstounder{\pol} (\contour_2,\mach_2)
+  \stepstounder{\pol} \ldots)$
+%
+yields the same trace as
+$\obstrace(
+                      (\contour,\mach')
+  \stepstounder{\pol} (\contour_1,\mach_1')
+  \stepstounder{\pol} (\contour_2,\mach_2')
+  \stepstounder{\pol} \ldots)$.
+
+% either (1) one or both of $(\contour,\mach)$ and
+% $(\contour,\mach')$ fail to terminate when executed with
+% $\stepstounder{\pol}$, or (2) both terminate and the machine-state
+% components of their results are variants with respect to the original
+% $\contour$.
 
 Policy $\pol$ {\em guarantees noninterference} if, for every $\contour$,
 every pair $(\mach,\mach')$ of variant machine states with respect to
