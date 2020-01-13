@@ -100,22 +100,33 @@ The {\em underlying} step function, $\mathord{\stepstounderfull} \in \MACHS
 % sequence of machine states $\mach_0, \mach_1, \mach_2, ...$ such that
 % $\mach_{i-1} \stepsto \mach_i$, for each $i \geq 1$.
 
-\subsection{Policies}
+\subsection{Contours and Variants}
 
 Intuitively, we use the word {\em policy} for any kind of dynamic
 enforcement mechanism (e.g., a runtime taint tracker, heap coloring rules,
 capability hardware, etc.). We use {\em property} for a mathematical
 predicate on programs (i.e., machine states) articulating some useful
-security goal, e.g. noninterference.
+security goal, e.g. noninterference. \iftext\bcp{Not quite true, if we stick
+  with hyperproperties.} \fi
 
 A {\em contour}
 $\contour \in \CONTOURS = \COMPONENTS \rightarrow \{\HIGH,\LOW\}\times
 \{\OBS,\HIDDEN\}$ is a map from machine components to pairs of ``security
-levels,'' where $\HIGH$ marks locations containing secret or low-integrity
-data and $\LOW$ marks those with public or high-integrity data, and
-``observabilities,'' where $\OBS$ marks locations whose contents are
-observable from the outside (by the ``attacker'') and $\HIDDEN$ marks
-internal ``hidden'' state that cannot be observed directly.
+levels,'' where $\HIGH$ marks locations that may contain secret or
+low-integrity data and $\LOW$ marks those that must only ever contain
+publicly readable or high-integrity data, and ``observabilities,'' where
+$\OBS$ marks locations whose contents are observable from the outside (by
+the ``attacker,'' e.g., by DMA) and $\HIDDEN$ marks internal ``hidden''
+state that cannot be observed directly (e.g., processor registers and memory
+addresses for temporary variables will usually be hidden).
+
+Given a machine state $\mach$ and a contour $\contour$, a {\em variant} of
+$\mach$ with respect to $\contour$ is any machine state $\mach'$ whose
+components agree with $\mach$ on all components marked $\LOW$ by
+$\contour$---i.e., if $\contour(\component) = (\LOW$,\,\underscore), then
+$\mach(\component) = \mach'(\component)$.
+
+\subsection{Policies}
 
 Informally, a (micro-){\em policy}
 is an enriched
@@ -146,67 +157,13 @@ That is, a policy takes a starting contour and produces a runtime monitor
 that carries along some private information and uses it to decide whether to
 terminate execution early.
 
+\subsection{Properties}
 
+\bcp{Here is where it starts getting iffy...}
 
-
-Given a machine state $\mach$ and a contour $\contour$, a {\em variant} of
-$\mach$ with respect to $\contour$ is any machine state $\mach'$ whose
-components agree with $\mach$ on all components marked $\LOW$ by
-$\contour$---i.e., if $\contour(\component) = (\LOW$,\,\underscore), then
-$\mach(\component) = \mach'(\component)$.
-
-\bcp{Sketchy / out of date from here on...}
-
-  \begin{itemize}
-  \item A {\em property} is a function that takes a contour to a
-  prefix-closed set of (finite and/or infinite) sequences of machine states.
-  That is, it takes a starting contour and produces a checker that tells
-  whether a given trace is OK to observe.
-  \begin{itemize}
-  \item I am not sure whether we want to be talking in terms of {\em
-    properties} or {\em hyperproperties} here (and all the way through).
-  \end{itemize}
-  \item Proposal: Forget about full-blown NI and focus the whole paper on
-  variants of ``lockstep NI'' where the PC is the same in every pair of
-  related runs.
-  \begin{itemize}
-  \item One issue that I am not sure about: Could there be a sneaky way of
-  ``putting secret information into the control state'' where the PCs of
-  related runs are always in lockstep but, because the instruction memory is
-  writeable, different instructions can get dispatched.
-
-  E.g., suppose the program looks like
-\begin{verbatim}
-0:   load from address 1000
-     write to address 100
-     jump to address 100
-100: <initial contents don't matter>
-     write R3 into address 1004
-     jump to address 100
-1000: <marked HIGH so that initial
-       contents vary on different runs>
-1004: <marked OBSERVABLE>
-\end{verbatim}
-  If the initial contents of address 1000 in one run is the encoding of the
-  instruction ``load immediate 0 into R3'' and the initial contents in the
-  other run is the encoding of the instruction ``load immediate 1 into R3,''
-  then the two programs execute different instructions (leading them to
-  write different things to an observable location) even though their PCs
-  are always in lock step.
-
-  \item So maybe we should be asking that the instruction stream be
-  identical, not (just?) the PCs
-  \end{itemize}
-  \item One nice observation is that, if we are only interested in pairs of
-  runs with identical PCs, there are two different ways to proceed: (1) say
-  that we {\em ignore} runs where the PCs (or instruction streams) diverge
-  (e.g., taint tracking), or (2) {\em disallow} runs where the PCs (or
-  instruction streams) diverge, i.e., demand that this never happens (e.g.,
-  stack and heap policies).
-  \item A remaining question is what to do about the possibility that the
-  contour changes differently on two related runs.  We could disallow this,
-  but not certain it's necessary---maybe everything works out OK.
-  \end{itemize}
+A {\em contoured (hyper)property} is a function that takes a contour to a
+hyperproperty.  That is, it takes a starting contour and produces a
+\bcp{prefix-closed?} set of pairs of sequences of machine states.
 
 
 The {\em observation trace} arising from a finite or infinite sequence of
@@ -279,22 +236,70 @@ $\obstrace(
 % components of their results are variants with respect to the original
 % $\contour$.
 
-Policy $\pol$ {\em guarantees noninterference} if, for every $\contour$,
-every pair $(\mach,\mach')$ of variant machine states with respect to
-$\contour$ are indistinguishable under $\pol$.
-
 \iftext
 \begin{itemize}
 \item \bcp{Should we be talking about end-to-end or single-step NI?  I guess we
   have to begin with EENI and then get to SSNI as a (stronger) refinement.}
 
 \item Relation to the standard definition of NI.
-
-\item Fact: The standard RISC-V semantics does not guarantee NI.  (Give a
-little example of a program that reads from a secret location and writes to
-a public one, just to illustrate the definition of NI.)
 \end{itemize}
 \fi
+
+\bcp{Recheck.}
+Policy $\pol$ {\em guarantees noninterference} if, for every $\contour$,
+every pair $(\mach,\mach')$ of variant machine states with respect to
+$\contour$ are indistinguishable under $\pol$.
+
+\iftext
+\bcp{
+Fact: The standard RISC-V semantics (i.e., the null policy) does not
+guarantee NI.  (Give a little example of a program that reads from a secret
+location and writes to a public one, just to illustrate the definition of
+NI.)}
+\fi
+
+\subsection{More...}
+  \begin{itemize}
+  \item Proposal: Maybe forget about full-blown NI and focus the whole paper
+  on variants of ``lockstep NI'' where the PC is the same in every pair of
+  related runs?
+  \item One issue that I am not sure about: Could there be a sneaky way of
+  ``putting secret information into the control state'' where the PCs of
+  related runs are always in lockstep but, because the instruction memory is
+  writeable, different instructions can get dispatched.
+
+  E.g., suppose the program looks like
+\begin{verbatim}
+0:   load from address 1000
+     write to address 100
+     jump to address 100
+100: <initial contents don't matter>
+     write R3 into address 1004
+     jump to address 100
+1000: <marked HIGH so that initial
+       contents vary on different runs>
+1004: <marked OBSERVABLE>
+\end{verbatim}
+  If the initial contents of address 1000 in one run is the encoding of the
+  instruction ``load immediate 0 into R3'' and the initial contents in the
+  other run is the encoding of the instruction ``load immediate 1 into R3,''
+  then the two programs execute different instructions (leading them to
+  write different things to an observable location) even though their PCs
+  are always in lock step.
+
+  So maybe we should be asking that the instruction stream be
+  identical, or maybe instructions paired with PCs?
+
+  \item One nice observation is that, if we are only interested in pairs of
+  runs with identical PCs, there are two different ways to proceed: (1) say
+  that we {\em ignore} runs where the PCs (or instruction streams) diverge
+  (e.g., taint tracking), or (2) {\em disallow} runs where the PCs (or
+  instruction streams) diverge, i.e., demand that this never happens (e.g.,
+  stack and heap policies).
+  \item A remaining question is what to do about the possibility that the
+  contour changes differently on two related runs.  We could disallow this,
+  but not certain it's necessary---maybe everything works out OK.
+  \end{itemize}
 
 \section{Tainting is noninterference$-$}
 
