@@ -122,13 +122,14 @@ addresses for temporary variables will usually be hidden).
 
 A {\em contoured trace} is a finite or infinite sequence
 $\seq{(\contour,\mach)} = (\contour_0,\mach_0),\,
-(\contour_1,\mach_1),\ldots$ of (contour, machine state) pairs.
+(\contour_1,\mach_1),\ldots$ of (contour, machine state) pairs \bcp{such
+  that the machine parts agree with the full step}.
 
 Given a machine state $\mach$ and a contour $\contour$, a {\em variant} of
 $\mach$ with respect to $\contour$ is any machine state $\mach'$ whose
 components agree with $\mach$ on all components marked $\LOW$ by
 $\contour$---i.e., if $\contour(\component) = (\LOW$,\,\underscore), then
-$\mach(\component) = \mach'(\component)$.
+$\mach(\component) = \mach'(\component)$.  \bcp{Move this to the NI section.}
 
 \subsection{Observations}
 
@@ -146,7 +147,7 @@ follows. For each component $\component$,
 %
 if
 $\contour_i(\component) = (\underscore,\HIDDEN)$ for all $i$, then
-$\obstrace(\component) = \bot$;
+$\obstrace(\component) = [\,]$;
 %
 otherwise, $\obstrace(\component)$ is a sequence whose first element
 is $\mach_i(\component)$ for the smallest $i$ such that
@@ -156,6 +157,7 @@ than the index $i$ of the $m^{th}$ element and such that
 $\contour_j(\component) = (\underscore,\OBS)$ and
 $\mach_j(\component) \neq \mach_i(\component)$.
 %
+\bcp{Can be defined more simply}
 \iftext
 \bcp{Unfinished and horrible...  But maybe the textual description is OK?}
 \newcommand{\aux}{\mathit{aux}}
@@ -180,6 +182,10 @@ $\mach_j(\component) \neq \mach_i(\component)$.
 \]
 \fi
 
+\bcp{Maybe make it a sequence of maps from components to values?  This is
+  simpler, but it means we can ``observe the observbility of locations...''
+But is this too unrealistic?}
+
 \subsection{Properties}
 
 % A {\em contoured (hyper)property} is a function that takes a contour to a
@@ -203,6 +209,61 @@ traces\iftext{} \bcp{Maybe prefix closed?}\fi.
 \bcp{Should we require that it contain all possible starting states and
   contours (though of course the sequences can be singletons in many
   cases!)?  What does it mean if it doesn't?}
+
+\subsection{Noninterference}
+
+\bcp{NI is the property where:
+  \begin{itemize}
+  \item In each top-level pair (each element of the hyperproperty), all the
+  contours coincide.
+  \item If the initial machine states plus contour are variants, then the
+  observervations of the two traces coincide.
+  \end{itemize}
+}
+
+% If $\mach$ and $\mach'$ are variant machine states with respect to contour
+% $\contour$, then $\mach$ and $\mach'$ are said to be {\em indistinguishable}
+% under policy $\pol$ if their observable
+% %
+% $\obstrace(
+%                       (\contour,\mach)
+%   \stepstounder{\pol} (\contour_1,\mach_1)
+%   \stepstounder{\pol} (\contour_2,\mach_2)
+%   \stepstounder{\pol} \ldots)$
+% %
+% yields the same trace as
+% $\obstrace(
+%                       (\contour,\mach')
+%   \stepstounder{\pol} (\contour_1,\mach_1')
+%   \stepstounder{\pol} (\contour_2,\mach_2')
+%   \stepstounder{\pol} \ldots)$.
+
+% % either (1) one or both of $(\contour,\mach)$ and
+% % $(\contour,\mach')$ fail to terminate when executed with
+% % $\stepstounder{\pol}$, or (2) both terminate and the machine-state
+% % components of their results are variants with respect to the original
+% % $\contour$.
+
+\iftext
+\begin{itemize}
+\item \bcp{Should we be talking about end-to-end or single-step NI?  I guess we
+  have to begin with EENI and then get to SSNI as a (stronger) refinement.}
+
+\item Relation to the standard definition of NI.
+\end{itemize}
+\fi
+
+% Policy $\pol$ {\em guarantees noninterference} if, for every $\contour$,
+% every pair $(\mach,\mach')$ of variant machine states with respect to
+% $\contour$ are indistinguishable under $\pol$.
+
+\iftext
+\bcp{
+Fact: The standard RISC-V semantics (i.e., the null policy) does not
+guarantee NI.  (Give a little example of a program that reads from a secret
+location and writes to a public one, just to illustrate the definition of
+NI.)}
+\fi
 
 \subsection{Policies}
 
@@ -245,57 +306,15 @@ that $\mach_{i-1} \stepstounderfull \mach_i$ for each $i > 0$ in the sequence.
 % that carries along some private information and uses it to decide whether to
 % terminate execution early.
 
-Policy $\pol$ {\em guarantees} property $\prop$ if \bcp{......}
+Policy $\pol$ {\em guarantees} property $\prop$ if \bcp{for every pair of
+  starting states and every starting contour, the pair of traces that you
+  get from the policy is in the property for {\em some} pair of sequences of
+  contours that agree with the given contour on the first element.}
 
 % every $\contour$,
 % every pair $(\mach,\mach')$ of variant machine states with respect to
 % $\contour$ are indistinguishable under $\pol$.
 
-\subsection{Noninterference}
-
-If $\mach$ and $\mach'$ are variant machine states with respect to contour
-$\contour$, then $\mach$ and $\mach'$ are said to be {\em indistinguishable}
-under policy $\pol$ if their observable
-%
-$\obstrace(
-                      (\contour,\mach)
-  \stepstounder{\pol} (\contour_1,\mach_1)
-  \stepstounder{\pol} (\contour_2,\mach_2)
-  \stepstounder{\pol} \ldots)$
-%
-yields the same trace as
-$\obstrace(
-                      (\contour,\mach')
-  \stepstounder{\pol} (\contour_1,\mach_1')
-  \stepstounder{\pol} (\contour_2,\mach_2')
-  \stepstounder{\pol} \ldots)$.
-
-% either (1) one or both of $(\contour,\mach)$ and
-% $(\contour,\mach')$ fail to terminate when executed with
-% $\stepstounder{\pol}$, or (2) both terminate and the machine-state
-% components of their results are variants with respect to the original
-% $\contour$.
-
-\iftext
-\begin{itemize}
-\item \bcp{Should we be talking about end-to-end or single-step NI?  I guess we
-  have to begin with EENI and then get to SSNI as a (stronger) refinement.}
-
-\item Relation to the standard definition of NI.
-\end{itemize}
-\fi
-
-% Policy $\pol$ {\em guarantees noninterference} if, for every $\contour$,
-% every pair $(\mach,\mach')$ of variant machine states with respect to
-% $\contour$ are indistinguishable under $\pol$.
-
-\iftext
-\bcp{
-Fact: The standard RISC-V semantics (i.e., the null policy) does not
-guarantee NI.  (Give a little example of a program that reads from a secret
-location and writes to a public one, just to illustrate the definition of
-NI.)}
-\fi
 
 \iftext
 \subsection{More...}
@@ -344,6 +363,7 @@ NI.)}
   \end{itemize}
 \fi
 
+\newpage
 \section{Tainting is noninterference$-$}
 
 \bcp{This needs to be written, now that we have added the hidden/observable stuff.}
