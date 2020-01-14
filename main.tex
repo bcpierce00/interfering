@@ -120,26 +120,35 @@ the ``attacker,'' e.g., by DMA) and $\HIDDEN$ marks internal ``hidden''
 state that cannot be observed directly (e.g., processor registers and memory
 addresses for temporary variables will usually be hidden).
 
+A {\em contoured trace} is a finite or infinite sequence
+$\seq{(\contour,\mach)} = (\contour_0,\mach_0),\,
+(\contour_1,\mach_1),\ldots$ of (contour, machine state) pairs.
+
 Given a machine state $\mach$ and a contour $\contour$, a {\em variant} of
 $\mach$ with respect to $\contour$ is any machine state $\mach'$ whose
 components agree with $\mach$ on all components marked $\LOW$ by
 $\contour$---i.e., if $\contour(\component) = (\LOW$,\,\underscore), then
 $\mach(\component) = \mach'(\component)$.
 
-The {\em observation trace} arising from a finite or infinite sequence of
-pairs of a contour and a machine state
-$(\contour_0,\mach_0),\, (\contour_1,\mach_1),\ldots$, written
-$\obstrace((\contour_0,\mach_0),\, (\contour_1,\mach_1),\ldots)$ is a
-partial map taking each machine component to the (finite or infinite)
-sequence of the {\em distinct} values taken on by this component at moments
-when it is {\em observable}.  Formally, this map can be constructed as
+\subsection{Observations}
+
+A {\em component observation} is a finite or infinite sequence of words in
+which adjacent elements are always distinct (``no stuttering'').  An {\em
+  observation} is a map from machine components to component observations.
+
+The observation arising from a contoured trace $\seq{(\contour,\mach)}$,
+written $\obstrace(\seq{(\contour,\mach)})$, is a map taking each machine
+component to the (finite or infinite) sequence of the {\em distinct} values
+taken on by this component at moments when it is {\em observable}.
+
+Formally, $\obstrace(\seq{(\contour,\mach)})$ can be constructed as
 follows. For each component $\component$,
 %
-(1) if
+if
 $\contour_i(\component) = (\underscore,\HIDDEN)$ for all $i$, then
 $\obstrace(\component) = \bot$;
 %
-and otherwise (2), $\obstrace(\component)$ is a sequence whose first element
+otherwise, $\obstrace(\component)$ is a sequence whose first element
 is $\mach_i(\component)$ for the smallest $i$ such that
 $\contour_i(\component) = (\underscore,\OBS)$ and whose $(m+1)^{th}$ element
 (if any) is $\mach_j(\component)$, where $j$ is the smallest index greater
@@ -151,7 +160,7 @@ $\mach_j(\component) \neq \mach_i(\component)$.
 \bcp{Unfinished and horrible...  But maybe the textual description is OK?}
 \newcommand{\aux}{\mathit{aux}}
 \bcp{Don't like the ``rest'' argument and the fact that we don't
-  have a metavariable for sequences of pairs of contours and machines.
+  have a metavariable for sequences of (contour, machine state) pairs.
   Consider defining one.}
 %
 \[
@@ -171,62 +180,76 @@ $\mach_j(\component) \neq \mach_i(\component)$.
 \]
 \fi
 
-\subsection{Policies}
-
-Informally, a (micro-){\em policy}
-is an enriched
-step function that works on pairs of contours and machines---i.e., it is a
-partial function taking a contour and a machine state to an updated contour
-and machine state that, wherever is is defined, agrees with
-$\stepstounderfull$.  That is,
-it represents an enforcement mechanism that sometimes halts programs earlier
-than the bare step relation does, but that agrees with the bare step
-relation when it allows evaluation to proceed.  We write
-$(\contour_1,\mach_1) \stepstounder{\pol} (\contour_2,\mach_2)$ for
-$\pol(\contour_1,\mach_1) = (\contour_2,\mach_2)$.
-
-\bcp{Fix: even simpler and cleaner, just run the step function to completion
-  and forget about $X$---i.e., a property is just a function from a pair of
-  a contour and a machine state to a finite or infinite sequence of machine
-  states!}  Formally, a policy
-%
-$\pol \in \exists X.\; (\CONTOURS \rightarrow X) \times (\MACHS \times X
-\rightharpoonup \MACHS \times X)$
-%
-comprises
-\begin{enumerate*}
-  \item a private type $X$,
-  \item a function taking a contour to an initial value of $X$, and
-  \item a partial step function of type
-  $(\MACHS \times X) \rightharpoonup (\MACHS \times X)$ that, when defined,
-  agrees with $\stepstounderfull$ on machine states. \bcp{We could actually
-    just make it return an X and calculate the machine state from the
-    ordinary step function.  This is perhaps a bit cleaner.}
-\end{enumerate*}
-That is, a policy takes a starting contour and produces a runtime monitor
-that carries along some private information and uses it to decide whether to
-terminate execution early.
-
 \subsection{Properties}
 
 % A {\em contoured (hyper)property} is a function that takes a contour to a
 % hyperproperty.  That is, it takes a starting contour and produces a
 % \bcp{prefix-closed?} set of pairs of sequences of machine states.
 
-\bcp{It gets sketchy from here on!  The observer needs to be simplified as
-  above, at a minimum.}
+% An {\em observer} $\observer \in CONTOURS \rightarrow (\MA \exists X.\; (\CONTOURS \rightarrow X) \times
+% (X \rightarrow \CONTOURS) \times (\MACHS \times X \rightharpoonup \MACHS
+% \times X) $
+% comprises
+% \begin{enumerate*}
+%   \item a private type $X$,
+%   \item a function taking a contour to an initial value of $X$, and
+%   \item a function that allows ``reading off'' a contour from an $X$, and
+%   \item a partial step function of type
+%   $(\MACHS \times X) \rightharpoonup X$.
+% \end{enumerate*}
 
-An {\em observer} $\observer \in \exists X.\; (\CONTOURS \rightarrow X) \times
-(X \rightarrow \CONTOURS) \times (\MACHS \times X \rightharpoonup \MACHS
-\times X) $
-comprises
-\begin{enumerate*}
-  \item a private type $X$,
-  \item a function taking a contour to an initial value of $X$, and
-  \item a function that allows ``reading off'' a contour from an $X$, and
-  \item a partial step function of type
-  $(\MACHS \times X) \rightharpoonup X$.
-\end{enumerate*}
+A {\em contoured hyperproperty} is a set of pairs of contoured
+traces\iftext{} \bcp{Maybe prefix closed?}\fi.
+\bcp{Should we require that it contain all possible starting states and
+  contours (though of course the sequences can be singletons in many
+  cases!)?  What does it mean if it doesn't?}
+
+\subsection{Policies}
+
+Informally, a (micro-){\em policy} is an enriched step function that,
+whenever is is defined, agrees with $\stepstounderfull$.  It represents an
+enforcement mechanism that sometimes halts programs earlier than the bare
+step relation does but that agrees with the bare step relation as long as it
+allows evaluation to proceed.  We write
+$(\contour_1,\mach_1) \stepstounder{\pol} (\contour_2,\mach_2)$ for
+$\pol(\contour_1,\mach_1) = (\contour_2,\mach_2)$.
+
+Formally, a policy
+%
+$\pol \in \CONTOURS \rightarrow \MACHS \rightarrow \SEQ{\MACHS}$
+%
+takes a contour $\contour$ and a starting machine state $\mach_0$ and produces
+a finite or infinite sequence of states $\mach_0,\,\mach_1 ,\, \ldots$ such
+that $\mach_{i-1} \stepstounderfull \mach_i$ for each $i > 0$ in the sequence.
+
+% \bcp{Fix: even simpler and cleaner, just run the step function to completion
+%   and forget about $X$---i.e., a property is just a function from a pair of
+%   a contour and a machine state to a finite or infinite sequence of machine
+%   states!}
+% Formally, a policy
+% %
+% $\pol \in \exists X.\; (\CONTOURS \rightarrow X) \times (\MACHS \times X
+% \rightharpoonup \MACHS \times X)$
+% %
+% comprises
+% \begin{enumerate*}
+%   \item a private type $X$,
+%   \item a function taking a contour to an initial value of $X$, and
+%   \item a partial step function of type
+%   $(\MACHS \times X) \rightharpoonup (\MACHS \times X)$ that, when defined,
+%   agrees with $\stepstounderfull$ on machine states. \bcp{We could actually
+%     just make it return an X and calculate the machine state from the
+%     ordinary step function.  This is perhaps a bit cleaner.}
+% \end{enumerate*}
+% That is, a policy takes a starting contour and produces a runtime monitor
+% that carries along some private information and uses it to decide whether to
+% terminate execution early.
+
+Policy $\pol$ {\em guarantees} property $\prop$ if \bcp{......}
+
+% every $\contour$,
+% every pair $(\mach,\mach')$ of variant machine states with respect to
+% $\contour$ are indistinguishable under $\pol$.
 
 \subsection{Noninterference}
 
@@ -262,10 +285,9 @@ $\obstrace(
 \end{itemize}
 \fi
 
-\bcp{Recheck.}
-Policy $\pol$ {\em guarantees noninterference} if, for every $\contour$,
-every pair $(\mach,\mach')$ of variant machine states with respect to
-$\contour$ are indistinguishable under $\pol$.
+% Policy $\pol$ {\em guarantees noninterference} if, for every $\contour$,
+% every pair $(\mach,\mach')$ of variant machine states with respect to
+% $\contour$ are indistinguishable under $\pol$.
 
 \iftext
 \bcp{
@@ -275,6 +297,7 @@ location and writes to a public one, just to illustrate the definition of
 NI.)}
 \fi
 
+\iftext
 \subsection{More...}
   \begin{itemize}
   \item Proposal: Maybe forget about full-blown NI and focus the whole paper
@@ -319,6 +342,7 @@ NI.)}
   contour changes differently on two related runs.  We could disallow this,
   but not certain it's necessary---maybe everything works out OK.
   \end{itemize}
+\fi
 
 \section{Tainting is noninterference$-$}
 
