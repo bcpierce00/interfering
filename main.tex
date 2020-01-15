@@ -411,55 +411,91 @@ the PCs of corresponding traces always stay in lock step.)
 
 \section{Stack protection is noninterference$++$}
 
+Here we consider stack protection as an instance of generalized interference \apt{or whatever it's called}.
+Our notion of stack protection includes aspects both of control integrity and data security.
+In the terminology of Skorstengaard et al.~\cite{Skorstengaard+19} we enforce:
+
 \begin{itemize}
+\item \emph{Well-bracketed control flow (WBCF)}, which says that ``invoked functions must either return to their callers,
+  invoke other functions themselves, or diverge.''
+\item \emph{Local state encapsulation (LSE)}, which says that ``when a function invokes another function, its local variables
+  (saved on its stack frame) will not be read or modified until the invoked function returns.''
+\end{itemize}
+\apt{Should rephrase (and improve!) these in our own words.}
+
+These properties are essentially orthogonal: we could enforce WBCF without LSE, and variants of
+LSE could apply to control constructs beyond simple procedure calls (e.g. exceptions, coroutines, threads, monitors, etc.).
+
+
+In terms of NI....
+\apt{Perhaps the NI-like property is just LSE, but it holds only if WBCF holds?}
+
+To make these ideas concrete in this paper, we adopt a very simple (and unrealistic) set of assumptions/conventions for stack frames and procedure calls.
+Each procedure stack frame contains just one local variable (plus possible control information), which is pointed to by
+the SP whenever the PC is within the procedure body (excluding entry and exit sequences). Our WBCF property says that
+when a procedure is called from a given PC at a given SP, it eventually returns (if at all) to the next
+address following the PC with the same SP. Our LSE-like property says that addresses between the base of the stack
+up to (but not including) the current SP cannot be read or written.
+\apt{Not clear why we should bother allowing addresses beyond the current top of stack to be accessible.}
+In particular, this implies that upon return from a call,
+the value of the local variable will be unchanged; moreover, the values of local variables cannot influence the
+behavior of callees. Parameters and return values are passed in registers, which (except for SP and RA) do not change
+during call or return.
+
+{\bf Getting more precise about the property.}
+
+Assumptions on code and environment\apt{trying to be as minimal as possible}:
+\begin{itemize}
+\item 
+  Memory is divided into two disjoint regions, one containing the code, the other the stack.
+  Code begins at address 0; the stack begins at address B and grows up, in the direction of increasing addresses.
 \item
-  Idea of accessibility: set of data memory addresses that can legally be read or written at a particular execution point.
-  (Assume instruction memory is distinct.)
+  The part of the stack between $B$ and the stack pointer \textsc{sp} (inclusive) is structured into a contiguous sequence of
+  \emph{frames}. Each frame contains a single word of local data, possibly preceded by control information. \apt{TMI?}
+  The initial value of \textsc{sp} is $B-1$.
 \item
-  Stack protection intuition in a nutshell: caller's memory data is not accessible to callee, although callee's memory data is accessible to caller.
-  This gives both an integrity property (callee cannot affect caller's memory) and a secrecy property
-  (caller's memory cannot affect callee).
-  Can generalize to other control situations, such as coroutines, threads, compartments,...
+  Code is assumed to be be annotated to indicate (a) instructions representing calls, (b) instructions forming the \emph{entry sequence} of
+  a procedure, and (c) instructions forming the \emph{return sequence} of a procedure.
 \item
-  In NI terms, protected programs are oblivious to variations in memory outside of their accessible set.
-  Unlike standard NI, the accessible set changes dynamically, so we cannot just frame the property in terms of
-  variant start states. [Is this true? Is it a significant difference? Are there other significant differences?]
+  Execution of the entry sequence pushes a new frame on the stack, adjusting \textsc{sp} to point to that
+  frame's data word.  Execution of the return sequence pops the frame on top of the stack by readjusting \textsc{sp}.
+  \apt{TMI!?}
+  Outside of the entry and return sequences, no instruction alters \textsc{sp}.
+\item
+  The call instruction and entry and return sequences do not alter any registers except \textsc{sp} and one
+  particular register named \textsc{ra}.
 \end{itemize}
 
-We start with a very simple (and unrealistic) set of assumptions/conventions for stack frames and procedure calls.
-We assume that memory is divided into two disjoint regions, one containing the code, the other the stack.
-Code begins at address 0; the stack begins at address $B$ and grows in the direction of increasing addresses.
+DO HERE: Formal description of conjecture 2 property.  Or maybe we no longer really care about this particular property if we have something for conjecture 3?
 
-The part of the stack between $B$ and the stack pointer \textsc{sp} is structured into a sequence of consecutive
-\emph{frames}. Each frame consists of a single return address and a single word of local data.
-
-  \begin {itemize}
-  \item Memory is divided into an instruction region and a data region. The data region contains a single contiguous stack, divided into frames, each associated with a procedure activation. (The stack grows in the direction of increasing addresses.)
-  \item Each frame consists of a saved return address and a single word of local data. These [both??] form the entirety of the procedure's memory data, and are the only thing we need to track when considering accessibility.
-  \item Registers other than RA, SP are not affected by calls or returns and hence are the (only) way to pass values between caller and callee.
-  \item Instructions serving as calls are statically marked as such in the code. [The entry and exit sequences must also be marked???]
-  \item The code for each procedure is bracketed by fixed entry and exit sequences (details to follow), which save/restore the RA and
-    adjust the SP. [Are these assumptions or checked facts?]
-  \item During the body of the procedure, the single word of local data is accessed via SP, which does not change (except during a call, of course).  The stored RA in the frame never changes. [I'm confused about these. They are checked facts, not assumptions.]
-  \end {itemize}
-  In this model, the definition of accessible memory is simply all (data) memory at addresses $\geq pc$.
+An (abstract) \emph{state description} $D$ consists of
 \begin{itemize}
 \item
-  Describe conjecture 2 property in terms of this model: informally and formally.
+  A stack $\dstk{D}$ of addresses, representing the return addresses of the current procedure and its callers. 
+  \apt{No need to remember the sp's, since they can be computed given that we know the fixed frame size.}
+  \apt{No need for $\dpcd{D}$ since it is just the size of $\dstk{D}$.}
 \item
-  Define abstract state descriptions.
+  For each memory location $a \geq B$, a natural number $\ddep{D}{a}$, representing the depth
+  of the frame to which $a$ belongs ($\infty$ if none).
+\end{itemize}
+
+The \emph{initial state description} $\dinit$ has $\dstk{\dinit} = \empstack$ and $\ddep{\dinit}{a} = \infty$ for all $a \geq B$.
+
+An address $a$ is \emph{accessible} with respect to a state $D$, written $\access{D}{a}$, if
+$a \geq B$ and $\ddep{D}{a} \geq \norm{\dstk{D}}$.
+
+
+TODO:
+\begin{itemize}
+\item
+  Define step relation.
 \item
   Define step consistency.
-\item
-  Discuss relationship between state consistency and conjecture 2 property.  (Former is: presumably stronger; hopefully not
+\item   
+  Discuss relationship between state consistency and top-level property.  (Former is: presumably stronger; hopefully not
   too strong that it produces lots of undesired test failures; surely easier to test).
 
 \end{itemize}
-
-
-
-
-
 
 
 \iftext
