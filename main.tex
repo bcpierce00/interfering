@@ -111,87 +111,98 @@ security goal, e.g. noninterference. \iftext\bcp{Not quite true, if we stick
   with hyperproperties.} \fi
 \fi
 
-\bcp{Idea: Remove the HIGH/LOW part from contours and instead make it part
-  of the $X$ parameter to both properties and policies.  (I.e., we will have
-  ``X properties'' and ``X policies'' for each X.)}
-
 A {\em contour}
-$\contour \in \CONTOURS = \COMPONENTS \rightarrow \{\HIGH,\LOW\}\times
-\{\OBS,\HIDDEN\}$ is a map from machine components to pairs of ``security
-levels,'' where $\HIGH$ marks locations that may contain secret or
-low-integrity data and $\LOW$ marks those that must only ever contain
-publicly readable or high-integrity data, and ``observabilities,'' where
-$\OBS$ marks locations whose contents are observable from the outside (by
-the ``attacker,'' e.g., by DMA) and $\HIDDEN$ marks internal ``hidden''
+$\contour \in \CONTOURS = \COMPONENTS \rightarrow \{\VIS,\HID\}$ is a map
+from machine components to ``observabilities,'' where
+$\VIS$ marks locations whose contents are observable from the outside (by
+the ``attacker,'' e.g., by DMA) and $\HID$ marks internal ``hidden''
 state that cannot be observed directly (e.g., processor registers and memory
 addresses for temporary variables will usually be hidden).
 
 A {\em contoured trace} is a finite or infinite sequence
 $\seq{(\contour,\mach)} = (\contour_0,\mach_0),\,
-(\contour_1,\mach_1),\ldots$ of (contour, machine state) pairs \bcp{such
-  that the machine parts agree with the full step}.
+(\contour_1,\mach_1),\ldots$ of (contour, machine state) pairs in which
+adjacent machine states are related by $\stepstounderfull$---i.e., in which
+$\mach_{i-1} \stepstounderfull \mach_i$ for each $i > 0$ in the sequence.
 
 \subsection{Observations}
 
-\bcp{Try it the other way round: a sequence of maps from components to
-  values.  Need to extend values with $\bot$ for always-hidden elements.
-  Emphasize that ``observability is not observable.''}
-\bcp{Also, change OBS to VIS}
+A {\em component observation} is either a word or the special value $\bot$.
+A {\em state observation} is a map from machine components to component
+observations.
 
-A {\em component observation} is a finite or infinite sequence of words in
-which adjacent elements are always distinct (``no stuttering'').  An {\em
-  observation} is a map from machine components to component observations.
+An {\em observation} is a nonempty, finite or infinite sequence of state
+observations in which (1) adjacent elements are always distinct (``no
+stuttering'') and (2) any component $\component$ that is mapped to $\bot$ by
+the the $j^{th}$ state observation in the sequence must also be mapped to
+$\bot$ by all observations earlier than $j$ in the sequence (i.e., once a
+component's value changes from $\bot$ to anything else, it never changes
+back to $\bot$ again).
 
-The observation arising from a contoured trace $\seq{(\contour,\mach)}$,
-written $\obstrace(\seq{(\contour,\mach)})$, is a map taking each machine
-component to the (finite or infinite) sequence of the {\em distinct} values
-taken on by this component at moments when it is {\em observable}.
+In particular, the observation $\obstrace(\seq{(\contour,\mach)})$ arising
+from a contoured trace $\seq{(\contour,\mach)}$ is sequence of state
+observations $\stateobs_0,\, \stateobs_1,\, \ldots$ defined informally as
+follows:
+\begin{itemize}
+\item $\stateobs_0$ maps every visible component (where $\contour_0 = \VIS$)
+to its value in $\mach_0$ and every hidden
+component to $\bot$; 
+\item $\stateobs_{i+1}$ is defined from $\stateobs_{i}$ by (1) for each
+visible component (where $\contour_{i+1} = \VIS$), copying its
+value from $\mach_{i+1}$, and (2) for each
+hidden component, where $\contour_i = \VIS$, copying its
+value from $\stateobs_{i+1}$, and (3) if the resulting $\stateobs_{i+1}$ is
+identical to $\stateobs_{i}$, then skipping $\stateobs_{i+1}$.
+\iftext\bcp{Too informal!!}\fi
 
-Formally, $\obstrace(\seq{(\contour,\mach)})$ can be constructed as
-follows. For each component $\component$,
-%
-if
-$\contour_i(\component) = (\underscore,\HIDDEN)$ for all $i$, then
-$\obstrace(\component) = [\,]$;
-%
-otherwise, $\obstrace(\component)$ is a sequence whose first element
-is $\mach_i(\component)$ for the smallest $i$ such that
-$\contour_i(\component) = (\underscore,\OBS)$ and whose $(m+1)^{th}$ element
-(if any) is $\mach_j(\component)$, where $j$ is the smallest index greater
-than the index $i$ of the $m^{th}$ element and such that
-$\contour_j(\component) = (\underscore,\OBS)$ and
-$\mach_j(\component) \neq \mach_i(\component)$.
-%
-\bcp{Can be defined more simply}
-\iftext
-\bcp{Unfinished and horrible...  But maybe the textual description is OK?}
-\newcommand{\aux}{\mathit{aux}}
-\bcp{Don't like the ``rest'' argument and the fact that we don't
-  have a metavariable for sequences of (contour, machine state) pairs.
-  Consider defining one.}
-%
-\[
-\begin{array}{lcl}
-\aux \; ( [\,] ) \; \trace& = & \trace
-\\
-\aux \; ( (\contour,\mach) \mathrel{::} \mathit{rest} ) \; T
-  & = &
-        \aux \;( \mathit{rest} )
-        \\ && \quad (\lambda k.\; \mbox{\bcp{and so on}}
-\\
-\\
-\obstrace \;( (\contour_0,\mach_0),\, \ldots )
-  &=& \aux \; ( (\contour_0,\mach_0),\, \ldots ) \; (\lambda
-      \component.\, \bot)
-\end{array}
-\]
-\fi
+% For each component $\component$,
+% %
+% if
+% $\contour_i(\component) = (\underscore,\HID)$ for all $i$, then
+% $\obstrace(\component) = [\,]$;
+% %
+% otherwise, $\obstrace(\component)$ is a sequence whose first element
+% is $\mach_i(\component)$ for the smallest $i$ such that
+% $\contour_i(\component) = (\underscore,\VIS)$ and whose $(m+1)^{th}$ element
+% (if any) is $\mach_j(\component)$, where $j$ is the smallest index greater
+% than the index $i$ of the $m^{th}$ element and such that
+% $\contour_j(\component) = (\underscore,\VIS)$ and
+% $\mach_j(\component) \neq \mach_i(\component)$.
+% %
+% \bcp{Can be defined more simply}
+% \iftext
+% \bcp{Unfinished and horrible...  But maybe the textual description is OK?}
+% \newcommand{\aux}{\mathit{aux}}
+% \bcp{Don't like the ``rest'' argument and the fact that we don't
+%   have a metavariable for sequences of (contour, machine state) pairs.
+%   Consider defining one.}
+% %
+% \[
+% \begin{array}{lcl}
+% \aux \; ( [\,] ) \; \trace& = & \trace
+% \\
+% \aux \; ( (\contour,\mach) \mathrel{::} \mathit{rest} ) \; T
+%   & = &
+%         \aux \;( \mathit{rest} )
+%         \\ && \quad (\lambda k.\; \mbox{\bcp{and so on}}
+% \\
+% \\
+% \obstrace \;( (\contour_0,\mach_0),\, \ldots )
+%   &=& \aux \; ( (\contour_0,\mach_0),\, \ldots ) \; (\lambda
+%       \component.\, \bot)
+% \end{array}
+% \]
+% \fi
 
 % \bcp{Maybe make it a sequence of maps from components to values?  This is
 %   simpler, but it means we can ``observe the observbility of locations...''
 %   But is this too unrealistic?}
 
+\iftext\bcp{Emphasize that ``observability is not observable.''}\fi
+
 \subsection{Properties}
+
+\bcp{Needs a parameter now.}
 
 % A {\em contoured (hyper)property} is a function that takes a contour to a
 % hyperproperty.  That is, it takes a starting contour and produces a
@@ -219,7 +230,7 @@ traces\iftext{} \bcp{Maybe prefix closed?}\fi.
   call and return sites.  So what we should do is to talk instead about ``$X$
   policies'' (i.e., make ``policy'' a type operator) and replace the initial
   $\CONTOURS$ argument to both policies and properties by an element of
-  $X$.} 
+  $X$.}
 
 \subsection{Noninterference}
 
@@ -446,7 +457,7 @@ during call or return.
 
 Assumptions on code and environment\apt{trying to be as minimal as possible}:
 \begin{itemize}
-\item 
+\item
   Memory is divided into two disjoint regions, one containing the code, the other the stack.
   Code begins at address 0; the stack begins at address B and grows up, in the direction of increasing addresses.
 \item
@@ -471,7 +482,7 @@ DO HERE: Formal description of conjecture 2 property.  Or maybe we no longer rea
 An (abstract) \emph{state description} $D$ consists of
 \begin{itemize}
 \item
-  A stack $\dstk{D}$ of addresses, representing the return addresses of the current procedure and its callers. 
+  A stack $\dstk{D}$ of addresses, representing the return addresses of the current procedure and its callers.
   \apt{No need to remember the sp's, since they can be computed given that we know the fixed frame size.}
   \apt{No need for $\dpcd{D}$ since it is just the size of $\dstk{D}$.}
 \item
@@ -491,7 +502,7 @@ TODO:
   Define step relation.
 \item
   Define step consistency.
-\item   
+\item
   Discuss relationship between state consistency and top-level property.  (Former is: presumably stronger; hopefully not
   too strong that it produces lots of undesired test failures; surely easier to test).
 
