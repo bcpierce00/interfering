@@ -119,42 +119,44 @@ the ``attacker,'' e.g., by DMA) and $\HID$ marks internal ``hidden''
 state that cannot be observed directly (e.g., processor registers and memory
 addresses for temporary variables will usually be hidden).
 
-A {\em contoured trace} is a finite or infinite sequence
-$\seq{(\contour,\mach)} = (\contour_0,\mach_0),\,
-(\contour_1,\mach_1),\ldots$ of (contour, machine state) pairs in which
-adjacent machine states are related by $\stepstounderfull$---i.e., in which
-$\mach_{i-1} \stepstounderfull \mach_i$ for each $i > 0$ in the sequence.
+A {\em contoured trace} of length $n$, where $n$ can be finite or
+infinite, is a length-$n$ sequence $\seq{(\contour,\mach)}_n =
+(\contour_0,\mach_0),\, (\contour_1,\mach_1),\ldots$ of (contour,
+machine state) pairs in which adjacent machine states are related by
+$\stepstounderfull$---i.e., in which $\mach_{i-1} \stepstounderfull
+\mach_i$ for each $i > 0$ in the sequence.
 
-\subsection{Observations}
-
-A {\em component observation} is either a word or the special value $\bot$.
-A {\em state observation} is a map from machine components to component
-observations.
-
-An {\em observation} is a nonempty, finite or infinite sequence of state
-observations in which (1) adjacent elements are always distinct (``no
-stuttering'') and (2) any component $\component$ that is mapped to $\bot$ by
-the the $j^{th}$ state observation in the sequence must also be mapped to
-$\bot$ by all observations earlier than $j$ in the sequence (i.e., once a
-component's value changes from $\bot$ to anything else, it never changes
-back to $\bot$ again).
-
-In particular, the observation $\obstrace(\seq{(\contour,\mach)})$ arising
-from a contoured trace $\seq{(\contour,\mach)}$ is sequence of state
-observations $\stateobs_0,\, \stateobs_1,\, \ldots$ defined informally as
-follows:
-\begin{itemize}
-\item $\stateobs_0$ maps every visible component (where $\contour_0 = \VIS$)
-to its value in $\mach_0$ and every hidden
-component to $\bot$; 
-\item $\stateobs_{i+1}$ is defined from $\stateobs_{i}$ by (1) for each
-visible component (where $\contour_{i+1} = \VIS$), copying its
-value from $\mach_{i+1}$, and (2) for each
-hidden component, where $\contour_i = \VIS$, copying its
-value from $\stateobs_{i+1}$, and (3) if the resulting $\stateobs_{i+1}$ is
-identical to $\stateobs_{i}$, then skipping $\stateobs_{i+1}$.
-\iftext\bcp{Too informal!!}\fi
-\end{itemize}
+% 
+%\subsection{Observations}
+% 
+%A {\em component observation} is either a word or the special value $\bot$.
+%A {\em state observation} is a map from machine components to component
+%observations.
+% 
+%An {\em observation} is a nonempty, finite or infinite sequence of state
+%observations in which (1) adjacent elements are always distinct (``no
+%stuttering'') and (2) any component $\component$ that is mapped to $\bot$ by
+%the the $j^{th}$ state observation in the sequence must also be mapped to
+%$\bot$ by all observations earlier than $j$ in the sequence (i.e., once a
+%component's value changes from $\bot$ to anything else, it never changes
+%back to $\bot$ again).
+% 
+%In particular, the observation $\obstrace(\seq{(\contour,\mach)})$ arising
+%from a contoured trace $\seq{(\contour,\mach)}$ is sequence of state
+%observations $\stateobs_0,\, \stateobs_1,\, \ldots$ defined informally as
+%follows:
+%\begin{itemize}
+%\item $\stateobs_0$ maps every visible component (where $\contour_0 = \VIS$)
+%to its value in $\mach_0$ and every hidden
+%component to $\bot$; 
+%\item $\stateobs_{i+1}$ is defined from $\stateobs_{i}$ by (1) for each
+%visible component (where $\contour_{i+1} = \VIS$), copying its
+%value from $\mach_{i+1}$, and (2) for each
+%hidden component, where $\contour_i = \VIS$, copying its
+%value from $\stateobs_{i+1}$, and (3) if the resulting $\stateobs_{i+1}$ is
+%identical to $\stateobs_{i}$, then skipping $\stateobs_{i+1}$.
+%\iftext\bcp{Too informal!!}\fi
+%\end{itemize}
 
 % For each component $\component$,
 % %
@@ -220,9 +222,60 @@ identical to $\stateobs_{i}$, then skipping $\stateobs_{i+1}$.
 %   \item a partial step function of type
 %   $(\MACHS \times X) \rightharpoonup X$.
 % \end{enumerate*}
+\leo{The following all assumes lockstep-ness:}
+
+\leo{I think we need variants from here... Should we call it
+  indistinguishability?}
+
+Given a machine state $\mach$ and a contour $\contour$, a {\em
+  variant} of $\mach$ with respect to $\contour$ is any machine state
+$\mach'$ whose components agree with $\mach$ on all components marked
+$\VIS$ by $\contour$---i.e., if $\contour(\component) = \VIS$, then
+$\mach(\component) = \mach'(\component)$.
 
 A {\em contoured hyperproperty} is a set of pairs of contoured
-traces\iftext{} \bcp{Maybe prefix closed?}\fi.
+traces such that:
+\begin{itemize}
+\item {\em same-length:}
+
+  For every pair of traces $\overline{(C, M)}_n$ and $\overline{(C',
+    M')}_m$ in the set, $n = m$.
+  
+\item {\em contour-lockstep:}
+
+  For every pair of traces $\overline{(C, M)}_n$ and $\overline{(C',
+    M')}_n$ in the set, $C_i = C_i'$ for all $i<n$.
+
+\item {\em prefix-closed:}
+
+  For every pair of traces $\overline{(C, M)}_n$ and $\overline{(C,
+    M')}_n$ in the set, the pair $\overline{(C, M)}_m$ and
+  $\overline{(C, M')}_m$ is also in the set if $m < n$.
+
+\item {\em suffix-closed:}
+
+  For every pair of traces $\overline{(C, M)}_n$ and $\overline{(C,
+    M')}_n$ in the set, and for every $0 \leq i < n$, there exists in
+  the set a pair of traces $\overline{(C', N)}_m$ and $\overline{(C',
+    N')}_m$ such that $C_0' = C_i$, $N_0 = M_i$, and $N_0' = M_0'$.
+  
+\item {\em variant-closed:}
+
+  For every pair of traces $\overline{(C, M)}$ and $\overline{(C,
+    M')}$ in the set, and for every machine state $N_0$ such that
+  $N_0$ is a variant of $M_0$, there exists in the set a pair of
+  traces $\overline{(C, M)}_m$ and $\overline{(C, N)}_m$.
+
+\item {\em contour-wellformedness:}  
+
+  For every pair of traces $\overline{(C, M)}_n$ and $\overline{(C,
+    M')}_n$ in the set, $C_0 \leq C_i$ for all $i<n$, where $C \leq
+  C'$ if $\forall \component, C(\component) \leq C'(\component)$ and
+  $\VIS < \HID$.
+
+
+\end{itemize}
+\iftext{} \bcp{Maybe prefix closed?}\fi.
 % \bcp{Should we require that it contain all possible starting states and
 %   contours (though of course the sequences can be singletons in many
 %   cases!)?  What does it mean if it doesn't?}
@@ -233,9 +286,11 @@ traces\iftext{} \bcp{Maybe prefix closed?}\fi.
   $\CONTOURS$ argument to both policies and properties by an element of
   $X$.}
 
+
+
+
 \subsection{Noninterference}
 
-\leo{Low should be VIS here right?}
 Given a machine state $\mach$ and a contour $\contour$, a {\em variant} of
 $\mach$ with respect to $\contour$ is any machine state $\mach'$ whose
 components agree with $\mach$ on all components marked $\LOW$ by
