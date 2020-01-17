@@ -235,6 +235,7 @@ traces\iftext{} \bcp{Maybe prefix closed?}\fi.
 
 \subsection{Noninterference}
 
+\leo{Low should be VIS here right?}
 Given a machine state $\mach$ and a contour $\contour$, a {\em variant} of
 $\mach$ with respect to $\contour$ is any machine state $\mach'$ whose
 components agree with $\mach$ on all components marked $\LOW$ by
@@ -249,6 +250,61 @@ $\mach(\component) = \mach'(\component)$.
   observervations of the two traces coincide.
   \end{itemize}
 }
+
+\leo{Some notes for the meeting}
+
+In traditional NI viewed as a pair of contoured traces $\overline{(C, M_i)}$ and
+$\overline{(C, N_i)}$, we can have the following formulations:
+\begin{enumerate}
+\item $M_0, N_0 \in \mathit{Initial State}, ~\text{s.t.} ~\mathit{variant}(C, M_0, N_0)$
+\item $M_0 \in \mathit{Initial State}, N_0 \in \mathit{Variant}(C, M_0)$
+\item $M_0, N_0 \in \mathit{Reachable State}, ~\text{s.t.} ~\mathit{variant}(C, M_0, N_0)$
+\item $M_0 \in \mathit{Reachable State}, N_0 \in \mathit{Variant}(C, M_0)$
+\end{enumerate}
+%
+The (intuitive) top level property we care about is (1) - end to end
+noninterference.
+%
+Property (2) is easier to test - but not always equivalent (if the set
+of variants of an initial state can take you outside the set of
+initial states).
+%
+Property (3) is also easier to test than - you start from an arbitrary
+(reachable) state instead of an initial one, allowing to get to the
+interesting part sooner.
+%
+Property (4) corresponds to what we actually want to test - start from
+an arbitrary (reachable) state, vary it, test the trace.
+
+As far as facilitating testing goes, the assumption of SSNI is that
+you don't need to test full traces - you can test all traces of length
+1 and that somehow gives you confidence for the full property.
+%
+More importantly, note that going from (1,2) to (3,4) doesn't really
+change the property itself {\em as long as the contour stays identical
+  throughout the execution}.
+
+Now, when the contour does change the expressive power of (3,4) and (1,2)
+is slightly different:
+\begin{itemize}
+\item If the contour C makes more things hidden at step $i$, then
+  starting from the (reachable) state $M_i$ and taking its variant can
+  lead to a pair $M_i, N_i$ that is not reachable from a pair of variant
+  initial states.
+\item If the contour C declassifies things at step $i$, then traces
+  that started from variants $M_0, N_0$ based on a more restrictive
+  contour C, can reach that point and no longer remain variant based
+  on the new contour.
+\end{itemize}
+Therefore an additional property of the hyperproperties when
+classification/declassification is involved, is that the traces
+in the property start at some contour level C0 and are truncated
+after C becomes more permissive than C0.
+
+The stack property we test is just a way of testing such a
+hyperproperty more efficiently.
+
+
 
 % If $\mach$ and $\mach'$ are variant machine states with respect to contour
 % $\contour$, then $\mach$ and $\mach'$ are said to be {\em indistinguishable}
