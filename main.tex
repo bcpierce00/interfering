@@ -334,6 +334,7 @@ where: \bcp{Which parts of this are common to {\em all} contoured lockstep
   the basic idea of truncating traces when visibility increases doesn't 
   seem to extend to things like coroutines, where we swap between two sets of visible locations on each transfer.}
 
+
 % \bcp{Should we require that it contain all possible starting states and
 %   contours (though of course the sequences can be singletons in many
 %   cases!)?  What does it mean if it doesn't?}
@@ -533,6 +534,56 @@ Policy $\pol$ {\em guarantees} property $\prop$ if \bcp{for every pair of
 % every pair $(\mach,\mach')$ of variant machine states with respect to
 % $\contour$ are indistinguishable under $\pol$.
 
+
+\subsection{Alternative Definition of Contoured Hyperproperty}
+
+\apt{Just for the record, here's an attempt to write down the splice-based
+  alternative I suggested. I \emph{think} it might work for stack safety
+  (and coroutine safety).  But there are some problems: (a) it doesn't account for the caller being able to write into the callee's local data (although perhaps there's no good reason to allow this anyway); (b) two calls that just happen to use the same memory space for their frames will share the same contour, which seems wrong.  I'm wondering if it would be better to use a more
+  explicit and nominal refinement of contours (maybe called ``context''); two
+  contexts might have the same contour but the trace partitioning would be done based on context name. I haven't thought about relating all this to testing...}
+
+  Let $T = \overline{(C,M)}_n$ be a contoured trace of length $n \leq \infty$.
+  Write $T\vert_C$ for the result of
+  filtering $T$ to contain only elements with contour $C$ and 
+  then projecting the trace components.
+  The \emph{contour partition} of $T$ is the set
+  $P(T) = \{(C_{i_1},T\vert_{C_{i_1}}),
+  (C_{i_2},T\vert_{C_{i_2}}),
+  \ldots,(C_{i_d},T\vert_{C_{i_d}})\}$ where
+  $C_{i_1},C_{i_2},\ldots,C_{i_d}$ are the distinct contours appearing in $\overline{C}$.
+  In other words, $P(T)$ is the result of dividing the trace into sections based on contour and then splicing together the sections. Note that these traces no longer obey the underlying step function; e.g., there might be a step directly from a call Jal to the return address. (We may need to pin down exactly what is legal in these ``gappy'' sequences.)
+
+  Observations are a bit simpler than before. 
+  A \emph{state observation} with respect to a contour $C$ is a map from
+  the machine components visible in $C$ to words.
+  An \emph{observation} with respect to a contour $C$ is 
+  is a nonempty, finite or infinite sequence of
+  state observations with respect to $C$, in which adjacent elements
+  are distinct (``no stuttering''). 
+  In particular, the \emph{observation trace} of
+  a machine state sequence $\overline{M}$ with respect to a contour $C$,
+  written $\obstrace_C(\overline{M})$ is the observation 
+  obtained by removing duplicates from the sequence 
+  $\stateobs_0,\, \stateobs_1,\, \ldots$ where
+  $\stateobs_i(\component) = M_i(\component)$ for all $\component$ such that $C(\component) = \VIS$.
+  We extend observation traces to contour partitions piecewise:
+  if $P(T) = \{(C_1,\overline{M}_1),(C_2,\overline{M}_2),\ldots,(C_d,\overline{M}_d)\}$, then $\obstrace(P(T))$ is $\{(C_1,\obstrace(\overline{M}_1)),
+  (C_2,\obstrace(\overline{M}_2)),\ldots,(C_d,\obstrace(\overline{M}_d))\}$
+
+
+  Variants are as before.
+  Noninterference (no need for lockstep) with respect to a (single)
+  contour $C$, written $NI_C$, is defined as as a (standard) hyperproperty: it is the set of pairs of (ordinary, but possibly gappy) machine-state traces such that if the initial elements of the traces are variants with respect to $C$ then their observation traces with respect to $C$ are identical.
+
+  A \emph{contoured hyperproperty} (no restriction to lockstep) is still a set of pairs of contoured traces. 
+
+  \emph{Contoured noninterference} is the contoured hyperproperty defined as follows: the pair of contoured traces $(T,T')$ is in the hyperproperty if,
+  for each $(C,\overline{M}) \in P(T)$ and $(C',\overline{M'}  ) \in P(T')$,
+  if $C = C'$ then $(\overline{M},\overline{M'}) \in NI_{C}$. (NB: This may
+  be too liberal; perhaps the sets of $C$'s should be the same?)
+  
+Standard noninterference falls out in the obvious way when trace contours are invariant. (In this case, the machine-state traces are not gappy.)
 
 \iftext
 \subsection{More...}
