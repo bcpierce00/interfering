@@ -119,9 +119,9 @@ Our contributions are:
 \subsection{Machine model}
 
 Concretely, we have in mind a conventional machine architecture with a
-RISC-V processor, perhaps extended with some kind of hardware-enforced
-security policy, but we won't need any RISC-V-specific details till we get
-to \cref{impl}.
+standard (RISC-V) processor extended with some kind of (static or dynamic,
+software- or hardware-enforced) security monitor, but we won't need to make
+any specific choices about details until we get to \cref{impl}.
 
 Conventions:
 %
@@ -169,16 +169,28 @@ security goal, e.g. noninterference. \iftext\bcp{Not quite true, if we stick
 
 \leo{We might need to change the intuition behind some of these things.}
 A {\em contour} $\contour \in \CONTOURS = \COMPONENTS \rightarrow
-\{\HIGH,\LOW\} \times \{\HI, \LO\}$ is a map from machine components
+\{\HIGH,\LOW\} \times \{\HI, \LO\}$\bcp{We need more mnemonic names for
+  these (that help us keep straight when we're talking about confidentiality
+  and when integrity), both in the tex and in the way they are displayed.}
+is a map from machine components 
 to confidentiality and integrity levels. $\LOW$ marks locations whose
 contents are observable from the outside (by the ``attacker,'' e.g.,
 by DMA) and $\HIGH$ marks internal ``hidden'' state that cannot be
 observed directly (e.g., processor registers and memory addresses for
 temporary variables will usually be hidden). Similarly, $\LO$
 locations correspond to low-integrity components (e.g. locations that
-can be written to by the network), while $\HI$ locations should be
+can be written to \bcp{directly or indirectly} by the network), while $\HI$ locations should be
 protected from such flows.
 
+\bcp{A random thought about integrity: One thing that may be helping confuse
+  us about integrity is that we've gone back and forth between ``eager'' and
+  ``lazy'' versions of various micropolicies, where the ``lazy'' ones do
+  allow high-integrity data to be overwritten, but only in a way that it
+  cannot be read again later (e.g., the lazy heap policy guarantees that, if
+  inaccessible memory is overwritten, then its color will change).  The lazy
+point of view is much more subtle as an integrity property.  So, to keep our
+heads straight here, we should be thinking only about eager properties in
+the first instance.}
 
 % 
 %\subsection{Observations}
@@ -275,24 +287,26 @@ protected from such flows.
 %   $(\MACHS \times X) \rightharpoonup X$.
 % \end{enumerate*}
 
-A {\em trace} of length $n$, where $n$ can be finite or infinite, is a
+A {\em trace} of length $n$, where $n$ can be finite or infinite\bcp{awkward}, is a
 length-$n$ sequence $\seq{\mach}_n = \mach_0,\, \mach_1,\ldots$ of
 machine states in which adjacent machine states are related by
 $\stepstounderfull$---i.e., in which $\mach_{i-1} \stepstounderfull
 \mach_i$ for each $i > 0$ in the sequence.
 
-A {\em contoured hyperproperty} is a set of triples: a contour along
-with a pair of traces. 
+A {\em contoured hyperproperty} is a set of triples, each consisting of a
+contour along with a pair of traces.
 
 \leo{No longer needed:?}
 A {\em contoured lockstep-hyperproperty} is a contoured hyperproperty
 such that each trace in every pair of traces in the set executes the
 same instruction sequence.
 
-Finally, we can parameterize the traces by some initial
-application-specific state to obtain a {\em contoured lockstep
-  $X$-hyperproperty}, where every trace comes with more information,
-for example call sites in stack safety.
+Finally, we can parameterize the traces by some initial application-specific
+state to obtain a {\em contoured lockstep $X$-hyperproperty}, where every
+trace comes with more information, for example call sites in stack safety.
+\bcp{If we use this later, we need to say it more formally to be clear about
+  what we mean---e.g., I had thought both the traces and the contour would
+  be functions of $X$!}
 
 \subsection{Noninterference}
 
@@ -315,7 +329,9 @@ Our baseline security property is noninterference.
 
   For each triple $(\contour, \overline{M}_n, \overline{M'}_{n'})$, if
   the initial elements of the traces are variants, then the final
-  states of the traces are also variants.
+  states of the traces are also variants.  \bcp{What does ``final''mean for
+    infinite traces?  What about pairs where one is finite and the other
+    infinite?} 
   
 \item {\em Integrity: }
 
@@ -350,12 +366,27 @@ Our baseline security property is noninterference.
 
 \leo{To warm up, a super simple separation policy.}
 \begin{itemize}
-\item Any instruction can serve as a final instruction.\leo{What about
-  instructions the are halted by the monitor?}
+\item Any instruction can serve as a final instruction.  \bcp{My picture
+  here was that, for this property, the $X$ parameter would be, say, the
+  address where the machine is considered to halt. (I guess the picture is
+  that we attach probes to the PC and to the rest of memory, and we read out
+  the memory when the PC reaches this address.  But when I write it down
+  that way it seems pretty awkward.  Maybe we should just assume that the
+  machine has a HALT instruction or some other way of signaling that it is
+  done---i.e., abstractly, simply take the step function as a partial
+  function.  We will need to put a footnote somewhere acknowledging that
+  this may be a bit of an abstraction from real modern processors, but the
+  simple separation policy is an abstraction anyway!)}
+
+\leo{What about
+  instructions the are halted by the monitor?}  \bcp{Not sure what the
+  question is here, but note that an instruction halted by the monitor will
+  not appear in the trace.}
 \item For forward compatibility we could treat the first unmatched return as
   a halt instruction.
 \item The instruction memory is marked $\LOW \times \HI$. That means
-  it is observable and can't change.
+  it is observable and can't change.  \bcp{What does this assumption mean,
+    precisely?  (I.e., what is ``the instruction memory''?)}
 \item The memory space is split in two. One part is marked $\LOW
   \times \LO$: this is the public part (or the one that can be
   accessed by the current process e.g.). The other part is marked
@@ -368,16 +399,26 @@ Our baseline security property is noninterference.
 \end{itemize}
 \leo{(The $+$ part in the title is a hint that one thing that gets added is that
 the PCs of corresponding traces always stay in lock step because of integrity?)}
+\bcp{The section titles are not working so well, now that we're being a bit
+  less abstract about our definitions.}
 
 \section{Stack Safety is noninterference$+$}
 
 \leo{Build up to the interesting thing:}
 \begin{itemize}
-\item The first unmatched return serves as a halt.
+\item The first unmatched return serves as a halt.  \bcp{What does that mean
+formally?}
 \item The instruction memory is again marked $\LOW \times \HI$. That
   means it is observable (both traces have the same instructions!) and
   can't change.
-\item At the beginning of time, the entire data memory is marked $\LOW
+\item At the beginning of time\bcp{Not clear what ``beginning of time''
+  means when we're talking about hyperproperties---the intuition of time is
+  relevant to the traces within the hyperproperty, but not to the
+  hyperproperty itself.  Simpler, I think, to view the hyperproperty as a
+  starting set of traces (where the whole machine state [registers and PC too,
+  right?] is marked $\LOW$), closed under an operator that takes a
+  contour+trace+trace and snips out all the subtraces between a call and its
+return.  (But: eek---see below.)}, the entire data memory is marked $\LOW
   \times \LO$. That makes for a very unintersting property as all
   variants are necessarily identical.
 \item BUT, we close the hyperproperty as follows:
@@ -393,8 +434,13 @@ the PCs of corresponding traces always stay in lock step because of integrity?)}
   \item For every variant of the new initial state with respect to the
     new contour, the contour plus pair of traces is in the
     hyperproperty.
-  \end{itemize}  
+  \end{itemize}
 \end{itemize}
+
+\bcp{Eeek.  Just realized why we absolutely need the ``lockstep'' part!
+  The closure operator that snips out a ``subtrace'' between a call and the
+  corresponding return has to do the snipping on {\em both} traces at once,
+  and this only makes sense if they are executing in lockstep.}
 
 \section{Old Stuff}
 
