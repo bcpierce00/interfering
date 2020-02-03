@@ -155,13 +155,20 @@ Conventions:
 % pairs of variant traces being ``distinguishable'' and then go to the full
 % thing?}
 
-The {\em underlying} step function,
-$\mathord{\stepstounderfull} \in \MACHS \rightarrow \MACHS$, embodies the
-standard RISC-V ISA semantics.  \bcp{It's probably clearer not to put RISCV
-  in the notation---for most of the paper, the fact that it's a RISCV really
-  doesn't matter.  Moreover, I think we want to make it a partial function,
-  for simplicity of definitions in this part, and if we insist on RISCV here
-  this will confuse people that know it doesn't have a HALT instruction.}
+We assume we have an underlying step function that takes machine
+states to machine states, $\MACHS \rightharpoonup \MACHS$; we also
+assume the only possible partiality is because of a $\HALT$
+instruction.
+
+%The
+%{\em underlying} step function, $\mathord{\stepstounderfull} \in
+%\MACHS \rightharpoonup \MACHS$, embodies the standard RISC-V ISA
+%semantics.  \bcp{It's probably clearer not to put RISCV in the
+%  notation---for most of the paper, the fact that it's a RISCV really
+%  doesn't matter.  Moreover, I think we want to make it a partial
+%  function, for simplicity of definitions in this part, and if we
+%  insist on RISCV here this will confuse people that know it doesn't
+%  have a HALT instruction.}
 
 % \bcp{Needed?}A {\em trace} $\trace{M}$ is a nonempty, finite or infinite
 % sequence of machine states $\mach_0, \mach_1, \mach_2, ...$ such that
@@ -180,17 +187,17 @@ security goal, e.g. noninterference. \iftext\bcp{Not quite true, if we stick
 
 \leo{We might need to change the intuition behind some of these things.}
 A {\em contour} $\contour \in \CONTOURS = \COMPONENTS \rightarrow
-\{\HIGH,\LOW\} \times \{\HI, \LO\}$\bcp{We need more mnemonic names for
+\{\HIGHSEC,\LOWSEC\} \times \{\HIGHINT, \LOWINT\}$\bcp{We need more mnemonic names for
   these (that help us keep straight when we're talking about confidentiality
-  and when integrity), both in the tex and in the way they are displayed.}
+  and when integrity) in the way they are displayed.}
 is a map from machine components
-to confidentiality and integrity levels. $\LOW$ marks locations whose
+to confidentiality and integrity levels. $\LOWSEC$ marks locations whose
 contents are observable from the outside (by the ``attacker,'' e.g.,
-by DMA) and $\HIGH$ marks internal ``hidden'' state that cannot be
+by DMA) and $\HIGHSEC$ marks internal ``hidden'' state that cannot be
 observed directly (e.g., processor registers and memory addresses for
-temporary variables will usually be hidden). Similarly, $\LO$
+temporary variables will usually be hidden). Similarly, $\LOWINT$
 locations correspond to low-integrity components (e.g. locations that
-can be written to \bcp{directly or indirectly} by the network), while $\HI$ locations should be
+can be written to \bcp{directly or indirectly} by the network), while $\HIGHINT$ locations should be
 protected from such flows.
 
 \bcp{A random thought about integrity: One thing that may be helping confuse
@@ -326,7 +333,7 @@ trace comes with more information, for example call sites in stack safety.
 Given a machine state $\mach$ and a contour $\contour$, a {\em
   variant} of $\mach$ with respect to $\contour$ is any machine state
 $\mach'$ whose components agree with $\mach$ on all components marked
-$\LOW$ by $\contour$---i.e., if $\contour(\component) = \LOW$, then
+$\LOWSEC$ by $\contour$---i.e., if $\contour(\component) = \LOWSEC$, then
 $\mach(\component) = \mach'(\component)$.
 
 \leo{Baseline noninterference:}
@@ -348,7 +355,7 @@ Our baseline security property is noninterference.
 
   For each triple $(\contour, \overline{M}_n, \overline{M'}_{n'})$,
   and for every high-integrity component $\component$ for which
-  $\contour(\component) = \HI$, $M_0(\component) = M_n(\component)$
+  $\contour(\component) = \HIGHINT$, $M_0(\component) = M_n(\component)$
   and $M'_0(\component) = M'_{n'}(\component)$.
 \end{itemize}
 \leo{In the terminology of the original hyperproperty paper,
@@ -395,13 +402,13 @@ Our baseline security property is noninterference.
   not appear in the trace.}
 \item For forward compatibility we could treat the first unmatched return as
   a halt instruction.
-\item The instruction memory is marked $\LOW \times \HI$. That means
+\item The instruction memory is marked $\LOWSEC \times \HIGHINT$. That means
   it is observable and can't change.  \bcp{What does this assumption mean,
     precisely?  (I.e., what is ``the instruction memory''?)}
-\item The memory space is split in two. One part is marked $\LOW
-  \times \LO$: this is the public part (or the one that can be
+\item The memory space is split in two. One part is marked $\LOWSEC
+  \times \LOWINT$: this is the public part (or the one that can be
   accessed by the current process e.g.). The other part is marked
-  $\HIGH \times \HI$: it should be completely inaccessible to the
+  $\HIGHSEC \times \HIGHINT$: it should be completely inaccessible to the
   current process.
 \item Separation is noninterference:
   \leo{Exactly the definition above}
@@ -419,7 +426,7 @@ the PCs of corresponding traces always stay in lock step because of integrity?)}
 \begin{itemize}
 \item The first unmatched return serves as a halt.  \bcp{What does that mean
 formally?}
-\item The instruction memory is again marked $\LOW \times \HI$. That
+\item The instruction memory is again marked $\LOWSEC \times \HIGHINT$. That
   means it is observable (both traces have the same instructions!) and
   can't change.
 \item At the beginning of time\bcp{Not clear what ``beginning of time''
@@ -427,10 +434,10 @@ formally?}
   relevant to the traces within the hyperproperty, but not to the
   hyperproperty itself.  Simpler, I think, to view the hyperproperty as a
   starting set of traces (where the whole machine state [registers and PC too,
-  right?] is marked $\LOW$), closed under an operator that takes a
+  right?] is marked $\LOWSEC$), closed under an operator that takes a
   contour+trace+trace and snips out all the subtraces between a call and its
-return.  (But: eek---see below.)}, the entire data memory is marked $\LOW
-  \times \LO$. That makes for a very unintersting property as all
+return.  (But: eek---see below.)}, the entire data memory is marked $\LOWSEC
+  \times \LOWINT$. That makes for a very unintersting property as all
   variants are necessarily identical.
 \item BUT, we close the hyperproperty as follows:
   \begin{itemize}
@@ -441,7 +448,7 @@ return.  (But: eek---see below.)}, the entire data memory is marked $\LOW
     due to symmetry) trace until its first unmatched return.
   \item We construct a new contour at that point: after every call,
     the local state of the caller becomes inaccessible (marked
-    $\HIGH \times \HI$) until a subsequent return.
+    $\HIGHSEC \times \HIGHINT$) until a subsequent return.
   \item For every variant of the new initial state with respect to the
     new contour, the contour plus pair of traces is in the
     hyperproperty.
@@ -946,7 +953,7 @@ LSE could apply to control constructs beyond simple procedure calls (e.g. except
 Under the assumption that WBCF holds, we can describe LSE as an instance of Lockstep-Noninterference, where the contour at
 each step maps the current stack frame to \VIS\ and the remainder of the stack to \HID\.
 The observations on which noninterference is defined will (necessarily)  be made on the values in the current stack frame.
-\apt{Again, we're conflating \VIS\ vs. \HID\ with \LOW\ vs \HIGH\; should probably be teased apart.}
+\apt{Again, we're conflating \VIS\ vs. \HID\ with \LOWSEC\ vs \HIGHSEC\; should probably be teased apart.}
 LSE has two aspects: secrecy (callees cannot read caller variables) and integrity (callees cannot alter caller variables).
 Secrecy is enforced by the variant-closure clause of L-N: since caller data is \HID, changing it cannot alter
 the callee's observable behavior.  Integrity is enforced why??? \apt{I've lost confidence that it is.}
