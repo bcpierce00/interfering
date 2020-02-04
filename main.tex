@@ -155,31 +155,30 @@ Conventions:
 % pairs of variant traces being ``distinguishable'' and then go to the full
 % thing?}
 
-We assume we have an underlying step function that takes machine
-states to machine states, $\MACHS \rightharpoonup \MACHS$; we also
-assume the only possible partiality is because of a $\HALT$
-instruction.
-
-%The
-%{\em underlying} step function, $\mathord{\stepstounderfull} \in
-%\MACHS \rightharpoonup \MACHS$, embodies the standard RISC-V ISA
-%semantics.  \bcp{It's probably clearer not to put RISCV in the
+The {\em underlying} step function, $\mathord{\stepstounderfull} \in
+\MACHS \rightarrow \MACHS$, embodies the standard RISC-V ISA
+semantics.
+%\bcp{It's probably clearer not to put RISCV in the
 %  notation---for most of the paper, the fact that it's a RISCV really
 %  doesn't matter.  Moreover, I think we want to make it a partial
 %  function, for simplicity of definitions in this part, and if we
 %  insist on RISCV here this will confuse people that know it doesn't
 %  have a HALT instruction.}
 
-% \bcp{Needed?}A {\em trace} $\trace{M}$ is a nonempty, finite or infinite
-% sequence of machine states $\mach_0, \mach_1, \mach_2, ...$ such that
-% $\mach_{i-1} \stepsto \mach_i$, for each $i \geq 1$.
+A {\em trace} is a finite or infinite sequence of machine states,
+$\seq{\mach} = \mach_0,\, \mach_1,\ldots$, in which adjacent machine
+states are related by $\stepstounderfull$---i.e., in which
+$\mach_{i-1} \stepstounderfull \mach_i$ for each $i > 0$ in the
+sequence.
 
 \subsection{Contours}
 
 \iftext
 Intuitively, we use the word {\em policy} for any kind of dynamic
 enforcement mechanism (e.g., a runtime taint tracker, heap coloring rules,
-capability hardware, etc.). We use {\em property} for a mathematical
+capability hardware, etc.).
+\leo{FIX: terminology}
+We use {\em property} for a mathematical
 predicate on programs (i.e., machine states) articulating some useful
 security goal, e.g. noninterference. \iftext\bcp{Not quite true, if we stick
   with hyperproperties.} \fi
@@ -200,6 +199,11 @@ locations correspond to low-integrity components (e.g. locations that
 can be written to \bcp{directly or indirectly} by the network), while $\HIGHINT$ locations should be
 protected from such flows.
 
+We denote this (reflexive) flows-to relation with $\flows$. Then
+$\LOWSEC \flowsstrict \HIGHSEC$ and $\HIGHINT \flowsstrict
+\LOWINT$. We can easily lift this relation to pairs of secrecy and
+integrity labels, and from there to contours pointwise.
+
 \bcp{A random thought about integrity: One thing that may be helping confuse
   us about integrity is that we've gone back and forth between ``eager'' and
   ``lazy'' versions of various micropolicies, where the ``lazy'' ones do
@@ -210,37 +214,36 @@ point of view is much more subtle as an integrity property.  So, to keep our
 heads straight here, we should be thinking only about eager properties in
 the first instance.}
 
-%
-%\subsection{Observations}
-%
-%A {\em component observation} is either a word or the special value $\bot$.
-%A {\em state observation} is a map from machine components to component
-%observations.
-%
-%An {\em observation} is a nonempty, finite or infinite sequence of state
-%observations in which (1) adjacent elements are always distinct (``no
-%stuttering'') and (2) any component $\component$ that is mapped to $\bot$ by
-%the the $j^{th}$ state observation in the sequence must also be mapped to
-%$\bot$ by all observations earlier than $j$ in the sequence (i.e., once a
-%component's value changes from $\bot$ to anything else, it never changes
-%back to $\bot$ again).
-%
-%In particular, the observation $\obstrace(\seq{(\contour,\mach)})$ arising
-%from a contoured trace $\seq{(\contour,\mach)}$ is sequence of state
-%observations $\stateobs_0,\, \stateobs_1,\, \ldots$ defined informally as
-%follows:
-%\begin{itemize}
-%\item $\stateobs_0$ maps every visible component (where $\contour_0 = \VIS$)
-%to its value in $\mach_0$ and every hidden
-%component to $\bot$;
-%\item $\stateobs_{i+1}$ is defined from $\stateobs_{i}$ by (1) for each
-%visible component (where $\contour_{i+1} = \VIS$), copying its
-%value from $\mach_{i+1}$, and (2) for each
-%hidden component, where $\contour_i = \VIS$, copying its
-%value from $\stateobs_{i+1}$\apt{$\stateobs_i$ ?}, and (3) if the resulting $\stateobs_{i+1}$ is
-%identical to $\stateobs_{i}$, then skipping $\stateobs_{i+1}$.
-%\iftext\bcp{Too informal!!}\fi
-%\end{itemize}
+\subsection{Observations}
+
+A {\em component observation} is either a word or the special value $\bot$.
+A {\em state observation} is a map from machine components to component
+observations.
+ 
+An {\em observation} is a nonempty, finite or infinite sequence of state
+observations in which (1) adjacent elements are always distinct (``no
+stuttering'') and (2) any component $\component$ that is mapped to $\bot$ by
+the the $j^{th}$ state observation in the sequence must also be mapped to
+$\bot$ by all observations earlier than $j$ in the sequence (i.e., once a
+component's value changes from $\bot$ to anything else, it never changes
+back to $\bot$ again).
+ 
+In particular, the observation $\obstrace(\contour, \seq{\mach})$
+arising from a pair of a contour $\contour$ and a trace $\seq{\mach}$
+is sequence of state observations $\stateobs_0,\, \stateobs_1,\,
+\ldots$ defined informally as follows:
+\begin{itemize}
+\item $\stateobs_0$ maps every visible component $\component$ (where
+  $\contour(\component) = (\LOWSEC, \_)$) to its value in $\mach_0$
+  and every hidden component to $\bot$;
+\item $\stateobs_{i+1}$ is defined from $\stateobs_{i}$ by (1) for
+  each visible component $\component$ (where $\contour(\component) =
+  (\LOWSEC, \_)$), copying its value from $\mach_{i+1}$, and (2) for
+  each hidden component $\component$, where $\contour (\component) =
+  (\HIGHSEC,\_)$, copying its value from $\stateobs_{i}$, and (3) if
+  the resulting $\stateobs_{i+1}$ is identical to $\stateobs_{i}$,
+  then skipping $\stateobs_{i+1}$.  \iftext\bcp{Too informal!!}\fi
+\end{itemize}
 
 % For each component $\component$,
 % %
@@ -285,14 +288,14 @@ the first instance.}
 %   simpler, but it means we can ``observe the observbility of locations...''
 %   But is this too unrealistic?}
 
-%\iftext\bcp{Emphasize that ``observability is not observable.''}\fi
+\iftext\bcp{Emphasize that ``observability is not observable.''}\fi
 
 \subsection{Properties}
 
 % A {\em contoured (hyper)property} is a function that takes a contour to a
 % hyperproperty.  That is, it takes a starting contour and produces a
 % \bcp{prefix-closed?} set of pairs of sequences of machine states.
-
+% 
 % An {\em observer} $\observer \in CONTOURS \rightarrow (\MA \exists X.\; (\CONTOURS \rightarrow X) \times
 % (X \rightarrow \CONTOURS) \times (\MACHS \times X \rightharpoonup \MACHS
 % \times X) $
@@ -305,36 +308,99 @@ the first instance.}
 %   $(\MACHS \times X) \rightharpoonup X$.
 % \end{enumerate*}
 
-A {\em trace} of length $n$, where $n$ can be finite or infinite\bcp{awkward}, is a
-length-$n$ sequence $\seq{\mach}_n = \mach_0,\, \mach_1,\ldots$ of
-machine states in which adjacent machine states are related by
-$\stepstounderfull$---i.e., in which $\mach_{i-1} \stepstounderfull
-\mach_i$ for each $i > 0$ in the sequence.
-
-A {\em contoured hyperproperty} is a set of triples, each consisting of a
-contour along with a pair of traces.
-
-\leo{No longer needed:?}
-A {\em contoured lockstep-hyperproperty} is a contoured hyperproperty
-such that each trace in every pair of traces in the set executes the
-same instruction sequence.
-
-Finally, we can parameterize the traces by some initial application-specific
-state to obtain a {\em contoured lockstep $X$-hyperproperty}, where every
-trace comes with more information, for example call sites in stack safety.
-\bcp{If we use this later, we need to say it more formally to be clear about
-  what we mean---e.g., I had thought both the traces and the contour would
-  be functions of $X$!}
-
-\subsection{Noninterference}
-
-\leo{Indistinguishability/variations:}
+Let $(\stepplus) :: (\CONTOURS \times \MACHS) \rightarrow (\CONTOURS
+\times \MACHS)$ be an extension of the underlying step function, such
+that $(C,M) \stepplus (C',M')$ implies that $M \stepstounderfull M'$.
+Given a contour $C$ and a machine state $M$, the {\em contoured trace}
+induced by $C$ and $M$, written $\induced{C}{M}$ is the largest
+(finite or infinite) sequence of pairs of (contour, machine state)
+pairs, in which adjacent pairs are related by $\stepstounderfull$ and
+for which $C \flows C_i$ for all $i > 0$ in the sequence.
+\leo{That is, the induced contoured trace by a (C,M) pair incorporates
+  the ``return'' snipping}
 
 Given a machine state $\mach$ and a contour $\contour$, a {\em
   variant} of $\mach$ with respect to $\contour$ is any machine state
 $\mach'$ whose components agree with $\mach$ on all components marked
 $\LOWSEC$ by $\contour$---i.e., if $\contour(\component) = \LOWSEC$, then
 $\mach(\component) = \mach'(\component)$.
+
+Let $\initmach$ be the set of initial states of the machine and let
+$\initcontour(M)$ be the initial contour assigned to each $M \in
+\initmach$.\leo{This could probably be generalized to a set}
+
+For each $M \in \initmach$ and $C = \initcontour(M)$, we define the
+{\em closure} of $(C,M)$ as the set of triples of (contour, trace,
+trace) as follows:
+\[
+\begin{array}{rcl}
+  \closure{(C,M)} = \{ ( C_i, \seq{N}, \seq{N'})
+  & | & C_{i-1} \not = C_i \\
+  & , & \seq{(C_i, M_i)} = \induced{C}{M}\\
+  & , & \seq{(\_, N_j)} = \induced{C_i}{M_i}\\
+  & , & N'_0 \in \variant{C_i}{M_i}\\
+  & , & \seq{(\_, N'_j)} = \induced{C_i}{N_0'} \}\\
+\end{array}  
+\]
+\leo{Alternative: We could do this for all $i$, but lose the
+  trivial instantiation of noninterference later on}
+
+A trace $\seq{M}$ satisfies the {\em integrity} safety property with
+respect to a contour $\contour$, if for all components $\component$
+where $\contour(\component) = (\_, \HIGHINT)$, $M_i(K) = M_0(K)$ for
+all $i$ in the trace.
+
+A pair of traces $\seq{M}$ and $\seq{N}$ satisfy the {\em
+  confidentiality} safety hyperproperty with respect to a contour
+$\contour$, if, if the initials states are variants $N_0 \in
+\variant{C}{M_0}$, then their observations coincide
+$\obstrace(\contour, \seq{M}) = \obstrace(\contour, \seq{N})$.
+\leo{Should we cut at minimum length for termination-insensitiveness?}
+
+\leo{From now on I need better terminology, but hopefully you get the
+  point} An initial machine state \leo{or contour machine state pair}
+is \leo{good} if for every triple $(C, \seq{N}, \seq{N'})$ in
+$\closure{(\initcontour(M),M)}$ we have:
+\begin{itemize}
+\item The traces $\seq{N}$ and $\seq{N'}$ satisfy confidentiality
+  with respect to $C$.
+\item The traces $\seq{N}$ and $\seq{N'}$ each satisfy integrity
+  with respect to $C$.
+\end{itemize}
+
+\leo{Combined result}
+Noninterference holds for the set of \leo{good} initial machine
+states.
+
+\leo{NOTE:
+  \begin{itemize}
+    \item When the contours don't change this is trivially
+      noninterference: only a variation of the initial state is
+      added to the trace.
+    \item This almost directly coincides with the LSE part
+      of the stack-safety property.
+  \end{itemize}
+}
+
+%A {\em contoured hyperproperty} is a set of triples,
+%each consisting of a contour along with a pair of traces.
+% 
+%\leo{No longer needed:?}
+%A {\em contoured lockstep-hyperproperty} is a contoured hyperproperty
+%such that each trace in every pair of traces in the set executes the
+%same instruction sequence.
+% 
+%Finally, we can parameterize the traces by some initial application-specific
+%state to obtain a {\em contoured lockstep $X$-hyperproperty}, where every
+%trace comes with more information, for example call sites in stack safety.
+%\bcp{If we use this later, we need to say it more formally to be clear about
+%  what we mean---e.g., I had thought both the traces and the contour would
+%  be functions of $X$!}
+
+\subsection{Noninterference}
+
+\leo{Indistinguishability/variations:}
+
 
 \leo{Baseline noninterference:}
 
