@@ -177,11 +177,9 @@ sequence.
 Intuitively, we use the word {\em policy} for any kind of dynamic
 enforcement mechanism (e.g., a runtime taint tracker, heap coloring rules,
 capability hardware, etc.).
-\leo{FIX: terminology}
 We use {\em property} for a mathematical
-predicate on programs (i.e., machine states) articulating some useful
-security goal, e.g. noninterference. \iftext\bcp{Not quite true, if we stick
-  with hyperproperties.} \fi
+condition on programs (i.e., machine states) articulating some useful
+security goal, e.g. noninterference.
 \fi
 
 \leo{We might need to change the intuition behind some of these things.}
@@ -196,7 +194,7 @@ by DMA) and $\HIGHSEC$ marks internal ``hidden'' state that cannot be
 observed directly (e.g., processor registers and memory addresses for
 temporary variables will usually be hidden). Similarly, $\LOWINT$
 locations correspond to low-integrity components (e.g. locations that
-can be written to \bcp{directly or indirectly} by the network), while $\HIGHINT$ locations should be
+can be written to \iftext \bcp{directly or indirectly} \fi by the network), while $\HIGHINT$ locations should be
 protected from such flows.
 
 We denote this (reflexive) flows-to relation with $\flows$. Then
@@ -204,22 +202,12 @@ $\LOWSEC \flowsstrict \HIGHSEC$ and $\HIGHINT \flowsstrict
 \LOWINT$. We can easily lift this relation to pairs of secrecy and
 integrity labels, and from there to contours pointwise.
 
-\bcp{A random thought about integrity: One thing that may be helping confuse
-  us about integrity is that we've gone back and forth between ``eager'' and
-  ``lazy'' versions of various micropolicies, where the ``lazy'' ones do
-  allow high-integrity data to be overwritten, but only in a way that it
-  cannot be read again later (e.g., the lazy heap policy guarantees that, if
-  inaccessible memory is overwritten, then its color will change).  The lazy
-point of view is much more subtle as an integrity property.  So, to keep our
-heads straight here, we should be thinking only about eager properties in
-the first instance.}
-
 \subsection{Observations}
 
 A {\em component observation} is either a word or the special value $\bot$.
 A {\em state observation} is a map from machine components to component
 observations.
- 
+
 An {\em observation} is a nonempty, finite or infinite sequence of state
 observations in which (1) adjacent elements are always distinct (``no
 stuttering'') and (2) any component $\component$ that is mapped to $\bot$ by
@@ -227,7 +215,7 @@ the the $j^{th}$ state observation in the sequence must also be mapped to
 $\bot$ by all observations earlier than $j$ in the sequence (i.e., once a
 component's value changes from $\bot$ to anything else, it never changes
 back to $\bot$ again).
- 
+
 In particular, the observation $\obstrace(\contour, \seq{\mach})$
 arising from a pair of a contour $\contour$ and a trace $\seq{\mach}$
 is sequence of state observations $\stateobs_0,\, \stateobs_1,\,
@@ -295,7 +283,7 @@ is sequence of state observations $\stateobs_0,\, \stateobs_1,\,
 % A {\em contoured (hyper)property} is a function that takes a contour to a
 % hyperproperty.  That is, it takes a starting contour and produces a
 % \bcp{prefix-closed?} set of pairs of sequences of machine states.
-% 
+%
 % An {\em observer} $\observer \in CONTOURS \rightarrow (\MA \exists X.\; (\CONTOURS \rightarrow X) \times
 % (X \rightarrow \CONTOURS) \times (\MACHS \times X \rightharpoonup \MACHS
 % \times X) $
@@ -326,8 +314,8 @@ $\LOWSEC$ by $\contour$---i.e., if $\contour(\component) = \LOWSEC$, then
 $\mach(\component) = \mach'(\component)$.
 
 Let $\initmach$ be the set of initial states of the machine and let
-$\initcontour(M)$ be the initial contour assigned to each $M \in
-\initmach$.\leo{This could probably be generalized to a set}
+$\initcontour(M)$ be the\bcp{an?} initial contour assigned to each $M \in
+\initmach$. \iftext\leo{This could probably be generalized to a set}\fi
 
 For each $M \in \initmach$ and $C = \initcontour(M)$, we define the
 {\em closure} of $(C,M)$ as the set of triples of (contour, trace,
@@ -340,10 +328,11 @@ trace) as follows:
   & , & \seq{(\_, N_j)} = \induced{C_i}{M_i}\\
   & , & N'_0 \in \variant{C_i}{M_i}\\
   & , & \seq{(\_, N'_j)} = \induced{C_i}{N_0'} \}\\
-\end{array}  
+\end{array}
 \]
 \leo{Alternative: We could do this for all $i$, but lose the
   trivial instantiation of noninterference later on}
+\bcp{Don't follow the notation here.  :-(}
 
 A trace $\seq{M}$ satisfies the {\em integrity} safety property with
 respect to a contour $\contour$, if for all components $\component$
@@ -353,9 +342,10 @@ all $i$ in the trace.
 A pair of traces $\seq{M}$ and $\seq{N}$ satisfy the {\em
   confidentiality} safety hyperproperty with respect to a contour
 $\contour$, if, if the initials states are variants $N_0 \in
-\variant{C}{M_0}$, then their observations coincide
+\variant{C}{M_0}$, then their observations coincide:
 $\obstrace(\contour, \seq{M}) = \obstrace(\contour, \seq{N})$.
 \leo{Should we cut at minimum length for termination-insensitiveness?}
+\bcp{Or just ask that one be a prefix of the other?}
 
 \leo{From now on I need better terminology, but hopefully you get the
   point} An initial machine state \leo{or contour machine state pair}
@@ -384,12 +374,12 @@ states.
 
 %A {\em contoured hyperproperty} is a set of triples,
 %each consisting of a contour along with a pair of traces.
-% 
+%
 %\leo{No longer needed:?}
 %A {\em contoured lockstep-hyperproperty} is a contoured hyperproperty
 %such that each trace in every pair of traces in the set executes the
 %same instruction sequence.
-% 
+%
 %Finally, we can parameterize the traces by some initial application-specific
 %state to obtain a {\em contoured lockstep $X$-hyperproperty}, where every
 %trace comes with more information, for example call sites in stack safety.
@@ -525,6 +515,157 @@ return.  (But: eek---see below.)}, the entire data memory is marked $\LOWSEC
   The closure operator that snips out a ``subtrace'' between a call and the
   corresponding return has to do the snipping on {\em both} traces at once,
   and this only makes sense if they are executing in lockstep.}
+
+\section{Implementation}
+\label{impl}
+
+Sketch of the micropolicies that claim to implement these properties on
+PIPE...
+
+\subsection{A taint checking monitor}
+
+\subsection{A stack safety monitor}
+
+\section{Testing the implementations}
+
+\begin{itemize}
+\item Experimental results of testing
+\end{itemize}
+
+\section{Related work}
+
+\begin{itemize}
+\item Nick and Andre's papers (and other micropolicy papers)
+\cite{DBLP:conf/sp/RoesslerD18}
+
+This is the basis of our run-time monitor in Section{XXX}.  Specifically,
+our micropolicy is a simplified variant of their ... (I think it is the
+Return-Address Protection + Static Authorities + Depth Isolation policy, but
+need to double check---be careful about laziness.)  Essentially, our work
+arose as an attempt to formalize the security property enforced by something
+like one of their stack policies.
+
+\item Hritcu et al's work on ``Testing Noninterference
+Quickly''~\cite{DBLP:journals/jfp/HritcuLSADHPV16} laid the
+foundation of the random testing strategy that we use here.  In particular,
+that paper explored testing strategies based on both standard ``End-to-end
+noninterference''---a pleasantly extensional and easy-to-define property
+that leads to somewhat inefficient testing because process that misbehaves
+while its PC is labeled ``high'' must return to a low PC before the
+misbehavior can be identified as such---and ``Single-step
+noninterference''---a more intricate property related to Goguen and
+Meseguer's ``unwinding conditions''~\cite{GoguenMeseguer85} that ``fails
+faster'' and is thus easier to test.  \bcp{Explain the relation of the
+  latter property to our stack testing strategy.}
+
+\item Azevedo de Amorim's presentation of heap safety as a noninterference
+property~\cite{DBLP:conf/post/AmorimHP18} was a key inspiration for our
+definition of stack safety.  (Details...)
+
+\item StkTokens: Skorstengaard, Devriese, Birkedal
+\begin{itemize}
+\item POPL \cite{skorstengaard2019stktokens}
+\item tech report with proofs: \cite{skorstengaard2018stktokens}
+\url{https://arxiv.org/pdf/1811.02787.pdf}
+\item TR with proofs for ``Reasoning about a machine...'', Feb 2019:
+\url{https://arxiv.org/pdf/1902.05283.pdf}
+\item \url{http://cs.au.dk/~lask/papers/esop2018.pdf}
+\item Also: {\em Reasoning about a Machine with Local Capabilities: Provably
+  Safe Stack and Return Pointer Management} \cite{10.1145/3363519}
+\url{https://dl.acm.org/doi/fullHtml/10.1145/3363519}
+
+\bcp{I'm nervous that these papers may be viewed as subsuming most of
+  ours---in particular, their security property is formulated as a logical
+  relation, i.e. a relational property!  We really need to dig into the
+  details (which are unfortunately rather technical).}
+\end{itemize}
+
+\item Stuff about dynamically changing labels (see footnote in Testing
+Noninterference Quickly paper)
+
+\item Simple Noninterference by Normalization \url{http://nachivpn.me/nibnbe.pdf}
+
+\item Mechanized Reasoning about a Capability Machine: [Linn] Georges,
+Trieu, Birkedal (PriSC 2020).
+%
+Described at the Iris Workshop as formalizing the security properties of
+capabilities. This appears to involve a fairly complex and very large
+mechanization in Iris (also in the eyes of the Iris people).
+
+
+
+\item \url{https://www.cis.upenn.edu/~stevez/papers/LZ05a.pdf} ??
+
+\item Not so closely related?
+\begin{itemize}
+\item Daniel's tainting paper (and some refs cited there)
+      \cite{DBLP:conf/eurosp/SchoepeBPS16} -- not needed if we postpone
+      dealing with tainting till another paper!
+\item We'd better say something about the relation to the original
+hyperproperties paper, no?  (No, not if we drop the word hyperproperty!)
+\end{itemize}
+\end{itemize}
+
+\iftext
+\section{Future work}
+
+\begin{itemize}
+\item Variations / extensions (OS, multiple processes, coroutines, generalizing depths to stacks of static call points, etc.)
+\item Extending the policy / property to more realistic ones
+\begin{itemize}
+\item Argument passing
+\item Variable-size stack frames
+\item Stack variables
+\item Relation to Nick and Andre’s policy
+\end{itemize}
+\item Could we also implement all this using Cheri capabilities?
+\item A more abstract presentation, perhaps unifying our treatments of
+confidentiality and integrity?
+\end{itemize}
+
+More:
+\begin{itemize}
+\item More realistic calling conventions.  (We need to eventually match this to the particular calling convention of whatever compiler we choose.)  E.g., the above will not quite work for passing arguments on the stack: callee won’t be able to read them…So perhaps need to support a special kind of write instruction that stores D.PCdepth+1 . [RB: Or implement this distinction through tags?]
+\item Combination with heap policy (colors, etc.)
+\item For coroutines:
+\begin{itemize}
+\item Generalize depth to depth + PID
+\item Private stuff not having changed as an idea should still work
+\item Maybe not so hard: The scheduler + other coroutines are just a sort of generalized “callee” as far as this process is concerned.  Just need to fiddle th step relation so that it recognizes which process is getting returned to and updates its description appropriately.
+\end{itemize}
+\item If we had a heap policy, maybe we could talk about dynamic code generation, loading, as allocating a heap region, storing instructions into it, and then calling into them.  For now, we just make all the instructions read only and assume they exist in the initial state.
+\item Question: how efficiently can consistency be tested? How much scrambling is needed, and does it really need to occur before every instruction? How expensive is it to check for agreement between the (in)accessible parts of two memories?  Would spot checking for agreement be adequate?]
+\item What are the effects of compartmentalization on the ability of each compartment to change its own code/stack?
+\item Tail calls (maybe by not marking them as call sites?)
+\end{itemize}
+
+\section*{Acknowledgments}
+\fi
+
+\section*{References}
+\bibliographystyle{IEEEtran}
+% \bibliography{bcp,local}
+
+\newpage
+
+\section*{Things to think about}
+
+\begin{itemize}
+\item
+How does Nick’s stack policy actually work these days?
+\item Andrew remembers that Catalin looked at something like this a long time ago and they decided that they needed unique tags for each dynamic call, not just levels.  We should check.
+\item \bcp{A random thought about integrity: One thing that may be helping confuse
+  us about integrity is that we've gone back and forth between ``eager'' and
+  ``lazy'' versions of various micropolicies, where the ``lazy'' ones do
+  allow high-integrity data to be overwritten, but only in a way that it
+  cannot be read again later (e.g., the lazy heap policy guarantees that, if
+  inaccessible memory is overwritten, then its color will change).  The lazy
+point of view is much more subtle as an integrity property.  So, to keep our
+heads straight here, we should be thinking only about eager properties in
+the first instance.}
+\end{itemize}
+
+\newpage
 
 \section{Old Stuff}
 
@@ -1103,145 +1244,5 @@ safety (after).
 they are combined, especially what bits can be factored out as common
 structure, e.g. the notion of accessibility)
 \fi
-
-\section{Implementation}
-\label{impl}
-
-Sketch of the micropolicies that claim to implement these properties on
-PIPE...
-
-\subsection{A taint checking monitor}
-
-\subsection{A stack safety monitor}
-
-\section{Testing the implementations}
-
-\begin{itemize}
-\item Experimental results of testing
-\end{itemize}
-
-\section{Related work}
-
-\begin{itemize}
-\item Nick and Andre's papers (and other micropolicy papers)
-\cite{DBLP:conf/sp/RoesslerD18}
-
-This is the basis of our run-time monitor in Section{XXX}.  Specifically,
-our micropolicy is a simplified variant of their ... (I think it is the
-Return-Address Protection + Static Authorities + Depth Isolation policy, but
-need to double check---be careful about laziness.)  Essentially, our work
-arose as an attempt to formalize the security property enforced by something
-like one of their stack policies.
-
-\item Hritcu et al's work on ``Testing Noninterference
-Quickly''~\cite{DBLP:journals/jfp/HritcuLSADHPV16} laid the
-foundation of the random testing strategy that we use here.  In particular,
-that paper explored testing strategies based on both standard ``End-to-end
-noninterference''---a pleasantly extensional and easy-to-define property
-that leads to somewhat inefficient testing because process that misbehaves
-while its PC is labeled ``high'' must return to a low PC before the
-misbehavior can be identified as such---and ``Single-step
-noninterference''---a more intricate property related to Goguen and
-Meseguer's ``unwinding conditions''~\cite{GoguenMeseguer85} that ``fails
-faster'' and is thus easier to test.  \bcp{Explain the relation of the
-  latter property to our stack testing strategy.}
-
-\item Azevedo de Amorim's presentation of heap safety as a noninterference
-property~\cite{DBLP:conf/post/AmorimHP18} was a key inspiration for our
-definition of stack safety.  (Details...)
-
-\item StkTokens: Skorstengaard, Devriese, Birkedal
-\begin{itemize}
-\item POPL \cite{skorstengaard2019stktokens}
-\item tech report with proofs: \cite{skorstengaard2018stktokens}
-\url{https://arxiv.org/pdf/1811.02787.pdf}
-\item TR with proofs for ``Reasoning about a machine...'', Feb 2019:
-\url{https://arxiv.org/pdf/1902.05283.pdf}
-\item \url{http://cs.au.dk/~lask/papers/esop2018.pdf}
-\item Also: {\em Reasoning about a Machine with Local Capabilities: Provably
-  Safe Stack and Return Pointer Management} \cite{10.1145/3363519}
-\url{https://dl.acm.org/doi/fullHtml/10.1145/3363519}
-
-\bcp{I'm nervous that these papers may be viewed as subsuming most of
-  ours---in particular, their security property is formulated as a logical
-  relation, i.e. a relational property!  We really need to dig into the
-  details (which are unfortunately rather technical).}
-\end{itemize}
-
-\item Stuff about dynamically changing labels (see footnote in Testing
-Noninterference Quickly paper)
-
-\item Simple Noninterference by Normalization \url{http://nachivpn.me/nibnbe.pdf}
-
-\item Mechanized Reasoning about a Capability Machine: [Linn] Georges,
-Trieu, Birkedal (PriSC 2020).
-%
-Described at the Iris Workshop as formalizing the security properties of
-capabilities. This appears to involve a fairly complex and very large
-mechanization in Iris (also in the eyes of the Iris people).
-
-
-
-\item \url{https://www.cis.upenn.edu/~stevez/papers/LZ05a.pdf} ??
-
-\item Not so closely related?
-\begin{itemize}
-\item Daniel's tainting paper (and some refs cited there)
-      \cite{DBLP:conf/eurosp/SchoepeBPS16} -- not needed if we postpone
-      dealing with tainting till another paper!
-\item We'd better say something about the relation to the original
-hyperproperties paper, no?  (No, not if we drop the word hyperproperty!) 
-\end{itemize}
-\end{itemize}
-
-\iftext
-\section{Future work}
-
-\begin{itemize}
-\item Variations / extensions (OS, multiple processes, coroutines, generalizing depths to stacks of static call points, etc.)
-\item Extending the policy / property to more realistic ones
-\begin{itemize}
-\item Argument passing
-\item Variable-size stack frames
-\item Stack variables
-\item Relation to Nick and Andre’s policy
-\end{itemize}
-\item Could we also implement all this using Cheri capabilities?
-\item A more abstract presentation, perhaps unifying our treatments of
-confidentiality and integrity?
-\end{itemize}
-
-More:
-\begin{itemize}
-\item More realistic calling conventions.  (We need to eventually match this to the particular calling convention of whatever compiler we choose.)  E.g., the above will not quite work for passing arguments on the stack: callee won’t be able to read them…So perhaps need to support a special kind of write instruction that stores D.PCdepth+1 . [RB: Or implement this distinction through tags?]
-\item Combination with heap policy (colors, etc.)
-\item For coroutines:
-\begin{itemize}
-\item Generalize depth to depth + PID
-\item Private stuff not having changed as an idea should still work
-\item Maybe not so hard: The scheduler + other coroutines are just a sort of generalized “callee” as far as this process is concerned.  Just need to fiddle th step relation so that it recognizes which process is getting returned to and updates its description appropriately.
-\end{itemize}
-\item If we had a heap policy, maybe we could talk about dynamic code generation, loading, as allocating a heap region, storing instructions into it, and then calling into them.  For now, we just make all the instructions read only and assume they exist in the initial state.
-\item Question: how efficiently can consistency be tested? How much scrambling is needed, and does it really need to occur before every instruction? How expensive is it to check for agreement between the (in)accessible parts of two memories?  Would spot checking for agreement be adequate?]
-\item What are the effects of compartmentalization on the ability of each compartment to change its own code/stack?
-\item Tail calls (maybe by not marking them as call sites?)
-\end{itemize}
-
-\section*{Acknowledgments}
-\fi
-
-\section*{References}
-\bibliographystyle{IEEEtran}
-% \bibliography{bcp,local}
-
-\newpage
-
-\section*{Things to think about}
-
-\begin{itemize}
-\item
-How does Nick’s stack policy actually work these days?
-\item Andrew remembers that Catalin looked at something like this a long time ago and they decided that they needed unique tags for each dynamic call, not just levels.  We should check.
-\end{itemize}
 
 \end{document}
