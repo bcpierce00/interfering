@@ -648,6 +648,50 @@ definition of stack safety.  (Details...)
   needs to be associated with a unique seal for returns, which should never be
   leaked to an adversary.
 
+  In their ESOP 2018 paper, the same authors present a similar scheme that uses
+  local capabilities employing similar techniques. Their capability machine is
+  mostly standard. Operations other than those working on capabilities are
+  mostly standard, with small extensions to account for the presence
+  capabilities. Notably, jmp needs to account for enter capabilities, which can
+  only be used to jump to a location and then become read-execute; they
+  represent an opaque packing of some code together with local state. The store
+  operation is also complicated, this time by the presence of local
+  capabilities, which can only be stored in registers (and write-local memory)
+  and may be temporarily handed over to an adversary, say for the duration of a
+  call.
+
+  The work presents a concrete calling convention that relies on a single shared
+  stack and has moderate overhead with stack and return pointers passed through
+  registers as local capabilities. The scheme imposes some standard conditions
+  on initial state and memory allocation primitives, and safety measures a
+  component needs to perform to protect itself against an adversary. The most
+  demanding requirement is that not only non-return value registers and used
+  stack, but also the unused part of the stack (which may contain local
+  capabilities) needs to be cleared when returning to the adversary. Simple
+  measures are applied on calls and returns to and from an adversary, and on
+  calls from an adversary.
+
+  The logical relation that is presented is not specific to the particular
+  calling convention. It uses a variant of the public-private separation of
+  worlds to model the particular properties of local capabilities. In
+  particular, worlds have permanent, temporary and revoked regions, with
+  non-revoked regions comprising a state transition system with both public and
+  private transitions. Local and global capabilities can depend on protocols
+  from permanent regions, and local capabilities can also depend on protocols
+  from temporary regions (which may be revoked in the future, and may not
+  outlive those regions). A pair of future world relations describe the changes
+  of memory over time. In the public FW relation, temporary and permanent
+  regions can evolve according to the public part of their transition system,
+  and revoked regions can be reinstated as temporary. In the private FW
+  relation, temporary and revoked regions can be replaced by arbitrary regions,
+  and permanent regions can evolve according to the private part of their
+  transition system. The relation defines an observation relation for safe
+  configurations (i.e., the memory of a halting configuration is satisfied by
+  some private FW). The relation on values covers conditions for the safe use of
+  write and write-local capabilities, and similarly for enter capabilities.
+
+  All this is used to prove WBCF and LCE for concrete example programs.
+
 }
 
 \end{itemize}
