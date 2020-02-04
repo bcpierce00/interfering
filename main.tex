@@ -578,6 +578,78 @@ definition of stack safety.  (Details...)
   ours---in particular, their security property is formulated as a logical
   relation, i.e. a relational property!  We really need to dig into the
   details (which are unfortunately rather technical).}
+
+\rb{
+  Some notes on StkTokens.
+
+  A calling convention based on linear capabilities to enforce WBCF and LCE. The
+  program is divided into mutually distrustful components. Instead of using
+  separate stacks for each component and a shared control stack, it uses a
+  single shared stack. For this, it needs to pass stack and return capabilities
+  to possibly untrusted components temporarily, revoking them later. Together
+  with a small number of security checks, these measures suffice to guarantee
+  WBCF and LCE. StkTokens employs linear capabilities to obtain this kind of
+  result while limiting the amount of overhead needed to secure the transitions
+  between boundary crossings, modeled by a standard notion of components,
+  linking, disjoint interfaces, etc.
+
+  The capability machine that is modeled has two final configurations: halted
+  (for successful termination) and failed. It is a mostly standard capability
+  machine, modified by the additional requirements of linear capabilities
+  (moves, stores and loads, seals, splitting and splicing of ranges of
+  capability).
+
+  The formalization relies on the definition of a second operational semantics
+  for the target language, where WBCF and LCE are natively enforced, and a proof
+  of FA between that and the original operational semantics of the target. This
+  semantics executes in lockstep with the original target semantics; in
+  addition, it gives a special interpretation to the sequence of call
+  instructions on top of the regular step relation. It assumes that all
+  components meet some syntactic well-formedness requirements, and requires
+  trusted components to perform a number of simple checks in addition to
+  employing the calling convention proper (check of stack base address on call,
+  appropriate use and protection of return and closure seals), as well as some
+  conditions on initial system configurations. The formalization has a number
+  of advantages over previous work, notably the establishment of some temporal
+  safety guarantees.
+
+  The core of the proof of FA is the definition of when two components are
+  related. This is modeled by a step-indexed Kripke logical with recursive
+  worlds, which each collect assumptions about the system. Worlds are divided
+  into sub-worlds for heap, call stack and free stack, each mapping region names
+  to regions, which can be either spatial (all three) or shared (heap only,
+  encapsulating a system invariant, including an invariant on seals). Spatial
+  regions differ from shared regions in their linearity and (optionally)
+  ownership. ``Regular'' spatial regions can become owned or revoked without
+  while preserving the relation between memories in the two semantics. The proof
+  uses (shared) code regions, regions for heap and stack memory, and regions to
+  track immutable, inactive parts of the stack. With those Kripke worlds, the LR
+  defines relatedness of various entities. There are two value relations for
+  trusted and untrusted values (a subset of trusted values which are safe to
+  pass to an adversary, including stack pointers and their linear capabilities,
+  and sealed values, all under certain conditions on the ownership of the
+  various parts of the stack). The top-level FA proof is straightforward.
+
+  The extended operational semantics has support for tail calls. Because data
+  memory does not contain any seals or ways to get to those, it can always be
+  shared safely.
+
+  Like in our scheme, instructions must be marked as executable and a check on
+  the PC made at each step. Stack pointers are now linear stack capabilities
+  (and there should only be stack pointers for the stack memory). Return
+  pointers are pairs of sealed return capabilities, encapsulating the callers
+  data and return code; the callee can only jump to these. A caller will split
+  its own stack capability into two: one for its local stack frame (which will
+  be sealed as the data component of the return capability pair) and one for the
+  unused stack, which will be passed to the callee. This second capability is
+  also used as a token to prove that the callee is allowed to return to the
+  caller by adjacency with the sealed data capability (for this trick to work,
+  stack frames must be non-empty). Another requirement is that each call point
+  needs to be associated with a unique seal for returns, which should never be
+  leaked to an adversary.
+
+}
+
 \end{itemize}
 
 \item Stuff about dynamically changing labels (see footnote in Testing
