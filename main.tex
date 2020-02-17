@@ -184,6 +184,26 @@ condition on programs (i.e., machine states) articulating some useful
 security goal, e.g. noninterference.
 \fi
 
+A {\em contour} $\contour \in \CONTOURS = \COMPONENTS \rightarrow \{\ACCYES,
+\ACCNO, \ACCCODE\}$ is a map from machine components to accessibility levels.
+$\ACCYES$ marks locations whose contents represent data observable from the
+outside (by the ``attacker,'' e.g., by DMA), which moreover correspond to
+low-integrity components (e.g., locations that can be written to \iftext
+\bcp{directly or indirectly} \fi by the network). $\ACCNO$ marks internal
+``hidden'' state that cannot be observed directly (e.g., processor registers and
+memory addresses for temporary variables will usually be hidden), which is
+moreover high-integrity (i.e., locations which should be protected from flows
+from the network)
+%
+\rb{Tried to merge discussion on integrity and secrecy, but maybe it is clearer
+  to separate both concerns?}
+%
+In addition to those two accessibility levels, $\ACCCODE$ marks locations that
+hold executable instructions, which are considered to be low-secrecy (i.e.,
+observable by the attacker) and high-integrity (i.e., the attacker cannot write
+to them).
+
+\rb{OLD:
 \leo{We might need to change the intuition behind some of these things.}
 A {\em contour} $\contour \in \CONTOURS = \COMPONENTS \rightarrow
 \{\HIGHSEC,\LOWSEC\} \times \{\HIGHINT, \LOWINT\}$\bcp{We need more mnemonic names for
@@ -198,13 +218,20 @@ temporary variables will usually be hidden). Similarly, $\LOWINT$
 locations correspond to low-integrity components (e.g. locations that
 can be written to \iftext \bcp{directly or indirectly} \fi by the network), while $\HIGHINT$ locations should be
 protected from such flows.
+}
 
+\rb{The flows-to relation was quite nice before, now it looks like it will get
+  messier\ldots}
+%
 We denote this (reflexive) flows-to relation with $\flows$. Then
 $\LOWSEC \flowsstrict \HIGHSEC$ and $\HIGHINT \flowsstrict
 \LOWINT$. We can easily lift this relation to pairs of secrecy and
 integrity labels, and from there to contours pointwise.
 
 \subsection{Observations}
+
+\rb{We are not using observations at the moment, but a few adjustments are made
+  here.}
 
 A {\em component observation} is either a word or the special value $\bot$.
 A {\em state observation} is a map from machine components to component
@@ -224,13 +251,13 @@ is sequence of state observations $\stateobs_0,\, \stateobs_1,\,
 \ldots$ defined informally as follows:
 \begin{itemize}
 \item $\stateobs_0$ maps every visible component $\component$ (where
-  $\contour(\component) = (\LOWSEC, \_)$) to its value in $\mach_0$
+  $\contour(\component) \in \{\ACCYES, \ACCCODE\}$) to its value in $\mach_0$
   and every hidden component to $\bot$;
 \item $\stateobs_{i+1}$ is defined from $\stateobs_{i}$ by (1) for
-  each visible component $\component$ (where $\contour(\component) =
-  (\LOWSEC, \_)$), copying its value from $\mach_{i+1}$, and (2) for
+  each visible component $\component$ (where $\contour(\component) \in
+  \{\ACCYES, \ACCCODE\}$), copying its value from $\mach_{i+1}$, and (2) for
   each hidden component $\component$, where $\contour (\component) =
-  (\HIGHSEC,\_)$, copying its value from $\stateobs_{i}$, and (3) if
+  \ACCNO$, copying its value from $\stateobs_{i}$, and (3) if
   the resulting $\stateobs_{i+1}$ is identical to $\stateobs_{i}$,
   then skipping $\stateobs_{i+1}$.  \iftext\bcp{Too informal!!}\fi
 \end{itemize}
@@ -312,8 +339,13 @@ for which $C \flows C_i$ for all $i > 0$ in the sequence.
 Given a machine state $\mach$ and a contour $\contour$, a {\em
   variant} of $\mach$ with respect to $\contour$ is any machine state
 $\mach'$ whose components agree with $\mach$ on all components marked
-$\LOWSEC$ by $\contour$---i.e., if $\contour(\component) = \LOWSEC$, then
+$\ACCYES$ or $\ACCCODE$ by $\contour$---i.e., if $\contour(\component) \in \{\ACCYES, \ACCCODE\}$, then
 $\mach(\component) = \mach'(\component)$.
+%
+\rb{When we talk about observations, it is visibility that we are concerned with
+  and moving from $\HIGHSEC$ to $\ACCNO$ and $\LOWSEC$ to $\ACCYES$ and
+  $\ACCCODE$ is simple. Here, the case of code is slightly more
+  interesting (are $\ACCCODE$-variants ever useful?).}
 
 Let $\initmach$ be the set of initial states of the machine and let
 $\initcontour(M)$ be the\bcp{an?} initial contour assigned to each $M \in
@@ -340,6 +372,8 @@ A trace $\seq{M}$ satisfies the {\em integrity} safety property with
 respect to a contour $\contour$, if for all components $\component$
 where $\contour(\component) = (\_, \HIGHINT)$, $M_i(K) = M_0(K)$ for
 all $i$ in the trace.
+%
+\rb{Here, $\HIGHINT$ would be replaced by $\in \{\ACCNO, \ACCCODE\}$.}
 
 A pair of traces $\seq{M}$ and $\seq{N}$ satisfy the {\em
   confidentiality} safety hyperproperty with respect to a contour
