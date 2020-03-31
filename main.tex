@@ -127,7 +127,9 @@ Our contributions are:
 Concretely, we have in mind a conventional machine architecture with a
 standard (RISC-V) processor extended with some kind of (static or dynamic,
 software- or hardware-enforced) security monitor, but we won't need to make
-any specific choices about details until we get to \cref{impl}.
+any specific choices about details until we get to \bcp{the implementation
+  section}.
+% \cref{impl}.
 
 Conventions:
 %
@@ -182,6 +184,26 @@ condition on programs (i.e., machine states) articulating some useful
 security goal, e.g. noninterference.
 \fi
 
+A {\em contour} $\contour \in \CONTOURS = \COMPONENTS \rightarrow \{\ACCYES,
+\ACCNO, \ACCCODE\}$ is a map from machine components to accessibility levels.
+$\ACCYES$ marks locations whose contents represent data observable from the
+outside (by the ``attacker,'' e.g., by DMA), which moreover correspond to
+low-integrity components (e.g., locations that can be written to \iftext
+\bcp{directly or indirectly} \fi by the network). $\ACCNO$ marks internal
+``hidden'' state that cannot be observed directly (e.g., processor registers and
+memory addresses for temporary variables will usually be hidden), which is
+moreover high-integrity (i.e., locations which should be protected from flows
+from the network)
+%
+\rb{Tried to merge discussion on integrity and secrecy, but maybe it is clearer
+  to separate both concerns?}
+%
+In addition to those two accessibility levels, $\ACCCODE$ marks locations that
+hold executable instructions, which are considered to be low-secrecy (i.e.,
+observable by the attacker) and high-integrity (i.e., the attacker cannot write
+to them).
+
+\rb{OLD:
 \leo{We might need to change the intuition behind some of these things.}
 A {\em contour} $\contour \in \CONTOURS = \COMPONENTS \rightarrow
 \{\HIGHSEC,\LOWSEC\} \times \{\HIGHINT, \LOWINT\}$\bcp{We need more mnemonic names for
@@ -196,13 +218,20 @@ temporary variables will usually be hidden). Similarly, $\LOWINT$
 locations correspond to low-integrity components (e.g. locations that
 can be written to \iftext \bcp{directly or indirectly} \fi by the network), while $\HIGHINT$ locations should be
 protected from such flows.
+}
 
+\rb{The flows-to relation was quite nice before, now it looks like it will get
+  messier\ldots}
+%
 We denote this (reflexive) flows-to relation with $\flows$. Then
 $\LOWSEC \flowsstrict \HIGHSEC$ and $\HIGHINT \flowsstrict
 \LOWINT$. We can easily lift this relation to pairs of secrecy and
 integrity labels, and from there to contours pointwise.
 
 \subsection{Observations}
+
+\rb{We are not using observations at the moment, but a few adjustments are made
+  here.}
 
 A {\em component observation} is either a word or the special value $\bot$.
 A {\em state observation} is a map from machine components to component
@@ -222,13 +251,13 @@ is sequence of state observations $\stateobs_0,\, \stateobs_1,\,
 \ldots$ defined informally as follows:
 \begin{itemize}
 \item $\stateobs_0$ maps every visible component $\component$ (where
-  $\contour(\component) = (\LOWSEC, \_)$) to its value in $\mach_0$
+  $\contour(\component) \in \{\ACCYES, \ACCCODE\}$) to its value in $\mach_0$
   and every hidden component to $\bot$;
 \item $\stateobs_{i+1}$ is defined from $\stateobs_{i}$ by (1) for
-  each visible component $\component$ (where $\contour(\component) =
-  (\LOWSEC, \_)$), copying its value from $\mach_{i+1}$, and (2) for
+  each visible component $\component$ (where $\contour(\component) \in
+  \{\ACCYES, \ACCCODE\}$), copying its value from $\mach_{i+1}$, and (2) for
   each hidden component $\component$, where $\contour (\component) =
-  (\HIGHSEC,\_)$, copying its value from $\stateobs_{i}$, and (3) if
+  \ACCNO$, copying its value from $\stateobs_{i}$, and (3) if
   the resulting $\stateobs_{i+1}$ is identical to $\stateobs_{i}$,
   then skipping $\stateobs_{i+1}$.  \iftext\bcp{Too informal!!}\fi
 \end{itemize}
@@ -310,8 +339,13 @@ for which $C \flows C_i$ for all $i > 0$ in the sequence.
 Given a machine state $\mach$ and a contour $\contour$, a {\em
   variant} of $\mach$ with respect to $\contour$ is any machine state
 $\mach'$ whose components agree with $\mach$ on all components marked
-$\LOWSEC$ by $\contour$---i.e., if $\contour(\component) = \LOWSEC$, then
+$\ACCYES$ or $\ACCCODE$ by $\contour$---i.e., if $\contour(\component) \in \{\ACCYES, \ACCCODE\}$, then
 $\mach(\component) = \mach'(\component)$.
+%
+\rb{When we talk about observations, it is visibility that we are concerned with
+  and moving from $\HIGHSEC$ to $\ACCNO$ and $\LOWSEC$ to $\ACCYES$ and
+  $\ACCCODE$ is simple. Here, the case of code is slightly more
+  interesting (are $\ACCCODE$-variants ever useful?).}
 
 Let $\initmach$ be the set of initial states of the machine and let
 $\initcontour(M)$ be the\bcp{an?} initial contour assigned to each $M \in
@@ -338,6 +372,8 @@ A trace $\seq{M}$ satisfies the {\em integrity} safety property with
 respect to a contour $\contour$, if for all components $\component$
 where $\contour(\component) = (\_, \HIGHINT)$, $M_i(K) = M_0(K)$ for
 all $i$ in the trace.
+%
+\rb{Here, $\HIGHINT$ would be replaced by $\in \{\ACCNO, \ACCCODE\}$.}
 
 A pair of traces $\seq{M}$ and $\seq{N}$ satisfy the {\em
   confidentiality} safety hyperproperty with respect to a contour
@@ -388,6 +424,67 @@ states.
 %\bcp{If we use this later, we need to say it more formally to be clear about
 %  what we mean---e.g., I had thought both the traces and the contour would
 %  be functions of $X$!}
+
+\rb{New try. Contours are as above.}
+
+A {\em call/return map} $\kappa \in \WORDS \rightarrow \{\CRCALL, \CRRET,
+\CRBOT\}$ is a map from addresses to tags (not to be confused with tags at the
+micropolicy level \rb{reference if needed}) that denote whether a memory
+location is to be treated as (the first word of) a call instruction, a return
+instruction, or neither \rb{(and we should compare these with call and return
+machine instructions ``proper'')}.
+
+The {\em step relation} $(\stepkappa) :: \MACHS \rightharpoonup \MACHS$ is a
+partial function from machine states to machine states: a restriction of the
+native machine's step relation $\stepstounderfull$ indexed by a call/return
+map $\kappa$, such that \rb{(How much to build into this, and/or the machine
+states themselves? Also describe and notate the concept of ``running until
+the first unmatched return (cf. observable halting states)'') \ldots}
+
+Given a machine state $\mach$ and associated contour $\contour$, an
+$\ACCNO$-variant is any state $\mach'$ that varies machine components tagged as
+$\ACCNO$ in $\mach$: that is, for any component $\component$ of $\mach$, if
+$\contour(\component) \neq \ACCNO$, then
+$\mach(\component) = \mach'(\component)$; otherwise (if
+$\contour(\component) = \ACCNO$), then $\mach'(\component)$ holds an
+arbitrary value, unrelated to $\mach(\component)$. Similarly, $\ACCYES$-variant
+states are defined by scrambling those machine components tagged as $\ACCYES$
+and leaving all others unchanged.
+
+A machine state $\mach$ is {\em safe} with respect to a contour $\contour$
+\rb{and call/return map $\kappa$} if it satisfies the following conditions:
+%
+\begin{enumerate}
+
+\item {\em Integrity:} if we run $\mach$ until its first unmatched return (if
+  any), all components other than those marked as accessible must remain
+  unchanged with respect to $\mach$. \rb{That is, the final state is an
+  $\ACCYES$-variant of $\mach$.}
+
+\item {\em Confidentiality:} for every $\ACCNO$-variant $\mach'$ of $\mach$, if
+  we run $\mach$ and $\mach'$ until their first unmatched returns, the resulting
+  final states are themselves $\ACCNO$-variant of one another. \rb{(Homogenize
+  notations, see also above.)}
+
+\item Let $\mach_1, \mach_2, \ldots$ be a machine execution starting from
+  $\mach$, i.e., $\mach_1 = \mach$. Let also $\contour_1, \contour_2, \ldots$
+  be the corresponding sequence of contours, such that $\contour_1 = \contour$
+  and at each step $\mach_i$ the corresponding $\contour_i$ \rb{\ldots better
+  define the contour-updating step in the style of $\stepplus$.} For all $i$,
+  if $M_i$ is a top-level call in the trace, then (the instruction immediately
+  after) it \rb{$\mach_{i+1}$?} is safe with respect to $C_i$.
+
+\item All instructions executed throughout any run starting from $\mach$ are
+  marked as such in the contour $\contour$. \rb{Need notation to dereference the
+  PC and have the memory be marked as $\ACCCODE$:
+  $\contour_i(\PC{\mach_i}) = \ACCCODE$ (or noting invariance in $\ACCCODE$
+  parts of $\contour$).}
+
+\end{enumerate}
+
+The step relation $\stepkappa$ is itself safe if every machine state $\mach$ is
+safe with respect to the special contour where all memory locations containing
+code are marked $\ACCCODE$ and all other components are marked $\ACCYES$.
 
 \subsection{Noninterference}
 
@@ -575,7 +672,7 @@ definition of stack safety.  (Details...)
 \url{https://arxiv.org/pdf/1811.02787.pdf}
 \item TR with proofs for ``Reasoning about a machine...'', Feb 2019:
 \url{https://arxiv.org/pdf/1902.05283.pdf}
-\item \url{http://cs.au.dk/~lask/papers/esop2018.pdf}
+\item \url{https://cs.au.dk/~birke/papers/local-capabilities-conf.pdf}
 \item Also: {\em Reasoning about a Machine with Local Capabilities: Provably
   Safe Stack and Return Pointer Management} \cite{10.1145/3363519}
 \url{https://dl.acm.org/doi/fullHtml/10.1145/3363519}
@@ -584,6 +681,131 @@ definition of stack safety.  (Details...)
   ours---in particular, their security property is formulated as a logical
   relation, i.e. a relational property!  We really need to dig into the
   details (which are unfortunately rather technical).}
+
+\rb{
+  Some notes on StkTokens.
+}
+\rb{
+  A calling convention based on linear capabilities to enforce WBCF and LCE. The
+  program is divided into mutually distrustful components. Instead of using
+  separate stacks for each component and a shared control stack, it uses a
+  single shared stack. For this, it needs to pass stack and return capabilities
+  to possibly untrusted components temporarily, revoking them later. Together
+  with a small number of security checks, these measures suffice to guarantee
+  WBCF and LCE. StkTokens employs linear capabilities to obtain this kind of
+  result while limiting the amount of overhead needed to secure the transitions
+  between boundary crossings, modeled by a standard notion of components,
+  linking, disjoint interfaces, etc.
+}
+\rb{
+  The capability machine that is modeled has two final configurations: halted
+  (for successful termination) and failed. It is a mostly standard capability
+  machine, modified by the additional requirements of linear capabilities
+  (moves, stores and loads, seals, splitting and splicing of ranges of
+  capability).
+}
+\rb{
+  The formalization relies on the definition of a second operational semantics
+  for the target language, where WBCF and LCE are natively enforced, and a proof
+  of FA between that and the original operational semantics of the target. This
+  semantics executes in lockstep with the original target semantics; in
+  addition, it gives a special interpretation to the sequence of call
+  instructions on top of the regular step relation. It assumes that all
+  components meet some syntactic well-formedness requirements, and requires
+  trusted components to perform a number of simple checks in addition to
+  employing the calling convention proper (check of stack base address on call,
+  appropriate use and protection of return and closure seals), as well as some
+  conditions on initial system configurations. The formalization has a number
+  of advantages over previous work, notably the establishment of some temporal
+  safety guarantees.
+}
+\rb{
+  The core of the proof of FA is the definition of when two components are
+  related. This is modeled by a step-indexed Kripke logical with recursive
+  worlds, which each collect assumptions about the system. Worlds are divided
+  into sub-worlds for heap, call stack and free stack, each mapping region names
+  to regions, which can be either spatial (all three) or shared (heap only,
+  encapsulating a system invariant, including an invariant on seals). Spatial
+  regions differ from shared regions in their linearity and (optionally)
+  ownership. ``Regular'' spatial regions can become owned or revoked without
+  while preserving the relation between memories in the two semantics. The proof
+  uses (shared) code regions, regions for heap and stack memory, and regions to
+  track immutable, inactive parts of the stack. With those Kripke worlds, the LR
+  defines relatedness of various entities. There are two value relations for
+  trusted and untrusted values (a subset of trusted values which are safe to
+  pass to an adversary, including stack pointers and their linear capabilities,
+  and sealed values, all under certain conditions on the ownership of the
+  various parts of the stack). The top-level FA proof is straightforward.
+}
+\rb{
+  The extended operational semantics has support for tail calls. Because data
+  memory does not contain any seals or ways to get to those, it can always be
+  shared safely.
+}
+\rb{
+  Like in our scheme, instructions must be marked as executable and a check on
+  the PC made at each step. Stack pointers are now linear stack capabilities
+  (and there should only be stack pointers for the stack memory). Return
+  pointers are pairs of sealed return capabilities, encapsulating the callers
+  data and return code; the callee can only jump to these. A caller will split
+  its own stack capability into two: one for its local stack frame (which will
+  be sealed as the data component of the return capability pair) and one for the
+  unused stack, which will be passed to the callee. This second capability is
+  also used as a token to prove that the callee is allowed to return to the
+  caller by adjacency with the sealed data capability (for this trick to work,
+  stack frames must be non-empty). Another requirement is that each call point
+  needs to be associated with a unique seal for returns, which should never be
+  leaked to an adversary.
+}
+\rb{
+  In their ESOP 2018 paper, the same authors present a similar scheme that uses
+  local capabilities employing similar techniques. Their capability machine is
+  mostly standard. Operations other than those working on capabilities are
+  mostly standard, with small extensions to account for the presence
+  capabilities. Notably, jmp needs to account for enter capabilities, which can
+  only be used to jump to a location and then become read-execute; they
+  represent an opaque packing of some code together with local state. The store
+  operation is also complicated, this time by the presence of local
+  capabilities, which can only be stored in registers (and write-local memory)
+  and may be temporarily handed over to an adversary, say for the duration of a
+  call.
+}
+\rb{
+  The work presents a concrete calling convention that relies on a single shared
+  stack and has moderate overhead with stack and return pointers passed through
+  registers as local capabilities. The scheme imposes some standard conditions
+  on initial state and memory allocation primitives, and safety measures a
+  component needs to perform to protect itself against an adversary. The most
+  demanding requirement is that not only non-return value registers and used
+  stack, but also the unused part of the stack (which may contain local
+  capabilities) needs to be cleared when returning to the adversary. Simple
+  measures are applied on calls and returns to and from an adversary, and on
+  calls from an adversary.
+}
+\rb{
+  The logical relation that is presented is not specific to the particular
+  calling convention. It uses a variant of the public-private separation of
+  worlds to model the particular properties of local capabilities. In
+  particular, worlds have permanent, temporary and revoked regions, with
+  non-revoked regions comprising a state transition system with both public and
+  private transitions. Local and global capabilities can depend on protocols
+  from permanent regions, and local capabilities can also depend on protocols
+  from temporary regions (which may be revoked in the future, and may not
+  outlive those regions). A pair of future world relations describe the changes
+  of memory over time. In the public FW relation, temporary and permanent
+  regions can evolve according to the public part of their transition system,
+  and revoked regions can be reinstated as temporary. In the private FW
+  relation, temporary and revoked regions can be replaced by arbitrary regions,
+  and permanent regions can evolve according to the private part of their
+  transition system. The relation defines an observation relation for safe
+  configurations (i.e., the memory of a halting configuration is satisfied by
+  some private FW). The relation on values covers conditions for the safe use of
+  write and write-local capabilities, and similarly for enter capabilities.
+}
+\rb{
+  All this is used to prove WBCF and LCE for concrete example programs.
+}
+
 \end{itemize}
 
 \item Stuff about dynamically changing labels (see footnote in Testing
