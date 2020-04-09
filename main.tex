@@ -171,7 +171,159 @@ A {\em trace} is a finite or infinite sequence of machine states,
 $\seq{\mach} = \mach_0,\, \mach_1,\ldots$, in which adjacent machine
 states are related by $\stepstounderfull$---i.e., in which
 $\mach_{i-1} \stepstounderfull \mach_i$ for each $i > 0$ in the
-sequence.
+sequence. We write $\seq{\mach}^i_j$ for the subtrace between $i$ and
+$j$.
+
+\subsection{Contours}
+
+A {\em contour} $\contour \in \CONTOURS = \COMPONENTS \rightarrow
+\{\HIGHSEC, \LOWSEC\} \times \{\HIGHINT, \LOWINT\}$ is a map from
+machine components to a pair of confidentiality and integrity labels.
+$\LOWSEC$ marks locations whose contents represent data observable
+{\em by the current process}; $\HIGHSEC$ corresponds to non-observable
+data (e.g. local state of the process caller). $\HIGHINT$ marks
+locations that the current process does not have write access to;
+$\LOWINT$ is freely accessible memory. As examples of different
+combinations consider the following:
+\begin{itemize}
+\item Locations that belong to the current process such as
+  available registers, local stack, memory accessible through
+  available pointers will be tagged $\LOWSEC \times \LOWINT$:
+  they can be both read and written.
+\item The local state of the caller that needs to be protected from a
+  potentially untrusted callee will be marked $\HIGHSEC \times
+  \HIGHINT$. The callee should be able to neither read nor write
+  these locations.
+\item The instruction memory is read only for every process: $\LOWSEC
+  \times \HIGHINT$.
+\item We won't have examples of secret data that can be overwritten.
+  \leo{Maybe in the lazy setting?}
+\end{itemize}  
+
+\subsection{Identity colorings}
+\leo{Feel free to coin another name}
+
+An {\em identity coloring} of a trace $\seq{\mach}$ is an equal-length
+sequence $\seq{\ID}$ of booleans $\IDS = \{\ME, \NOTME\}$, where
+$\ID_j = \ME$ iff the machine state $\mach_j$ is executing the same
+process as $\mach_0$.
+
+A {\em call map} is a set of instructions for a machine state that are
+(1) $JAL$s and (2) correspond to actual calls.
+
+Given a machine trace $\seq{\mach}$ and a call map this can be
+computed as follows:
+\begin{enumerate}
+\item $mach_0$ is colored $\ME$.
+\item Find the next machine state $\mach_c$ (if any) that appears in
+  the trace $\seq{mach}$ such that the instruction executed at
+  $\mach_c$ is a $JAL$ that is marked as a call in the call map.
+\item Color all states between $\mach_0$ and $\mach_c$ inclusive as
+  $\ME$. If no such state exists, color the remainder of the trace
+  $\ME$.
+\item Find the next state $\mach_r$ after $\mach_c$ in the trace (if
+  any) such that the pc of $\mach_r$ is equal to the pc of $\mach_c +
+  4$, and whose stack pointer is identical to that of $\mach_c$.
+\item Color all states between $\mach_{c+1}$ and $\mach_r$ as
+  $\NOTME$.  If no such state exists, color the remainder of the trace
+  $\NOTME$.
+\item Color $\mach_{r+1}$ as $\ME$. Go to step (2).
+\end{enumerate}
+
+\subsection{Contoured Trace}
+
+Given a contour $C$ and a machine state $M$, the {\em contoured trace}
+induced by $C$ and $M$, written $\induced{C}{M}$, is the (finite or
+infinite) sequence of pairs of (contour, machine state) pairs in which
+states in adjacent pairs are related by $\stepstounderfull$, and in which
+contours in adjacent pairs are constructed as follows:
+\begin{itemize}
+\item If in the identity coloring of $\seq{\mach}$ $\ID_i$ = $\ID_{i+1}$ then
+  $C_{i+1} = C_i$.
+\item If $\ID_{i} = \ME$ and $\ID_{i+1} = \NOTME$, then $C_{i+1}$ is
+  constructed from $C_i$ by setting the local state of $\mach_i$ (the
+  caller) to $\HIGHSEC \times \HIGHINT$.
+\item If $\ID_{i} = \NOTME$ and $\ID_{i+1} = \ME$, then $C_{i+1}$ is
+  constructed from $C_i$ by setting the local state of the caller
+  to $\LOWSEC \times LOWINT$.
+\end{itemize}
+\leo{To make this more precise we need to accurately describe what
+  local state {\em is}}
+
+\subsection{Integrity}
+
+A trace $\seq{\mach}$ satisfies the {\em integrity} safety property
+with respect to a contour $\contour$, if for all components
+$\component$ where $\contour(\component) = (\_, \HIGHINT)$,
+$\mach_i(\component) = \mach_0(\component)$ for all $i$ in the trace.
+
+\leo{For confidentiality we need observations first}
+
+\subsection{Observations}
+
+A {\em component observation} is either a word or the special value
+$\bot$.  \leo{Fix notation, clashes with $\LOWINT$}  A {\em state
+  observation} is a map from machine components to component
+observations.
+
+An {\em observation} is a nonempty, finite or infinite sequence of state
+observations in which (1) adjacent elements are always distinct (``no
+stuttering'') and (2) any component $\component$ that is mapped to $\bot$ by
+the the $j^{th}$ state observation in the sequence must also be mapped to
+$\bot$ by all observations earlier than $j$ in the sequence (i.e., once a
+component's value changes from $\bot$ to anything else, it never changes
+back to $\bot$ again).
+
+In particular, the observation $\obstrace(\contour, \seq{\mach})$
+arising from a pair of a contour $\contour$ and a trace $\seq{\mach}$
+is sequence of state observations $\stateobs_0,\, \stateobs_1,\,
+\ldots$ defined informally as follows:
+\begin{itemize}
+\item $\stateobs_0$ maps every visible component $\component$ (where
+  $\contour(\component) \in \{\LOWSEC \times \_\}$) to its value in
+  $\mach_0$ and every hidden component to $\bot$;
+\item $\stateobs_{i+1}$ is defined from $\stateobs_{i}$ by (1) for
+  each visible component $\component$ (where
+  $\contour(\component) \in \{\LOWSEC \times \_ \}$) its value
+  from $\mach_{i+1}$, and (2) for each hidden component $\component$,
+  where $\contour (\component) = \{\HIGHSEC \times \_\}$,
+  copying its value from $\stateobs_{i}$, and (3) if the resulting
+  $\stateobs_{i+1}$ is identical to $\stateobs_{i}$, then skipping
+  $\stateobs_{i+1}$.  \iftext\bcp{Too informal!!}\fi
+\end{itemize}
+\iftext\bcp{Emphasize that ``observability is not observable.''}\fi
+
+\subsection{Confidentiality}
+
+Given a machine state $\mach$ and a contour $\contour$, a {\em
+  variant} of $\mach$ with respect to $\contour$ is any machine state
+$\mach'$ whose components agree with $\mach$ on all components marked
+$(\LOWSEC, \_)$ by $\contour$---i.e., if $\contour(\component) =
+(\LOWSEC, \_)$, then $\mach(\component) = \mach'(\component)$.
+
+A pair of traces $\seq{M}$ and $\seq{N}$ satisfy the {\em
+  confidentiality} safety hyperproperty with respect to a contour
+$\contour$, if, if the initials states are variants of each other $N_0
+\in \variant{C}{M_0}$, then the observations of one is a prefix of the
+observations of the other: $\obstrace(\contour, \seq{M}) \subseteq
+\obstrace(\contour, \seq{N})$.
+
+\subsection{Stack Safety}
+
+A trace $\seq{\mach}$ satisfies {\em stack safety} with respect to a
+contour $\contour$ if:
+\begin{itemize}
+\item $\seq{\mach}$ satisfies integrity with respect to $\contour$.
+\item For every variant $N \in \variant{C}{\mach_0}$, $\seq{\mach}$
+  and the the induced trace $\seq{N}$ satisfy confidentiality with
+  respect to $\contour$.
+\item Every subtrace $\seq{\mach}^r_c$ colored $\NOTME$ in the
+  identity coloring of $\seq{\mach}$ satisfies stack safety with
+  respect to the contour $\contour_c$.
+\end{itemize}
+
+
+\leo{OLD STUFF BEGINS HERE}
 
 \subsection{Contours}
 
