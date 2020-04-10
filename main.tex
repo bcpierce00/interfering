@@ -183,7 +183,7 @@ $\LOWSEC$ marks locations whose contents represent data observable
 {\em by the current process}; $\HIGHSEC$ corresponds to non-observable
 data (e.g. local state of the process caller). $\HIGHINT$ marks
 locations that the current process does not have write access to;
-$\LOWINT$ is freely accessible memory. As examples of different
+$\LOWINT$ is freely accessible \apt{``accessible''?} memory. As examples of different
 combinations consider the following:
 \begin{itemize}
 \item Locations that belong to the current process such as
@@ -211,23 +211,23 @@ process as $\mach_0$.
 A {\em call map} is a set of instructions for a machine state that are
 (1) $JAL$s and (2) correspond to actual calls.
 
-Given a machine trace $\seq{\mach}$ and a call map this can be
+Given a machine trace $\seq{\mach}$ and a call map the identity coloring can be
 computed as follows:
 \begin{enumerate}
-\item $mach_0$ is colored $\ME$.
+\item Set $i=0$.
+\item Color $\mach_i$ as $\ME$.
 \item Find the next machine state $\mach_c$ (if any) that appears in
-  the trace $\seq{mach}$ such that the instruction executed at
+  the trace $\seq{\mach}$ such that the instruction executed at
   $\mach_c$ is a $JAL$ that is marked as a call in the call map.
-\item Color all states between $\mach_0$ and $\mach_c$ inclusive as
+\item Color all states between $\mach_i$ and $\mach_c$ inclusive as
   $\ME$. If no such state exists, color the remainder of the trace
   $\ME$.
 \item Find the next state $\mach_r$ after $\mach_c$ in the trace (if
   any) such that the pc of $\mach_r$ is equal to the pc of $\mach_c +
   4$, and whose stack pointer is identical to that of $\mach_c$.
-\item Color all states between $\mach_{c+1}$ and $\mach_r$ as
-  $\NOTME$.  If no such state exists, color the remainder of the trace
-  $\NOTME$.
-\item Color $\mach_{r+1}$ as $\ME$. Go to step (2).
+\item If $M_r$ exists, color all states between $\mach_{c+1}$ and $\mach_{r-1}$ inclusive as
+  $\NOTME$. Otherwise, color the remainder of the trace starting from $\mach_{c+1}$ as $\NOTME$.  
+\item If $M_r$ exists, set $i=r$ and go to step (2). Otherwise, halt.
 \end{enumerate}
 
 \subsection{Contoured Trace}
@@ -245,10 +245,13 @@ contours in adjacent pairs are constructed as follows:
   caller) to $\HIGHSEC \times \HIGHINT$.
 \item If $\ID_{i} = \NOTME$ and $\ID_{i+1} = \ME$, then $C_{i+1}$ is
   constructed from $C_i$ by setting the local state of the caller
-  to $\LOWSEC \times LOWINT$.
+  to $\LOWSEC \times \LOWINT$.
 \end{itemize}
 \leo{To make this more precise we need to accurately describe what
   local state {\em is}}
+
+\apt{How is this definition of contoured traces connected to the various properties
+  below (which seem to talk about an (uncontoured) trace plus a single contour) ?}
 
 \subsection{Integrity}
 
@@ -256,6 +259,7 @@ A trace $\seq{\mach}$ satisfies the {\em integrity} safety property
 with respect to a contour $\contour$, if for all components
 $\component$ where $\contour(\component) = (\_, \HIGHINT)$,
 $\mach_i(\component) = \mach_0(\component)$ for all $i$ in the trace.
+
 
 \leo{For confidentiality we need observations first}
 
