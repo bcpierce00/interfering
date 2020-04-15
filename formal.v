@@ -1,0 +1,2 @@
+Coinductive StackSafety :=
+end.
