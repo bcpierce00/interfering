@@ -174,6 +174,28 @@ $\mach_{i-1} \stepstounderfull \mach_i$ for each $i > 0$ in the
 sequence. We write $\seq{\mach}^i_j$ for the subtrace between $i$ and
 $j$.
 
+\subsection{Calling Convention}
+
+\leo{Mainly @Andrew, check if this makes sense for the eager setting.}
+
+We adopt the following calling convention:
+\begin{itemize}
+\item First the caller increases the stack pointer to allocate stack space
+  for arguments and result and zeroes out anything not written.
+\item Then a $\JAL$ happens.
+\item Then the entry sequence of the callee follows which increases
+  the stack pointer again to allocate as much local space as needed
+  (e.g. for the return address), and it is all zeroed out if not
+  explicitly written. \leo{This can be lifted by dealing with
+    stack allocation in the contours}
+\end{itemize}  
+
+A {\em call map} is a map from a sequence of instructions (read: {\em
+  a call sequence}) to a natural number (the number of arguments and
+results of the call plus the size of the local state of the callee,
+which corresponds to stack locations that will be made available to
+the callee).
+
 \subsection{Contours}
 
 A {\em contour} $\contour \in \CONTOURS = \COMPONENTS \rightarrow
@@ -196,42 +218,38 @@ combinations consider the following:
   these locations.
 \item The instruction memory is read only for every process: $\LOWSEC
   \times \HIGHINT$.
-\item We won't have examples of secret data that can be overwritten.
-  \leo{Maybe in the lazy setting?}
+\item Uninitialized memory can be written, but never read. This is only
+  applicable in a more lazy setting where we don't zero out memory.
 \end{itemize}
 
 \subsection{Identity colorings}
 \leo{Feel free to coin another name}
 
+\leo{Went with S for ``self'' and O for ``other''. M/NM was confusing
+  with the machine states also being M. T/F didn't really work
+  with transitions. Open to other suggestions.}
 An {\em identity coloring} of a trace $\seq{\mach}$ is an equal-length
-sequence $\seq{\ID}$ of booleans $\IDS = \{\ME, \NOTME\}$, where
-$\ID_j = \ME$ iff the machine state $\mach_j$ is executing the same
-process as $\mach_0$.
-
-A {\em call map} is a set of instructions for a machine state that are
-(1) $JAL$s and (2) correspond to actual calls.
+sequence $\seq{\ID}$ of ids ($\IDS = \{\ME, \NOTME, \TRANS\}$, where
+$\ID_j = \ME$ if the machine state $\mach_j$ is executing the same
+process as $\mach_0$, $ID_j = \NOTME$ if it is executing a different
+process, and $ID_j = \TRANS$ during a transition (e.g. during a call
+or return sequence).
 
 Given a machine trace $\seq{\mach}$ and a call map the identity coloring can be
-computed as follows:
+computed by iterating through the trace:
 \begin{enumerate}
-\item Set $i=0$.
-\item Color $\mach_i$ as $\ME$.
-\item Find the next machine state $\mach_c$ (if any) that appears in
-  the trace $\seq{\mach}$ such that the instruction executed at
-  $\mach_c$ is a $JAL$ that is marked as a call in the call map.
-\item Color all states between $\mach_i$ and $\mach_c$ inclusive as
-  $\ME$. If no such state exists, color the remainder of the trace
-  $\ME$.
-\item Find the next state $\mach_r$ after $\mach_c$ in the trace (if
-  any) such that the pc of $\mach_r$ is equal to the pc of $\mach_c +
-  4$, and whose stack pointer is identical to that of $\mach_c$.
-\item If $M_r$ exists, color all states between $\mach_{c+1}$ and $\mach_{r-1}$ inclusive as
-  $\NOTME$. Otherwise, color the remainder of the trace starting from $\mach_{c+1}$ as $\NOTME$.
-\item If $M_r$ exists, set $i=r$ and go to step (2). Otherwise, halt.
+\item Start by coloring $\mach_0$ as $\ME$.
+\item Color every subsequent state as $\ME$, until the first machine
+  state (if any) at which the instruction executed is a
+  the beginning of a call sequence.
+\item Color the entire call sequence $\TRANS$. This necessarily
+  contains a machine state $\mach_c$ which is a $\JAL$.
+\item Color every subsequence state as $\NOTME$, until the first state
+  $\mach_r$ after $\mach_c$ in the trace (if any) such that the pc of
+  $\PC{\mach_r}$ is equal to $\PC{\mach_c} + 4$, and whose stack
+  pointer is identical to that of $\mach_c$. Then mark $\mach_r$ as
+  $\ME$ and got to step (2).
 \end{enumerate}
-
-\apt{This definition may need refinement to reflect the fact that entry and exit sequences
-  are multiple instructions; in the middle of these sequences the state might be neither $\ME$ nor $\NOTME$.}
 
 \subsection{Contoured Trace}
 
@@ -241,17 +259,22 @@ infinite) sequence of pairs of (contour, machine state) pairs in which
 states in adjacent pairs are related by $\stepstounderfull$, and in which
 contours in adjacent pairs are constructed as follows:
 \begin{itemize}
-\item If in the identity coloring of $\seq{\mach}$ $\ID_i$ = $\ID_{i+1}$ then
+\item If in the identity coloring of $\seq{\mach}$ the identity of
+  consecutive states is preserved ($\ID_i$ = $\ID_{i+1}$) then
   $C_{i+1} = C_i$.
-\item If $\ID_{i} = \ME$ and $\ID_{i+1} = \NOTME$, then $C_{i+1}$ is
+\item If $\ID_{i} = \ME$ and $\ID_{i+1} = \TRANS$, then $C_{i+1}$ is
   constructed from $C_i$ by setting the local state of $\mach_i$ (the
-  caller) to $\HIGHSEC \times \HIGHINT$.
-\item If $\ID_{i} = \NOTME$ and $\ID_{i+1} = \ME$, then $C_{i+1}$ is
+  caller) to $\HIGHSEC \times \HIGHINT$. The local state is comprised
+  of everything below the stack pointer at $\mach_i$.
+\item If $\ID_{i} = \TRANS$ and $\ID_{i+1} = \NOTME$, then $C_{i+1}$ is
+  constructed from $C_i$ by making the top $n$ locations in the stack,
+  where $n$ is the mapping of the transition call sequence in the call map,
+  readable and writeable $\LOWSEC \times \LOWINT$.
+\item If $\ID_{i} = \TRANS$ and $\ID_{i+1} = \ME$, then $C_{i+1}$ is
   constructed from $C_i$ by setting the local state of the caller
-  to $\LOWSEC \times \LOWINT$.
+  to $\LOWSEC \times \LOWINT$, and making everything above the stack
+  pointer $\HIGHSEC \times \HIGHINT$ again.
 \end{itemize}
-\leo{To make this more precise we need to accurately describe what
-  local state {\em is}}
 
 \subsection{Integrity}
 
@@ -259,7 +282,6 @@ A trace $\seq{\mach}$ satisfies the {\em integrity} safety property
 with respect to a contour $\contour$, if for all components
 $\component$ where $\contour(\component) = (\_, \HIGHINT)$,
 $\mach_i(\component) = \mach_0(\component)$ for all $i$ in the trace.
-
 
 \leo{For confidentiality we need observations first}
 
@@ -279,27 +301,23 @@ component's value changes from $\bot$ to anything else, it never changes
 back to $\bot$ again).
 
 In particular, the observation $\obstrace(\contour, \seq{\mach})$
-arising from a pair of a contour $\contour$ and a trace $\seq{\mach}$
+arising from a contoured trace $\seq{(\contour, \mach)}$
 is sequence of state observations $\stateobs_0,\, \stateobs_1,\,
 \ldots$ defined informally as follows:
 \begin{itemize}
 \item $\stateobs_0$ maps every visible component $\component$ (where
-  $\contour(\component) \in \{\LOWSEC \times \_\}$) to its value in
+  $\contour_0(\component) \in \{\LOWSEC \times \_\}$) to its value in
   $\mach_0$ and every hidden component to $\bot$;
 \item $\stateobs_{i+1}$ is defined from $\stateobs_{i}$ by (1) for
   each visible component $\component$ (where
-  $\contour(\component) \in \{\LOWSEC \times \_ \}$) its value
+  $\contour_{i+1}(\component) \in \{\LOWSEC \times \_ \}$) its value
   from $\mach_{i+1}$, and (2) for each hidden component $\component$,
-  where $\contour (\component) = \{\HIGHSEC \times \_\}$,
+  where $\contour_{i+1} (\component) = \{\HIGHSEC \times \_\}$,
   copying its value from $\stateobs_{i}$, and (3) if the resulting
   $\stateobs_{i+1}$ is identical to $\stateobs_{i}$, then skipping
   $\stateobs_{i+1}$.  \iftext\bcp{Too informal!!}\fi
 \end{itemize}
 \iftext\bcp{Emphasize that ``observability is not observable.''}\fi
-
-\apt{This definition seems to have vestiges of being based on contoured
-  traces; for single contours, there is no possibility of changing from
-  $\bot$ to anything else.}
 
 \subsection{Confidentiality}
 
@@ -313,8 +331,8 @@ A pair of traces $\seq{M}$ and $\seq{N}$ satisfy the {\em
   confidentiality} safety hyperproperty with respect to a contour
 $\contour$, if, if the initials states are variants of each other $N_0
 \in \variant{C}{M_0}$, then the observations of one is a prefix of the
-observations of the other: $\obstrace(\contour, \seq{M}) \subseteq
-\obstrace(\contour, \seq{N})$.
+observations of the other: $\obstrace(\seq{\contour, \mach}) \subseteq
+\obstrace(\seq{\contour, N})$.
 
 \apt{Does this differ from lockstep equivalence? And why prefix?}
 
