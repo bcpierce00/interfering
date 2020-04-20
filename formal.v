@@ -8,19 +8,19 @@ Variable MachineState : Type.
 Variable step : MachineState -> option MachineState.
 
 CoInductive Trace : Type :=
-  last : MachineState -> Trace
-| notlast : MachineState -> Trace -> Trace.
+  finished : MachineState -> Trace
+| notfinished : MachineState -> Trace -> Trace.
 
 Definition fst (MM : Trace) : MachineState :=
   match MM with
-  | last M => M
-  | notlast M _ => M
+  | finished M => M
+  | notfinished M _ => M
   end.
 
 CoFixpoint traceOf (M : MachineState) : Trace :=
   match step M with
-  | None => last M
-  | Some M' => notlast M (traceOf M')
+  | None => finished M
+  | Some M' => notfinished M (traceOf M')
   end.
 
 
