@@ -22,6 +22,7 @@ Variable valueEq : Value -> Value -> bool.
 (* Should this be option? *)
 Variable componentOf : Value -> Component.
 
+Variable initSP : Value.
 Variable JAL : Value.
 Variable incr : Value -> Value.
 Variable vplus : Value -> nat -> Value.
@@ -182,21 +183,59 @@ CoFixpoint ContouredTraceOf (C : Contour) (it : ITrace) :=
     notfinished (C, id, M) (ContouredTraceOf C' MM)
   end.
 
-Definition ComponentObservation := option Value.
-Definition StateObservation : Component -> Observation.
+Definition CTraceOf (retSP : Value) (C : Contour) (M : MachineState) (cm : CallMap) :=
+  ContouredTraceOf C (ITraceOfAux (ME retSP) M cm).
+
+Definition CompObs := option Value.
+Definition StateObs := Component -> CompObs.
+
+Definition OTrace := Trace StateObs.
+
+Definition updateObs (s : StateObs) (C' : Contour) (M' : MachineState) :=
+  fun k => match confidentialityOf (C' k) with
+           | LC => Some (valueOf k M')
+           | HC => s k
+           end.
+
+CoFixpoint ObsTraceAux (s : StateObs) (ct : CTrace) : OTrace :=
+  match ct with
+  | finished (C, id, M) =>
+    finished (updateObs s C M)
+  | notfinished (C, id, M) CIMs =>
+    let s' := updateObs s C M in
+    notfinished s' (ObsTraceAux s' CIMs)
+  end.
   
-Variable StackConfidentiality : Trace -> Trace -> Contour -> Prop.
-Variable subtrace : Trace -> Trace -> Contour -> Prop.
+Definition ObsTrace (ct : CTrace) : OTrace :=
+  let '(C,_,M) := head ct in
+  let s0 := fun k =>
+              match confidentialityOf (C k) with
+              | LC => Some (valueOf k M)
+              | HC => None
+              end in
+  ObsTraceAux s0 ct.
 
+CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
+| PrefixEq  : forall m, TracePrefix (finished m) (finished m)
+| PrefixNow : forall m mm, TracePrefix (finished m) (notfinished m mm)
+| PrefixLater : forall m mm1 mm2, TracePrefix mm1 mm2 ->
+                                  TracePrefix (notfinished m mm1)
+                                              (notfinished m mm2).
 
-CoInductive StackSafety : Trace -> Contour -> Prop :=
-  ss : forall (MM : Trace) (C : Contour),
-       (StackIntegrity MM C) *
-       (forall N, variantOf N (fst MM) C ->
-                  StackConfidentiality MM (traceOf N) C) *
-       (forall Mcallee C',
-           subtrace MM Mcallee C' -> StackSafety Mcallee C')
-       ->
-       StackSafety MM C.
+Definition StackConfidentiality (retSP : Value) (cm : CallMap)
+           (C : Contour) (M : MachineState) :=
+  forall N, variantOf M N C ->
+            let o  := ObsTrace (CTraceOf retSP C M cm) in
+            let o' := ObsTrace (CTraceOf retSP C N cm) in
+            TracePrefix o o' \/ TracePrefix o' o.
+
+Variable subtrace : MTrace -> MTrace -> Contour -> Prop.
+
+CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
+  ss : forall (MM : MTrace) (C : Contour),
+       (StackIntegrity C MM) ->
+       (StackConfidentiality initSP cm C (head MM)) ->
+       (forall Mcallee C', subtrace MM Mcallee C' -> StackSafety cm Mcallee C') ->
+       StackSafety cm MM C.
 
 End foo.
