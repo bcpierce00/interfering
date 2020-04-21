@@ -233,6 +233,47 @@ CoFixpoint ITraceOfAux (id : Identity) (M : MachineState) (cm : CallMap) : ITrac
     end
   end.
 
+CoFixpoint ITraceOfAux' (id : Identity) (MM : MTrace) (M: MachineState) (cm : CallMap) : ITrace :=
+  match MM with
+  | finished _ => finished (id, M)
+  | notfinished _ MM' => 
+    let M' := head MM' in
+    match id with
+    | ME meSP =>
+      match find (fun cme =>
+                    match cme with
+                    | (h::_, _) => valueEq h (valueOf PC M')
+                    | _ => false
+                    end) cm with
+      | Some (seq, sz) =>
+        notfinished (id,M) (ITraceOfAux (TRANS seq
+                                               sz 
+                                               (valueOf PC M')
+                                               (valueOf SP M')
+                                               meSP)
+                                        M' cm)
+      | None =>
+        notfinished (id,M) (ITraceOfAux (ME meSP) M' cm)
+      end
+    | TRANS seq sz jalPC jalSP meSP =>
+      match seq with
+      | _im :: im' :: ims =>
+        notfinished (id,M)
+                    (ITraceOfAux (TRANS (im' :: ims) sz jalPC jalSP meSP) M' cm)
+      | _ =>
+        (* Potential check: should be a singleton list always (_im) *)
+        notfinished (id, M)
+                    (ITraceOfAux (NOTME jalPC jalSP sz meSP) M' cm)
+      end
+    | NOTME jalPC jalSP sz meSP => 
+      if andb (valueEq (valueOf PC M') (vplus jalPC 4))
+              (valueEq (valueOf SP M') jalSP) then
+        notfinished (id,M) (ITraceOfAux (ME meSP) M' cm)
+      else
+        notfinished (id,M) (ITraceOfAux (NOTME jalPC jalSP sz meSP) M' cm)
+    end
+  end.
+
 Definition CTrace := Trace (Contour * Identity * MachineState).
 
 Definition updateContour (C : Contour) (id id' : Identity) (M M' : MachineState) :=
@@ -274,8 +315,11 @@ CoFixpoint ContouredTraceOf (C : Contour) (it : ITrace) :=
     notfinished (C, id, M) (ContouredTraceOf C' MM)
   end.
 
-Definition CTraceOf (retSP : Value) (C : Contour) (M : MachineState) (cm : CallMap) :=
-  ContouredTraceOf C (ITraceOfAux (ME retSP) M cm).
+(* Definition CTraceOf (retSP : Value) (C : Contour) (M : MachineState) (cm : CallMap) := *)
+(*   ContouredTraceOf C (ITraceOfAux (ME retSP) M cm). *)
+
+Definition CTraceOf' (retSP : Value) (C : Contour) (MM : MTrace) (cm : CallMap) :=
+  ContouredTraceOf C (ITraceOfAux' (ME retSP) MM (head MM) cm).
 
 Definition CompObs := option Value.
 Definition StateObs := Component -> CompObs.
@@ -313,19 +357,28 @@ CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
                                   TracePrefix (notfinished m mm1)
                                               (notfinished m mm2).
 
+(* Definition StackConfidentiality (retSP : Value) (cm : CallMap) *)
+(*            (C : Contour) (M : MachineState) := *)
+(*   forall N, variantOf M N C -> *)
+(*             let o  := ObsTrace (CTraceOf retSP C M cm) in *)
+(*             let o' := ObsTrace (CTraceOf retSP C N cm) in *)
+(*             TracePrefix o o' \/ TracePrefix o' o. *)
+
+(* APT: Surely this needs to be defined on a trace with a potential
+stopping point, not just on a starting state? *)
 Definition StackConfidentiality (retSP : Value) (cm : CallMap)
-           (C : Contour) (M : MachineState) :=
-  forall N, variantOf M N C ->
-            let o  := ObsTrace (CTraceOf retSP C M cm) in
-            let o' := ObsTrace (CTraceOf retSP C N cm) in
-            TracePrefix o o' \/ TracePrefix o' o.
+           (C : Contour) (MM : MTrace) := 
+  forall N, variantOf (head MM) N C ->
+            let o  := ObsTrace (CTraceOf' retSP C MM cm) in
+            let o' := ObsTrace (CTraceOf' retSP C (traceOf N) cm) in
+            TracePrefix o o'.  (* just this direction: it would be bad if variant trace ended sooner than reference, right? *)
 
 Variable subtrace : MTrace -> MTrace -> Contour -> Prop.
 
 CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
   ss : forall (MM : MTrace) (C : Contour),
        (StackIntegrity C MM) ->
-       (StackConfidentiality initSP cm C (head MM)) ->
+       (StackConfidentiality initSP cm C MM (* (head MM)*)) ->
        (forall Mcallee C', subtrace MM Mcallee C' -> StackSafety cm Mcallee C') ->
        StackSafety cm MM C.
 
