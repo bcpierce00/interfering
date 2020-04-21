@@ -9,6 +9,9 @@ Section foo.
 Variable MachineState : Type.
 Variable Component : Type.
 
+(* APT: Since Components include registers, these aren't total orders, which is confusing. 
+        Maybe we should get more honest about the makeup of Components?
+        Or : just do these comparisons on Values; then we don't really need componentOf. *)
 Variable cle : Component -> Component -> bool.
 Variable clt : Component -> Component -> bool.
 
@@ -20,6 +23,7 @@ Variable valueOf : Component -> MachineState -> Value.
 Variable valueEq : Value -> Value -> bool.
 
 (* Should this be option? *)
+(* APT: See above. *)
 Variable componentOf : Value -> Component.
 
 Variable initSP : Value.
@@ -50,11 +54,57 @@ CoInductive Trace (A : Type) : Type :=
 Arguments finished {_} _.
 Arguments notfinished {_} _ _.
 
+(* Definition idTrace {A} (MM: Trace A) : Trace A := *)
+(*   match MM with *)
+(*   | finished M => finished M *)
+(*   | notfinished M MM' => notfinished M  MM' *)
+(*   end. *)
+
+(* Lemma idTrace_eq : forall {A} (MM: Trace A), MM = idTrace MM. *)
+(*   destruct MM; reflexivity. *)
+(* Qed. *)
+
+
 Definition head {A} (MM : Trace A) : A :=
   match MM with
   | finished M => M
   | notfinished M _ => M
   end.
+
+Inductive InTrace {A} (m:A) : Trace A -> Prop :=
+| In_finished : InTrace m (finished m)
+| In_now : forall MM, InTrace m (notfinished m MM)                        
+| In_later : forall m' MM, InTrace m MM -> InTrace m (notfinished m' MM).
+
+Lemma head_InTrace :forall {A} (MM: Trace A), InTrace (head MM) MM.
+Proof.
+  intros.
+  destruct MM. 
+  - constructor.
+  - simpl. constructor.
+Qed.
+
+(* Definition tail {A} (MM: Trace A) : option (Trace A) := *)
+(*   match MM with *)
+(*   | finished _ => None *)
+(*   | notfinished _ M => Some M *)
+(*   end. *)
+  
+(* Fixpoint ith {A} (i:nat) (MM: Trace A) : option A := *)
+(*   match i with *)
+(*   | O => Some (head MM) *)
+(*   | S i' => match tail MM with *)
+(*             | Some MM' => ith i' MM' *)
+(*             | None => None                               *)
+(*             end *)
+(*   end. *)
+
+(* Lemma head_ith : forall {A} (MM: Trace A), ith O MM = Some (head MM). *)
+(* Proof. *)
+(*   destruct MM. *)
+(*   - auto. *)
+(*   - auto. *)
+(* Qed. *)
 
 Definition MTrace := Trace MachineState.
 
@@ -76,16 +126,55 @@ CoInductive StackIntegrity (C : Contour) : MTrace -> Prop :=
     StackIntegrity C MM ->
     StackIntegrity C (notfinished M0 MM).
 
+
+(* APT: An equivalent alternative definition that more closely matches the latex... *)
+
+Definition StackIntegrity' (C : Contour) (MM: MTrace) : Prop :=
+    forall (k: Component), integrityOf (C k) = HI ->
+      forall (m: MachineState), InTrace m MM -> valueOf k (head MM) = valueOf k m.
+
+Lemma StackIntegrityEquiv : forall (C:Contour) (MM: MTrace),
+     StackIntegrity' C MM -> StackIntegrity C MM.
+Proof.
+  cofix COFIX.
+  intros.
+  destruct MM. 
+  - constructor.
+  - constructor.
+    + intros. unfold StackIntegrity' in H.  simpl in H. 
+      apply H; auto. constructor. apply head_InTrace. 
+    + apply COFIX. 
+      unfold StackIntegrity' in *.  intros. simpl in H. 
+      erewrite <- H; auto. 
+      * apply H; auto.  constructor. auto.
+      * constructor. apply head_InTrace.
+Qed.
+
+Lemma StackIntegrity'Equiv : forall (C:Contour) (MM: MTrace),
+     StackIntegrity C MM -> StackIntegrity' C MM.
+Proof.
+  intros.
+  unfold StackIntegrity'. 
+  intros.
+  induction H1. 
+  - auto.
+  - auto.
+  - simpl. inversion H. subst. rewrite <- IHInTrace.
+    +  apply H4; auto. 
+    +  inversion H.  auto.
+Qed.
+
 Definition variantOf (M N : MachineState) (C : Contour) :=
   forall (k : Component), confidentialityOf (C k) = LC ->
                           valueOf k M = valueOf k N.
 
 (* The values here are the valueOf a sequence of PCs we care about *)
+(* APT: ? the addresses or the instructions in them? Doesn't seem to be used in either case; why not just track its length? *)
 Definition CallMap := list (list Value * nat)%type.
 (* There are many well-formedness conditions on this... *)
   
 Inductive Identity :=
-| ME : Value -> (* SP below which I can't access things *)
+| ME : Value -> (* SP below which I can't access things *) 
        Identity
 | NOTME : Value -> (* PC at the time of call *)
           Value -> (* SP at the time of call *)
@@ -102,7 +191,9 @@ Inductive Identity :=
 
 Definition ITrace := Trace (Identity * MachineState).
 
-CoFixpoint ITraceOfAux (id : Identity) (M : MachineState) (cm : CallMap) :=
+(* APT: This now assumes each call sequence starts with the JAL, right? 
+        Is this essential, or was it just to make things a bit simpler? *)
+CoFixpoint ITraceOfAux (id : Identity) (M : MachineState) (cm : CallMap) : ITrace :=
   match step M with
   | None => finished (id, M)
   | Some M' =>
@@ -150,7 +241,7 @@ Definition updateContour (C : Contour) (id id' : Identity) (M M' : MachineState)
   | NOTME _ _ _ _, NOTME _ _ _ _ => C
   | TRANS _ _ _ _ _, TRANS _ _ _ _ _ => C
   | ME _, TRANS _ sz _ _ _=>
-    (* Everything other than the sz top parts of the stuck becomes unreachable. *)
+    (* Everything other than the sz top parts of the stack becomes unreachable. *)
     fun k => if cle k (componentOf (vminus (valueOf SP M) sz))
              then (HC, HI) else C k
   | TRANS _ _ _ _ _, NOTME _ jalSP _ _=>
@@ -160,7 +251,7 @@ Definition updateContour (C : Contour) (id id' : Identity) (M M' : MachineState)
                      (clt (componentOf jalSP) k)
              then (LC, LI)
              else C k
-  | NOTME _ jalSP _ _, ME meSP =>
+  | NOTME _ _ (* jalSP *) _ _, ME meSP =>
     (* Everything above the SP at the call becomes unreadable again,
        Everything below the SP but above the low limit of ME becomes
        readable again. *)
@@ -191,7 +282,7 @@ Definition StateObs := Component -> CompObs.
 
 Definition OTrace := Trace StateObs.
 
-Definition updateObs (s : StateObs) (C' : Contour) (M' : MachineState) :=
+Definition updateObs (s : StateObs) (C' : Contour) (M' : MachineState) : StateObs :=
   fun k => match confidentialityOf (C' k) with
            | LC => Some (valueOf k M')
            | HC => s k
