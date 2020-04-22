@@ -12,6 +12,36 @@ Variable Component : Type.
 (* APT: Since Components include registers, these aren't total orders, which is confusing. 
         Maybe we should get more honest about the makeup of Components?
         Or : just do these comparisons on Values; then we don't really need componentOf. *)
+(* LEO: Components/Values: I agree that the abstraction we have right
+now is iffy. There should be components (registers, pc, pointers) and
+values (words). You can extract the value of a component given a
+machine state (always I think?).  We also need to compare components
+however: A contour is a map from components to labels, and during a
+call we change that mapping depending on whether the component lies in
+a particular position with respect to the SP.  We could have a
+"withinRegion" function that only returns true if it is a valid
+(stack) pointer with two other component-pointers. If we wanted to do
+the ordering at the value level, then we would need a different
+Component -> Value function "asValue", that reads of the "address" of
+the component (and then this induces an ordering in components
+itself). Not sure what the cleanest abstraction is here. *)
+
+(* BCP: To me it seems cleaner to keep the distinction between
+components and values.  I’ve been wondering whether we need to
+explicitly recognize that there is a stack (i.e., whether we need,
+say, an ordering on components). *)
+
+(* APT: The Coq development currently has an ordering on components.
+The problem is that it is total, so needs to be defined on registers
+as well as stack addresses. 
+A fairly simple way to fix this is just to make the order partial.   
+A clearer way might be to do what is in the latex and define 
+ Component = Addr + Register 
+ Addr = Word 
+ Value = Word 
+and then just put an order on Word. *)
+
+
 Variable cle : Component -> Component -> bool.
 Variable clt : Component -> Component -> bool.
 
@@ -26,7 +56,7 @@ Variable valueEq : Value -> Value -> bool.
 (* APT: See above. *)
 Variable componentOf : Value -> Component.
 
-Variable initSP : Value.
+(* Variable initSP : Value. *)
 Variable JAL : Value.
 Variable incr : Value -> Value.
 Variable vplus : Value -> nat -> Value.
@@ -203,51 +233,25 @@ Inductive Identity :=
 
 Definition ITrace := Trace (Identity * MachineState).
 
-(* CoFixpoint ITraceOfAux (id : Identity) (M : MachineState) (cm : CallMap) : ITrace := *)
-(*   match step M with *)
-(*   | None => finished (id, M) *)
-(*   | Some M' => *)
-(*     match id with *)
-(*     | ME meSP => *)
-(*       match find (fun cme => *)
-(*                     match cme with *)
-(*                     | (h::_, _) => valueEq h (valueOf PC M') *)
-(*                     | _ => false *)
-(*                     end) cm with *)
-(*       | Some (seq, sz) => *)
-(*         notfinished (id,M) (ITraceOfAux (TRANS seq *)
-(*                                                sz  *)
-(*                                                (valueOf PC M') *)
-(*                                                (valueOf SP M') *)
-(*                                                meSP) *)
-(*                                         M' cm) *)
-(*       | None => *)
-(*         notfinished (id,M) (ITraceOfAux (ME meSP) M' cm) *)
-(*       end *)
-(*     | TRANS seq sz jalPC jalSP meSP => *)
-(*       match seq with *)
-(*       | _im :: im' :: ims => *)
-(*         notfinished (id,M) *)
-(*                     (ITraceOfAux (TRANS (im' :: ims) sz jalPC jalSP meSP) M' cm) *)
-(*       | _ => *)
-(*         (* Potential check: should be a singleton list always (_im) *) *)
-(*         notfinished (id, M) *)
-(*                     (ITraceOfAux (NOTME jalPC jalSP sz meSP) M' cm) *)
-(*       end *)
-(*     | NOTME jalPC jalSP sz meSP =>  *)
-(*       if andb (valueEq (valueOf PC M') (vplus jalPC 4)) *)
-(*               (valueEq (valueOf SP M') jalSP) then *)
-(*         notfinished (id,M) (ITraceOfAux (ME meSP) M' cm) *)
-(*       else *)
-(*         notfinished (id,M) (ITraceOfAux (NOTME jalPC jalSP sz meSP) M' cm) *)
-(*     end *)
-(*   end. *)
-
-
 (* APT: Recast as operator over MTraces.
         Assumes each call sequence starts with the JAL, right? 
         Is this essential, or was it just to make things a bit simpler? *)
-CoFixpoint ITraceOfAux' (id : Identity) (MM : MTrace) (M: MachineState) (cm : CallMap) : ITrace :=
+(* LEO: Each call sequence starts with a jal : that makes the
+formalization significantly simpler as you can figure out the
+information you need for contour changes the moment you start the
+transition. Is it too unrealistic an assumption? *)
+(* APT: I think this is fine, provided that we allow the callee to
+access the piece of the caller’s stack containing the arguments. To do
+this, we can add an additional parameter to the call map entries
+giving the number of args.  (Note that this prevents our handling
+dynamic frame sizes, but that is a feature that is ok to omit at least
+at first.)  *) 
+(* LEO: Note that this way the handling of arguments/returns is not
+part of the blessed sequence. And we could either (1) assume there is
+enough local stack space for all calls or (2) handle stack allocation
+and deallocation in the contours.  *)
+
+CoFixpoint ITraceOfAux (id : Identity) (MM : MTrace) (M: MachineState) (cm : CallMap) : ITrace :=
   match MM with
   | finished _ => finished (id, M)
   | notfinished _ MM' => 
@@ -260,31 +264,31 @@ CoFixpoint ITraceOfAux' (id : Identity) (MM : MTrace) (M: MachineState) (cm : Ca
                     | _ => false
                     end) cm with
       | Some (seq, sz) =>
-        notfinished (id,M) (ITraceOfAux' (TRANS seq
+        notfinished (id,M) (ITraceOfAux (TRANS seq
                                                sz 
                                                (valueOf PC M')
                                                (valueOf SP M')
                                                meSP)
                                         MM' M' cm)
       | None =>
-        notfinished (id,M) (ITraceOfAux' (ME meSP) MM' M' cm)
+        notfinished (id,M) (ITraceOfAux (ME meSP) MM' M' cm)
       end
     | TRANS seq sz jalPC jalSP meSP =>
       match seq with
       | _im :: im' :: ims =>
         notfinished (id,M)
-                    (ITraceOfAux' (TRANS (im' :: ims) sz jalPC jalSP meSP) MM' M' cm)
+                    (ITraceOfAux (TRANS (im' :: ims) sz jalPC jalSP meSP) MM' M' cm)
       | _ =>
         (* Potential check: should be a singleton list always (_im) *)
         notfinished (id, M)
-                    (ITraceOfAux' (NOTME jalPC jalSP sz meSP) MM' M' cm)
+                    (ITraceOfAux (NOTME jalPC jalSP sz meSP) MM' M' cm)
       end
     | NOTME jalPC jalSP sz meSP => 
       if andb (valueEq (valueOf PC M') (vplus jalPC 4))
               (valueEq (valueOf SP M') jalSP) then
-        notfinished (id,M) (ITraceOfAux' (ME meSP) MM' M' cm)
+        notfinished (id,M) (ITraceOfAux (ME meSP) MM' M' cm)
       else
-        notfinished (id,M) (ITraceOfAux' (NOTME jalPC jalSP sz meSP) MM' M' cm)
+        notfinished (id,M) (ITraceOfAux (NOTME jalPC jalSP sz meSP) MM' M' cm)
     end
   end.
 
@@ -329,12 +333,8 @@ CoFixpoint ContouredTraceOf (C : Contour) (it : ITrace) :=
     notfinished (C, id, M) (ContouredTraceOf C' MM)
   end.
 
-(* Definition CTraceOf (retSP : Value) (C : Contour) (M : MachineState) (cm : CallMap) := *)
-(*   ContouredTraceOf C (ITraceOfAux (ME retSP) M cm). *)
-
-(* APT: Recast as operator over MTraces *)
-Definition CTraceOf' (retSP : Value) (C : Contour) (MM : MTrace) (cm : CallMap) :=
-  ContouredTraceOf C (ITraceOfAux' (ME retSP) MM (head MM) cm).
+Definition CTraceOf (retSP : Value) (C : Contour) (MM : MTrace) (cm : CallMap) :=
+  ContouredTraceOf C (ITraceOfAux (ME retSP) MM (head MM) cm).
 
 Definition CompObs := option Value.
 Definition StateObs := Component -> CompObs.
@@ -372,26 +372,25 @@ CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
                                   TracePrefix (notfinished m mm1)
                                               (notfinished m mm2).
 
-(* Definition StackConfidentiality (retSP : Value) (cm : CallMap) *)
-(*            (C : Contour) (M : MachineState) := *)
-(*   forall N, variantOf M N C -> *)
-(*             let o  := ObsTrace (CTraceOf retSP C M cm) in *)
-(*             let o' := ObsTrace (CTraceOf retSP C N cm) in *)
-(*             TracePrefix o o' \/ TracePrefix o' o. *)
 
-(* APT: Surely this needs to be defined on a trace with a potential
-stopping point, not just on a starting state?  
-*)
 Definition StackConfidentiality (retSP : Value) (cm : CallMap)
            (C : Contour) (MM : MTrace) := 
   forall N, variantOf (head MM) N C ->
-            let o  := ObsTrace (CTraceOf' retSP C MM cm) in
-            let o' := ObsTrace (CTraceOf' retSP C (traceOf N) cm) in
-            TracePrefix o o'.  (* just this direction: it would be bad if variant trace ended sooner than reference, right? *)
+            let o  := ObsTrace (CTraceOf retSP C MM cm) in
+            let o' := ObsTrace (CTraceOf retSP C (traceOf N) cm) in
+            TracePrefix o o'. (* \/ TracePrefix o' o) *)
+(* APT: just this direction: it would be bad if variant trace ended sooner than reference, right? *)
+(* LEO: I'm not sure about only one observation being a prefix of the other. What if the variant machine tries halts because of the monitor? Are we termination-sensitive? *)
+(* APT: Ah, right.  I guess we have to be termination-insensitive. *)
+(* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed 
+to fail-stop more often than the reference trace? *)
+
+(* APT: ObsTrace equivalence implies lock-step behavior, right? 
+Why not just use the latter instead? *)
 
 
 (* Following attempts to encode subtraces that start on transition to NOTME, but can end anywhere as long as still NOTME. 
-There is surely a prettier way! *)
+There is surely still a prettier way! *)
 
 Definition notme (id: Identity) : Prop :=
   match id with
@@ -408,15 +407,17 @@ CoInductive subtraceAux : CTrace -> MTrace -> Contour -> Prop :=
 .
                                                                       
 Definition subtrace (retSP: Value) (cm :CallMap) (C0: Contour) (super: MTrace) (sub: MTrace) (C:Contour) :=
-  subtraceAux (CTraceOf' retSP C0 super cm) sub C.
+  subtraceAux (CTraceOf retSP C0 super cm) sub C.
 
 
 (* APT: As things stand, retSP is always initSP.  Is this right? *)
+(* LEO: The retSP should always be the stack pointer of the callee of the "initial" process. So when recursing in StackSafety the retSP should be the SP of (head Mcallee) I think. *)
+(* APT: Does the adjustment below do the trick? *)
 CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
   ss : forall (MM : MTrace) (C : Contour),
        (StackIntegrity C MM) ->
-       (StackConfidentiality initSP cm C MM (* (head MM)*)) ->
-       (forall Mcallee C', subtrace initSP cm C MM Mcallee C' -> StackSafety cm Mcallee C') ->
+       (StackConfidentiality (valueOf SP (head MM)) (* initSP *) cm C MM) -> 
+       (forall Mcallee C', subtrace (valueOf SP (head MM)) (* initSP *) cm C MM Mcallee C' -> StackSafety cm Mcallee C') ->
        StackSafety cm MM C.
 
 End foo.
