@@ -84,6 +84,18 @@ Proof.
   - simpl. constructor.
 Qed.
 
+CoFixpoint mapTrace {A B:Type} (f:A -> B) (MM: Trace A) : Trace B :=
+  match MM with
+  | finished M => finished (f M)
+  | notfinished M MM' => notfinished (f M) (mapTrace f MM')
+  end.
+
+CoInductive ForallTrace {A:Type} (P:A -> Prop) : Trace A -> Prop :=
+| Forall_finished : forall M, P M -> ForallTrace P (finished M)
+| Forall_notfinished : forall M MM', P M -> ForallTrace P MM' -> ForallTrace P (notfinished M MM')
+.
+
+
 (* Definition tail {A} (MM: Trace A) : option (Trace A) := *)
 (*   match MM with *)
 (*   | finished _ => None *)
@@ -387,20 +399,17 @@ Definition notme (id: Identity) : Prop :=
   | _ => False
   end.
 
-CoInductive subtraceAux0 : CTrace -> MTrace -> Prop :=
-| subtraceAux0Eq  : forall C id m, notme id -> subtraceAux0 (finished (C,id,m)) (finished m)
-| subtraceAux0Now : forall C id m  MM,  notme id -> subtraceAux0 (notfinished (C,id,m) MM) (finished m)
-| subtraceAux0Later :  forall C id m MM MM', notme id -> subtraceAux0 MM MM' -> subtraceAux0 (notfinished (C,id,m) MM) (notfinished m MM')
-.
+Definition notme' (cid : Contour * Identity * MachineState) := notme (snd (fst cid)).
 
-CoInductive subtraceAux1 : CTrace -> MTrace -> Contour -> Prop :=
-| subtraceAux1Now: forall C id m MM MM',
-     ~ notme id -> (let '(_,id',_) := head MM in notme id') -> subtraceAux0 MM MM' -> subtraceAux1 (notfinished (C,id,m) MM) MM' C
-| subtraceAux1Later: forall cim C MM MM' ,  subtraceAux1 MM MM' C -> subtraceAux1 (notfinished cim MM) MM' C
+CoInductive subtraceAux : CTrace -> MTrace -> Contour -> Prop :=
+| subtraceAuxNow: forall C id m MM MM',
+     ~ notme id -> TracePrefix MM' MM -> ForallTrace notme' MM' -> subtraceAux (notfinished (C,id,m) MM) (mapTrace snd MM') C
+| subtraceAuxLater: forall cim C MM MM' ,  subtraceAux MM MM' C -> subtraceAux (notfinished cim MM) MM' C
 .
                                                                       
 Definition subtrace (retSP: Value) (cm :CallMap) (C0: Contour) (super: MTrace) (sub: MTrace) (C:Contour) :=
- subtraceAux1 (CTraceOf' retSP C0 super cm) sub C.
+  subtraceAux (CTraceOf' retSP C0 super cm) sub C.
+
 
 (* APT: As things stand, retSP is always initSP.  Is this right? *)
 CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
