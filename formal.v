@@ -17,6 +17,8 @@ Variable clt : Component -> Component -> bool.
 
 Variable PC : Component.
 Variable SP : Component.
+(* SNA: we should consider weaker forms of observability, like a special output register. *)
+Variable O : Component.
 
 Variable Value : Type.
 Variable valueOf : Component -> MachineState -> Value.
@@ -352,6 +354,27 @@ Definition ObsTrace (ct : CTrace) : OTrace :=
               | HC => None
               end in
   ObsTraceAux s0 ct.
+
+(* SNA: alternative obs: non-stuttering trace of output register *)
+CoFixpoint ObsTrace' (ct : CTrace) : Trace Value :=
+  match ct with
+  | finished (C, id, M) =>
+    finished (valueOf O M)
+  | notfinished (C, id, M) CIMs =>
+    let v := valueOf O M in
+    match CIMs with
+    | finished (_,_,M') =>
+      let v' := (valueOf O M') in
+      if valueEq v v'
+      then finished v
+      else notfinished v (finished v')
+    | notfinished (C',id',M') CIMs' =>
+      let v' := (valueOf O M') in
+      if valueEq v v'
+      then notfinished v (ObsTrace' CIMs')
+      else notfinished v (ObsTrace' (notfinished (C',id',M') CIMs'))
+    end
+  end.
 
 CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
 | PrefixEq  : forall m, TracePrefix (finished m) (finished m)
