@@ -41,9 +41,8 @@ A clearer way might be to do what is in the latex and define
  Value = Word 
 and then just put an order on Word. *)
 
-
-Variable cle : Component -> Component -> bool.
 Variable clt : Component -> Component -> bool.
+Variable cle : Component -> Component -> bool.
 
 Variable PC : Component.
 Variable SP : Component.
@@ -52,18 +51,18 @@ Variable O : Component.
 
 Variable Value : Type.
 Variable valueOf : Component -> MachineState -> Value.
-Variable valueEq : Value -> Value -> bool.
+Variable veq : Value -> Value -> bool.
 
 (* Should this be option? *)
 (* APT: See above. *)
-Variable componentOf : Value -> Component.
+Variable componentOf : Value -> option Component.
 
 (* Variable initSP : Value. *)
 Variable JAL : Value.
 Variable incr : Value -> Value.
 Variable vplus : Value -> nat -> Value.
 Variable vminus : Value -> nat -> Value.
-Variable veq : Value -> Value -> bool.
+
 Variable step : MachineState -> option MachineState.
 
 (* TODO: Change these *)
@@ -214,7 +213,129 @@ Definition variantOf (M N : MachineState) (C : Contour) :=
 
 (* The values here are the valueOf a sequence of PCs we care about *)
 (* APT: ? the addresses or the instructions in them? Doesn't seem to be used in either case; why not just track its length? *)
-Definition CallMap := list (list Value * nat)%type.
+Definition Obs (M : MachineState) := valueOf O M.
+
+Definition ObsTrace := Trace Value.
+
+(* Stuttering version *)
+Definition ObsTraceOf' (MM : MTrace) := mapTrace Obs MM.
+
+(* SNA: alternative obs: non-stuttering trace of output register *)
+CoFixpoint ObsTraceOf (MM : MTrace) : Trace Value :=
+  match MM with
+  | finished M =>
+    finished (valueOf O M)
+  | notfinished M Ms =>
+    let v := valueOf O M in
+    match Ms with
+    | finished M' =>
+      let v' := valueOf O M' in
+      if veq v v'
+      then finished v
+      else notfinished v (finished v')
+    | notfinished M' Ms' =>
+      let v' := valueOf O M' in
+      if veq v v'
+      then notfinished v (ObsTraceOf Ms')
+      else notfinished v (ObsTraceOf (notfinished M' Ms'))
+    end
+  end.
+
+CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
+| PrefixEq  : forall m, TracePrefix (finished m) (finished m)
+| PrefixNow : forall m mm, TracePrefix (finished m) (notfinished m mm)
+| PrefixLater : forall m mm1 mm2, TracePrefix mm1 mm2 ->
+                                  TracePrefix (notfinished m mm1)
+                                              (notfinished m mm2).
+
+Definition StackConfidentiality (C : Contour) (MM : MTrace) := 
+  forall N, variantOf (head MM) N C ->
+            let o  := ObsTraceOf MM in
+            let o' := ObsTraceOf (traceOf N) in
+            TracePrefix o o'. (* \/ TracePrefix o' o) *)
+
+(* APT: just this direction: it would be bad if variant trace ended sooner than reference, right? *)
+(* LEO: I'm not sure about only one observation being a prefix of the other. What if the variant machine tries halts because of the monitor? Are we termination-sensitive? *)
+(* APT: Ah, right.  I guess we have to be termination-insensitive. *)
+(* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed 
+to fail-stop more often than the reference trace? *)
+
+(* APT: ObsTrace equivalence implies lock-step behavior, right? 
+Why not just use the latter instead? *)
+
+Definition CallMap := Value -> nat -> Prop. 
+
+Definition isCall (cm: CallMap) (M: MachineState) (iaddr: Value) (args: nat) : Prop :=
+  valueOf PC M = iaddr /\ cm iaddr args.
+
+Definition isRet (Mc M: MachineState) : Prop :=
+  valueOf PC M = vplus (valueOf PC Mc) 4 /\ valueOf SP M = valueOf SP Mc.
+
+Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
+  fun k =>
+    match componentOf (vminus (valueOf SP M) args) with
+    | Some k' =>
+      if cle k k' then
+        (HC, HI)
+      else if clt k' k then
+        (HC, LI)
+      else (C k)
+    | None => C k (* What to do here? *)
+    end.
+
+CoInductive Subtrace : Contour -> MTrace -> Contour -> MTrace -> Prop :=
+  | SubNow : forall iaddr args cm C C' MM MM',
+      (* Current instruction is a call *)
+      isCall cm (head MM) iaddr args ->
+      (* Take the prefix until a return *)
+      TracePrefix MM' MM ->
+      ForallTrace (fun M => ~ (isRet (head MM) M)) MM' ->
+      (* Construct the new contour *)
+      updateContour C args (head MM) = C' -> 
+      Subtrace C MM C' MM'
+  | SubLater : forall C MM C' MM' M,
+      Subtrace C MM C' MM' ->
+      Subtrace C (notfinished M MM) C' MM'.
+
+CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
+  ss : forall (MM : MTrace) (C : Contour),
+       (StackIntegrity C MM) ->
+       (StackConfidentiality C MM) ->
+       (forall MM' C', Subtrace C MM C' MM' -> StackSafety cm MM' C') ->
+       StackSafety cm MM C.
+
+End foo.
+
+(*
+(* Following attempts to encode subtraces that start on transition to NOTME, but can end anywhere as long as still NOTME. 
+There is surely still a prettier way! *)
+
+
+Definition notme (id: Identity) : Prop :=
+  match id with
+  | NOTME _ _ _ _ => True
+  | _ => False
+  end.
+
+Definition notme' (cid : Contour * Identity * MachineState) := notme (snd (fst cid)).
+
+CoInductive subtraceAux : CTrace -> MTrace -> Contour -> Prop :=
+| subtraceAuxNow: forall C id m MM MM',
+     ~ notme id -> TracePrefix MM' MM -> ForallTrace notme' MM' -> subtraceAux (notfinished (C,id,m) MM) (mapTrace snd MM') C
+| subtraceAuxLater: forall cim C MM MM' ,  subtraceAux MM MM' C -> subtraceAux (notfinished cim MM) MM' C
+.
+                                                                      
+Definition subtrace (retSP: Value) (cm :CallMap) (C0: Contour) (super: MTrace) (sub: MTrace) (C:Contour) :=
+  subtraceAux (CTraceOf retSP C0 super cm) sub C.
+
+
+(* APT: As things stand, retSP is always initSP.  Is this right? *)
+(* LEO: The retSP should always be the stack pointer of the callee of the "initial" process. So when recursing in StackSafety the retSP should be the SP of (head Mcallee) I think. *)
+(* APT: Does the adjustment below do the trick? *)
+
+End foo.
+
+
 (* There are many well-formedness conditions on this... *)
   
 Inductive Identity :=
@@ -338,10 +459,6 @@ CoFixpoint ContouredTraceOf (C : Contour) (it : ITrace) :=
 Definition CTraceOf (retSP : Value) (C : Contour) (MM : MTrace) (cm : CallMap) :=
   ContouredTraceOf C (ITraceOfAux (ME retSP) MM (head MM) cm).
 
-Definition CompObs := option Value.
-Definition StateObs := Component -> CompObs.
-
-Definition OTrace := Trace StateObs.
 
 Definition updateObs (s : StateObs) (C' : Contour) (M' : MachineState) : StateObs :=
   fun k => match confidentialityOf (C' k) with
@@ -367,80 +484,5 @@ Definition ObsTrace (ct : CTrace) : OTrace :=
               end in
   ObsTraceAux s0 ct.
 
-(* SNA: alternative obs: non-stuttering trace of output register *)
-CoFixpoint ObsTrace' (ct : CTrace) : Trace Value :=
-  match ct with
-  | finished (C, id, M) =>
-    finished (valueOf O M)
-  | notfinished (C, id, M) CIMs =>
-    let v := valueOf O M in
-    match CIMs with
-    | finished (_,_,M') =>
-      let v' := (valueOf O M') in
-      if valueEq v v'
-      then finished v
-      else notfinished v (finished v')
-    | notfinished (C',id',M') CIMs' =>
-      let v' := (valueOf O M') in
-      if valueEq v v'
-      then notfinished v (ObsTrace' CIMs')
-      else notfinished v (ObsTrace' (notfinished (C',id',M') CIMs'))
-    end
-  end.
 
-CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
-| PrefixEq  : forall m, TracePrefix (finished m) (finished m)
-| PrefixNow : forall m mm, TracePrefix (finished m) (notfinished m mm)
-| PrefixLater : forall m mm1 mm2, TracePrefix mm1 mm2 ->
-                                  TracePrefix (notfinished m mm1)
-                                              (notfinished m mm2).
-
-
-Definition StackConfidentiality (retSP : Value) (cm : CallMap)
-           (C : Contour) (MM : MTrace) := 
-  forall N, variantOf (head MM) N C ->
-            let o  := ObsTrace (CTraceOf retSP C MM cm) in
-            let o' := ObsTrace (CTraceOf retSP C (traceOf N) cm) in
-            TracePrefix o o'. (* \/ TracePrefix o' o) *)
-(* APT: just this direction: it would be bad if variant trace ended sooner than reference, right? *)
-(* LEO: I'm not sure about only one observation being a prefix of the other. What if the variant machine tries halts because of the monitor? Are we termination-sensitive? *)
-(* APT: Ah, right.  I guess we have to be termination-insensitive. *)
-(* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed 
-to fail-stop more often than the reference trace? *)
-
-(* APT: ObsTrace equivalence implies lock-step behavior, right? 
-Why not just use the latter instead? *)
-
-
-(* Following attempts to encode subtraces that start on transition to NOTME, but can end anywhere as long as still NOTME. 
-There is surely still a prettier way! *)
-
-Definition notme (id: Identity) : Prop :=
-  match id with
-  | NOTME _ _ _ _ => True
-  | _ => False
-  end.
-
-Definition notme' (cid : Contour * Identity * MachineState) := notme (snd (fst cid)).
-
-CoInductive subtraceAux : CTrace -> MTrace -> Contour -> Prop :=
-| subtraceAuxNow: forall C id m MM MM',
-     ~ notme id -> TracePrefix MM' MM -> ForallTrace notme' MM' -> subtraceAux (notfinished (C,id,m) MM) (mapTrace snd MM') C
-| subtraceAuxLater: forall cim C MM MM' ,  subtraceAux MM MM' C -> subtraceAux (notfinished cim MM) MM' C
-.
-                                                                      
-Definition subtrace (retSP: Value) (cm :CallMap) (C0: Contour) (super: MTrace) (sub: MTrace) (C:Contour) :=
-  subtraceAux (CTraceOf retSP C0 super cm) sub C.
-
-
-(* APT: As things stand, retSP is always initSP.  Is this right? *)
-(* LEO: The retSP should always be the stack pointer of the callee of the "initial" process. So when recursing in StackSafety the retSP should be the SP of (head Mcallee) I think. *)
-(* APT: Does the adjustment below do the trick? *)
-CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
-  ss : forall (MM : MTrace) (C : Contour),
-       (StackIntegrity C MM) ->
-       (StackConfidentiality (valueOf SP (head MM)) (* initSP *) cm C MM) -> 
-       (forall Mcallee C', subtrace (valueOf SP (head MM)) (* initSP *) cm C MM Mcallee C' -> StackSafety cm Mcallee C') ->
-       StackSafety cm MM C.
-
-End foo.
+*)
