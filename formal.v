@@ -213,6 +213,7 @@ Definition variantOf (M N : MachineState) (C : Contour) :=
 
 (* The values here are the valueOf a sequence of PCs we care about *)
 (* APT: ? the addresses or the instructions in them? Doesn't seem to be used in either case; why not just track its length? *)
+(* Needs contour *)
 Definition Obs (M : MachineState) := valueOf O M.
 
 Definition ObsTrace := Trace Value.
@@ -240,6 +241,8 @@ CoFixpoint ObsTraceOf (MM : MTrace) : Trace Value :=
       else notfinished v (ObsTraceOf (notfinished M' Ms'))
     end
   end.
+
+(* Variable Observation. step : MS -> MS * Observation *)
 
 CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
 | PrefixEq  : forall m, TracePrefix (finished m) (finished m)
@@ -277,8 +280,10 @@ Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
     | Some k' =>
       if cle k k' then
         (HC, HI)
-      else if clt k' k then
+      else if clt (valueOf SP M) k then
         (HC, LI)
+      else if andb (clt k' k) (cle k (valueOf SP M)) then
+        (LC, LI)                  
       else (C k)
     | None => C k (* What to do here? *)
     end.
