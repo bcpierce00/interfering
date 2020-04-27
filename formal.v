@@ -1,4 +1,5 @@
 Require Import List.
+Import ListNotations.
 
 Section foo.
 
@@ -461,6 +462,7 @@ CoInductive LazySafety' : MTrace -> Contour -> Prop :=
 
 (* This confidentiality is more inline with the eager policy, doesn't
    consider later execution *)
+Fail
 CoInductive LocalConfidentiality : Contour -> MTrace -> Prop :=
   | varytrace : forall C MM,
                   (forall MMsub NN C' M N,
@@ -472,6 +474,61 @@ CoInductive LocalConfidentiality : Contour -> MTrace -> Prop :=
                     LocalConfidentiality C' MMsub) ->
                   LocalConfidentiality C MM.
 
+Section EagerPolicy.
+
+(* Type of tags and some tags of interest, with a minimalist form of blessed
+   call and return sequences. *)
+Variable Tag : Type.
+Variable Instr : Tag.
+Variable Call : Tag.
+Variable Ret : Tag.
+Variable PCdepth : nat -> Tag.
+Variable Stack : nat -> Tag.
+
+(* Machine states are enriched with mappings from components to tags. (Should a
+   rich state be a pair of a machine state and the enrichment?) For now, lists
+   are used in lieu of sets and an ordering assumed. *)
+Definition RichState := Component -> list Tag.
+Variable tagsOf : RichState -> Component -> list Tag.
+
+(* Given a call map [cm] and contour [C], relate these to the rich state(s) [T]
+   whose tagging is compatible with those. (Add an initial machine state?) *)
+Variable InitialTags : CallMap -> Contour -> RichState -> Prop.
+
+Variable updateTag : RichState -> Component -> list Tag -> RichState.
+
+CoInductive TaggedRun : RichState -> MTrace -> Prop :=
+| RunFinished : forall T M,
+    TaggedRun T (finished M)
+| RunCall : forall T T' (M : MachineState) MM d,
+    tagsOf T (Reg PC) = [PCdepth d] ->
+    tagsOf T (Mem (M (Reg PC))) = [Call; Instr] ->
+    updateTag T (Reg PC) [PCdepth (S d)] = T' ->
+    TaggedRun T' MM ->
+    TaggedRun T (notfinished M MM)
+| RunRet : forall T T' (M : MachineState) MM d,
+    tagsOf T (Reg PC) = [PCdepth (S d)] ->
+    tagsOf T (Mem (M (Reg PC))) = [Instr; Ret] ->
+    updateTag T (Reg PC) [PCdepth d] = T' ->
+    TaggedRun T' MM ->
+    TaggedRun T (notfinished M MM)
+(* ... *)
+.
+
+(* The eager policy allows a trace if said trace can result from a run of the
+   rich machine starting from the initial enriched state. *)
+CoInductive EagerPolicyTrace : CallMap -> Contour -> MTrace -> Prop :=
+| EPTIntro : forall cm C T MM,
+    InitialTags cm C T ->
+    TaggedRun T MM ->
+    EagerPolicyOK cm MM C.
+
+Conjecture EagerPolicy_StackSafety :
+  forall cm MM C,
+    EagerPolicyTrace cm C MM ->
+    StackSafety cm MM C.
+
+End EagerPolicy.
 
 End foo.
 
