@@ -315,6 +315,7 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
 (* ??? double-check this *)      
 
 
+(* BCP: Do we really need the Subtrace part here? *)
 CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
   ss : forall (MM : MTrace) (C : Contour),
        (StackIntegrity C MM) ->
@@ -407,6 +408,7 @@ CoInductive ObservableConfidentiality : Contour -> MTrace -> option MTrace -> Pr
                     ObservableConfidentiality C' MMsub (OptTraceApp MMO MMOouter)) ->
                   ObservableConfidentiality C MM MMOouter.
 
+(* BCP: Why is this not just a Definition? *)
 CoInductive LazySafety : MTrace -> Contour -> Prop :=
   ls : forall (MM : MTrace) (C : Contour),
        (ObservableIntegrity C MM None) ->
