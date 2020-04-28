@@ -495,18 +495,35 @@ Variable tagsOf : RichState -> Component -> list Tag.
    whose tagging is compatible with those. (Add an initial machine state?) *)
 Variable InitialTags : CallMap -> Contour -> RichState -> Prop.
 
+(* We need some way to update tags. *)
 Variable updateTag : RichState -> Component -> list Tag -> RichState.
+
+(* We need to know whether the currently executing instruction performs memory
+   operations (loads and stores), and on which address they operate. *)
+Variable isLoad : MachineState -> Addr -> Prop.
+Variable isStore : MachineState -> Addr -> Prop.
 
 CoInductive TaggedStep (M: MachineState) (T : RichState) : RichState -> Prop :=
 | TCall : forall T' d,
-    tagsOf T (Reg PC) = [PCdepth d] ->
     tagsOf T (Mem (M (Reg PC))) = [Call; Instr] ->
+    tagsOf T (Reg PC) = [PCdepth d] ->
     updateTag T (Reg PC) [PCdepth (S d)] = T' ->
     TaggedStep M T T'
 | TRet : forall T' d,
-    tagsOf T (Reg PC) = [PCdepth (S d)] ->
     tagsOf T (Mem (M (Reg PC))) = [Instr; Ret] ->
+    tagsOf T (Reg PC) = [PCdepth (S d)] ->
     updateTag T (Reg PC) [PCdepth d] = T' ->
+    TaggedStep M T T'
+| TLoad : forall iaddr dPC dMem,
+    isLoad M iaddr ->
+    tagsOf T (Reg PC) = [PCdepth dPC] ->
+    tagsOf T (Mem iaddr) = [Stack dMem] ->
+    dPC <= dMem ->
+    TaggedStep M T T
+| TStore : forall T' iaddr d,
+    isStore M iaddr ->
+    tagsOf T (Reg PC) = [PCdepth d] ->
+    updateTag T (Mem iaddr) [Stack d] = T' ->
     TaggedStep M T T'
 (* ... *)
 .
@@ -519,6 +536,8 @@ CoInductive TaggedRun : RichState -> MTrace -> Prop :=
     TaggedStep M T T' ->
     TaggedRun T' MM ->
     TaggedRun T (notfinished M MM).
+
+(* TODO: Add missing ingredients from testing and important details. *)
 
 (* The eager policy allows a trace if said trace can result from a run of the
    rich machine starting from the initial enriched state. *)
