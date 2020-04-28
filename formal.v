@@ -497,23 +497,28 @@ Variable InitialTags : CallMap -> Contour -> RichState -> Prop.
 
 Variable updateTag : RichState -> Component -> list Tag -> RichState.
 
-CoInductive TaggedRun : RichState -> MTrace -> Prop :=
-| RunFinished : forall T M,
-    TaggedRun T (finished M)
-| RunCall : forall T T' (M : MachineState) MM d,
+CoInductive TaggedStep (M: MachineState) (T : RichState) : RichState -> Prop :=
+| TCall : forall T' d,
     tagsOf T (Reg PC) = [PCdepth d] ->
     tagsOf T (Mem (M (Reg PC))) = [Call; Instr] ->
     updateTag T (Reg PC) [PCdepth (S d)] = T' ->
-    TaggedRun T' MM ->
-    TaggedRun T (notfinished M MM)
-| RunRet : forall T T' (M : MachineState) MM d,
+    TaggedStep M T T'
+| TRet : forall T' d,
     tagsOf T (Reg PC) = [PCdepth (S d)] ->
     tagsOf T (Mem (M (Reg PC))) = [Instr; Ret] ->
     updateTag T (Reg PC) [PCdepth d] = T' ->
-    TaggedRun T' MM ->
-    TaggedRun T (notfinished M MM)
+    TaggedStep M T T'
 (* ... *)
 .
+
+CoInductive TaggedRun : RichState -> MTrace -> Prop :=
+| RunFinished : forall T M,
+    TaggedRun T (finished M)
+| RunNotfinished : forall T T' M MM,
+    step M = Some (head MM) ->
+    TaggedStep M T T' ->
+    TaggedRun T' MM ->
+    TaggedRun T (notfinished M MM).
 
 (* The eager policy allows a trace if said trace can result from a run of the
    rich machine starting from the initial enriched state. *)
@@ -521,7 +526,7 @@ CoInductive EagerPolicyTrace : CallMap -> Contour -> MTrace -> Prop :=
 | EPTIntro : forall cm C T MM,
     InitialTags cm C T ->
     TaggedRun T MM ->
-    EagerPolicyOK cm MM C.
+    EagerPolicyTrace cm C MM.
 
 Conjecture EagerPolicy_StackSafety :
   forall cm MM C,
