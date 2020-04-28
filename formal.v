@@ -20,59 +20,15 @@ Section foo.
           
   Definition MachineState := Component -> Value.
 
-(* APT: Since Components include registers, these aren't total orders, which is confusing. 
-        Maybe we should get more honest about the makeup of Components?
-        Or : just do these comparisons on Values; then we don't really need componentOf. *)
-(* LEO: Components/Values: I agree that the abstraction we have right
-now is iffy. There should be components (registers, pc, pointers) and
-values (words). You can extract the value of a component given a
-machine state (always I think?).  We also need to compare components
-however: A contour is a map from components to labels, and during a
-call we change that mapping depending on whether the component lies in
-a particular position with respect to the SP.  We could have a
-"withinRegion" function that only returns true if it is a valid
-(stack) pointer with two other component-pointers. If we wanted to do
-the ordering at the value level, then we would need a different
-Component -> Value function "asValue", that reads of the "address" of
-the component (and then this induces an ordering in components
-itself). Not sure what the cleanest abstraction is here. *)
-
-(* BCP: To me it seems cleaner to keep the distinction between
-components and values.  I’ve been wondering whether we need to
-explicitly recognize that there is a stack (i.e., whether we need,
-say, an ordering on components). *)
-
-(* APT: The Coq development currently has an ordering on components.
-The problem is that it is total, so needs to be defined on registers
-as well as stack addresses. 
-A fairly simple way to fix this is just to make the order partial.   
-A clearer way might be to do what is in the latex and define 
- Component = Addr + Register 
- Addr = Word 
- Value = Word 
-and then just put an order on Word. *)
 
   Variable wlt : Word -> Word -> bool.
   Variable weq : Word -> Word -> bool.
   Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
 
-(*
-Variable clt : Component -> Component -> bool.
-Variable cle : Component -> Component -> bool.
- *)
-  
 Variable PC : Register.
 Variable SP : Register.
 (* SNA: we should consider weaker forms of observability, like a special output register. *)
 Variable O : Register.
-
-(*Variable Value : Type. *)
-(* Definition valueOf (C:Component) (M:MachineState) : Value := M C. *)
-(* Variable veq : Value -> Value -> bool. *)
-
-(* Should this be option? *)
-(* APT: See above. *)
-(* Variable componentOf : Value -> option Component. *)
 
 (* Variable initSP : Value. *)
 Variable JAL : Word.
@@ -313,8 +269,8 @@ to fail-stop more often than the reference trace? *)
 
 Definition CallMap := Value -> nat -> Prop. 
 
-Definition isCall (cm: CallMap) (M: MachineState) (iaddr: Value) (args: nat) : Prop :=
-  M (Reg PC) = iaddr /\ cm iaddr args.
+Definition isCall (cm: CallMap) (M: MachineState) (args: nat) : Prop :=
+   cm (M (Reg PC)) args.
 
 Definition isRet (Mc M: MachineState) : Prop :=
   M (Reg PC) = wplus (Mc (Reg PC)) 4 /\ M (Reg SP) = Mc (Reg SP).
@@ -330,30 +286,40 @@ Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
         (LC, LI)                  
       else if wlt (M (Reg SP)) a then
         (HC, LI)
-      else C k
+      else C k (* impossible *)
     | _ => C k
     end.
 
-CoInductive Subtrace : Contour -> MTrace -> Contour -> MTrace -> Prop :=
-  | SubNow : forall iaddr args cm C C' MM MM',
+CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> Prop :=
+  | SubNow : forall C C' MM MM' args,
       (* Current instruction is a call *)
-      isCall cm (head MM) iaddr args ->
+      isCall cm (head MM) args ->
       (* Take the prefix until a return *)
       (* APT/SNA: Does this want to be LongestPrefix ? *)
-      TracePrefix MM' MM ->
+(*       TracePrefix MM' MM ->
       ForallTrace (fun M => ~ (isRet (head MM) M)) MM' ->
+*)
+      LongestPrefix MM MM' (fun M => ~ (isRet (head MM) M)) ->
       (* Construct the new contour *)
       updateContour C args (head MM) = C' -> 
-      Subtrace C MM C' MM'
-  | SubLater : forall C MM C' MM' M,
-      Subtrace C MM C' MM' ->
-      Subtrace C (notfinished M MM) C' MM'.
+      Subtrace cm C MM C' MM'
+  | SubNotNow: forall C MM C' MM' M,
+      (forall args, ~ isCall cm (head MM) args) -> 
+      Subtrace cm C MM C' MM' ->
+      Subtrace cm C (notfinished M MM) C' MM'
+  | SubSkipCall : forall C MM C' MM' args M3 MM'',
+      isCall cm (head MM) args -> 
+      TraceSpan (fun M => ~ (isRet (head MM) M)) MM MM' (Some MM'')  -> 
+      Subtrace cm C MM'' C' M3 ->
+      Subtrace cm C MM C' M3.
+(* ??? double-check this *)      
+
 
 CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
   ss : forall (MM : MTrace) (C : Contour),
        (StackIntegrity C MM) ->
        (StackConfidentiality C MM) ->
-       (forall MM' C', Subtrace C MM C' MM' -> StackSafety cm MM' C') ->
+       (forall MM' C', Subtrace cm C MM C' MM' -> StackSafety cm MM' C') ->
        StackSafety cm MM C.
 
 (* ********* SNA Beware : Lazy Properties ********* *)
@@ -361,9 +327,9 @@ CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
 (* this variation of subtrace also gives us the suffix of the primary trace
    after the subtrace, or None if the subtrace is itself a suffix *)
 CoInductive SubtraceWithSuffix : Contour -> MTrace -> Contour -> MTrace -> option MTrace -> Prop :=
-  | SubSufNow : forall iaddr args cm C C' MM MM' MMO,
+  | SubSufNow : forall args cm C C' MM MM' MMO,
       (* Current instruction is a call *)
-      isCall cm (head MM) iaddr args ->
+      isCall cm (head MM) args ->
       (* Take the prefix until a return -- the entire thing *)
       TraceSpan (fun M => ~ (isRet (head MM) M)) MM MM' MMO ->
       (* Construct the new contour *)
@@ -376,7 +342,7 @@ CoInductive SubtraceWithSuffix : Contour -> MTrace -> Contour -> MTrace -> optio
 (* These helpers just tell us when one field is higher in the second argument than the first. *)
 Definition wentUpInt (outer inner : Label) : bool :=
   match outer, inner with
-  | (_,LI), (_,HI) => true
+  | (_,LI), (_,HI) => true 
   | _, _ => false
   end.
 
@@ -396,8 +362,6 @@ Definition wentUp (outer inner : Label) : bool :=
 (* A rollback takes an initial state and a final state and their inner and outer contours,
    and gives a state in which those components that went up between contours are restored
    to their initial values, and all other components respect their final values. *)
-Definition RollbackInt (C C': Contour) (Mstart Mend : MachineState) : MachineState :=
-  fun k => (if wentUpInt (C k) (C' k) then Mstart else Mend) k.
 
 Definition RollbackConf (C C': Contour) (Mstart Mend : MachineState) : MachineState :=
   fun k => (if wentUpConf (C k) (C' k) then Mstart else Mend) k.
@@ -405,37 +369,43 @@ Definition RollbackConf (C C': Contour) (Mstart Mend : MachineState) : MachineSt
 Definition Rollback (C C': Contour) (Mstart Mend : MachineState) : MachineState :=
   fun k => (if wentUp (C k) (C' k) then Mstart else Mend) k.
 
+Definition RollbackInt (C C': Contour) (Mstart Mend : MachineState) : MachineState :=
+(*   fun k => (if wentUpInt (C k) (C' k) then Mstart else Mend) k. *)
+  fun k => (match C' k with (_,HI) => Mstart | _ => Mend end) k.
+
 (* Observable properties are relations on a contour and reference trace at that contour,
    with an additional trace of the remaining execution after the current contour. *)
 CoInductive ObservableIntegrity : Contour -> MTrace -> option MTrace -> Prop :=
-  | safetrace : forall C MM MMOrest,
+  | safetrace : forall C MM MMOouter,
                   (* for any subtrace of MM and its suffix, if any *)
-                  (forall MMsub MMO MMsuf MMsuf' C',
-                    SubtraceWithSuffix C MM C' MMsub MMO ->
-                    (MMO = Some MMsuf ->
-                      MMsuf' = traceOf (RollbackInt C C' (head MMsub) (head MMsuf)) ->
+                  (forall MMsub MMsuffO MMsuf MMsuf' Csub,
+                    SubtraceWithSuffix C MM Csub MMsub MMsuffO ->
+                    (MMsuffO = Some MMsuf ->
+                      MMsuf' = traceOf (RollbackInt C Csub (head MMsub) (head MMsuf)) ->
                       (* and check if observable behavior of the reference prefixes
                          that of the rollback (prefix because lazy policies might failstop
                          reference trace but not rollback trace) *)
-                      TracePrefix (ObsTraceOf (TraceApp MMsuf MMOrest)) (ObsTraceOf MMsuf')) ->
+                      let actual := ObsTraceOf (TraceApp MMsuf MMOouter) in
+                      let ideal := ObsTraceOf MMsuf' in
+                      TracePrefix actual ideal) -> 
                     (* inside each subtrace, do the same, passing suffix in as remaining execution *)
-                    ObservableIntegrity C' MMsub (OptTraceApp MMO MMOrest)) ->
-                  ObservableIntegrity C MM MMOrest.
+                    ObservableIntegrity Csub MMsub (OptTraceApp MMsuffO MMOouter)) ->
+                  ObservableIntegrity C MM MMOouter.
 
 CoInductive ObservableConfidentiality : Contour -> MTrace -> option MTrace -> Prop :=
-| varytrace' : forall C MM MMOrest,
-                  (forall MMsub MMO MMext NN NNO NNext C' N,
+| varytrace' : forall C MM MMOouter,
+                  (forall MMsub MMO MMactual NN NNO NNideal C' N,
                     SubtraceWithSuffix C MM C' MMsub MMO ->
                     (* this time we vary the state at call and run until return *)
                     variantOf (head MMsub) N C' ->
                     TraceSpan (fun M => ~ (isRet (head MM) M)) (traceOf N) NN NNO ->
-                    MMext = TraceApp MMsub MMO ->
+                    MMactual = TraceApp MMsub MMO ->
                     (* if varied trace returns, varied memory must be rolled back before continuing *)
-                    NNext = TraceApp NN (option_map (fun NNsuf => traceOf (RollbackConf C C' (head MMsub) (head NNsuf))) NNO) ->
+                    NNideal = TraceApp NN (option_map (fun NNsuf => traceOf (RollbackConf C C' (head MMsub) (head NNsuf))) NNO) ->
                     (* then reference trace's behavior should prefix that of varied trace *)
-                    TracePrefix (ObsTraceOf MMext) (ObsTraceOf NNext) ->
-                    ObservableConfidentiality C' MMsub (OptTraceApp MMO MMOrest)) ->
-                  ObservableConfidentiality C MM MMOrest.
+                    TracePrefix (ObsTraceOf MMactual) (ObsTraceOf NNideal) ->
+                    ObservableConfidentiality C' MMsub (OptTraceApp MMO MMOouter)) ->
+                  ObservableConfidentiality C MM MMOouter.
 
 CoInductive LazySafety : MTrace -> Contour -> Prop :=
   ls : forall (MM : MTrace) (C : Contour),
