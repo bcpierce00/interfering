@@ -285,12 +285,14 @@ CoInductive TraceEq {A} : Trace A -> Trace A -> Prop :=
 | EqCons : forall m mm1 mm2, TraceEq mm1 mm2 ->
                              TraceEq (notfinished m mm1) (notfinished m mm2).
 
+(* Divide MM1 into MM2 ++ MMO such that MM2 is the longest prefix for which P holds on each element *)
 Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : Trace A) (MMO : option (Trace A)) : Prop :=
   MM1 = TraceApp MM2 MMO /\ ForallTrace P MM2 /\
   forall MM2', TracePrefix MM2' MM1 ->
     ForallTrace P MM2' ->
     TracePrefix MM2' MM2.
 
+(* MM2 is the longest prefix of MM1 for which P holds on each element. *)
 Definition LongestPrefix {A} (MM1 MM2 : Trace A) (P : A -> Prop) : Prop :=
   TracePrefix MM2 MM1 /\ ForallTrace P MM2 /\
   forall MM2', TracePrefix MM2' MM1 ->
@@ -435,6 +437,14 @@ CoInductive ObservableConfidentiality : Contour -> MTrace -> option MTrace -> Pr
                     ObservableConfidentiality C' MMsub (OptTraceApp MMO MMOrest)) ->
                   ObservableConfidentiality C MM MMOrest.
 
+CoInductive LazySafety : MTrace -> Contour -> Prop :=
+  ls : forall (MM : MTrace) (C : Contour),
+       (ObservableIntegrity C MM None) ->
+       (ObservableConfidentiality C MM None) ->
+       LazySafety MM C.
+
+(* More conjectural stuff follows. *)
+
 (* Conjecture we can combine these properties into one by varying for confidentiality and rolling back everything *)
 CoInductive ObservableConfidentegrity : Contour -> MTrace -> option MTrace -> Prop :=
 | varysafetrace : forall C MM MMOrest,
@@ -448,12 +458,6 @@ CoInductive ObservableConfidentegrity : Contour -> MTrace -> option MTrace -> Pr
                         TracePrefix (ObsTraceOf MMext) (ObsTraceOf NNext) ->
                     ObservableConfidentegrity C' MMsub (OptTraceApp MMO MMOrest)) ->
                   ObservableConfidentegrity C MM MMOrest.
-
-CoInductive LazySafety : MTrace -> Contour -> Prop :=
-  ls : forall (MM : MTrace) (C : Contour),
-       (ObservableIntegrity C MM None) ->
-       (ObservableConfidentiality C MM None) ->
-       LazySafety MM C.
 
 CoInductive LazySafety' : MTrace -> Contour -> Prop :=
   ls' : forall (MM : MTrace) (C : Contour),
