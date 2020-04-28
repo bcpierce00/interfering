@@ -131,7 +131,7 @@ Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : Trace A) (MMO : option (Trac
     TracePrefix MM2 MM2' .
 
 (* MM2 is the longest prefix of MM1 for which P holds on each element. *)
-Definition LongestPrefix {A} (MM1 MM2 : Trace A) (P : A -> Prop) : Prop :=
+Definition LongestPrefix {A} (P : A -> Prop) (MM1 MM2 : Trace A) : Prop :=
   exists MMO, TraceSpan P MM1 MM2 MMO. 
 
 (* Definition tail {A} (MM: Trace A) : option (Trace A) := *)
@@ -288,7 +288,7 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
       (* Current instruction is a call *)
       isCall cm (head MM) args ->
       (* Take the prefix until a return *)
-      LongestPrefix MM MM' (fun M => ~ (isRet (head MM) M)) ->
+      LongestPrefix (fun M => ~ (isRet (head MM) M)) MM MM' ->
       (* Construct the new contour *)
       updateContour C args (head MM) = C' -> 
       Subtrace cm C MM C' MM'
@@ -430,7 +430,7 @@ CoInductive LocalConfidentiality : Contour -> MTrace -> Prop :=
                     Subtrace C MM C' MMsub ->
                     Some M = step (head MMsub) ->
                     variantOf M N C' ->
-                    LongestPrefix NN (traceOf N) (fun M => ~ (isRet (head MM) M)) ->
+                    LongestPrefix (fun M => ~ (isRet (head MM) M)) NN (traceOf N) ->
                     TraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\ variantOf (last NN) (last MMsub) C' ->
                     LocalConfidentiality C' MMsub) ->
                   LocalConfidentiality C MM.
