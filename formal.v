@@ -7,34 +7,29 @@ Section foo.
    Contour should correspond to a MachineState, not to a Trace,
    etc. *)
 
-  Variable Word : Type.
-  Variable Register : Type.
-
-  Definition Addr : Type := Word.
-  Definition Value : Type := Word.
-
-  Inductive Component:=
-  | Mem (a:Addr)
-  | Reg (r:Register).
-
-          
-  Definition MachineState := Component -> Value.
-
-
-  Variable wlt : Word -> Word -> bool.
-  Variable weq : Word -> Word -> bool.
-  Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
-
-Variable PC : Register.
-Variable SP : Register.
-(* SNA: we should consider weaker forms of observability, like a special output register. *)
-Variable O : Register.
-
-(* Variable initSP : Value. *)
-Variable JAL : Word.
-Variable incr : Word -> Word. 
+Variable Word : Type.
+Variable wlt : Word -> Word -> bool.
+Variable weq : Word -> Word -> bool.
+Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
 Variable wplus : Word -> nat -> Word. 
 Variable wminus : Word -> nat -> Word. 
+(* Variable incr : Word -> Word.  *)
+
+Definition Addr : Type := Word.
+
+Variable Register : Type.
+Variable PC : Register.
+Variable SP : Register.
+Variable O : Register. (* "output register" *)
+
+Inductive Component:=
+| Mem (a:Addr)
+| Reg (r:Register).
+
+Definition Value : Type := Word.
+(* Variable JAL : Value. *)
+
+Definition MachineState := Component -> Value.
 
 Variable step : MachineState -> option MachineState.
 
@@ -58,15 +53,15 @@ CoInductive Trace (A : Type) : Type :=
 Arguments finished {_} _.
 Arguments notfinished {_} _ _.
 
-(* Definition idTrace {A} (MM: Trace A) : Trace A := *)
-(*   match MM with *)
-(*   | finished M => finished M *)
-(*   | notfinished M MM' => notfinished M  MM' *)
-(*   end. *)
+Definition idTrace {A} (MM: Trace A) : Trace A := 
+  match MM with 
+  | finished M => finished M 
+  | notfinished M MM' => notfinished M  MM'
+  end.
 
-(* Lemma idTrace_eq : forall {A} (MM: Trace A), MM = idTrace MM. *)
-(*   destruct MM; reflexivity. *)
-(* Qed. *)
+Lemma idTrace_eq : forall {A} (MM: Trace A), MM = idTrace MM. 
+   destruct MM; reflexivity.
+Qed.
 
 
 Definition head {A} (MM : Trace A) : A :=
@@ -98,6 +93,46 @@ CoInductive ForallTrace {A:Type} (P:A -> Prop) : Trace A -> Prop :=
 | Forall_finished : forall M, P M -> ForallTrace P (finished M)
 | Forall_notfinished : forall M MM', P M -> ForallTrace P MM' -> ForallTrace P (notfinished M MM')
 .
+
+CoInductive TraceEq {A} : Trace A -> Trace A -> Prop :=
+| EqFin : forall m, TraceEq (finished m) (finished m)
+| EqCons : forall m mm1 mm2, TraceEq mm1 mm2 ->
+                             TraceEq (notfinished m mm1) (notfinished m mm2).
+
+CoFixpoint TraceApp {A} (MM: Trace A) (MMO: option (Trace A)) : Trace A :=
+  match MM with
+  | finished m =>
+    match MMO with
+    | Some m' => notfinished m m'
+    | None => MM
+    end
+  | notfinished m MM' => notfinished m (TraceApp MM' MMO)
+  end.
+
+Definition OptTraceApp {A} (MMO1: option (Trace A)) (MMO2: option (Trace A)) : option (Trace A) :=
+  match MMO1 with
+  | Some MM => Some (TraceApp MM MMO2)
+  | None => MMO2
+  end.
+
+(* TracePrefix MM1 MM2 says MM2 is a prefix of MM1. *)
+CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
+| PrefixEq  : forall m, TracePrefix (finished m) (finished m)
+| PrefixNow : forall m mm, TracePrefix (notfinished m mm) (finished m)
+| PrefixLater : forall m mm1 mm2, TracePrefix mm1 mm2 ->
+                                  TracePrefix (notfinished m mm1)
+                                              (notfinished m mm2).
+
+(* Divide MM1 into MM2 ++ MMO such that MM2 is the longest prefix for which P holds on each element *)
+Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : Trace A) (MMO : option (Trace A)) : Prop :=
+  MM1 = TraceApp MM2 MMO /\ ForallTrace P MM2 /\
+  forall MM2', TracePrefix MM1 MM2'->
+    ForallTrace P MM2' ->
+    TracePrefix MM2 MM2' .
+
+(* MM2 is the longest prefix of MM1 for which P holds on each element. *)
+Definition LongestPrefix {A} (MM1 MM2 : Trace A) (P : A -> Prop) : Prop :=
+  exists MMO, TraceSpan P MM1 MM2 MMO. 
 
 (* Definition tail {A} (MM: Trace A) : option (Trace A) := *)
 (*   match MM with *)
@@ -211,61 +246,19 @@ CoFixpoint ObsTraceOf (MM : MTrace) : Trace Value :=
     end
   end.
 
-(* APT: TODO: Show that Leo's original version of ObsTrace equivalence implies lock-step equivalence. *)
-
-CoFixpoint TraceApp {A} (MM: Trace A) (MMO: option (Trace A)) : Trace A :=
-  match MM with
-  | finished m =>
-    match MMO with
-    | Some m' => notfinished m m'
-    | None => MM
-    end
-  | notfinished m MM' => notfinished m (TraceApp MM' MMO)
-  end.
-
-Definition OptTraceApp {A} (MMO1: option (Trace A)) (MMO2: option (Trace A)) : option (Trace A) :=
-  match MMO1 with
-  | Some MM => Some (TraceApp MM MMO2)
-  | None => MMO2
-  end.
-
-CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
-| PrefixEq  : forall m, TracePrefix (finished m) (finished m)
-| PrefixNow : forall m mm, TracePrefix (finished m) (notfinished m mm)
-| PrefixLater : forall m mm1 mm2, TracePrefix mm1 mm2 ->
-                                  TracePrefix (notfinished m mm1)
-                                              (notfinished m mm2).
-
-CoInductive TraceEq {A} : Trace A -> Trace A -> Prop :=
-| EqFin : forall m, TraceEq (finished m) (finished m)
-| EqCons : forall m mm1 mm2, TraceEq mm1 mm2 ->
-                             TraceEq (notfinished m mm1) (notfinished m mm2).
-
-(* Divide MM1 into MM2 ++ MMO such that MM2 is the longest prefix for which P holds on each element *)
-Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : Trace A) (MMO : option (Trace A)) : Prop :=
-  MM1 = TraceApp MM2 MMO /\ ForallTrace P MM2 /\
-  forall MM2', TracePrefix MM2' MM1 ->
-    ForallTrace P MM2' ->
-    TracePrefix MM2' MM2.
-
-(* MM2 is the longest prefix of MM1 for which P holds on each element. *)
-Definition LongestPrefix {A} (MM1 MM2 : Trace A) (P : A -> Prop) : Prop :=
-  TracePrefix MM2 MM1 /\ ForallTrace P MM2 /\
-  forall MM2', TracePrefix MM2' MM1 ->
-    ForallTrace P MM2' ->
-    TracePrefix MM2' MM2.
 
 Definition StackConfidentiality (C : Contour) (MM : MTrace) := 
   forall N, variantOf (head MM) N C ->
             let o  := ObsTraceOf MM in
             let o' := ObsTraceOf (traceOf N) in
-            TracePrefix o o'. (* \/ TracePrefix o' o) *)
-
+            TracePrefix o' o. (* \/ TracePrefix o o') *)
 (* APT: just this direction: it would be bad if variant trace ended sooner than reference, right? *)
 (* LEO: I'm not sure about only one observation being a prefix of the other. What if the variant machine tries halts because of the monitor? Are we termination-sensitive? *)
 (* APT: Ah, right.  I guess we have to be termination-insensitive. *)
 (* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed 
 to fail-stop more often than the reference trace? *)
+
+(* TODO: Revive Leo's original version of ObsTrace equivalence and compare with others. *)
 
 Definition CallMap := Value -> nat -> Prop. 
 
@@ -295,10 +288,6 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
       (* Current instruction is a call *)
       isCall cm (head MM) args ->
       (* Take the prefix until a return *)
-      (* APT/SNA: Does this want to be LongestPrefix ? *)
-(*       TracePrefix MM' MM ->
-      ForallTrace (fun M => ~ (isRet (head MM) M)) MM' ->
-*)
       LongestPrefix MM MM' (fun M => ~ (isRet (head MM) M)) ->
       (* Construct the new contour *)
       updateContour C args (head MM) = C' -> 
@@ -307,12 +296,11 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
       (forall args, ~ isCall cm (head MM) args) -> 
       Subtrace cm C MM C' MM' ->
       Subtrace cm C (notfinished M MM) C' MM'
-  | SubSkipCall : forall C MM C' MM' args M3 MM'',
+  | SubSkipCall : forall C MM C' MMskip args MM' MM'',
       isCall cm (head MM) args -> 
-      TraceSpan (fun M => ~ (isRet (head MM) M)) MM MM' (Some MM'')  -> 
-      Subtrace cm C MM'' C' M3 ->
-      Subtrace cm C MM C' M3.
-(* ??? double-check this *)      
+      TraceSpan (fun M => ~ (isRet (head MM) M)) MM MMskip (Some MM')  -> 
+      Subtrace cm C MM' C' MM'' ->
+      Subtrace cm C MM C' MM''.
 
 
 (* BCP: Do we really need the Subtrace part here? *)
@@ -339,6 +327,7 @@ CoInductive SubtraceWithSuffix : Contour -> MTrace -> Contour -> MTrace -> optio
   | SubSufLater : forall C MM C' MM' M MMO,
       SubtraceWithSuffix C MM C' MM' MMO ->
       SubtraceWithSuffix C (notfinished M MM) C' MM' MMO.
+(* TODO: Fix this to capture just top-level subtraces, as with Subtrace *)
 
 (* These helpers just tell us when one field is higher in the second argument than the first. *)
 Definition wentUpInt (outer inner : Label) : bool :=
@@ -371,6 +360,7 @@ Definition Rollback (C C': Contour) (Mstart Mend : MachineState) : MachineState 
   fun k => (if wentUp (C k) (C' k) then Mstart else Mend) k.
 
 Definition RollbackInt (C C': Contour) (Mstart Mend : MachineState) : MachineState :=
+(* TODO: Figure out what is really wanted here. *)
 (*   fun k => (if wentUpInt (C k) (C' k) then Mstart else Mend) k. *)
   fun k => (match C' k with (_,HI) => Mstart | _ => Mend end) k.
 
@@ -388,7 +378,7 @@ CoInductive ObservableIntegrity : Contour -> MTrace -> option MTrace -> Prop :=
                          reference trace but not rollback trace) *)
                       let actual := ObsTraceOf (TraceApp MMsuf MMOouter) in
                       let ideal := ObsTraceOf MMsuf' in
-                      TracePrefix actual ideal) -> 
+                      TracePrefix ideal actual) -> 
                     (* inside each subtrace, do the same, passing suffix in as remaining execution *)
                     ObservableIntegrity Csub MMsub (OptTraceApp MMsuffO MMOouter)) ->
                   ObservableIntegrity C MM MMOouter.
@@ -404,16 +394,13 @@ CoInductive ObservableConfidentiality : Contour -> MTrace -> option MTrace -> Pr
                     (* if varied trace returns, varied memory must be rolled back before continuing *)
                     NNideal = TraceApp NN (option_map (fun NNsuf => traceOf (RollbackConf C C' (head MMsub) (head NNsuf))) NNO) ->
                     (* then reference trace's behavior should prefix that of varied trace *)
-                    TracePrefix (ObsTraceOf MMactual) (ObsTraceOf NNideal) ->
+                    TracePrefix (ObsTraceOf NNideal) (ObsTraceOf MMactual) ->
                     ObservableConfidentiality C' MMsub (OptTraceApp MMO MMOouter)) ->
                   ObservableConfidentiality C MM MMOouter.
 
-(* BCP: Why is this not just a Definition? *)
-CoInductive LazySafety : MTrace -> Contour -> Prop :=
-  ls : forall (MM : MTrace) (C : Contour),
-       (ObservableIntegrity C MM None) ->
-       (ObservableConfidentiality C MM None) ->
-       LazySafety MM C.
+Definition LazySafety (MM:MTrace) (C:Contour) : Prop :=
+       (ObservableIntegrity C MM None) /\ 
+       (ObservableConfidentiality C MM None).
 
 (* More conjectural stuff follows. *)
 
@@ -427,14 +414,12 @@ CoInductive ObservableConfidentegrity : Contour -> MTrace -> option MTrace -> Pr
                         MMext = TraceApp MMsub MMO ->
                         (* rollback integrity and confidentiality together *)
                         NNext = TraceApp NN (option_map (fun NNsuf => traceOf (Rollback C C' (head MMsub) (head NNsuf))) NNO) ->
-                        TracePrefix (ObsTraceOf MMext) (ObsTraceOf NNext) ->
+                        TracePrefix (ObsTraceOf NNext) (ObsTraceOf MMext) ->
                     ObservableConfidentegrity C' MMsub (OptTraceApp MMO MMOrest)) ->
                   ObservableConfidentegrity C MM MMOrest.
 
-CoInductive LazySafety' : MTrace -> Contour -> Prop :=
-  ls' : forall (MM : MTrace) (C : Contour),
-        ObservableConfidentegrity C MM None ->
-        LazySafety' MM C.
+Definition LazySafety' (MM: MTrace) (C: Contour) : Prop :=
+        ObservableConfidentegrity C MM None.
 
 (* This confidentiality is more inline with the eager policy, doesn't
    consider later execution *)
@@ -547,7 +532,7 @@ Definition notme' (cid : Contour * Identity * MachineState) := notme (snd (fst c
 
 CoInductive subtraceAux : CTrace -> MTrace -> Contour -> Prop :=
 | subtraceAuxNow: forall C id m MM MM',
-     ~ notme id -> TracePrefix MM' MM -> ForallTrace notme' MM' -> subtraceAux (notfinished (C,id,m) MM) (mapTrace snd MM') C
+     ~ notme id -> TracePrefix MM MM' -> ForallTrace notme' MM' -> subtraceAux (notfinished (C,id,m) MM) (mapTrace snd MM') C
 | subtraceAuxLater: forall cim C MM MM' ,  subtraceAux MM MM' C -> subtraceAux (notfinished cim MM) MM' C
 .
                                                                       
