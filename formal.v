@@ -435,36 +435,45 @@ CoInductive LocalConfidentiality : Contour -> MTrace -> Prop :=
                     LocalConfidentiality C' MMsub) ->
                   LocalConfidentiality C MM.
 
-Section EagerPolicy.
+(* ********* Tags and tagged properties and policies ********* *)
 
 (* Type of tags and some tags of interest, with a minimalist form of blessed
-   call and return sequences. *)
+   call and return sequences.
+
+   RB: TODO: Concretize this? Share among related sections? *)
 Variable Tag : Type.
 Variable Instr : Tag.
 Variable Call : Tag.
 Variable Ret : Tag.
 Variable PCdepth : nat -> Tag.
+Variable SPtag : Tag.
 Variable Stack : nat -> Tag.
+Variable H1 : Tag.
+
+Section EagerPolicy.
 
 (* Machine states are enriched with mappings from components to tags. (Should a
    rich state be a pair of a machine state and the enrichment?) For now, lists
-   are used in lieu of sets and an ordering assumed. *)
-Definition RichState := Component -> list Tag.
-Variable tagsOf : RichState -> Component -> list Tag.
+   are used in lieu of sets and an ordering assumed.
+
+   RB: TODO: Previously called RichState, harmonize w.r.t. testing development.
+*)
+Definition TagState := Component -> list Tag.
+Variable tagsOf : TagState -> Component -> list Tag.
 
 (* Given a call map [cm] and contour [C], relate these to the rich state(s) [T]
    whose tagging is compatible with those. (Add an initial machine state?) *)
-Variable InitialTags : CallMap -> Contour -> RichState -> Prop.
+Variable InitialTags : CallMap -> Contour -> TagState -> Prop.
 
 (* We need some way to update tags. *)
-Variable updateTag : RichState -> Component -> list Tag -> RichState.
+Variable updateTag : TagState -> Component -> list Tag -> TagState.
 
 (* We need to know whether the currently executing instruction performs memory
    operations (loads and stores), and on which address they operate. *)
 Variable isLoad : MachineState -> Addr -> Prop.
 Variable isStore : MachineState -> Addr -> Prop.
 
-CoInductive TaggedStep (M: MachineState) (T : RichState) : RichState -> Prop :=
+CoInductive TaggedStep (M: MachineState) (T : TagState) : TagState -> Prop :=
 | TCall : forall T' d,
     tagsOf T (Mem (M (Reg PC))) = [Call; Instr] ->
     tagsOf T (Reg PC) = [PCdepth d] ->
@@ -489,7 +498,7 @@ CoInductive TaggedStep (M: MachineState) (T : RichState) : RichState -> Prop :=
 (* ... *)
 .
 
-CoInductive TaggedRun : RichState -> MTrace -> Prop :=
+CoInductive TaggedRun : TagState -> MTrace -> Prop :=
 | RunFinished : forall T M,
     TaggedRun T (finished M)
 | RunNotfinished : forall T T' M MM,
@@ -514,6 +523,157 @@ Conjecture EagerPolicy_StackSafety :
     StackSafety cm MM C.
 
 End EagerPolicy.
+
+Section EagerTestingProperty.
+
+(* TODO: Consider moving towards a computable variant of the property. *)
+
+(* The state of the PIPE is a tag map and a counter containing the next unique
+   identifier to be generated. *)
+Definition PipeState := (TagState * nat)%type.
+
+(* The rich machine state is simply a pair of machine and PIPE states. *)
+Definition RichState := (MachineState * PipeState)%type.
+
+(* Simplified state description "tags" for the testing property. *)
+Variant DescTag :=
+| DTStack : nat -> DescTag
+| DTInstr : DescTag
+| DTOther : DescTag.
+
+(* State description for the testing policy. *)
+Record StateDesc := mkStateDesc {
+  pcdepth : nat ;
+  memdepth : Addr -> DescTag ;
+  dstack : list (Addr * Addr * RichState) ;
+  callinstrs : list Addr ;
+  callsites : list Addr ;
+}.
+
+(* Tag helpers. *)
+Definition callTag := [Call; Instr]. (* Should be "callerTag"? *)
+Definition calleeTag := [H1; Instr].
+(* From tag sets to description "tags". *)
+Variable to_desc : list Tag -> DescTag.
+  (* match ts with *)
+  (* | [Stack n] => DSStack n *)
+  (* | [PCdepth _] => DTOther *)
+  (* | [SPtag] => DTOther *)
+  (* | _ => DTInstr *)
+  (* end. *)
+(* These would be standard map and filter functions on finite memories. *)
+Variable map : forall {A B C : Type} (m : A -> B) (f : B -> C), (A -> C).
+Variable eqMap : forall {A B : Type} (m1 m2 : A -> B) (def : B -> Prop), Prop.
+Variable mapFilter :
+  forall {A B : Type} (m : A -> B) (f : A -> B -> Prop), (A -> B).
+Definition eqMapFilter {A B} (m1 m2 : A -> B) f d :=
+  eqMap (mapFilter m1 f) (mapFilter m2 f) d.
+(* More helpers for memories. *)
+Variable memLayout : TagState -> (Addr -> DescTag).
+Variable memCallers : TagState -> list Addr.
+Variable memCallees : TagState -> list Addr.
+(* And some more. *)
+Variable stateMem : RichState -> (Addr -> Value).
+Variable defMem : Value.
+
+(* Default memory tag. *)
+Definition initMem := [Stack 0].
+Definition defDesc := to_desc initMem.
+
+(* Initial state description. *)
+Definition initDesc (ts : TagState) : StateDesc :=
+  mkStateDesc
+    0
+    (memLayout ts)
+    []
+    (memCallers ts)
+    (memCallees ts).
+
+(* Test state as state of the main machine and a list of variant machines with
+   their states. *)
+Definition TestState := (RichState * list RichState)%type.
+
+(* Attempt to take a step in all machine variants. *)
+Variable testStep : TestState -> option TestState.
+
+(* Helpers for single-step stack safety. *)
+Definition tagOf (def : DescTag) (addr : Addr) (sd : StateDesc) : DescTag :=
+  (memdepth sd) addr. (* Not using the default here, vs. sparse memory maps. *)
+
+Definition accessibleTag (t : DescTag) (depth : nat) : Prop :=
+  match t with
+  | DTStack n => n >= depth
+  | DTInstr => False
+  | DTOther => False
+  end.
+
+Definition isAccessible (def : DescTag) (addr : Addr) (sd : StateDesc) : Prop :=
+  accessibleTag (tagOf def addr sd) (pcdepth sd).
+
+Definition isInaccessible (def : DescTag) (addr : Addr) (sd : StateDesc) : Prop :=
+  ~ accessibleTag (tagOf def addr sd) (pcdepth sd).
+
+Definition isInstruction (def : DescTag) (addr : Addr) (sd : StateDesc) : Prop :=
+  match (tagOf def addr sd) with
+  | DTInstr => True
+  | _ => False
+  end.
+
+(* single_step_stack_safety *)
+Inductive EagerTestingSingleStep
+           (s  : RichState)
+           (d  : StateDesc)
+           (t  : RichState) (* variant of [s] w.r.t. [d] *)
+           (s' : RichState) (* state such that [s] steps to it *)
+           (d' : StateDesc) (* state description of [s'] *)
+           (t' : RichState) (* state such that [t] steps to it *)
+  : Prop :=
+| ETsingle :
+    (* Instruction memory of [s'] and [t'] w.r.t. [d] agrees. *)
+    let isInstruction' addr _ := isInstruction defDesc addr d in
+    eqMapFilter (stateMem s') (stateMem t') isInstruction' (fun _ => False) ->
+    (* Accessible memory of [s'] and [t'] w.r.t. [d] agrees. *)
+    let isAccessible' addr _ := isAccessible defDesc addr d in
+    eqMapFilter (stateMem s') (stateMem t') isAccessible' (fun x => x = defMem) ->
+    (* Inaccessible memory of [t] and [t'] w.r.t. [d] agrees. *)
+    let isInaccessible' addr _ := isInaccessible defDesc addr d in
+    eqMapFilter (stateMem t) (stateMem t') isInaccessible' (fun x => x = defMem) ->
+    (* The step eagerly satisfies stack safety. *)
+    EagerTestingSingleStep s d t s' d' t'.
+
+(* next_state *)
+Variable next_desc :
+  forall (def : DescTag) (s : RichState) (d : StateDesc) (s' : RichState),
+  option StateDesc.
+
+(* prop_stack_safety_full (1)
+   (1) works on genVariationTestState (2)
+       and uses to_desc, callTag and calleeTag to get initDesc
+       and passes this to stack_safety_full (3)
+   (2) takes a few arguments for generation, including isSecretMP (4)
+       leaving this abstract at the moment
+   (3) operates on traces of TestStates (Main + Variants) *)
+(* TODO: Synchronize MTrace and TestState. *)
+CoInductive EagerTestingFull : MTrace -> StateDesc -> TestState -> Prop :=
+| ETFdone : forall M d ts,
+    EagerTestingFull (finished M) d ts
+| ETFstep : forall M MM dInput dUpdated tsInput tsScrambled tsStepped,
+    (* First, check if the currently executed instruction is (the destination
+       of) a call. If it is, scramble. *)
+    (* In (M (Reg PC)) (callsites d) -> *)
+    (* Take a step in all machine variants. *)
+    testStep tsScrambled = Some tsStepped ->
+    (* Compute the next state description. *)
+    next_desc defDesc (fst tsInput) dInput (fst tsStepped) = Some dUpdated ->
+    (* Call single-step stack safety for each variant.*)
+    (* ... *)
+    EagerTestingFull (notfinished M MM) dInput tsInput.
+
+Variable EagerTesting : Prop.
+
+(* Conjecture EagerTesting_StackSafety : ... *)
+
+End EagerTestingProperty.
 
 End foo.
 
