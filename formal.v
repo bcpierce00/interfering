@@ -655,8 +655,8 @@ Variable map : forall {A B C : Type} (m : A -> B) (f : B -> C), (A -> C).
 Variable eqMap : forall {A B : Type} (m1 m2 : A -> B) (def : B -> Prop), Prop.
 Variable mapFilter :
   forall {A B : Type} (m : A -> B) (f : A -> B -> Prop), (A -> B).
-Definition eqMapFilter {A B} (m1 m2 : A -> B) f d :=   (* APT: Coq 8.8.2 - seems to ignore {} on there  Variables. *)
-  @eqMap _ _ (@mapFilter _ _ m1 f) (@mapFilter _ _ m2 f) d.
+Definition eqMapFilter {A B} (m1 m2 : A -> B) f d :=   
+  eqMap (mapFilter m1 f) (mapFilter m2 f) d.
 (* More helpers for memories. *)
 Variable memLayout : TagState -> (Addr -> DescTag).
 Variable memCallers : TagState -> list Addr.
