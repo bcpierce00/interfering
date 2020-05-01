@@ -276,12 +276,12 @@ Definition isRet (Mc M: MachineState) : Prop :=
 
 Definition StackConfidentiality' (C : Contour) (MM : MTrace) :=
   forall N NN Mret, variantOf (head MM) N C ->
-               LongestPrefix (fun M => ~ (isRet (head MM) M)) NN (traceOf N) ->
+               LongestPrefix (fun M => ~ (isRet (head MM) M)) NN (traceOf N) -> (* LEO: Does this make sense at the toplevel? Won't the toplevel trace be of size 2? *)
                TraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
-               (IsEnd MM Mret ->
+               (IsEnd MM Mret -> (* LEO: Again, toplevel concerns. I like this formalization for all the rest. *)
                 exists Nret, IsEnd NN Nret /\
                 forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k 
-                  -> Nret k = Mret k).
+                  -> Nret k = Mret k). (* LEO: Where does indistinguishability come into play here? *)
 
 (* TODO: Revive Leo's original version of ObsTrace equivalence and compare with others. *)
 
