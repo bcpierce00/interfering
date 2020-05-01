@@ -377,7 +377,7 @@ CoInductive ObservableIntegrity (cm:CallMap) : Contour -> MTrace -> option MTrac
                       (* The idealized trace reflects the behavior of the trace after rolling back
                          illegal changes that took place in MMsub. The actual trace that followed
                          MMsub should prefix it, because an error might stop the actual trace prematurely. *)
-                      let actual := MMsuf^MMOouter in
+                      let actual := MMsuf ^ MMOouter in
                       let ideal := MMsuf' in
                       TracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)) -> 
                     (* Inside each subtrace, the property should also hold for Csub. *)
@@ -402,10 +402,10 @@ CoInductive ObservableConfidentiality (cm : CallMap) : Contour -> MTrace -> opti
                        and NN is the trace from N until a return *)
                     variantOf (head MMsub) N Csub ->
                     TraceSpan (fun M => ~ (isRet (head MM) M)) (traceOf N) NN NNO ->
-                    let actual := MMsub^MMsuffO in
+                    let actual := MMsub ^ MMsuffO in
                     (* The full variant trace behaves as NN until return, then a confidentiality
                        rollback from the return onward, and its behavior must match the actual trace. *)
-                    let variant := NN^(option_map (fun NNsuff => traceOf (RollbackConf C (head MMsub) N (head NNsuff))) NNO) in
+                    let variant := NN ^ (option_map (fun NNsuff => traceOf (RollbackConf C (head MMsub) N (head NNsuff))) NNO) in
                     TraceEq (ObsTraceOf variant) (ObsTraceOf actual) ->
                     ObservableConfidentiality cm Csub MMsub (MMsuffO ?^ MMOouter)) ->
                   ObservableConfidentiality cm C MM MMOouter.
@@ -432,11 +432,11 @@ CoInductive ObservableConfidentegrity (cm : CallMap) : Contour -> MTrace -> opti
                       SubtraceWithSuffix cm C MM Csub MMsub MMsuffO ->
                       variantOf (head MMsub) N Csub ->
                       TraceSpan (fun M => ~ (isRet (head MM) M)) (traceOf N) NN NNO ->
-                      let actual := MMsub^MMsuffO in
+                      let actual := MMsub ^ MMsuffO in
                       (* This variant rolls back integrity and confidentiality together, so it is also
                          An idealized trace as in the integrity property. Because integrity is involved,
                          the actual trace should be a prefix of the idealized/variant. *)
-                      let variant := NN^(option_map (fun NNsuff => traceOf (RollbackCI C (head MMsub) N (head NNsuff))) NNO) in
+                      let variant := NN ^ (option_map (fun NNsuff => traceOf (RollbackCI C (head MMsub) N (head NNsuff))) NNO) in
                       TracePrefix (ObsTraceOf variant) (ObsTraceOf actual) ->
                     ObservableConfidentegrity cm Csub MMsub (MMsuffO ?^ MMouterO)) ->
                   ObservableConfidentegrity cm C MM MMouterO.
@@ -630,8 +630,8 @@ Variable map : forall {A B C : Type} (m : A -> B) (f : B -> C), (A -> C).
 Variable eqMap : forall {A B : Type} (m1 m2 : A -> B) (def : B -> Prop), Prop.
 Variable mapFilter :
   forall {A B : Type} (m : A -> B) (f : A -> B -> Prop), (A -> B).
-Definition eqMapFilter {A B} (m1 m2 : A -> B) f d :=
-  eqMap (mapFilter m1 f) (mapFilter m2 f) d.
+Definition eqMapFilter {A B} (m1 m2 : A -> B) f d :=   (* APT: Coq 8.8.2 - seems to ignore {} on there  Variables. *)
+  @eqMap _ _ (@mapFilter _ _ m1 f) (@mapFilter _ _ m2 f) d.
 (* More helpers for memories. *)
 Variable memLayout : TagState -> (Addr -> DescTag).
 Variable memCallers : TagState -> list Addr.
