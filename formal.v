@@ -110,11 +110,15 @@ CoFixpoint TraceApp {A} (MM: Trace A) (MMO: option (Trace A)) : Trace A :=
   | notfinished m MM' => notfinished m (TraceApp MM' MMO)
   end.
 
+Notation "MM1 ^ MM2" := (TraceApp MM1 MM2).
+
 Definition OptTraceApp {A} (MMO1: option (Trace A)) (MMO2: option (Trace A)) : option (Trace A) :=
   match MMO1 with
   | Some MM => Some (TraceApp MM MMO2)
   | None => MMO2
   end.
+
+Notation "MM1 ?^ MM2" := (OptTraceApp MM1 MM2) (at level 80).
 
 (* TracePrefix MM1 MM2 says MM2 is a prefix of MM1. *)
 CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
@@ -126,14 +130,19 @@ CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
 
 (* Divide MM1 into MM2 ++ MMO such that MM2 is the longest prefix for which P holds on each element *)
 Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : Trace A) (MMO : option (Trace A)) : Prop :=
-  MM1 = TraceApp MM2 MMO /\ ForallTrace P MM2 /\
+  MM1 = MM2^MMO /\ ForallTrace P MM2 /\
   forall MM2', TracePrefix MM1 MM2'->
     ForallTrace P MM2' ->
     TracePrefix MM2 MM2' .
 
 (* MM2 is the longest prefix of MM1 for which P holds on each element. *)
 Definition LongestPrefix {A} (P : A -> Prop) (MM1 MM2 : Trace A) : Prop :=
-  exists MMO, TraceSpan P MM1 MM2 MMO. 
+  exists MMO, TraceSpan P MM1 MM2 MMO.
+
+CoInductive IsEnd {A} : Trace A -> A -> Prop :=
+| IsEndNow : forall M, IsEnd (finished M) M
+| IsEndLater : forall MM M M', IsEnd MM M -> IsEnd (notfinished M' MM) M
+.
 
 (* Definition tail {A} (MM: Trace A) : option (Trace A) := *)
 (*   match MM with *)
@@ -259,15 +268,27 @@ Definition StackConfidentiality (C : Contour) (MM : MTrace) :=
 (* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed 
 to fail-stop more often than the reference trace? *)
 
+(* SNA: Proposed confidentiality property for eager policy; actual and variant traces
+   have identical observation traces and a final state in the actual trace has a
+   corresponding pre-return state in the variant, where all changes are indistinguishable. *)
+Definition isRet (Mc M: MachineState) : Prop :=
+  M (Reg PC) = wplus (Mc (Reg PC)) 4 /\ M (Reg SP) = Mc (Reg SP).
+
+Definition StackConfidentiality' (C : Contour) (MM : MTrace) :=
+  forall N NN Mret, variantOf (head MM) N C ->
+               LongestPrefix (fun M => ~ (isRet (head MM) M)) NN (traceOf N) ->
+               TraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
+               (IsEnd MM Mret ->
+                exists Nret, IsEnd NN Nret /\
+                forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k 
+                  -> Nret k = Mret k).
+
 (* TODO: Revive Leo's original version of ObsTrace equivalence and compare with others. *)
 
 Definition CallMap := Value -> nat -> Prop. 
 
 Definition isCall (cm: CallMap) (M: MachineState) (args: nat) : Prop :=
    cm (M (Reg PC)) args.
-
-Definition isRet (Mc M: MachineState) : Prop :=
-  M (Reg PC) = wplus (Mc (Reg PC)) 4 /\ M (Reg SP) = Mc (Reg SP).
 
 Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
   fun k =>
@@ -302,7 +323,6 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
       TraceSpan (fun M => ~ (isRet (head MM) M)) MM MMskip (Some MM')  -> 
       Subtrace cm C MM' C' MM'' ->
       Subtrace cm C MM C' MM''.
-
 
 (* BCP: Do we really need the Subtrace part here? *)
 CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
@@ -357,11 +377,11 @@ CoInductive ObservableIntegrity (cm:CallMap) : Contour -> MTrace -> option MTrac
                       (* The idealized trace reflects the behavior of the trace after rolling back
                          illegal changes that took place in MMsub. The actual trace that followed
                          MMsub should prefix it, because an error might stop the actual trace prematurely. *)
-                      let actual := ObsTraceOf (TraceApp MMsuf MMOouter) in
-                      let ideal := ObsTraceOf MMsuf' in
-                      TracePrefix ideal actual) -> 
+                      let actual := MMsuf^MMOouter in
+                      let ideal := MMsuf' in
+                      TracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)) -> 
                     (* Inside each subtrace, the property should also hold for Csub. *)
-                    ObservableIntegrity cm Csub MMsub (OptTraceApp MMsuffO MMOouter)) ->
+                    ObservableIntegrity cm Csub MMsub (MMsuffO ?^ MMOouter)) ->
                   ObservableIntegrity cm C MM MMOouter.
 
 (* A confidentiality rollback aims to undo a variation, so it restores the values of the
@@ -373,11 +393,6 @@ Definition RollbackConf (C: Contour) (Mstart Nstart Nend : MachineState) : Machi
            | LC => Nend k
            end.
 
-(* Helper function to extend a rolled-back state into a trace *)
-Definition traceOfRBOpt (C:Contour) (Mstart Nstart:MachineState) (NNO:option MTrace) :=
-  fun rb =>
-    option_map (fun NN => traceOf (rb C Mstart Nstart (head NN))) NNO.
-
 CoInductive ObservableConfidentiality (cm : CallMap) : Contour -> MTrace -> option MTrace -> Prop :=
 | varytrace' : forall C MM MMOouter,
                   (forall MMsub MMsuffO NN NNO Csub N,
@@ -387,12 +402,12 @@ CoInductive ObservableConfidentiality (cm : CallMap) : Contour -> MTrace -> opti
                        and NN is the trace from N until a return *)
                     variantOf (head MMsub) N Csub ->
                     TraceSpan (fun M => ~ (isRet (head MM) M)) (traceOf N) NN NNO ->
-                    let actual := ObsTraceOf (TraceApp MMsub MMsuffO) in
+                    let actual := MMsub^MMsuffO in
                     (* The full variant trace behaves as NN until return, then a confidentiality
                        rollback from the return onward, and its behavior must match the actual trace. *)
-                    let variant := ObsTraceOf (TraceApp NN (traceOfRBOpt Csub (head MMsub) (head NN) NNO RollbackConf)) in
-                    TraceEq variant actual ->
-                    ObservableConfidentiality cm Csub MMsub (OptTraceApp MMsuffO MMOouter)) ->
+                    let variant := NN^(option_map (fun NNsuff => traceOf (RollbackConf C (head MMsub) N (head NNsuff))) NNO) in
+                    TraceEq (ObsTraceOf variant) (ObsTraceOf actual) ->
+                    ObservableConfidentiality cm Csub MMsub (MMsuffO ?^ MMOouter)) ->
                   ObservableConfidentiality cm C MM MMOouter.
 
 Definition LazySafety (cm:CallMap) (C:Contour) (MM:MTrace) : Prop :=
@@ -402,8 +417,8 @@ Definition LazySafety (cm:CallMap) (C:Contour) (MM:MTrace) : Prop :=
 (* More conjectural stuff follows. *)
 
 (* This is meant to rollback in all of the cases that either an integrity or a confidentiality
-   rollback would. If a components is HI, it should always be rolled back; if HC but LI, only
-   values unchanged since their variation should be. *)
+   rollback would. If a component is HI, it should always be rolled back; if HC but LI, it
+   should be rolled back only if it kept the value of its variant. *)
 Definition RollbackCI (C: Contour) (Mstart Nstart Nend : MachineState) : MachineState :=
   fun k => match C k with
            | (_,HI) => Mstart k
@@ -417,13 +432,13 @@ CoInductive ObservableConfidentegrity (cm : CallMap) : Contour -> MTrace -> opti
                       SubtraceWithSuffix cm C MM Csub MMsub MMsuffO ->
                       variantOf (head MMsub) N Csub ->
                       TraceSpan (fun M => ~ (isRet (head MM) M)) (traceOf N) NN NNO ->
-                      let actual := ObsTraceOf (TraceApp MMsub MMsuffO) in
+                      let actual := MMsub^MMsuffO in
                       (* This variant rolls back integrity and confidentiality together, so it is also
                          An idealized trace as in the integrity property. Because integrity is involved,
                          the actual trace should be a prefix of the idealized/variant. *)
-                      let variant := ObsTraceOf (TraceApp NN (traceOfRBOpt Csub (head MMsub) (head NN) NNO RollbackCI)) in
-                      TracePrefix variant actual ->
-                    ObservableConfidentegrity cm Csub MMsub (OptTraceApp MMsuffO MMouterO)) ->
+                      let variant := NN^(option_map (fun NNsuff => traceOf (RollbackCI C (head MMsub) N (head NNsuff))) NNO) in
+                      TracePrefix (ObsTraceOf variant) (ObsTraceOf actual) ->
+                    ObservableConfidentegrity cm Csub MMsub (MMsuffO ?^ MMouterO)) ->
                   ObservableConfidentegrity cm C MM MMouterO.
 
 Definition LazySafety' (cm: CallMap) (C: Contour) (MM: MTrace) : Prop :=
@@ -433,23 +448,56 @@ Conjecture EagerSafetyImpliesLazy :
   forall cm C MM,
   StackSafety cm MM C -> LazySafety cm C MM.
 
-Conjecture Lazy'ImpliesLazy :
+Conjecture ConfidentegrityImpliesConfidentiality :
+  forall cm C MM MMO,
+    ObservableConfidentegrity cm C MM MMO -> ObservableConfidentiality cm C MM MMO.
+
+Conjecture ConfidentegrityImpliesIntegrity :
+  forall cm C MM MMO,
+    ObservableConfidentegrity cm C MM MMO -> ObservableIntegrity cm C MM MMO.
+
+Theorem Lazy'ImpliesLazy :
   forall cm C MM,
   LazySafety' cm C MM -> LazySafety cm C MM.
+Proof.
+  intros. unfold LazySafety' in H. unfold LazySafety;split;destruct MM.
+  - apply (ConfidentegrityImpliesIntegrity cm C (finished m) None); auto.
+  - apply (ConfidentegrityImpliesIntegrity cm C (notfinished m MM) None); auto.
+  - apply (ConfidentegrityImpliesConfidentiality cm C (finished m) None); auto.
+  - apply (ConfidentegrityImpliesConfidentiality cm C (notfinished m MM) None); auto.
+Qed.
 
-(* This confidentiality is more inline with the eager policy, doesn't
-   consider later execution *)
-Fail
-CoInductive LocalConfidentiality : Contour -> MTrace -> Prop :=
-  | varytrace : forall C MM,
-                  (forall MMsub NN C' M N,
-                    Subtrace C MM C' MMsub ->
-                    Some M = step (head MMsub) ->
-                    variantOf M N C' ->
-                    LongestPrefix (fun M => ~ (isRet (head MM) M)) NN (traceOf N) ->
-                    TraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\ variantOf (last NN) (last MMsub) C' ->
-                    LocalConfidentiality C' MMsub) ->
-                  LocalConfidentiality C MM.
+Conjecture LazyNotImpliesLazy' :
+  exists cm C MM,
+  LazySafety cm C MM /\ ~ LazySafety' cm C MM.
+(* The counterexample:
+
+main: mov #0 r1
+      store r1 FP
+      [call sequence to sub]
+      ld FP r1
+      bne r1 r2 #2
+      mov #1 O
+      beq #0 #0 #1
+      mov #0 O
+      halt
+
+sub:  ld (FP-1) r2
+      beq r2 #0 #2
+      mov #1 r1
+      store r1 (FP-1)
+      [return sequence]
+
+In observable confidentiality, if the variation keeps main's memory the same,
+sub returns and the behavior is [1]. Of course that is the case for the actual trace as well.
+If it changes, sub writes 1 to it and to r1, so the behavior is still [1].
+
+In observable integrity, sub never does anything, because there is no variant. So
+the behavior is [1] for both the ideal and actual traces.
+
+But for confidentegrity, if main's memory varies, sub moves 1 to r1 and stores it
+in main's memory. Then the rollback sets main's memory back to 0. So r1 and r2 will
+not be equal, and the behavior is [0]. So confidentegrity does not hold. *)
 
 (* ********* Tags and tagged properties and policies ********* *)
 
