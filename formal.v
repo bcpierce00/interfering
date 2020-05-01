@@ -255,7 +255,8 @@ CoFixpoint ObsTraceOf (MM : MTrace) : Trace Value :=
       else notfinished v (ObsTraceOf (notfinished M' Ms'))
     end
   end.
-
+(* Alternate: steps have observations (options or tau) and obstrace concatenates
+   non-taus. *)
 
 Definition StackConfidentiality (C : Contour) (MM : MTrace) := 
   forall N, variantOf (head MM) N C ->
@@ -274,9 +275,9 @@ to fail-stop more often than the reference trace? *)
 Definition isRet (Mc M: MachineState) : Prop :=
   M (Reg PC) = wplus (Mc (Reg PC)) 4 /\ M (Reg SP) = Mc (Reg SP).
 
-Definition StackConfidentiality' (C : Contour) (MM : MTrace) :=
+Definition StackConfidentiality' (C : Contour) (MM : MTrace) (isRet : MachineState -> Prop) :=
   forall N NN Mret, variantOf (head MM) N C ->
-               LongestPrefix (fun M => ~ (isRet (head MM) M)) NN (traceOf N) -> (* LEO: Does this make sense at the toplevel? Won't the toplevel trace be of size 2? *)
+               LongestPrefix (fun M => ~ isRet M) NN (traceOf N) -> (* LEO: Does this make sense at the toplevel? Won't the toplevel trace be of size 2? *)
                TraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
                (IsEnd MM Mret -> (* LEO: Again, toplevel concerns. I like this formalization for all the rest. *)
                 exists Nret, IsEnd NN Nret /\
@@ -324,6 +325,19 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
       Subtrace cm C MM' C' MM'' ->
       Subtrace cm C MM C' MM''.
 
+CoInductive Subtrace' (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> Prop :=
+  | SubNow' : forall C C' MM MM' args,
+      (* Current instruction is a call *)
+      isCall cm (head MM) args ->
+      (* Take the prefix until a return *)
+      LongestPrefix (fun M => ~ (isRet (head MM) M)) MM MM' ->
+      (* Construct the new contour *)
+      updateContour C args (head MM) = C' -> 
+      Subtrace' cm C MM C' MM'
+  | SubNotNow': forall C MM C' MM' M,
+      Subtrace' cm C MM C' MM' ->
+      Subtrace' cm C (notfinished M MM) C' MM'.
+
 (* BCP: Do we really need the Subtrace part here? *)
 CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
   ss : forall (MM : MTrace) (C : Contour),
@@ -331,6 +345,17 @@ CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
        (StackConfidentiality C MM) ->
        (forall MM' C', Subtrace cm C MM C' MM' -> StackSafety cm MM' C') ->
        StackSafety cm MM C.
+
+Definition StackSafety' (cm : CallMap) : MTrace -> Contour -> Prop :=
+  fun (MM : MTrace) (C : Contour) =>
+    (StackIntegrity C MM) /\
+    (StackConfidentiality' C MM (fun _ => False)) /\
+    (forall MM' C', Subtrace' cm C MM C' MM' ->
+                    StackIntegrity C' MM' /\
+                    StackConfidentiality' C' MM' (isRet (head MM'))).
+
+(* TODO: step by step property that implies the rest *)
+(* TODO2: this setup for lazy properties *)
 
 (* ********* SNA Beware : Lazy Properties ********* *)
 
