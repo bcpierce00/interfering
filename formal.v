@@ -34,10 +34,10 @@ Definition Value : Type := Word.
 (* A Machine State is just a map from Components to Values. *)
 Definition MachineState := Component -> Value.
 
-(* Abstract Type of Observations. *)
-Variable Observation : Type.
-(* Some Observations are silent. *)
-Variable isSilent : Observation -> Prop.
+(* Observations are values, or silent (tau) *)
+Inductive Observation :=
+| Out (w : Word)
+| Tau.
 
 (* A Machine State can step to a new Machine State plus an Observation. *)
 Variable step : MachineState -> option (MachineState * Observation).
@@ -246,18 +246,18 @@ Definition variantOf (M N : MachineState) (C : Contour) :=
 
 (* LEO: I'm not sure how to satisfy productivity here. We're essentially trying
    to filter a trace. *)
-Definition ObsTrace := Trace (option Observation).
+Definition ObsTrace := Trace Observation.
 
 CoFixpoint ObsTraceOf (MM: MTrace) : ObsTrace :=
   match MM with
   | finished m =>
-    finished None
+    finished Tau
   | notfinished M MM' =>
     match step M with
     | Some (M', O) =>
-      notfinished (Some O) (ObsTraceOf MM')
+      notfinished O (ObsTraceOf MM')
     | None => (* Shouldn't happen in wf MTrace *)
-      notfinished None (ObsTraceOf MM') 
+      notfinished Tau (ObsTraceOf MM') 
     end
   end.
 
@@ -309,13 +309,34 @@ Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) :=
 (* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed 
 to fail-stop more often than the reference trace? *)
 
+CoInductive ObsTraceEq : Trace Observation -> Trace Observation -> Prop :=
+| ObsEqTau1 : forall OO OO',
+    ObsTraceEq OO OO' ->
+    ObsTraceEq (notfinished Tau OO) OO'
+| ObsEqTau2 : forall OO OO',
+    ObsTraceEq OO OO' ->
+    ObsTraceEq OO (notfinished Tau OO')
+| ObsEqNow : forall w OO OO',
+    ObsTraceEq OO OO' ->
+    ObsTraceEq (notfinished (Out w) OO) (notfinished (Out w) OO')
+| ObsEqFinishedOut : forall w,
+    ObsTraceEq (finished (Out w)) (finished (Out w))
+| ObsEqFinishedTau : 
+    ObsTraceEq (finished Tau) (finished Tau)
+(* The last thing we need is a way of handling *all-tau* traces.
+   There are a couple of ways of doing that, not sure what will
+   play better in proofs. *)
+| ObsEqAllTau : forall OO,
+     ObsTraceEq OO OO.
+               
+
 (* SNA: Proposed confidentiality property for eager policy; actual and variant traces
    have identical observation traces and a final state in the actual trace has a
    corresponding pre-return state in the variant, where all changes are indistinguishable. *)
 Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) (isRet : MachineState -> Prop) :=
   forall N NN Mret, variantOf (head MM) N C ->
                LongestPrefix (fun M => ~ isRet M) NN (traceOf N) -> 
-               TraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
+               ObsTraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
                (IsEnd MM Mret -> 
                 exists Nret, IsEnd NN Nret /\
                 forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k 
