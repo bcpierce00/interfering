@@ -312,9 +312,6 @@ to fail-stop more often than the reference trace? *)
 (* SNA: Proposed confidentiality property for eager policy; actual and variant traces
    have identical observation traces and a final state in the actual trace has a
    corresponding pre-return state in the variant, where all changes are indistinguishable. *)
-Definition isRet (Mc M: MachineState) : Prop :=
-  M (Reg PC) = wplus (Mc (Reg PC)) 4 /\ M (Reg SP) = Mc (Reg SP).
-
 Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) (isRet : MachineState -> Prop) :=
   forall N NN Mret, variantOf (head MM) N C ->
                LongestPrefix (fun M => ~ isRet M) NN (traceOf N) -> 
@@ -328,6 +325,9 @@ Definition CallMap := Value -> nat -> Prop.
 
 Definition isCall (cm: CallMap) (M: MachineState) (args: nat) : Prop :=
    cm (M (Reg PC)) args.
+
+Definition isRet (Mc M: MachineState) : Prop :=
+  M (Reg PC) = wplus (Mc (Reg PC)) 4 /\ M (Reg SP) = Mc (Reg SP).
 
 Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
   fun k =>
@@ -397,8 +397,6 @@ Definition EagerStackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
 
 (***** TESTING Property **********)
 
-(* TODO2: this setup for lazy properties *)
-
 (* ********* SNA Beware : Lazy Properties ********* *)
 
 (* this variation of subtrace also gives us the suffix of the primary trace
@@ -433,53 +431,35 @@ Definition RollbackInt (C: Contour) (Mstart Mend : MachineState) : MachineState 
 (* Observable properties take a contour and a trace, with an optional additional trace.
    The contour C represents the security levels for trace MM, and MMOouter is the
    execution following after MM when C no longer applies. *)
-CoInductive ObservableIntegrity (cm:CallMap) : Contour -> MTrace -> option MTrace -> Prop :=
-  | safetrace : forall C MM MMOouter,
-                  (* A subtrace MMsub represents a call whose contour is Csub, and MMsufO
-                     is what happens after MMsub's return (if anything), and before MMOouter. *)
-                  (forall MMsub MMsuffO MMsuf MMsuf' Csub,
-                    SubtraceWithSuffix cm C MM Csub MMsub MMsuffO ->
-                    (MMsuffO = Some MMsuf ->
-                      MMsuf' = traceOf (RollbackInt Csub (head MMsub) (head MMsuf)) ->
-                      (* The idealized trace reflects the behavior of the trace after rolling back
-                         illegal changes that took place in MMsub. The actual trace that followed
-                         MMsub should prefix it, because an error might stop the actual trace prematurely. *)
-                      let actual := MMsuf ^ MMOouter in
-                      let ideal := MMsuf' in
-                      TracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)) -> 
-                    (* Inside each subtrace, the property should also hold for Csub. *)
-                    ObservableIntegrity cm Csub MMsub (MMsuffO ?^ MMOouter)) ->
-                  ObservableIntegrity cm C MM MMOouter.
+Definition ObservableIntegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) : Prop :=
+ match MMsuffO with
+ | Some actual =>
+   let ideal := traceOf (RollbackInt C (head MM) (head actual)) in
+   TracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)
+ | None => True
+ end.
 
 (* A confidentiality rollback aims to undo a variation, so it restores the values of the
    original, unvaried state. But if the varied values were overwritten after they were varied,
    the changes should be kept. Otherwise we are building in some integrity. *)
-Definition RollbackConf (C: Contour) (Mstart Nstart Nend : MachineState) : MachineState :=
-  fun k => match confidentialityOf (C k) with
-           | HC => if weq (Nstart k) (Nend k) then Mstart k else Nend k
-           | LC => Nend k
-           end.
+Definition RollbackConf (Mstart Nstart Nend : MachineState) : MachineState :=
+  fun k => if weq (Nstart k) (Nend k) && negb (weq (Mstart k) (Nstart k))
+           then Mstart k
+           else Nend k.
 
-CoInductive ObservableConfidentiality (cm : CallMap) : Contour -> MTrace -> option MTrace -> Prop :=
-| varytrace' : forall C MM MMOouter,
-                  (forall MMsub MMsuffO NN NNO Csub N,
-                    SubtraceWithSuffix cm C MM Csub MMsub MMsuffO ->
-                    (* The state N agrees with the start of MMsub on
-                       components that are low confidentiality in Csub,
-                       and NN is the trace from N until a return *)
-                    variantOf (head MMsub) N Csub ->
-                    TraceSpan (fun M => ~ (isRet (head MM) M)) (traceOf N) NN NNO ->
-                    let actual := MMsub ^ MMsuffO in
-                    (* The full variant trace behaves as NN until return, then a confidentiality
-                       rollback from the return onward, and its behavior must match the actual trace. *)
-                    let variant := NN ^ (option_map (fun NNsuff => traceOf (RollbackConf C (head MMsub) N (head NNsuff))) NNO) in
-                    TraceEq (ObsTraceOf variant) (ObsTraceOf actual) ->
-                    ObservableConfidentiality cm Csub MMsub (MMsuffO ?^ MMOouter)) ->
-                  ObservableConfidentiality cm C MM MMOouter.
+Definition ObservableConfidentiality (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) (isRet:MachineState -> Prop) : Prop :=
+  forall N NN NNO, variantOf (head MM) N C ->
+                   TraceSpan (fun N' => ~ (isRet N')) (traceOf N) NN NNO ->
+                   let actual := MM^MMsuffO in
+                   let variant := NN ^(option_map (fun NN => traceOf (RollbackConf (head MM) N (head NN))) NNO) in
+                   TraceEq (ObsTraceOf variant) (ObsTraceOf actual).
 
-Definition LazySafety (cm:CallMap) (C:Contour) (MM:MTrace) : Prop :=
-       (ObservableIntegrity cm C MM None) /\ 
-       (ObservableConfidentiality cm C MM None).
+Definition LazyStackSafety (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
+  ObservableIntegrity C MM None /\
+  ObservableConfidentiality C MM None (fun _ => False) /\
+  (forall MM' C' MMsuffO, SubtraceWithSuffix cm C MM C' MM' MMsuffO ->
+                          ObservableIntegrity C' MM' MMsuffO /\
+                          ObservableConfidentiality C' MM' MMsuffO (isRet (head MM'))).
 
 (* More conjectural stuff follows. *)
 
@@ -487,56 +467,32 @@ Definition LazySafety (cm:CallMap) (C:Contour) (MM:MTrace) : Prop :=
    rollback would. If a component is HI, it should always be rolled back; if HC but LI, it
    should be rolled back only if it kept the value of its variant. *)
 Definition RollbackCI (C: Contour) (Mstart Nstart Nend : MachineState) : MachineState :=
-  fun k => match C k with
-           | (_,HI) => Mstart k
-           | (HC,LI) => if weq (Nstart k) (Nend k) then Mstart k else Nend k
-           | _ => Nend k
-           end.
+  RollbackInt C Mstart (RollbackConf Mstart Nstart Nend).
 
-CoInductive ObservableConfidentegrity (cm : CallMap) : Contour -> MTrace -> option MTrace -> Prop :=
-| varysafetrace : forall C MM MMouterO,
-                    (forall MMsub MMsuffO NN NNO Csub N,
-                      SubtraceWithSuffix cm C MM Csub MMsub MMsuffO ->
-                      variantOf (head MMsub) N Csub ->
-                      TraceSpan (fun M => ~ (isRet (head MM) M)) (traceOf N) NN NNO ->
-                      let actual := MMsub ^ MMsuffO in
-                      (* This variant rolls back integrity and confidentiality together, so it is also
-                         An idealized trace as in the integrity property. Because integrity is involved,
-                         the actual trace should be a prefix of the idealized/variant. *)
-                      let variant := NN ^ (option_map (fun NNsuff => traceOf (RollbackCI C (head MMsub) N (head NNsuff))) NNO) in
-                      TracePrefix (ObsTraceOf variant) (ObsTraceOf actual) ->
-                    ObservableConfidentegrity cm Csub MMsub (MMsuffO ?^ MMouterO)) ->
-                  ObservableConfidentegrity cm C MM MMouterO.
+Definition ObservableConfidentegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) (isRet:MachineState -> Prop) : Prop :=
+  forall N NN NNO,
+    variantOf (head MM) N C ->
+    TraceSpan (fun N' => ~ isRet N') (traceOf N) NN NNO ->
+    let actual := MM^MMsuffO in
+    let ideal := NN^(option_map (fun NN' => traceOf (RollbackCI C (head MM) N (head NN'))) NNO) in
+    TracePrefix (ObsTraceOf ideal) (ObsTraceOf actual).
 
-Definition LazySafety' (cm: CallMap) (C: Contour) (MM: MTrace) : Prop :=
-        ObservableConfidentegrity cm C MM None.
+Definition LazyStackSafety' (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
+  ObservableConfidentegrity C MM None (fun _ => False) /\
+  (forall MM' C' MMsuffO, SubtraceWithSuffix cm C MM C' MM' MMsuffO ->
+                          ObservableConfidentegrity C' MM' MMsuffO (isRet (head MM'))).
 
 Conjecture EagerSafetyImpliesLazy :
   forall cm C MM,
-  StackSafety cm MM C -> LazySafety cm C MM.
+  EagerStackSafety cm MM C -> LazyStackSafety cm C MM.
 
-Conjecture ConfidentegrityImpliesConfidentiality :
-  forall cm C MM MMO,
-    ObservableConfidentegrity cm C MM MMO -> ObservableConfidentiality cm C MM MMO.
-
-Conjecture ConfidentegrityImpliesIntegrity :
-  forall cm C MM MMO,
-    ObservableConfidentegrity cm C MM MMO -> ObservableIntegrity cm C MM MMO.
-
-Theorem Lazy'ImpliesLazy :
+Conjecture Lazy'ImpliesLazy :
   forall cm C MM,
-  LazySafety' cm C MM -> LazySafety cm C MM.
-Proof.
-  intros. unfold LazySafety' in H. unfold LazySafety;split;destruct MM.
-  - apply (ConfidentegrityImpliesIntegrity cm C (finished m) None); auto.
-  - apply (ConfidentegrityImpliesIntegrity cm C (notfinished m MM) None); auto.
-  - apply (ConfidentegrityImpliesConfidentiality cm C (finished m) None); auto.
-  - apply (ConfidentegrityImpliesConfidentiality cm C (notfinished m MM) None); auto.
-Qed.
+  LazyStackSafety' cm C MM -> LazyStackSafety cm C MM.
 
 Conjecture LazyNotImpliesLazy' :
   exists cm C MM,
-  LazySafety cm C MM /\ ~ LazySafety' cm C MM.
+  LazyStackSafety cm C MM /\ ~ LazyStackSafety' cm C MM.
 (* The counterexample:
 
 main: mov #0 r1
@@ -632,8 +588,8 @@ CoInductive TaggedStep (M: MachineState) (T : TagState) : TagState -> Prop :=
 CoInductive TaggedRun : TagState -> MTrace -> Prop :=
 | RunFinished : forall T M,
     TaggedRun T (finished M)
-| RunNotfinished : forall T T' M MM,
-    step M = Some (head MM) ->
+| RunNotfinished : forall T T' M MM O,
+    step M = Some (head MM,O) ->
     TaggedStep M T T' ->
     TaggedRun T' MM ->
     TaggedRun T (notfinished M MM).
@@ -651,7 +607,7 @@ CoInductive EagerPolicyTrace : CallMap -> Contour -> MTrace -> Prop :=
 Conjecture EagerPolicy_StackSafety :
   forall cm MM C,
     EagerPolicyTrace cm C MM ->
-    StackSafety cm MM C.
+    EagerStackSafety cm MM C.
 
 End EagerPolicy.
 
@@ -697,6 +653,10 @@ Variable map : forall {A B C : Type} (m : A -> B) (f : B -> C), (A -> C).
 Variable eqMap : forall {A B : Type} (m1 m2 : A -> B) (def : B -> Prop), Prop.
 Variable mapFilter :
   forall {A B : Type} (m : A -> B) (f : A -> B -> Prop), (A -> B).
+
+Arguments eqMap {_ _} _ _ _.
+Arguments mapFilter {_ _} _ _ _.
+
 Definition eqMapFilter {A B} (m1 m2 : A -> B) f d :=   
   eqMap (mapFilter m1 f) (mapFilter m2 f) d.
 (* More helpers for memories. *)
