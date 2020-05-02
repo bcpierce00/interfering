@@ -92,7 +92,10 @@ CoInductive NoMoreStutter : ObsTrace -> ObsTrace -> Prop :=
 | NMSTrans : forall OO OO' OO'',
     NoMoreStutter OO OO' ->
     NoMoreStutter OO' OO'' ->
-    NoMoreStutter OO OO''.
+    NoMoreStutter OO OO''
+| NMSSym : forall OO,
+    NoMoreStutter OO OO
+.
 
 Definition Destuttered (OO : ObsTrace) (OO' : ObsTrace) : Prop :=
   NoMoreStutter OO OO' /\ ForallTrace (fun O => O <> Tau) OO'.
