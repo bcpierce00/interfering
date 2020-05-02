@@ -417,8 +417,99 @@ Definition EagerStackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
 (* TODO: step by step property that implies the rest *)
 
 (***** TESTING Property **********)
+(* Note: This enforces lockstep due to PC equality.
+   TODO: How not to enforce lockstep? *)
 
+Definition EagerIntegrityTest (C : Contour) (M M' : MachineState) : Prop :=
+  forall (k : Component), integrityOf (C k) = HI -> M k = M' k.
 
+Definition EagerConfidentialityTest (isRet : MachineState -> Prop)  
+           (M M' N N' : MachineState) (OM ON : Observation) : Prop :=
+  OM = ON /\ 
+  forall (k : Component),  M k <> M' k \/ N k <> N' k -> M' k = N' k.
+
+(* Initial Machine State, Current Variant Machine State, Current Contour, isRet *)
+Definition MNCR : Type :=
+  MachineState * MachineState * Contour * (MachineState -> Prop).
+
+Inductive MNCR_step : MNCR -> MNCR -> Prop :=
+| ncr : forall M0 N N' C R,
+    (exists O, step N = Some (N', O)) ->
+    MNCR_step (M0,N,C,R) (M0, N',C,R).
+
+Definition MNCRs_step (MNCRs MNCRs' : list MNCR) : Prop :=
+  Forall2 MNCR_step MNCRs MNCRs'.
+
+      (* Could also do this? *)
+      (* EagerIntegrityTest C N N' -> *)
+
+(* Invariant: MNCRs nonempty *)
+CoInductive EagerStackSafetyTest (cm : CallMap) : MachineState -> list MNCR -> Prop :=
+| EagerTestHalt :
+    forall M MNCRs, 
+    step M = None ->
+    EagerStackSafetyTest cm M MNCRs
+| EagerTestStep :
+    forall M MNCRs MNCRs' M0 N C R M' OM N' ON,
+      (* Not a call or a return *)
+      (forall args, ~ isCall cm M args) ->
+      (forall M0 N C R, In (M0,N,C,R) MNCRs -> ~ R M) ->
+      (* Take a step. *)
+      step M = Some (M', OM) ->      
+      (* Enforce confidentiality for each variant. *)
+      In (M0,N,C,R) MNCRs ->
+      step N = Some (N', ON) ->
+      EagerConfidentialityTest R M M' N N' OM ON ->
+      (* Enforce integrity for main trace, but for each possible level in NCRs? *)
+      EagerIntegrityTest C M M' ->
+      (* Step all variants and just recurse *)
+      MNCRs_step MNCRs MNCRs' ->
+      EagerStackSafetyTest cm M' MNCRs' ->
+      (* Conclude for current. *)
+      EagerStackSafetyTest cm M MNCRs
+| EagerTestCall :
+    forall args M MNCRs MNCRs' M0 N C C' R M' OM N' ON,
+      (* Is a call *)
+      isCall cm M args ->
+      (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)  
+      (* Take a step. *)
+      step M = Some (M', OM) ->      
+      (* Enforce confidentiality for each variant. *)
+      In (M0,N,C,R) MNCRs ->
+      step N = Some (N', ON) ->
+      EagerConfidentialityTest R M M' N N' OM ON ->
+      (* Enforce integrity for main trace, but for each possible level in NCRs? *)
+      EagerIntegrityTest C M M' ->
+      (* Step all variants. *)
+      MNCRs_step MNCRs MNCRs' ->
+      (* Calculate the new contour based on the top of the variant stack. *)
+      (exists M0 N0 C0 R0 MNCR0s, (M0,N0,C0,R0) :: MNCR0s = MNCRs /\
+                                  updateContour C0 args M0 = C') ->
+      (* Recurse with every variant at the new contour at the top. *)
+      (forall Mvar, variantOf M Mvar C ->
+                    EagerStackSafetyTest cm M' ((M, Mvar, C', isRet M) :: MNCRs')) ->
+      (* Conclude for current. *)
+      EagerStackSafetyTest cm M MNCRs
+| EagerTestRet :
+    forall M MNCRs MNCRs' M0 N C R M' OM N' ON,
+      (* Is a return *)
+      (* isCall cm M args -> *)
+      (exists M0 N C R, In (M0,N,C,R) MNCRs /\ R M) ->
+        (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)  
+      (* Take a step. *)
+      step M = Some (M', OM) ->      
+      (* Enforce confidentiality for each variant. *)
+      In (M0,N,C,R) MNCRs ->
+      step N = Some (N', ON) ->
+      EagerConfidentialityTest R M M' N N' OM ON ->
+      (* Enforce integrity for main trace, but for each possible level in NCRs? *)
+      EagerIntegrityTest C M M' ->
+      (* Step all variants. *)
+      MNCRs_step MNCRs MNCRs' ->
+      (* Recurse but take of the top of the stack. *)
+      EagerStackSafetyTest cm M' (tl MNCRs') ->
+      (* Conclude for current. *)
+      EagerStackSafetyTest cm M MNCRs.
 
 (* TODO2: this setup for lazy properties *)
 
