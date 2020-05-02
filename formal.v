@@ -41,6 +41,7 @@ Inductive Observation :=
 
 (* A Machine State can step to a new Machine State plus an Observation. *)
 Variable step : MachineState -> option (MachineState * Observation).
+(* APT: Why is there an option here? Machines run forever... *)
 
 (*******************)
 (***** Traces ******)
@@ -328,7 +329,14 @@ CoInductive ObsTraceEq : Trace Observation -> Trace Observation -> Prop :=
    play better in proofs. *)
 | ObsEqAllTau : forall OO,
      ObsTraceEq OO OO.
-               
+(* APT: Establishing equality between traces seems hard, and this overlaps 
+the previous two cases.  Maybe try:
+   ForallTrace (fun o => o = Tau) OO -> 
+   ForallTrace (fun o => o = Tau) OO' -> 
+   ObsTraceEq OO OO'
+? 
+*)
+
 
 (* SNA: Proposed confidentiality property for eager policy; actual and variant traces
    have identical observation traces and a final state in the actual trace has a
@@ -341,6 +349,7 @@ Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) (isRet : Machin
                 exists Nret, IsEnd NN Nret /\
                 forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k 
                   -> Nret k = Mret k). 
+(* BCP queried: should we also require that MM terminates if NN terminates? *)
 
 Definition CallMap := Value -> nat -> Prop. 
 
@@ -536,6 +545,13 @@ CoInductive SubtraceWithSuffix (cm: CallMap) : Contour -> MTrace -> Contour -> M
       TraceSpan (fun M => ~ (isRet (head MM) M)) MM MMskip (Some MM')  -> 
       SubtraceWithSuffix cm C MM' C' MM'' MMO ->
       SubtraceWithSuffix cm C MM C' MM'' MMO.
+(* APT: This should be reverted like Subtrace so that we get all sub-traces, not just immediate children of the parent trace. *)
+
+(* APT: Or, here's the following suggestion for restructing Subtrace and friends:
+- Subtrace should just pick out the suffixes that start with a return.
+- Users of Subtrace that need to use LongestPrefix or Span can do so themselves,
+  avoiding the need for a separate SubtraceWithSuffix.
+*)
 
 (* Since eager property protects everything that is HI,
    an integrity rollback restores all HI components. *)
@@ -555,6 +571,8 @@ Definition ObservableIntegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) :
    TracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)
  | None => True
  end.
+(* APT: Need a prefix analog to ObsTraceEq, to cope with stuttering? *)
+
 
 (* A confidentiality rollback aims to undo a variation, so it restores the values of the
    original, unvaried state. But if the varied values were overwritten after they were varied,
@@ -567,12 +585,15 @@ Definition RollbackConf (Mstart Nstart Nend : MachineState) : MachineState :=
 Definition ObservableConfidentiality (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) (isRet:MachineState -> Prop) : Prop :=
   forall N NN NNO, variantOf (head MM) N C ->
                    TraceSpan (fun N' => ~ (isRet N')) (traceOf N) NN NNO ->
-                   let actual := MM^MMsuffO in
-                   let variant := NN ^(option_map (fun NN => traceOf (RollbackConf (head MM) N (head NN))) NNO) in
+                   let actual := MM ^ MMsuffO in
+                   let variant := NN ^ (option_map (fun NN => traceOf (RollbackConf (head MM) N (head NN))) NNO) in
                    TraceEq (ObsTraceOf variant) (ObsTraceOf actual).
+(* APT: Modify to use ObsTraceEq? *)
+(* APT: There is no real need to pass MMsuffO separately here; could just do the append
+        in the caller. *)
 
 Definition LazyStackSafety (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
-  ObservableIntegrity C MM None /\
+  ObservableIntegrity C MM None (* APT: This is superfluous *) /\
   ObservableConfidentiality C MM None (fun _ => False) /\
   (forall MM' C' MMsuffO, SubtraceWithSuffix cm C MM C' MM' MMsuffO ->
                           ObservableIntegrity C' MM' MMsuffO /\
@@ -590,9 +611,10 @@ Definition ObservableConfidentegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTr
   forall N NN NNO,
     variantOf (head MM) N C ->
     TraceSpan (fun N' => ~ isRet N') (traceOf N) NN NNO ->
-    let actual := MM^MMsuffO in
-    let ideal := NN^(option_map (fun NN' => traceOf (RollbackCI C (head MM) N (head NN'))) NNO) in
+    let actual := MM ^ MMsuffO in
+    let ideal := NN ^ (option_map (fun NN' => traceOf (RollbackCI C (head MM) N (head NN'))) NNO) in
     TracePrefix (ObsTraceOf ideal) (ObsTraceOf actual).
+(* APT: Again, need a prefix analog to ObsTraceEq, to cope with stuttering? *)
 
 Definition LazyStackSafety' (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
   ObservableConfidentegrity C MM None (fun _ => False) /\
