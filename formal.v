@@ -8,13 +8,14 @@ Section foo.
    Contour should correspond to a MachineState, not to a Trace,
    etc. *)
 
+(* Primitive Abstractions. *)
+  
 Variable Word : Type.
 Variable wlt : Word -> Word -> bool.
 Variable weq : Word -> Word -> bool.
 Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
 Variable wplus : Word -> nat -> Word. 
 Variable wminus : Word -> nat -> Word. 
-(* Variable incr : Word -> Word.  *)
 
 Definition Addr : Type := Word.
 
@@ -27,25 +28,23 @@ Inductive Component:=
 | Mem (a:Addr)
 | Reg (r:Register).
 
+(* A Value is a Word. *)
 Definition Value : Type := Word.
-(* Variable JAL : Value. *)
 
+(* A Machine State is just a map from Components to Values. *)
 Definition MachineState := Component -> Value.
 
-Variable step : MachineState -> option MachineState.
+(* Abstract Type of Observations. *)
+Variable Observation : Type.
+(* Some Observations are silent. *)
+Variable isSilent : Observation -> Prop.
 
-(* TODO: Change these *)
-Inductive CLabel :=
-| HC
-| LC.
+(* A Machine State can step to a new Machine State plus an Observation. *)
+Variable step : MachineState -> option (MachineState * Observation).
 
-Inductive ILabel :=
-| HI
-| LI.
-
-Definition Label := (CLabel * ILabel)%type.
-
-Definition Contour := Component -> Label.
+(*******************)
+(***** Traces ******)
+(*******************)
 
 CoInductive Trace (A : Type) : Type :=
 | finished : A -> Trace A
@@ -63,7 +62,6 @@ Definition idTrace {A} (MM: Trace A) : Trace A :=
 Lemma idTrace_eq : forall {A} (MM: Trace A), MM = idTrace MM. 
    destruct MM; reflexivity.
 Qed.
-
 
 Definition head {A} (MM : Trace A) : A :=
   match MM with
@@ -120,6 +118,7 @@ Definition OptTraceApp {A} (MMO1: option (Trace A)) (MMO2: option (Trace A)) : o
 
 Notation "MM1 ?^ MM2" := (OptTraceApp MM1 MM2) (at level 80).
 
+(* LEO: TODO: Should we define TracePrefix based on TraceSpan? *)
 (* TracePrefix MM1 MM2 says MM2 is a prefix of MM1. *)
 CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
 | PrefixEq  : forall m, TracePrefix (finished m) (finished m)
@@ -171,50 +170,67 @@ Definition MTrace := Trace MachineState.
 CoFixpoint traceOf (M : MachineState) : MTrace :=
   match step M with
   | None => finished M
-  | Some M' => notfinished M (traceOf M')
+  | Some (M',_) => notfinished M (traceOf M')
   end.
+
+(* Confidentiality and Integrity Labels *)
+Inductive CLabel :=
+| HC
+| LC.
+
+Inductive ILabel :=
+| HI
+| LI.
+
+Definition Label := (CLabel * ILabel)%type.
+
+Definition Contour := Component -> Label.
 
 Definition integrityOf (l : Label) : ILabel := snd l.
 Definition confidentialityOf (l : Label) : CLabel := fst l.
 
-CoInductive StackIntegrity (C : Contour) : MTrace -> Prop :=
-| SI_finished : forall M, StackIntegrity C (finished M)
+(****************************)
+(***** Eager Integrity ******)
+(****************************)
+
+(* Latex-like definition. *)
+Definition EagerStackIntegrity (C : Contour) (MM: MTrace) : Prop :=
+    forall (k: Component), integrityOf (C k) = HI ->
+      forall (m: MachineState), InTrace m MM -> (head MM) k = m k.
+
+(* CoInductive variant *)
+CoInductive EagerStackIntegrity' (C : Contour) : MTrace -> Prop :=
+| SI_finished : forall M, EagerStackIntegrity' C (finished M)
 | SI_notfinished :
     forall (M0: MachineState) (MM: MTrace),
     (forall (k: Component), integrityOf (C k) = HI ->
                             M0 k = (head MM) k) ->
-    StackIntegrity C MM ->
-    StackIntegrity C (notfinished M0 MM).
+    EagerStackIntegrity' C MM ->
+    EagerStackIntegrity' C (notfinished M0 MM).
 
-
-(* APT: An equivalent alternative definition that more closely matches the latex... *)
-
-Definition StackIntegrity' (C : Contour) (MM: MTrace) : Prop :=
-    forall (k: Component), integrityOf (C k) = HI ->
-      forall (m: MachineState), InTrace m MM -> (head MM) k = m k.
 
 Lemma StackIntegrityEquiv : forall (C:Contour) (MM: MTrace),
-     StackIntegrity' C MM -> StackIntegrity C MM.
+     EagerStackIntegrity C MM -> EagerStackIntegrity' C MM.
 Proof.
   cofix COFIX.
   intros.
   destruct MM. 
   - constructor.
   - constructor.
-    + intros. unfold StackIntegrity' in H.  simpl in H. 
+    + intros. unfold EagerStackIntegrity in H.  simpl in H. 
       apply H; auto. constructor. apply head_InTrace. 
     + apply COFIX. 
-      unfold StackIntegrity' in *.  intros. simpl in H. 
+      unfold EagerStackIntegrity in *.  intros. simpl in H. 
       erewrite <- H; auto. 
       * apply H; auto.  constructor. auto.
       * constructor. apply head_InTrace.
 Qed.
 
 Lemma StackIntegrity'Equiv : forall (C:Contour) (MM: MTrace),
-     StackIntegrity C MM -> StackIntegrity' C MM.
+     EagerStackIntegrity' C MM -> EagerStackIntegrity C MM.
 Proof.
   intros.
-  unfold StackIntegrity'. 
+  unfold EagerStackIntegrity. 
   intros.
   induction H1. 
   - auto.
@@ -228,9 +244,30 @@ Definition variantOf (M N : MachineState) (C : Contour) :=
   forall (k : Component), confidentialityOf (C k) = LC ->
                           M k = N k.
 
+(* LEO: I'm not sure how to satisfy productivity here. We're essentially trying
+   to filter a trace. *)
+Definition ObsTrace := Trace (option Observation).
+
+CoFixpoint ObsTraceOf (MM: MTrace) : ObsTrace :=
+  match MM with
+  | finished m =>
+    finished None
+  | notfinished M MM' =>
+    match step M with
+    | Some (M', O) =>
+      notfinished (Some O) (ObsTraceOf MM')
+    | None => (* Shouldn't happen in wf MTrace *)
+      notfinished None (ObsTraceOf MM') 
+    end
+  end.
+
+(*
+Definition ObsTraceOf (MM : MTrace) : ObsTrace :=
+  mapTrace (fun M => option_map snd (step M)) MM.
+
 Definition Obs (M : MachineState) := M (Reg O).
 
-Definition ObsTrace := Trace Value.
+
 
 (* Stuttering version *)
 Definition ObsTraceOf' (MM : MTrace) := mapTrace Obs MM.
@@ -255,14 +292,17 @@ CoFixpoint ObsTraceOf (MM : MTrace) : Trace Value :=
       else notfinished v (ObsTraceOf (notfinished M' Ms'))
     end
   end.
+ *)
 (* Alternate: steps have observations (options or tau) and obstrace concatenates
    non-taus. *)
-
-Definition StackConfidentiality (C : Contour) (MM : MTrace) := 
+(* LEO: Can't do this. It's not productive. Unless I'm missing something. *)
+(*
+Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) := 
   forall N, variantOf (head MM) N C ->
             let o  := ObsTraceOf MM in
             let o' := ObsTraceOf (traceOf N) in
             TracePrefix o' o. (* \/ TracePrefix o o') *)
+*)
 (* APT: just this direction: it would be bad if variant trace ended sooner than reference, right? *)
 (* LEO: I'm not sure about only one observation being a prefix of the other. What if the variant machine tries halts because of the monitor? Are we termination-sensitive? *)
 (* APT: Ah, right.  I guess we have to be termination-insensitive. *)
@@ -275,16 +315,14 @@ to fail-stop more often than the reference trace? *)
 Definition isRet (Mc M: MachineState) : Prop :=
   M (Reg PC) = wplus (Mc (Reg PC)) 4 /\ M (Reg SP) = Mc (Reg SP).
 
-Definition StackConfidentiality' (C : Contour) (MM : MTrace) (isRet : MachineState -> Prop) :=
+Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) (isRet : MachineState -> Prop) :=
   forall N NN Mret, variantOf (head MM) N C ->
-               LongestPrefix (fun M => ~ isRet M) NN (traceOf N) -> (* LEO: Does this make sense at the toplevel? Won't the toplevel trace be of size 2? *)
+               LongestPrefix (fun M => ~ isRet M) NN (traceOf N) -> 
                TraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
-               (IsEnd MM Mret -> (* LEO: Again, toplevel concerns. I like this formalization for all the rest. *)
+               (IsEnd MM Mret -> 
                 exists Nret, IsEnd NN Nret /\
                 forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k 
-                  -> Nret k = Mret k). (* LEO: Where does indistinguishability come into play here? *)
-
-(* TODO: Revive Leo's original version of ObsTrace equivalence and compare with others. *)
+                  -> Nret k = Mret k). 
 
 Definition CallMap := Value -> nat -> Prop. 
 
@@ -306,6 +344,7 @@ Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
     | _ => C k
     end.
 
+(*
 CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> Prop :=
   | SubNow : forall C C' MM MM' args,
       (* Current instruction is a call *)
@@ -324,37 +363,40 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
       TraceSpan (fun M => ~ (isRet (head MM) M)) MM MMskip (Some MM')  -> 
       Subtrace cm C MM' C' MM'' ->
       Subtrace cm C MM C' MM''.
-
-CoInductive Subtrace' (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> Prop :=
-  | SubNow' : forall C C' MM MM' args,
+*)
+CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> Prop :=
+  | SubNow : forall C C' MM MM' args,
       (* Current instruction is a call *)
       isCall cm (head MM) args ->
       (* Take the prefix until a return *)
       LongestPrefix (fun M => ~ (isRet (head MM) M)) MM MM' ->
       (* Construct the new contour *)
       updateContour C args (head MM) = C' -> 
-      Subtrace' cm C MM C' MM'
-  | SubNotNow': forall C MM C' MM' M,
-      Subtrace' cm C MM C' MM' ->
-      Subtrace' cm C (notfinished M MM) C' MM'.
+      Subtrace cm C MM C' MM'
+  | SubNotNow: forall C MM C' MM' M,
+      Subtrace cm C MM C' MM' ->
+      Subtrace cm C (notfinished M MM) C' MM'.
 
-(* BCP: Do we really need the Subtrace part here? *)
+(*
 CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
   ss : forall (MM : MTrace) (C : Contour),
        (StackIntegrity C MM) ->
        (StackConfidentiality C MM) ->
        (forall MM' C', Subtrace cm C MM C' MM' -> StackSafety cm MM' C') ->
        StackSafety cm MM C.
-
-Definition StackSafety' (cm : CallMap) : MTrace -> Contour -> Prop :=
+*)
+Definition EagerStackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
   fun (MM : MTrace) (C : Contour) =>
-    (StackIntegrity C MM) /\
-    (StackConfidentiality' C MM (fun _ => False)) /\
-    (forall MM' C', Subtrace' cm C MM C' MM' ->
-                    StackIntegrity C' MM' /\
-                    StackConfidentiality' C' MM' (isRet (head MM'))).
+    (EagerStackIntegrity C MM) /\
+    (EagerStackConfidentiality C MM (fun _ => False)) /\
+    (forall MM' C', Subtrace cm C MM C' MM' ->
+                    EagerStackIntegrity C' MM' /\
+                    EagerStackConfidentiality C' MM' (isRet (head MM'))).
 
 (* TODO: step by step property that implies the rest *)
+
+(***** TESTING Property **********)
+
 (* TODO2: this setup for lazy properties *)
 
 (* ********* SNA Beware : Lazy Properties ********* *)
