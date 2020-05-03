@@ -562,10 +562,42 @@ Proof.
       inversion H3; subst; left; auto.
     + right. apply IHForall2; auto.
 Qed.
-      
+
+Inductive Last {A : Type} : A -> list A -> Prop :=
+| LastSing : forall x, Last x [x]
+| LastTail : forall x h t, Last x t -> Last x (h::t).
+
+Lemma MNCR_step_preserves_last :
+  forall M N C R MNCRs MNCRs' N' O,
+  Last (M,N,C,R) MNCRs ->
+  Forall2 MNCR_step MNCRs MNCRs' ->
+  step N = Some (N',O) ->
+  Last (M,N',C,R) MNCRs'.
+Proof.
+  intros.  
+  induction H0.
+  - inversion H.
+  - inversion H; subst; eauto.
+    + inversion H0; subst; eauto.
+      destruct H8.
+      rewrite H1 in H3.
+      inversion H3; subst; auto.
+      inversion H2; subst; auto.
+      left; auto.
+    + right. apply IHForall2; auto.
+Qed.
+
+Lemma Last_implies_In {A : Type} (x : A) (l : list A) :
+  Last x l -> In x l.
+Proof.  
+  intros Last; induction Last.
+  - left; auto.
+  - right; auto.
+Qed.
+
 Theorem TestImpliesIntegrityToplevel :
   forall cm C MM MNCRs,
-  (exists M N R, In (M,N,C,R) MNCRs) ->
+  (exists M N, Last (M,N,C,fun _ => False) MNCRs) ->
   EagerStackSafetyTest cm MM MNCRs -> EagerStackIntegrity' C MM.
 Proof.
   cofix COFIX.
@@ -575,31 +607,57 @@ Proof.
   - apply SI_notfinished.
     + intros k Hk.
       unfold EagerIntegrityTest in *.
-      destruct HIn as [M0 [N [R HIn]]].
-      eauto.
+      destruct HIn as [M0 [N HIn]].
+      eapply H3; [eapply Last_implies_In | ]; eauto.
     + apply (COFIX cm C MM0 MNCRs'); auto.
-      destruct HIn as [M0 [N [R HIn]]].      
+      destruct HIn as [M0 [N HIn]].
       unfold MNCRs_step in *.
-      destruct (H2 M0 N C R HIn) as [N' [ON [HN' HConf]]].
-      exists M0. exists N'. exists R.
-      eapply MNCR_step_preserves_in; eauto.
+      remember HIn as HLast; clear HeqHLast.
+      apply Last_implies_In in HIn.
+      destruct (H2 M0 N C (fun _ => False) HIn) as [N' [ON [HN' HConf]]].
+      exists M0. exists N'.
+      eapply MNCR_step_preserves_last; eauto.
   - apply SI_notfinished.
     + intros k Hk.
       unfold EagerIntegrityTest in *.
-      destruct HIn as [M0 [N [R HIn]]].
-      eauto.
+      destruct HIn as [M0 [N HIn]].
+      eapply H2; [eapply Last_implies_In | ]; eauto.
     + apply (COFIX cm C MM0 ((M, M, C', isRet M) :: MNCRs')).
-      * destruct HIn as [M0 [N [R HIn]]].      
+      * destruct HIn as [M0 [N HIn]].      
         unfold MNCRs_step in *.
-        destruct (H1 M0 N C R HIn) as [N' [ON [HN' HConf]]].
-        exists M0. exists N'. exists R.
+        remember HIn as HLast; clear HeqHLast.
+        apply Last_implies_In in HIn.
+        destruct (H1 M0 N C (fun _ => False) HIn) as [N' [ON [HN' HConf]]].
+        exists M0. exists N'. 
         right.
-        eapply MNCR_step_preserves_in; eauto.
+        eapply MNCR_step_preserves_last; eauto.
       * apply H6.
         unfold variantOf.
         auto.
-  - admit.
-Admitted.
+  - apply SI_notfinished.
+    + intros k Hk.
+      unfold EagerIntegrityTest in *.
+      destruct HIn as [M0 [N HIn]].
+      eapply H2; [eapply Last_implies_In | ]; eauto.
+    + apply (COFIX cm C MM0 (tl MNCRs')); auto.
+      destruct HIn as [M0 [N HIn]].      
+      unfold MNCRs_step in *.
+      remember HIn as HLast; clear HeqHLast.
+      apply Last_implies_In in HIn.
+      destruct (H1 M0 N C (fun _ => False) HIn) as [N' [ON [HN' HConf]]].
+      exists M0. exists N'.
+      destruct MCNRs.
+      * inversion H3; subst.
+        inversion HLast.
+      * destruct MNCRs'; inversion H3; subst.
+        simpl.
+        { inversion HLast; subst; clear HLast.
+          - destruct H as [M1 [N1 [C1 [R1 [HIn1 HR]]]]].
+            in_reasoning.
+            inversion HR.
+          - eapply MNCR_step_preserves_last; eauto.
+        } 
+Qed.
 
   (* TODO2: this setup for lazy properties *)
 
