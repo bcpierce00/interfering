@@ -335,6 +335,8 @@ the previous two cases.  Maybe try:
    ForallTrace (fun o => o = Tau) OO' -> 
    ObsTraceEq OO OO'
 ? 
+LEO: That was the other thing I had in mind. I'll see what makes proofs easier.
+(Note that this proposal overlaps with the first two cases, as well as the last one.)
 *)
 
 
@@ -453,54 +455,62 @@ Definition MNCRs_step (MNCRs MNCRs' : list MNCR) : Prop :=
       (* EagerIntegrityTest C N N' -> *)
 
 (* Invariant: MNCRs nonempty *)
-CoInductive EagerStackSafetyTest (cm : CallMap) : MachineState -> list MNCR -> Prop :=
+CoInductive EagerStackSafetyTest (cm : CallMap) : MTrace -> list MNCR -> Prop :=
 | EagerTestHalt :
     forall M MNCRs, 
     step M = None ->
-    EagerStackSafetyTest cm M MNCRs
+    EagerStackSafetyTest cm (finished M) MNCRs
 | EagerTestStep :
-    forall M MNCRs MNCRs' M0 N C R M' OM N' ON,
+    forall M MM MNCRs MNCRs' M' OM,
       (* Not a call or a return *)
       (forall args, ~ isCall cm M args) ->
       (forall M0 N C R, In (M0,N,C,R) MNCRs -> ~ R M) ->
       (* Take a step. *)
       step M = Some (M', OM) ->      
       (* Enforce confidentiality for each variant. *)
-      In (M0,N,C,R) MNCRs ->
-      step N = Some (N', ON) ->
-      EagerConfidentialityTest R M M' N N' OM ON ->
+      (forall M0 N C R,
+          In (M0,N,C,R) MNCRs ->
+          exists N' ON, step N = Some (N', ON) /\
+          EagerConfidentialityTest R M M' N N' OM ON) ->
       (* Enforce integrity for main trace, but for each possible level in NCRs? *)
-      EagerIntegrityTest C M M' ->
+      (forall M0 N C R,
+          In (M0,N,C,R) MNCRs ->
+          EagerIntegrityTest C M M') ->
       (* Step all variants and just recurse *)
       MNCRs_step MNCRs MNCRs' ->
-      EagerStackSafetyTest cm M' MNCRs' ->
+      head MM = M' ->
+      EagerStackSafetyTest cm MM MNCRs' ->
       (* Conclude for current. *)
-      EagerStackSafetyTest cm M MNCRs
+      EagerStackSafetyTest cm (notfinished M MM) MNCRs
 | EagerTestCall :
-    forall args M MNCRs MNCRs' M0 N C C' R M' OM N' ON,
+    forall args M MM MNCRs MNCRs' M' OM C C',
       (* Is a call *)
       isCall cm M args ->
       (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)  
       (* Take a step. *)
       step M = Some (M', OM) ->      
       (* Enforce confidentiality for each variant. *)
-      In (M0,N,C,R) MNCRs ->
-      step N = Some (N', ON) ->
-      EagerConfidentialityTest R M M' N N' OM ON ->
+      (forall M0 N C R,
+          In (M0,N,C,R) MNCRs ->
+          exists N' ON, step N = Some (N', ON) /\
+          EagerConfidentialityTest R M M' N N' OM ON) ->
       (* Enforce integrity for main trace, but for each possible level in NCRs? *)
-      EagerIntegrityTest C M M' ->
+      (forall M0 N C R,
+          In (M0,N,C,R) MNCRs ->
+          EagerIntegrityTest C M M') ->
       (* Step all variants. *)
       MNCRs_step MNCRs MNCRs' ->
+      head MM = M' ->
       (* Calculate the new contour based on the top of the variant stack. *)
       (exists M0 N0 C0 R0 MNCR0s, (M0,N0,C0,R0) :: MNCR0s = MNCRs /\
                                   updateContour C0 args M0 = C') ->
       (* Recurse with every variant at the new contour at the top. *)
       (forall Mvar, variantOf M Mvar C ->
-                    EagerStackSafetyTest cm M' ((M, Mvar, C', isRet M) :: MNCRs')) ->
+                    EagerStackSafetyTest cm MM ((M, Mvar, C', isRet M) :: MNCRs')) ->
       (* Conclude for current. *)
-      EagerStackSafetyTest cm M MNCRs
+      EagerStackSafetyTest cm (notfinished M MM) MNCRs
 | EagerTestRet :
-    forall M MNCRs MNCRs' M0 N C R M' OM N' ON,
+    forall M MM MNCRs MNCRs' M' OM,
       (* Is a return *)
       (* isCall cm M args -> *)
       (exists M0 N C R, In (M0,N,C,R) MNCRs /\ R M) ->
@@ -508,19 +518,90 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MachineState -> list MNCR -> P
       (* Take a step. *)
       step M = Some (M', OM) ->      
       (* Enforce confidentiality for each variant. *)
-      In (M0,N,C,R) MNCRs ->
-      step N = Some (N', ON) ->
-      EagerConfidentialityTest R M M' N N' OM ON ->
+      (forall M0 N C R,
+          In (M0,N,C,R) MNCRs ->
+          exists N' ON, step N = Some (N', ON) /\
+          EagerConfidentialityTest R M M' N N' OM ON) ->
       (* Enforce integrity for main trace, but for each possible level in NCRs? *)
-      EagerIntegrityTest C M M' ->
+      (forall M0 N C R,
+          In (M0,N,C,R) MNCRs ->
+          EagerIntegrityTest C M M') ->
       (* Step all variants. *)
       MNCRs_step MNCRs MNCRs' ->
       (* Recurse but take of the top of the stack. *)
-      EagerStackSafetyTest cm M' (tl MNCRs') ->
+      head MM = M' ->
+      EagerStackSafetyTest cm MM (tl MNCRs') ->
       (* Conclude for current. *)
-      EagerStackSafetyTest cm M MNCRs.
+      EagerStackSafetyTest cm (notfinished M MM) MNCRs.
 
-(* TODO2: this setup for lazy properties *)
+Definition EagerStackSafetyTest' cm C MM :=
+  forall N, variantOf (head MM) N C ->
+  EagerStackSafetyTest cm MM [(head MM,N,C,fun _ => False)].
+
+Ltac in_reasoning := 
+  repeat match goal with
+         | [ H : In _ [] |- _ ] => inversion H
+         | [ H : In _ [_] |- _ ] => inversion H; subst; clear H
+         | [ H : (_,_,_,_) = (_,_,_,_) |- _ ] => inversion H; subst; clear H
+         end.
+
+Lemma MNCR_step_preserves_in :
+  forall M N C R MNCRs MNCRs' N' O,
+  In (M,N,C,R) MNCRs ->
+  Forall2 MNCR_step MNCRs MNCRs' ->
+  step N = Some (N',O) ->
+  In (M,N',C,R) MNCRs'.
+Proof.
+  intros.  
+  induction H0.
+  - inversion H.
+  - inversion H; subst; eauto.
+    + inversion H0; subst; eauto.
+      destruct H8.
+      rewrite H1 in H3.
+      inversion H3; subst; left; auto.
+    + right. apply IHForall2; auto.
+Qed.
+      
+Theorem TestImpliesIntegrityToplevel :
+  forall cm C MM MNCRs,
+  (exists M N R, In (M,N,C,R) MNCRs) ->
+  EagerStackSafetyTest cm MM MNCRs -> EagerStackIntegrity' C MM.
+Proof.
+  cofix COFIX.
+  intros cm C MM MCNRs HIn Safety.
+  inversion Safety; subst.
+  - apply SI_finished. 
+  - apply SI_notfinished.
+    + intros k Hk.
+      unfold EagerIntegrityTest in *.
+      destruct HIn as [M0 [N [R HIn]]].
+      eauto.
+    + apply (COFIX cm C MM0 MNCRs'); auto.
+      destruct HIn as [M0 [N [R HIn]]].      
+      unfold MNCRs_step in *.
+      destruct (H2 M0 N C R HIn) as [N' [ON [HN' HConf]]].
+      exists M0. exists N'. exists R.
+      eapply MNCR_step_preserves_in; eauto.
+  - apply SI_notfinished.
+    + intros k Hk.
+      unfold EagerIntegrityTest in *.
+      destruct HIn as [M0 [N [R HIn]]].
+      eauto.
+    + apply (COFIX cm C MM0 ((M, M, C', isRet M) :: MNCRs')).
+      * destruct HIn as [M0 [N [R HIn]]].      
+        unfold MNCRs_step in *.
+        destruct (H1 M0 N C R HIn) as [N' [ON [HN' HConf]]].
+        exists M0. exists N'. exists R.
+        right.
+        eapply MNCR_step_preserves_in; eauto.
+      * apply H6.
+        unfold variantOf.
+        auto.
+  - admit.
+Admitted.
+
+  (* TODO2: this setup for lazy properties *)
 
 
 (* ********* SNA Beware : Lazy Properties ********* *)
