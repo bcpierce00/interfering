@@ -257,6 +257,11 @@ Proof.
     +  inversion H.  auto.
 Qed.
 
+(* NB: It doesn't matter whether we calculate this at a
+call instruction (as in a subtrace) or at the first 
+instruction of the callee (as in the top-level trace)
+assuming that registers remain LI,LC at all times. *)
+
 Definition variantOf (M N : MachineState) (C : Contour) :=
   forall (k : Component), confidentialityOf (C k) = LC ->
                           M k = N k.
@@ -360,14 +365,16 @@ Definition ObsTracePrefix (OO OO' : Trace Observation) : Prop :=
    have identical observation traces and a final state in the actual trace has a
    corresponding pre-return state in the variant, where all changes are indistinguishable. *)
 Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) (isRet : MachineState -> Prop) :=
-  forall N NN Mret, variantOf (head MM) N C ->
+  forall N NN Mret,
+               variantOf (head MM) N C ->
                LongestPrefix (fun M => ~ isRet M) NN (traceOf N) -> 
                ObsTraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
-               (IsEnd MM Mret -> 
-                exists Nret, IsEnd NN Nret /\
-                forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k 
-                  -> Nret k = Mret k). 
-(* BCP queried: should we also require that MM terminates if NN terminates? *)
+               (IsEnd MM Mret -> exists Nret, 
+                 IsEnd NN Nret /\
+                 forall k,
+                 (head MM) k <> Mret k \/ (head NN) k <> Nret k ->
+                 Nret k = Mret k). 
+(* BCP suggested: should we require co-termination of MM and NN? *)
 
 CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
   MTrace -> MTrace -> Prop :=
@@ -523,7 +530,7 @@ Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MM : MTrac
   EagerStackConfidentiality C MM R.
 Proof.
   intros Conf.
-  intros N NN MRet HVar [MMO [App [NotR Pref]]].
+  intros N NN Mret HVar [MMO [App [NotR Pref]]].
   specialize (Conf NN).
   assert (head NN = N) as HN.
   { apply TraceAppHead in App.
@@ -567,6 +574,9 @@ Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
     | _ => C k
     end.
 
+(* SNA: Since we never actually use the old contour in updateContour,
+   I made this for FindCall, below. (Importantly, if we did use the old contour,
+   newer versions of subtrace would be wrong.) *)
 Definition makeContour (args : nat) (M : MachineState) : Contour :=
   fun k =>
     match k with
@@ -933,6 +943,7 @@ Theorem TestImpliesConfidentialityToplevel :
   forall N, variantOf (head MM) N C ->
             StrongEagerStackConfidentiality (fun _ => False) MM (traceOf N).
 Proof.
+
   cofix COFIX.
   intros cm C MM MNCRs [M0 [N0 HLast]] Safety N Var.
   inversion Safety; subst; clear Safety.
@@ -941,8 +952,9 @@ Proof.
     specialize (H0 M0 C N (fun _ => False) HIn).
     rewrite (frob_eq (traceOf N)); simpl.
     rewrite 
-  *)  
-    (* ********* SNA Beware : Lazy Properties ********* *)
+ *)
+
+(* ********* SNA Beware : Lazy Properties ********* *)
 
 (* Since eager property protects everything that is HI,
    an integrity rollback restores all HI components. *)
@@ -976,15 +988,13 @@ Definition ObservableConfidentiality (C:Contour) (MM:MTrace) (isRet:MachineState
                    TraceSpan (fun N' => ~ (isRet N')) (traceOf N) NN NNO ->
                    let variant := NN ^ (option_map (fun NN => traceOf (RollbackConf (head MM) N (head NN))) NNO) in
                    ObsTraceEq (ObsTraceOf variant) (ObsTraceOf MM).
-(* APT: There is no real need to pass MMsuffO separately here; could just do the append
-        in the caller. *)
 
 Definition LazyStackSafety (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
   ObservableConfidentiality C MM (fun _ => False) /\
   (forall MM' MM'' C' MMsuffO, FindCall cm MM C' MM' ->
                           TraceSpan (fun M => ~isRet (head MM') M) MM' MM'' MMsuffO ->
-                          ObservableIntegrity C' MM' MMsuffO /\
-                          ObservableConfidentiality C' (TraceApp MM' MMsuffO) (isRet (head MM'))).
+                          ObservableIntegrity C' MM'' MMsuffO /\
+                          ObservableConfidentiality C' MM' (isRet (head MM'))).
 
 (* More conjectural stuff follows. *)
 
