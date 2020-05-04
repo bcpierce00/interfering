@@ -155,7 +155,7 @@ Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : Trace A) (MMO : option (Trac
 Definition LongestPrefix {A} (P : A -> Prop) (MM1 MM2 : Trace A) : Prop :=
   exists MMO, TraceSpan P MM1 MM2 MMO.
 
-CoInductive IsEnd {A} : Trace A -> A -> Prop :=
+Inductive IsEnd {A} : Trace A -> A -> Prop :=
 | IsEndNow : forall M, IsEnd (finished M) M
 | IsEndLater : forall MM M M', IsEnd MM M -> IsEnd (notfinished M' MM) M
 .
@@ -455,7 +455,69 @@ Proof.
     end.
     apply ObsEqFinishedTau.
 Qed.
-      
+
+Lemma ComponentConfTrans :
+  forall (M0 M1 M2 N0 N1 N2 : MachineState),
+    (forall k : Component, M1 k <> M0 k \/ N1 k <> N0 k -> M1 k = N1 k) ->
+    (forall k : Component, M1 k <> M2 k \/ N1 k <> N2 k -> N2 k = M2 k) ->
+    (forall k : Component, M0 k <> M2 k \/ N0 k <> N2 k -> N2 k = M2 k).
+Proof.
+  intros M0 M1 M2 N0 N1 N2 H01 H12.
+  intros k [HM02 | HN02].
+  - destruct (WordEqDec (M2 k) (M1 k)) as [eqM | neqM].
+    + assert (M1 k <> M0 k) as HM01.
+      { intros Contra.
+        apply HM02.
+        rewrite Contra in eqM.
+        auto.
+      }
+      specialize (H01 k (or_introl HM01)).
+      destruct (WordEqDec (N2 k) (N1 k)) as [eqN | neqN].
+      * rewrite eqM; rewrite eqN; auto.
+      * apply H12; eauto.
+    + eapply H12; eauto.
+  - destruct (WordEqDec (N2 k) (N1 k)) as [eqN | neqN].
+    + assert (N1 k <> N0 k) as HN01.
+      { intros Contra.
+        apply HN02.
+        rewrite Contra in eqN.
+        auto.
+      }
+      specialize (H01 k (or_intror HN01)).
+      destruct (WordEqDec (M2 k) (M1 k)) as [eqM | neqM].
+      * rewrite eqM; rewrite eqN; auto.
+      * apply H12; eauto.
+    + eapply H12; eauto.
+Qed.
+
+Lemma StrongConfImpliesEndConf :
+  forall C R MM NN,
+    variantOf (head MM) (head NN) C ->
+    StrongEagerStackConfidentiality R MM NN ->
+    forall Mret,
+      IsEnd MM Mret ->
+      exists Nret : MachineState,
+        IsEnd NN Nret /\
+        forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k  ->
+                  Nret k = Mret k. 
+Proof.
+  intros C R MM NN Var Conf Mret HEnd.
+  generalize dependent NN.
+  induction HEnd; subst; eauto; intros NN Var Conf.
+  - inversion Conf; subst; eauto; clear Conf.
+    exists N.
+    split; [ constructor |].
+    simpl; intros k Hk.
+    inversion Hk; exfalso; eauto.
+  - inversion Conf; subst; eauto; clear Conf; simpl in *.
+    destruct (IHHEnd NN0) as [Nret [InNRet HNRet]]; eauto.
+    + eapply confStepPreservesVariant; eauto.
+    + exists Nret.
+      split.
+      * constructor; auto.
+      * eapply ComponentConfTrans; eauto.
+Qed.        
+
 Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MM : MTrace) :
   (forall (NN : MTrace),
     variantOf (head MM) (head NN) C ->
@@ -477,8 +539,12 @@ Proof.
     + rewrite HN; eauto.
     + eapply Conf.
       rewrite HN; eauto.
-  - admit.
-Admitted.
+  - intros HEnd.
+    eapply StrongConfImpliesEndConf; eauto.
+    + rewrite HN; eauto.
+    + eapply Conf.
+      rewrite HN; eauto.
+Qed.
 
 Definition CallMap := Value -> nat -> Prop. 
 
