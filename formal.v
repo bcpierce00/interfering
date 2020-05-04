@@ -17,6 +17,8 @@ Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
 Variable wplus : Word -> nat -> Word. 
 Variable wminus : Word -> nat -> Word. 
 
+Variable WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2}.
+
 Definition Addr : Type := Word.
 
 Variable Register : Type.
@@ -119,7 +121,21 @@ Definition OptTraceApp {A} (MMO1: option (Trace A)) (MMO2: option (Trace A)) : o
 
 Notation "MM1 ?^ MM2" := (OptTraceApp MM1 MM2) (at level 80).
 
-(* LEO: TODO: Should we define TracePrefix based on TraceSpan? *)
+Lemma TraceAppHead {A} :
+  forall (MM NN : Trace A) (NNO : option (Trace A)),
+    MM = NN ^ NNO -> head MM = head NN.
+Proof.
+  intros MM NN NNO App.
+  destruct NN as [a | a NN].
+  - rewrite App.
+    simpl.
+    destruct NNO; simpl; auto.
+  - rewrite App.
+    simpl.
+    auto.
+Qed.
+
+    (* LEO: TODO: Should we define TracePrefix based on TraceSpan? *)
 (* TracePrefix MM1 MM2 says MM2 is a prefix of MM1. *)
 CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
 | PrefixEq  : forall m, TracePrefix (finished m) (finished m)
@@ -352,6 +368,115 @@ Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) (isRet : Machin
                 forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k 
                   -> Nret k = Mret k). 
 (* BCP queried: should we also require that MM terminates if NN terminates? *)
+
+CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
+  MTrace -> MTrace -> Prop :=
+| StrongConfStep :
+    forall M MM N NN O,
+      step M = Some (head MM, O) ->
+      step N = Some (head NN, O) ->
+      (forall k, head MM k <> M k \/ head NN k <> N k -> head MM k = head NN k) ->
+      StrongEagerStackConfidentiality R MM NN ->
+      StrongEagerStackConfidentiality R (notfinished M MM) (notfinished N NN)
+| StrongConfEnd :
+    forall M N,
+      R M -> R N ->
+      StrongEagerStackConfidentiality R (finished M) (finished N).
+
+Definition frob {A} (MM : Trace A) : Trace A :=
+  match MM with
+  | finished a => finished a
+  | notfinished a MM' => notfinished a MM'
+  end.
+
+Lemma frob_eq : forall {A} (MM : Trace A), MM = frob MM.
+Proof.
+  destruct MM; auto.
+Qed.
+
+Lemma confStepPreservesVariant :
+  forall C M M' OM N N' ON,
+    step M = Some (M', OM) -> step N = Some (N', ON) ->
+    (forall k, M' k <> M k \/ N' k <> N k -> M' k = N' k) ->
+    variantOf M N C ->
+    variantOf M' N' C.
+Proof.
+  unfold variantOf.
+  intros C M M' OM N N' ON StepM StepN Conf Var k Hk.
+  destruct (WordEqDec (M' k) (M k)) as [eqM | neqM];
+  destruct (WordEqDec (N' k) (N k)) as [eqN | neqN];
+  try solve [ apply Conf; auto ];
+  rewrite eqM; rewrite eqN; auto.
+Qed.
+
+Lemma StrongConfImpliesObsEq :
+  forall C R MM NN,
+    variantOf (head MM) (head NN) C ->
+    StrongEagerStackConfidentiality R MM NN ->
+    ObsTraceEq (ObsTraceOf MM) (ObsTraceOf NN).
+Proof.
+  cofix COFIX.
+  intros C R MM NN Var Conf.
+  inversion Conf; simpl.
+  - match goal with
+    | [ |- ObsTraceEq ?T1 ?T2 ] =>
+      rewrite (frob_eq T1); rewrite (frob_eq T2); simpl
+    end.
+    repeat match goal with
+           | [ H : step ?M = _ |- context[step ?M] ] => rewrite H; simpl
+           end.
+    destruct O0.
+    + apply ObsEqNow.
+      eapply COFIX; eauto.
+      eapply confStepPreservesVariant; eauto.
+      assert (head MM = M) as HM
+          by (destruct H3; auto).
+      assert (head NN = N) as HN
+          by (destruct H4; auto).
+      rewrite <- HM.
+      rewrite <- HN.      
+      apply Var.
+    + apply ObsEqTau1.
+      apply ObsEqTau2.
+      eapply COFIX; eauto.
+      eapply confStepPreservesVariant; eauto.
+      assert (head MM = M) as HM
+          by (destruct H3; auto).
+      assert (head NN = N) as HN
+          by (destruct H4; auto).
+      rewrite <- HM.
+      rewrite <- HN.      
+      apply Var.
+  - match goal with
+    | [ |- ObsTraceEq ?T1 ?T2 ] =>
+      rewrite (frob_eq T1); rewrite (frob_eq T2); simpl
+    end.
+    apply ObsEqFinishedTau.
+Qed.
+      
+Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MM : MTrace) :
+  (forall (NN : MTrace),
+    variantOf (head MM) (head NN) C ->
+    StrongEagerStackConfidentiality R MM NN) ->
+  EagerStackConfidentiality C MM R.
+Proof.
+  intros Conf.
+  intros N NN MRet HVar [MMO [App [NotR Pref]]].
+  specialize (Conf NN).
+  assert (head NN = N) as HN.
+  { apply TraceAppHead in App.
+    rewrite App.
+    simpl.
+    destruct (step N); simpl; auto.
+    destruct p; simpl; auto.
+  }
+  split.
+  - eapply StrongConfImpliesObsEq; eauto.
+    + rewrite HN; eauto.
+    + eapply Conf.
+      rewrite HN; eauto.
+  - admit.
+Admitted.
 
 Definition CallMap := Value -> nat -> Prop. 
 
@@ -658,6 +783,15 @@ Proof.
           - eapply MNCR_step_preserves_last; eauto.
         } 
 Qed.
+
+Theorem TestImpliesConfidentialityToplevel :
+  forall cm C MM MNCRs,
+  (exists M N, Last (M,N,C,fun _ => False) MNCRs) ->
+  EagerStackSafetyTest cm MM MNCRs -> EagerStackConfidentiality C MM (fun _ => False).
+Proof.
+  intros cm C MM MNCRs HLast Safety.
+  
+  
 
   (* TODO2: this setup for lazy properties *)
 
