@@ -44,6 +44,9 @@ Inductive Observation :=
 (* A Machine State can step to a new Machine State plus an Observation. *)
 Variable step : MachineState -> option (MachineState * Observation).
 (* APT: Why is there an option here? Machines run forever... *)
+(* APT: Ah, is this because a tagged machine can fail-stop?
+But don't we really want top-level properties to be phrased in terms of a non-halting machine? *)
+
 
 (*******************)
 (***** Traces ******)
@@ -920,6 +923,7 @@ Definition ObservableIntegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) :
  | Some actual =>
    let ideal := traceOf (RollbackInt C (head MM) (head actual)) in
    ObsTracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)
+(* or ObsTraceEq ?? *)
  | None => True
  end.
 
@@ -959,6 +963,7 @@ Definition ObservableConfidentegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTr
     let actual := MM ^ MMsuffO in
     let ideal := NN ^ (option_map (fun NN' => traceOf (RollbackCI C (head MM) N (head NN'))) NNO) in
     ObsTracePrefix (ObsTraceOf ideal) (ObsTraceOf actual).
+(* or ObsTraceEq?? *)
 
 Definition LazyStackSafety' (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
   ObservableConfidentegrity C MM None (fun _ => False) /\
