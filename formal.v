@@ -355,6 +355,8 @@ LEO: That was the other thing I had in mind. I'll see what makes proofs easier.
 (Note that this proposal overlaps with the first two cases, as well as the last one.)
 *)
 
+Definition ObsTracePrefix (OO OO' : Trace Observation) : Prop :=
+  exists OO'', ObsTraceEq OO OO'' /\ TracePrefix OO'' OO' \/ ObsTraceEq OO' OO'' /\ TracePrefix OO OO'.
 
 (* SNA: Proposed confidentiality property for eager policy; actual and variant traces
    have identical observation traces and a final state in the actual trace has a
@@ -501,6 +503,20 @@ Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
     | _ => C k
     end.
 
+Definition makeContour (args : nat) (M : MachineState) : Contour :=
+  fun k =>
+    match k with
+    | Mem a => 
+      let a' := wminus (M (Reg SP)) args in
+      if wle a a' then
+        (HC, HI)
+      else if andb (wlt a' a) (wle a (M (Reg SP))) then
+        (LC, LI)                  
+      else (*if wlt (M (Reg SP)) a then*)
+        (HC, LI)
+    | _ => (LC, LI)
+    end.
+
 (*
 CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> Prop :=
   | SubNow : forall C C' MM MM' args,
@@ -533,6 +549,22 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
   | SubNotNow: forall C MM C' MM' M,
       Subtrace cm C MM C' MM' ->
       Subtrace cm C (notfinished M MM) C' MM'.
+
+(* APT+SNA: rather than two subtraces, with and without suffix, we could just
+   find the starts of calls and then take prefixes/suffixes when we need them.
+   Also we don't really need to update contours so much as just generate them
+   from the state. *)
+CoInductive FindCall (cm: CallMap) : MTrace -> Contour -> MTrace -> Prop :=
+  | FindCallNow : forall C MM MM' args,
+      (* Current instruction is a call *)
+      isCall cm (head MM) args ->
+      (* Construct the contour *)
+      makeContour args (head MM) = C -> 
+      FindCall cm MM C MM'
+  | FindCallLater: forall C MM MM' M,
+      (forall args, ~ isCall cm (head MM) args) -> 
+      FindCall cm MM C MM' ->
+      FindCall cm (notfinished M MM) C MM'.
 
 (*
 CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
@@ -791,40 +823,7 @@ Theorem TestImpliesConfidentialityToplevel :
 Proof.
   intros cm C MM MNCRs HLast Safety.
   
-  
-
-  (* TODO2: this setup for lazy properties *)
-
-
 (* ********* SNA Beware : Lazy Properties ********* *)
-
-(* this variation of subtrace also gives us the suffix of the primary trace
-   after the subtrace, or None if the subtrace is itself a suffix *)
-CoInductive SubtraceWithSuffix (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> option MTrace -> Prop :=
-  | SubSufNow : forall C C' MM MM' MMO args,
-      (* Current instruction is a call *)
-      isCall cm (head MM) args ->
-      (* Take the prefix until a return and maybe a suffix *)
-      TraceSpan (fun M => ~ (isRet (head MM) M)) MM MM' MMO ->
-      (* Construct the new contour *)
-      updateContour C args (head MM) = C' -> 
-      SubtraceWithSuffix cm C MM C' MM' MMO
-  | SubSufNotNow: forall C C' MM MM' MMO M,
-      (forall args, ~ isCall cm (head MM) args) -> 
-      SubtraceWithSuffix cm C MM C' MM' MMO ->
-      SubtraceWithSuffix cm C (notfinished M MM) C' MM' MMO
-  | SubSufSkipCall : forall C C' MM MMskip MM' MM'' MMO args,
-      isCall cm (head MM) args -> 
-      TraceSpan (fun M => ~ (isRet (head MM) M)) MM MMskip (Some MM')  -> 
-      SubtraceWithSuffix cm C MM' C' MM'' MMO ->
-      SubtraceWithSuffix cm C MM C' MM'' MMO.
-(* APT: This should be reverted like Subtrace so that we get all sub-traces, not just immediate children of the parent trace. *)
-
-(* APT: Or, here's the following suggestion for restructing Subtrace and friends:
-- Subtrace should just pick out the suffixes that start with a return.
-- Users of Subtrace that need to use LongestPrefix or Span can do so themselves,
-  avoiding the need for a separate SubtraceWithSuffix.
-*)
 
 (* Since eager property protects everything that is HI,
    an integrity rollback restores all HI components. *)
@@ -841,11 +840,9 @@ Definition ObservableIntegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) :
  match MMsuffO with
  | Some actual =>
    let ideal := traceOf (RollbackInt C (head MM) (head actual)) in
-   TracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)
+   ObsTracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)
  | None => True
  end.
-(* APT: Need a prefix analog to ObsTraceEq, to cope with stuttering? *)
-
 
 (* A confidentiality rollback aims to undo a variation, so it restores the values of the
    original, unvaried state. But if the varied values were overwritten after they were varied,
@@ -855,22 +852,20 @@ Definition RollbackConf (Mstart Nstart Nend : MachineState) : MachineState :=
            then Mstart k
            else Nend k.
 
-Definition ObservableConfidentiality (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) (isRet:MachineState -> Prop) : Prop :=
+Definition ObservableConfidentiality (C:Contour) (MM:MTrace) (isRet:MachineState -> Prop) : Prop :=
   forall N NN NNO, variantOf (head MM) N C ->
                    TraceSpan (fun N' => ~ (isRet N')) (traceOf N) NN NNO ->
-                   let actual := MM ^ MMsuffO in
                    let variant := NN ^ (option_map (fun NN => traceOf (RollbackConf (head MM) N (head NN))) NNO) in
-                   TraceEq (ObsTraceOf variant) (ObsTraceOf actual).
-(* APT: Modify to use ObsTraceEq? *)
+                   ObsTraceEq (ObsTraceOf variant) (ObsTraceOf MM).
 (* APT: There is no real need to pass MMsuffO separately here; could just do the append
         in the caller. *)
 
 Definition LazyStackSafety (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
-  ObservableIntegrity C MM None (* APT: This is superfluous *) /\
-  ObservableConfidentiality C MM None (fun _ => False) /\
-  (forall MM' C' MMsuffO, SubtraceWithSuffix cm C MM C' MM' MMsuffO ->
+  ObservableConfidentiality C MM (fun _ => False) /\
+  (forall MM' MM'' C' MMsuffO, FindCall cm MM C' MM' ->
+                          TraceSpan (fun M => ~isRet (head MM') M) MM' MM'' MMsuffO ->
                           ObservableIntegrity C' MM' MMsuffO /\
-                          ObservableConfidentiality C' MM' MMsuffO (isRet (head MM'))).
+                          ObservableConfidentiality C' (TraceApp MM' MMsuffO) (isRet (head MM'))).
 
 (* More conjectural stuff follows. *)
 
@@ -886,13 +881,13 @@ Definition ObservableConfidentegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTr
     TraceSpan (fun N' => ~ isRet N') (traceOf N) NN NNO ->
     let actual := MM ^ MMsuffO in
     let ideal := NN ^ (option_map (fun NN' => traceOf (RollbackCI C (head MM) N (head NN'))) NNO) in
-    TracePrefix (ObsTraceOf ideal) (ObsTraceOf actual).
-(* APT: Again, need a prefix analog to ObsTraceEq, to cope with stuttering? *)
+    ObsTracePrefix (ObsTraceOf ideal) (ObsTraceOf actual).
 
 Definition LazyStackSafety' (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
   ObservableConfidentegrity C MM None (fun _ => False) /\
-  (forall MM' C' MMsuffO, SubtraceWithSuffix cm C MM C' MM' MMsuffO ->
-                          ObservableConfidentegrity C' MM' MMsuffO (isRet (head MM'))).
+  (forall MM' MM'' C' MMsuffO, FindCall cm MM C MM' ->
+                          TraceSpan (fun M => ~isRet (head MM') M) MM' MM'' MMsuffO ->
+                          ObservableConfidentegrity C' MM'' MMsuffO (isRet (head MM''))).
 
 Conjecture EagerSafetyImpliesLazy :
   forall cm C MM,
