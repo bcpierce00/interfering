@@ -362,14 +362,14 @@ Definition ObsTracePrefix (OO OO' : Trace Observation) : Prop :=
    have identical observation traces and a final state in the actual trace has a
    corresponding pre-return state in the variant, where all changes are indistinguishable. *)
 Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) (isRet : MachineState -> Prop) :=
-  forall N NN Mret, variantOf (head MM) N C ->
+  forall N NN, variantOf (head MM) N C ->
                LongestPrefix (fun M => ~ isRet M) NN (traceOf N) -> 
                ObsTraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
-               (IsEnd MM Mret -> 
-                exists Nret, IsEnd NN Nret /\
-                forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k 
-                  -> Nret k = Mret k). 
-(* BCP queried: should we also require that MM terminates if NN terminates? *)
+               exists Mret, IsEnd MM Mret <-> exists Nret, IsEnd NN Nret /\
+               forall Mret Nret k,
+                 IsEnd MM Mret -> IsEnd NN Nret ->
+                 (head MM) k <> Mret k \/ (head NN) k <> Nret k ->
+                 Nret k = Mret k. 
 
 CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
   MTrace -> MTrace -> Prop :=
@@ -569,6 +569,8 @@ Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
     | _ => C k
     end.
 
+(* SNA: Since we never actually use the old contour in updateContour,
+   I made this for FindCall, below. *)
 Definition makeContour (args : nat) (M : MachineState) : Contour :=
   fun k =>
     match k with
