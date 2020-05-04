@@ -570,7 +570,8 @@ Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
     end.
 
 (* SNA: Since we never actually use the old contour in updateContour,
-   I made this for FindCall, below. *)
+   I made this for FindCall, below. (Importantly, if we did use the old contour,
+   newer versions of subtrace would be wrong. *)
 Definition makeContour (args : nat) (M : MachineState) : Contour :=
   fun k =>
     match k with
