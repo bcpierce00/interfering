@@ -410,7 +410,7 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace) (isRet : Machi
     variantOf (ms (head MP)) m' C ->
     LongestPrefix (fun m => ~ isRet m) M' (MTraceOf m') ->
     ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M') /\
-    (exists mpret, IsEnd MP mpret <-> exists mret', IsEnd M' mret') /\
+    ((exists mpret, IsEnd MP mpret) <-> (exists mret', IsEnd M' mret')) /\
     (forall mpret mret' k,
       IsEnd MP mpret -> IsEnd M' mret' ->
       ms (head MP) k <> ms mpret k \/ (head M') k <> mret' k ->
@@ -440,30 +440,30 @@ CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
       R (ms mp) -> R m ->
       StrongEagerStackConfidentiality R (finished mp) (finished m).
 
-(* LEO: REFIX.
 Lemma confStepPreservesVariant :
-  forall C M M' OM N N' ON,
-    step M = Some (M', OM) -> step N = Some (N', ON) ->
-    (forall k, M' k <> M k \/ N' k <> N k -> M' k = N' k) ->
-    variantOf M N C ->
-    variantOf M' N' C.
+  forall C mp m' p' OM mv mv' ON,
+    mpstep mp = Some (m', p', OM) ->
+    step mv = (mv', ON) ->
+    (forall k, m' k <> ms mp k \/ mv' k <> mv k -> m' k = mv' k) ->
+    variantOf (ms mp) mv C ->
+    variantOf m' mv' C.
 Proof.
   unfold variantOf.
-  intros C M M' OM N N' ON StepM StepN Conf Var k Hk.
-  destruct (WordEqDec (M' k) (M k)) as [eqM | neqM];
-  destruct (WordEqDec (N' k) (N k)) as [eqN | neqN];
+  intros C mp m' p' OM mv mv' ON StepM StepN Conf Var k Hk.
+  destruct (WordEqDec (m' k) (ms mp k)) as [eqM | neqM];
+  destruct (WordEqDec (mv' k) (mv k)) as [eqN | neqN];
   try solve [ apply Conf; auto ];
   rewrite eqM; rewrite eqN; auto.
 Qed.
 
 Lemma StrongConfImpliesObsEq :
-  forall C R MM NN,
-    variantOf (head MM) (head NN) C ->
-    StrongEagerStackConfidentiality R MM NN ->
-    ObsTraceEq (ObsTraceOf MM) (ObsTraceOf NN).
+  forall C R MP MV,
+    variantOf (ms (head MP)) (head MV) C ->
+    StrongEagerStackConfidentiality R MP MV ->
+    ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
 Proof.
   cofix COFIX.
-  intros C R MM NN Var Conf.
+  intros C R MP MV Var Conf.
   inversion Conf; simpl.
   - match goal with
     | [ |- ObsTraceEq ?T1 ?T2 ] =>
@@ -472,28 +472,37 @@ Proof.
     repeat match goal with
            | [ H : step ?M = _ |- context[step ?M] ] => rewrite H; simpl
            end.
+    unfold mpstep in *.
+    destruct (step (ms mp)) eqn:HStepMP.
+    destruct (pstep mp) eqn:HPStepMP; inversion H.
     destruct O0.
     + apply ObsEqNow.
       eapply COFIX; eauto.
       eapply confStepPreservesVariant; eauto.
-      assert (head MM = M) as HM
+      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
+        subst.
+        eauto.
+      * assert (head MP = mp) as HM
           by (destruct H3; auto).
-      assert (head NN = N) as HN
+        assert (head MV = m') as HN
           by (destruct H4; auto).
-      rewrite <- HM.
-      rewrite <- HN.
-      apply Var.
+        rewrite <- HM.
+        rewrite <- HN.  
+        apply Var.
     + apply ObsEqTau1.
       apply ObsEqTau2.
       eapply COFIX; eauto.
       eapply confStepPreservesVariant; eauto.
-      assert (head MM = M) as HM
+      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
+        subst.
+        eauto.
+      * assert (head MP = mp) as HM
           by (destruct H3; auto).
-      assert (head NN = N) as HN
+        assert (head MV = m') as HN
           by (destruct H4; auto).
-      rewrite <- HM.
-      rewrite <- HN.
-      apply Var.
+        rewrite <- HM.
+        rewrite <- HN.
+        apply Var.
   - match goal with
     | [ |- ObsTraceEq ?T1 ?T2 ] =>
       rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
@@ -504,8 +513,8 @@ Qed.
 Lemma ComponentConfTrans :
   forall (M0 M1 M2 N0 N1 N2 : MachineState),
     (forall k : Component, M1 k <> M0 k \/ N1 k <> N0 k -> M1 k = N1 k) ->
-    (forall k : Component, M1 k <> M2 k \/ N1 k <> N2 k -> N2 k = M2 k) ->
-    (forall k : Component, M0 k <> M2 k \/ N0 k <> N2 k -> N2 k = M2 k).
+    (forall k : Component, M1 k <> M2 k \/ N1 k <> N2 k -> M2 k = N2 k) ->
+    (forall k : Component, M0 k <> M2 k \/ N0 k <> N2 k -> M2 k = N2 k).
 Proof.
   intros M0 M1 M2 N0 N1 N2 H01 H12.
   intros k [HM02 | HN02].
@@ -535,62 +544,82 @@ Proof.
     + eapply H12; eauto.
 Qed.
 
-Lemma StrongConfImpliesEndConf :
-  forall C R MM NN,
-    variantOf (head MM) (head NN) C ->
-    StrongEagerStackConfidentiality R MM NN ->
-    forall Mret,
-      IsEnd MM Mret ->
-      exists Nret : MachineState,
-        IsEnd NN Nret /\
-        forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k  ->
-                  Nret k = Mret k.
+Lemma StrongConfImpliesCotermination :
+  forall C R MP MV,
+    variantOf (ms (head MP)) (head MV) C ->
+    StrongEagerStackConfidentiality R MP MV ->
+    (exists mpret, IsEnd MP mpret) <-> (exists mvret, IsEnd MV mvret).
 Proof.
-  intros C R MM NN Var Conf Mret HEnd.
-  generalize dependent NN.
-  induction HEnd; subst; eauto; intros NN Var Conf.
-  - inversion Conf; subst; eauto; clear Conf.
-    exists N.
-    split; [ constructor |].
-    simpl; intros k Hk.
-    inversion Hk; exfalso; eauto.
-  - inversion Conf; subst; eauto; clear Conf; simpl in *.
-    destruct (IHHEnd NN0) as [Nret [InNRet HNRet]]; eauto.
-    + eapply confStepPreservesVariant; eauto.
-    + exists Nret.
-      split.
-      * constructor; auto.
-      * eapply ComponentConfTrans; eauto.
+  intros C R MP MV Var Conf; split.
+  - intros [mpret HEnd].
+    generalize dependent MV.
+    induction HEnd; subst; eauto; intros MV Var Conf;
+    inversion Conf; subst; eauto; clear Conf; simpl in *.
+    + exists m.
+      constructor.
+    + destruct (IHHEnd M'0); eauto using confStepPreservesVariant.
+      exists x; constructor; eauto.
+  - intros [mvret HEnd].
+    generalize dependent MP.
+    induction HEnd; subst; eauto; intros MP Var Conf;
+    inversion Conf; subst; eauto; clear Conf; simpl in *.
+    + exists mp.
+      constructor.
+    + destruct (IHHEnd MP0); eauto using confStepPreservesVariant.
+      exists x; constructor; eauto.
 Qed.
 
-Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MM : MTrace) :
-  (forall (NN : MTrace),
-    variantOf (head MM) (head NN) C ->
-    StrongEagerStackConfidentiality R MM NN) ->
-  EagerStackConfidentiality C MM R.
+Lemma StrongConfImpliesEndConf :
+  forall C R MP MV mpret mvret,
+    variantOf (ms (head MP)) (head MV) C ->
+    StrongEagerStackConfidentiality R MP MV ->
+    IsEnd MP mpret -> IsEnd MV mvret ->
+    forall k, ms (head MP) k <> ms mpret k \/ (head MV) k <> mvret k  ->
+              ms mpret k = mvret k.
+Proof.
+  intros C R MP MV mpret mvret Var Conf HMPEnd HMVEnd.
+  generalize dependent MV.
+  generalize dependent mvret.
+  induction HMPEnd; subst; eauto; intros mvret MV Var Conf HMVEnd;
+    inversion Conf; subst; eauto; clear Conf; simpl in *.
+  - intros k Hk.
+    inversion HMVEnd; subst; clear HMVEnd; eauto.
+    inversion Hk; exfalso; eauto.
+  - inversion HMVEnd; subst; clear HMVEnd; eauto.
+    eapply ComponentConfTrans; eauto.
+    intros k Hk.
+    eapply IHHMPEnd; eauto using confStepPreservesVariant.
+Qed.    
+
+Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MP : MPTrace) :
+  (forall (MV : MTrace),
+    variantOf (ms (head MP)) (head MV) C ->
+    StrongEagerStackConfidentiality R MP MV) ->
+  EagerStackConfidentiality C MP R.
 Proof.
   intros Conf.
-  intros N NN Mret HVar [MMO [App [NotR Pref]]].
-  specialize (Conf NN).
-  assert (head NN = N) as HN.
+  intros mv MV HVar [MMO [App [NotR Pref]]].
+  specialize (Conf MV).
+  assert (head MV = mv) as HN.
   { apply TraceAppHead in App.
     rewrite App.
     simpl.
-    destruct (step N); simpl; auto.
-    destruct p; simpl; auto.
+    destruct (step mv); simpl; auto.
   }
-  split.
+  split; [|split].
   - eapply StrongConfImpliesObsEq; eauto.
     + rewrite HN; eauto.
     + eapply Conf.
       rewrite HN; eauto.
-  - intros HEnd.
+  - eapply StrongConfImpliesCotermination; eauto.
+    + rewrite HN; eauto.
+    + eapply Conf; rewrite HN; eauto.
+  - intros mpret mret k HMPEnd HMVEnd.
     eapply StrongConfImpliesEndConf; eauto.
     + rewrite HN; eauto.
     + eapply Conf.
       rewrite HN; eauto.
 Qed.
-*)
 
 Definition CallMap := Value -> nat -> Prop.
 
