@@ -12,8 +12,8 @@ Variable Word : Type.
 Variable wlt : Word -> Word -> bool.
 Variable weq : Word -> Word -> bool.
 Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
-Variable wplus : Word -> nat -> Word. 
-Variable wminus : Word -> nat -> Word. 
+Variable wplus : Word -> nat -> Word.
+Variable wminus : Word -> nat -> Word.
 (* Variable incr : Word -> Word.  *)
 
 Definition Addr : Type := Word.
@@ -54,13 +54,13 @@ CoInductive Trace (A : Type) : Type :=
 Arguments finished {_} _.
 Arguments notfinished {_} _ _.
 
-Definition idTrace {A} (MM: Trace A) : Trace A := 
-  match MM with 
-  | finished M => finished M 
+Definition idTrace {A} (MM: Trace A) : Trace A :=
+  match MM with
+  | finished M => finished M
   | notfinished M MM' => notfinished M  MM'
   end.
 
-Lemma idTrace_eq : forall {A} (MM: Trace A), MM = idTrace MM. 
+Lemma idTrace_eq : forall {A} (MM: Trace A), MM = idTrace MM.
    destruct MM; reflexivity.
 Qed.
 
@@ -73,13 +73,13 @@ Definition head {A} (MM : Trace A) : A :=
 
 Inductive InTrace {A} (m:A) : Trace A -> Prop :=
 | In_finished : InTrace m (finished m)
-| In_now : forall MM, InTrace m (notfinished m MM)                        
+| In_now : forall MM, InTrace m (notfinished m MM)
 | In_later : forall m' MM, InTrace m MM -> InTrace m (notfinished m' MM).
 
 Lemma head_InTrace :forall {A} (MM: Trace A), InTrace (head MM) MM.
 Proof.
   intros.
-  destruct MM. 
+  destruct MM.
   - constructor.
   - simpl. constructor.
 Qed.
@@ -149,7 +149,7 @@ CoInductive IsEnd {A} : Trace A -> A -> Prop :=
 (*   | finished _ => None *)
 (*   | notfinished _ M => Some M *)
 (*   end. *)
-  
+
 (* Fixpoint ith {A} (i:nat) (MM: Trace A) : option A := *)
 (*   match i with *)
 (*   | O => Some (head MM) *)
