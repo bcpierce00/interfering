@@ -9,13 +9,13 @@ Section foo.
    etc. *)
 
 (* Primitive Abstractions. *)
-  
+
 Variable Word : Type.
 Variable wlt : Word -> Word -> bool.
 Variable weq : Word -> Word -> bool.
 Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
-Variable wplus : Word -> nat -> Word. 
-Variable wminus : Word -> nat -> Word. 
+Variable wplus : Word -> nat -> Word.
+Variable wminus : Word -> nat -> Word.
 
 Variable WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2}.
 
@@ -35,6 +35,19 @@ Definition Value : Type := Word.
 
 (* A Machine State is just a map from Components to Values. *)
 Definition MachineState := Component -> Value.
+(* TODO: Where does the micropolicy state live in this representation?
+   Do we need to say that a MachineState _includes_ this map rather
+   than that it _is_ this map?  (E.g., by making a MachineState
+   abstract and providing a [lookup] function that maps a machinestate
+   and a component to a word?)
+
+   Better:
+     - Talk about two different machine models -- a "core behavior"
+       model and an enhanced version that maintains its own state and
+       can fail-stop the trace.
+     - The "main trace" is on an enhanced machine
+     - Variant machines are executed only on the core machine, and
+       rollback happens only to core machine states. *)
 
 (* Observations are values, or silent (tau) *)
 Inductive Observation :=
@@ -236,14 +249,14 @@ Lemma StackIntegrityEquiv : forall (C:Contour) (MM: MTrace),
 Proof.
   cofix COFIX.
   intros.
-  destruct MM. 
+  destruct MM.
   - constructor.
   - constructor.
-    + intros. unfold EagerStackIntegrity in H.  simpl in H. 
-      apply H; auto. constructor. apply head_InTrace. 
-    + apply COFIX. 
-      unfold EagerStackIntegrity in *.  intros. simpl in H. 
-      erewrite <- H; auto. 
+    + intros. unfold EagerStackIntegrity in H.  simpl in H.
+      apply H; auto. constructor. apply head_InTrace.
+    + apply COFIX.
+      unfold EagerStackIntegrity in *.  intros. simpl in H.
+      erewrite <- H; auto.
       * apply H; auto.  constructor. auto.
       * constructor. apply head_InTrace.
 Qed.
@@ -252,18 +265,18 @@ Lemma StackIntegrity'Equiv : forall (C:Contour) (MM: MTrace),
      EagerStackIntegrity' C MM -> EagerStackIntegrity C MM.
 Proof.
   intros.
-  unfold EagerStackIntegrity. 
+  unfold EagerStackIntegrity.
   intros.
-  induction H1. 
+  induction H1.
   - auto.
   - auto.
   - simpl. inversion H. subst. rewrite <- IHInTrace.
-    +  apply H4; auto. 
+    +  apply H4; auto.
     +  inversion H.  auto.
 Qed.
 
 (* NB: It doesn't matter whether we calculate this at a
-call instruction (as in a subtrace) or at the first 
+call instruction (as in a subtrace) or at the first
 instruction of the callee (as in the top-level trace)
 assuming that registers remain LI,LC at all times. *)
 
@@ -282,7 +295,7 @@ CoFixpoint ObsTraceOf (MM: MTrace) : ObsTrace :=
     | Some (M', O) =>
       notfinished O (ObsTraceOf MM')
     | None => (* Shouldn't happen in wf MTrace *)
-      notfinished Tau (ObsTraceOf MM') 
+      notfinished Tau (ObsTraceOf MM')
     end
   end.
 
@@ -303,10 +316,10 @@ CoFixpoint ObsTraceOf (MM : MTrace) : Trace Value :=
   | finished M =>
     finished (M (Reg O))
   | notfinished M Ms =>
-    let v := M (Reg O) in 
+    let v := M (Reg O) in
     match Ms with
     | finished M' =>
-      let v' := M' (Reg O) in 
+      let v' := M' (Reg O) in
       if weq v v'
       then finished v
       else notfinished v (finished v')
@@ -322,7 +335,7 @@ CoFixpoint ObsTraceOf (MM : MTrace) : Trace Value :=
    non-taus. *)
 (* LEO: Can't do this. It's not productive. Unless I'm missing something. *)
 (*
-Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) := 
+Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) :=
   forall N, variantOf (head MM) N C ->
             let o  := ObsTraceOf MM in
             let o' := ObsTraceOf (traceOf N) in
@@ -331,7 +344,7 @@ Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) :=
 (* APT: just this direction: it would be bad if variant trace ended sooner than reference, right? *)
 (* LEO: I'm not sure about only one observation being a prefix of the other. What if the variant machine tries halts because of the monitor? Are we termination-sensitive? *)
 (* APT: Ah, right.  I guess we have to be termination-insensitive. *)
-(* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed 
+(* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed
 to fail-stop more often than the reference trace? *)
 
 CoInductive ObsTraceEq : Trace Observation -> Trace Observation -> Prop :=
@@ -346,19 +359,19 @@ CoInductive ObsTraceEq : Trace Observation -> Trace Observation -> Prop :=
     ObsTraceEq (notfinished (Out w) OO) (notfinished (Out w) OO')
 | ObsEqFinishedOut : forall w,
     ObsTraceEq (finished (Out w)) (finished (Out w))
-| ObsEqFinishedTau : 
+| ObsEqFinishedTau :
     ObsTraceEq (finished Tau) (finished Tau)
 (* The last thing we need is a way of handling *all-tau* traces.
    There are a couple of ways of doing that, not sure what will
    play better in proofs. *)
 | ObsEqAllTau : forall OO,
      ObsTraceEq OO OO.
-(* APT: Establishing equality between traces seems hard, and this overlaps 
+(* APT: Establishing equality between traces seems hard, and this overlaps
 the previous two cases.  Maybe try:
-   ForallTrace (fun o => o = Tau) OO -> 
-   ForallTrace (fun o => o = Tau) OO' -> 
+   ForallTrace (fun o => o = Tau) OO ->
+   ForallTrace (fun o => o = Tau) OO' ->
    ObsTraceEq OO OO'
-? 
+?
 LEO: That was the other thing I had in mind. I'll see what makes proofs easier.
 (Note that this proposal overlaps with the first two cases, as well as the last one.)
 *)
@@ -372,13 +385,13 @@ Definition ObsTracePrefix (OO OO' : Trace Observation) : Prop :=
 Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) (isRet : MachineState -> Prop) :=
   forall N NN Mret,
                variantOf (head MM) N C ->
-               LongestPrefix (fun M => ~ isRet M) NN (traceOf N) -> 
+               LongestPrefix (fun M => ~ isRet M) NN (traceOf N) ->
                ObsTraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
-               (IsEnd MM Mret -> exists Nret, 
+               (IsEnd MM Mret -> exists Nret,
                  IsEnd NN Nret /\
                  forall k,
                  (head MM) k <> Mret k \/ (head NN) k <> Nret k ->
-                 Nret k = Mret k). 
+                 Nret k = Mret k).
 (* BCP suggested: should we require co-termination of MM and NN? *)
 
 CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
@@ -435,7 +448,7 @@ Proof.
       assert (head NN = N) as HN
           by (destruct H4; auto).
       rewrite <- HM.
-      rewrite <- HN.      
+      rewrite <- HN.
       apply Var.
     + apply ObsEqTau1.
       apply ObsEqTau2.
@@ -446,7 +459,7 @@ Proof.
       assert (head NN = N) as HN
           by (destruct H4; auto).
       rewrite <- HM.
-      rewrite <- HN.      
+      rewrite <- HN.
       apply Var.
   - match goal with
     | [ |- ObsTraceEq ?T1 ?T2 ] =>
@@ -498,7 +511,7 @@ Lemma StrongConfImpliesEndConf :
       exists Nret : MachineState,
         IsEnd NN Nret /\
         forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k  ->
-                  Nret k = Mret k. 
+                  Nret k = Mret k.
 Proof.
   intros C R MM NN Var Conf Mret HEnd.
   generalize dependent NN.
@@ -515,7 +528,7 @@ Proof.
       split.
       * constructor; auto.
       * eapply ComponentConfTrans; eauto.
-Qed.        
+Qed.
 
 Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MM : MTrace) :
   (forall (NN : MTrace),
@@ -545,7 +558,7 @@ Proof.
       rewrite HN; eauto.
 Qed.
 
-Definition CallMap := Value -> nat -> Prop. 
+Definition CallMap := Value -> nat -> Prop.
 
 Definition isCall (cm: CallMap) (M: MachineState) (args: nat) : Prop :=
    cm (M (Reg PC)) args.
@@ -556,12 +569,12 @@ Definition isRet (Mc M: MachineState) : Prop :=
 Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
   fun k =>
     match k with
-    | Mem a => 
+    | Mem a =>
       let a' := wminus (M (Reg SP)) args in
       if wle a a' then
         (HC, HI)
       else if andb (wlt a' a) (wle a (M (Reg SP))) then
-        (LC, LI)                  
+        (LC, LI)
       else if wlt (M (Reg SP)) a then
         (HC, LI)
       else C k (* impossible *)
@@ -574,12 +587,12 @@ Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
 Definition makeContour (args : nat) (M : MachineState) : Contour :=
   fun k =>
     match k with
-    | Mem a => 
+    | Mem a =>
       let a' := wminus (M (Reg SP)) args in
       if wle a a' then
         (HC, HI)
       else if andb (wlt a' a) (wle a (M (Reg SP))) then
-        (LC, LI)                  
+        (LC, LI)
       else (*if wlt (M (Reg SP)) a then*)
         (HC, LI)
     | _ => (LC, LI)
@@ -593,15 +606,15 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
       (* Take the prefix until a return *)
       LongestPrefix (fun M => ~ (isRet (head MM) M)) MM MM' ->
       (* Construct the new contour *)
-      updateContour C args (head MM) = C' -> 
+      updateContour C args (head MM) = C' ->
       Subtrace cm C MM C' MM'
   | SubNotNow: forall C MM C' MM' M,
-      (forall args, ~ isCall cm (head MM) args) -> 
+      (forall args, ~ isCall cm (head MM) args) ->
       Subtrace cm C MM C' MM' ->
       Subtrace cm C (notfinished M MM) C' MM'
   | SubSkipCall : forall C MM C' MMskip args MM' MM'',
-      isCall cm (head MM) args -> 
-      TraceSpan (fun M => ~ (isRet (head MM) M)) MM MMskip (Some MM')  -> 
+      isCall cm (head MM) args ->
+      TraceSpan (fun M => ~ (isRet (head MM) M)) MM MMskip (Some MM')  ->
       Subtrace cm C MM' C' MM'' ->
       Subtrace cm C MM C' MM''.
 *)
@@ -612,7 +625,7 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
       (* Take the prefix until a return *)
       LongestPrefix (fun M => ~ (isRet (head MM) M)) MM MM' ->
       (* Construct the new contour *)
-      updateContour C args (head MM) = C' -> 
+      updateContour C args (head MM) = C' ->
       Subtrace cm C MM C' MM'
   | SubNotNow: forall C MM C' MM' M,
       Subtrace cm C MM C' MM' ->
@@ -627,10 +640,10 @@ CoInductive FindCall (cm: CallMap) : MTrace -> Contour -> MTrace -> Prop :=
       (* Current instruction is a call *)
       isCall cm (head MM) args ->
       (* Construct the contour *)
-      makeContour args (head MM) = C -> 
+      makeContour args (head MM) = C ->
       FindCall cm MM C MM'
   | FindCallLater: forall C MM MM' M,
-      (forall args, ~ isCall cm (head MM) args) -> 
+      (forall args, ~ isCall cm (head MM) args) ->
       FindCall cm MM C MM' ->
       FindCall cm (notfinished M MM) C MM'.
 
@@ -652,6 +665,11 @@ Definition EagerStackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
 
 (* TODO: step by step property that implies the rest *)
 
+(* TODO: Rename this to SafeTrace or something, then write StackSafe
+   as a top-level property that either quantifies over all traces (for
+   a dynamic analysis) or only over a subset (e.g., those produced by
+   a stack-protecting compiler). *)
+
 (***** TESTING Property **********)
 (* Note: This enforces lockstep due to PC equality.
    TODO: How not to enforce lockstep? *)
@@ -659,9 +677,9 @@ Definition EagerStackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
 Definition EagerIntegrityTest (C : Contour) (M M' : MachineState) : Prop :=
   forall (k : Component), integrityOf (C k) = HI -> M k = M' k.
 
-Definition EagerConfidentialityTest (isRet : MachineState -> Prop)  
+Definition EagerConfidentialityTest (isRet : MachineState -> Prop)
            (M M' N N' : MachineState) (OM ON : Observation) : Prop :=
-  OM = ON /\ 
+  OM = ON /\
   forall (k : Component),  M k <> M' k \/ N k <> N' k -> M' k = N' k.
 
 (* Elements of the Variant Stack. *)
@@ -697,13 +715,13 @@ Inductive Last {A : Type} : A -> list A -> Prop :=
 
 Lemma Last_unique {A : Type} (x x' : A) (l : list A) :
   Last x l -> Last x' l -> x = x'.
-Proof.  
+Proof.
   intro H; induction H; intro HLast; inversion HLast; subst; clear HLast; eauto;
     match goal with
     | [ H : Last _ [] |- _ ] => inversion H
     end.
 Qed.
-    
+
 Lemma VSE_step_preserves_in :
   forall vse vses vses' N' O,
   In vse vses ->
@@ -747,7 +765,7 @@ Qed.
 
 Lemma Last_implies_In {A : Type} (x : A) (l : list A) :
   Last x l -> In x l.
-Proof.  
+Proof.
   intros Last; induction Last.
   - left; auto.
   - right; auto.
@@ -763,12 +781,12 @@ Definition WellFormedVS (M : MachineState) (vs : VarStack) : Prop :=
   (exists vse, Last vse vs /\ retP vse = fun _ => False) /\
   (* The current state is in the trace of *every* init machine. *)
   (Forall (fun vse => InTrace M (traceOf (init_machine vse))) vs) /\
-  (* The variant state is in the trace of its own init variant. *) 
+  (* The variant state is in the trace of its own init variant. *)
   (Forall (fun vse => InTrace (curr_variant vse) (traceOf (init_variant vse))) vs).
 
 CoInductive EagerStackSafetyTest (cm : CallMap) : MTrace -> VarStack -> Prop :=
 | EagerTestHalt :
-    forall M vs, 
+    forall M vs,
       step M = None ->
       WellFormedVS M vs ->
       (forall vse, In vse vs -> step (curr_variant vse) = None) ->
@@ -780,7 +798,7 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MTrace -> VarStack -> Prop :=
       (forall vse, In vse vs -> ~ (retP vse M)) ->
       (* Take a step. *)
       step M = Some (M', OM) ->
-      WellFormedVS M vs ->      
+      WellFormedVS M vs ->
       (* Enforce confidentiality for each variant. *)
       (forall vse,
           In vse vs ->
@@ -800,10 +818,10 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MTrace -> VarStack -> Prop :=
     forall args M MM vs vs' M' OM C C',
       (* Is a call *)
       isCall cm M args ->
-      (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)  
+      (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)
       (* Take a step. *)
       step M = Some (M', OM) ->
-      WellFormedVS M vs ->      
+      WellFormedVS M vs ->
       (* Enforce confidentiality for each variant. *)
       (forall vse,
           In vse vs ->
@@ -836,10 +854,10 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MTrace -> VarStack -> Prop :=
       (* Is a return *)
       (* isCall cm M args -> *)
       (exists vse, In vse vs /\ retP vse M) ->
-        (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)  
+        (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)
       (* Take a step. *)
       step M = Some (M', OM) ->
-      WellFormedVS M vs ->      
+      WellFormedVS M vs ->
       (* Enforce confidentiality for each variant. *)
       (forall vse,
           In vse vs ->
@@ -861,7 +879,7 @@ Definition EagerStackSafetyTest' cm C MM :=
   forall N, variantOf (head MM) N C ->
   EagerStackSafetyTest cm MM [Build_VSE (head MM) N N C (fun _ => False)].
 
-Ltac in_reasoning := 
+Ltac in_reasoning :=
   repeat match goal with
          | [ H : In _ [] |- _ ] => inversion H
          | [ H : In _ [_] |- _ ] => inversion H; subst; clear H
@@ -884,7 +902,7 @@ Proof.
   cofix COFIX.
   intros cm C MM vs [vse_last [HLast HC]] Safety.
   inversion Safety; subst.
-  - apply SI_finished. 
+  - apply SI_finished.
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
       unfold EagerIntegrityTest in *.
@@ -894,7 +912,7 @@ Proof.
       destruct (H3 vse_last (Last_implies_In vse_last vs HLast))
         as [N' [ON [HN' HConf]]].
       exists (upd_curr N' vse_last); split; auto.
-      eapply VSE_step_preserves_last; eauto.      
+      eapply VSE_step_preserves_last; eauto.
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
       unfold EagerIntegrityTest in *.
@@ -926,8 +944,8 @@ Proof.
           + subst.
             rewrite HRet in Contra'; exfalso; eauto.
           + inversion Contra.
-        } 
-Qed.          
+        }
+Qed.
 
 (*
 Theorem TestImpliesConfidentialityToplevel :
@@ -945,7 +963,7 @@ Proof.
     simpl in *.
     specialize (H0 M0 C N (fun _ => False) HIn).
     rewrite (idTrace_eq (traceOf N)); simpl.
-    rewrite 
+    rewrite
  *)
 
 (* ********* SNA Beware : Lazy Properties ********* *)
@@ -1189,7 +1207,7 @@ Variable mapFilter :
 Arguments eqMap {_ _} _ _ _.
 Arguments mapFilter {_ _} _ _ _.
 
-Definition eqMapFilter {A B} (m1 m2 : A -> B) f d :=   
+Definition eqMapFilter {A B} (m1 m2 : A -> B) f d :=
   eqMap (mapFilter m1 f) (mapFilter m2 f) d.
 (* More helpers for memories. *)
 Variable memLayout : TagState -> (Addr -> DescTag).
@@ -1301,7 +1319,7 @@ End EagerTestingProperty.
 End foo.
 
 (*
-(* Following attempts to encode subtraces that start on transition to NOTME, but can end anywhere as long as still NOTME. 
+(* Following attempts to encode subtraces that start on transition to NOTME, but can end anywhere as long as still NOTME.
 There is surely still a prettier way! *)
 
 
@@ -1318,7 +1336,7 @@ CoInductive subtraceAux : CTrace -> MTrace -> Contour -> Prop :=
      ~ notme id -> TracePrefix MM MM' -> ForallTrace notme' MM' -> subtraceAux (notfinished (C,id,m) MM) (mapTrace snd MM') C
 | subtraceAuxLater: forall cim C MM MM' ,  subtraceAux MM MM' C -> subtraceAux (notfinished cim MM) MM' C
 .
-                                                                      
+
 Definition subtrace (retSP: Value) (cm :CallMap) (C0: Contour) (super: MTrace) (sub: MTrace) (C:Contour) :=
   subtraceAux (CTraceOf retSP C0 super cm) sub C.
 
@@ -1331,15 +1349,15 @@ End foo.
 
 
 (* There are many well-formedness conditions on this... *)
-  
+
 Inductive Identity :=
-| ME : Value -> (* SP below which I can't access things *) 
+| ME : Value -> (* SP below which I can't access things *)
        Identity
 | NOTME : Value -> (* PC at the time of call *)
           Value -> (* SP at the time of call *)
           nat -> (* local state size *)
           Value -> (* SP of callee *)
-          Identity 
+          Identity
 | TRANS :
     list Value -> (* Instructions remaining in the sequence *)
     nat ->        (* local state size to be allocated *)
@@ -1351,7 +1369,7 @@ Inductive Identity :=
 Definition ITrace := Trace (Identity * MachineState).
 
 (* APT: Recast as operator over MTraces.
-        Assumes each call sequence starts with the JAL, right? 
+        Assumes each call sequence starts with the JAL, right?
         Is this essential, or was it just to make things a bit simpler? *)
 (* LEO: Each call sequence starts with a jal : that makes the
 formalization significantly simpler as you can figure out the
@@ -1362,7 +1380,7 @@ access the piece of the caller’s stack containing the arguments. To do
 this, we can add an additional parameter to the call map entries
 giving the number of args.  (Note that this prevents our handling
 dynamic frame sizes, but that is a feature that is ok to omit at least
-at first.)  *) 
+at first.)  *)
 (* LEO: Note that this way the handling of arguments/returns is not
 part of the blessed sequence. And we could either (1) assume there is
 enough local stack space for all calls or (2) handle stack allocation
@@ -1371,7 +1389,7 @@ and deallocation in the contours.  *)
 CoFixpoint ITraceOfAux (id : Identity) (MM : MTrace) (M: MachineState) (cm : CallMap) : ITrace :=
   match MM with
   | finished _ => finished (id, M)
-  | notfinished _ MM' => 
+  | notfinished _ MM' =>
     let M' := head MM' in
     match id with
     | ME meSP =>
@@ -1382,7 +1400,7 @@ CoFixpoint ITraceOfAux (id : Identity) (MM : MTrace) (M: MachineState) (cm : Cal
                     end) cm with
       | Some (seq, sz) =>
         notfinished (id,M) (ITraceOfAux (TRANS seq
-                                               sz 
+                                               sz
                                                (valueOf PC M')
                                                (valueOf SP M')
                                                meSP)
@@ -1400,7 +1418,7 @@ CoFixpoint ITraceOfAux (id : Identity) (MM : MTrace) (M: MachineState) (cm : Cal
         notfinished (id, M)
                     (ITraceOfAux (NOTME jalPC jalSP sz meSP) MM' M' cm)
       end
-    | NOTME jalPC jalSP sz meSP => 
+    | NOTME jalPC jalSP sz meSP =>
       if andb (valueEq (valueOf PC M') (vplus jalPC 4))
               (valueEq (valueOf SP M') jalSP) then
         notfinished (id,M) (ITraceOfAux (ME meSP) MM' M' cm)
@@ -1421,7 +1439,7 @@ Definition updateContour (C : Contour) (id id' : Identity) (M M' : MachineState)
     fun k => if cle k (componentOf (vminus (valueOf SP M) sz))
              then (HC, HI) else C k
   | TRANS _ _ _ _ _, NOTME _ jalSP _ _=>
-    (* Everything between the size of SP at the call, and the current SP 
+    (* Everything between the size of SP at the call, and the current SP
        is now "local state" *)
     fun k => if andb (cle k (componentOf (valueOf SP M')))
                      (clt (componentOf jalSP) k)
@@ -1437,8 +1455,8 @@ Definition updateContour (C : Contour) (id id' : Identity) (M M' : MachineState)
              else if clt (componentOf (valueOf SP M')) k then (HC, HI)
              else C k
   | _, _ => (* ERROR CASE *)
-    C 
-  end.    
+    C
+  end.
 
 CoFixpoint ContouredTraceOf (C : Contour) (it : ITrace) :=
   match it with
@@ -1468,7 +1486,7 @@ CoFixpoint ObsTraceAux (s : StateObs) (ct : CTrace) : OTrace :=
     let s' := updateObs s C M in
     notfinished s' (ObsTraceAux s' CIMs)
   end.
-  
+
 Definition ObsTrace (ct : CTrace) : OTrace :=
   let '(C,_,M) := head ct in
   let s0 := fun k =>
