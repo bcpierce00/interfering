@@ -14,16 +14,10 @@ Variable Word : Type.
 Variable wlt : Word -> Word -> bool.
 Variable weq : Word -> Word -> bool.
 Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
-<<<<<<< HEAD
-Variable wplus : Word -> nat -> Word.
-Variable wminus : Word -> nat -> Word.
-(* Variable incr : Word -> Word.  *)
-=======
 Variable wplus : Word -> nat -> Word. 
 Variable wminus : Word -> nat -> Word. 
 
 Variable WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2}.
->>>>>>> f9424bcc3186b2e53e6d9870c0d3814a047de349
 
 Definition Addr : Type := Word.
 
