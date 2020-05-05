@@ -8,13 +8,22 @@ Section foo.
    Contour should correspond to a MachineState, not to a Trace,
    etc. *)
 
+(* Primitive Abstractions. *)
+  
 Variable Word : Type.
 Variable wlt : Word -> Word -> bool.
 Variable weq : Word -> Word -> bool.
 Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
+<<<<<<< HEAD
 Variable wplus : Word -> nat -> Word.
 Variable wminus : Word -> nat -> Word.
 (* Variable incr : Word -> Word.  *)
+=======
+Variable wplus : Word -> nat -> Word. 
+Variable wminus : Word -> nat -> Word. 
+
+Variable WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2}.
+>>>>>>> f9424bcc3186b2e53e6d9870c0d3814a047de349
 
 Definition Addr : Type := Word.
 
@@ -27,25 +36,27 @@ Inductive Component:=
 | Mem (a:Addr)
 | Reg (r:Register).
 
+(* A Value is a Word. *)
 Definition Value : Type := Word.
-(* Variable JAL : Value. *)
 
+(* A Machine State is just a map from Components to Values. *)
 Definition MachineState := Component -> Value.
 
-Variable step : MachineState -> option MachineState.
+(* Observations are values, or silent (tau) *)
+Inductive Observation :=
+| Out (w : Word)
+| Tau.
 
-(* TODO: Change these *)
-Inductive CLabel :=
-| HC
-| LC.
+(* A Machine State can step to a new Machine State plus an Observation. *)
+Variable step : MachineState -> option (MachineState * Observation).
+(* APT: Why is there an option here? Machines run forever... *)
+(* APT: Ah, is this because a tagged machine can fail-stop?
+But don't we really want top-level properties to be phrased in terms of a non-halting machine? *)
 
-Inductive ILabel :=
-| HI
-| LI.
 
-Definition Label := (CLabel * ILabel)%type.
-
-Definition Contour := Component -> Label.
+(*******************)
+(***** Traces ******)
+(*******************)
 
 CoInductive Trace (A : Type) : Type :=
 | finished : A -> Trace A
@@ -63,7 +74,6 @@ Definition idTrace {A} (MM: Trace A) : Trace A :=
 Lemma idTrace_eq : forall {A} (MM: Trace A), MM = idTrace MM.
    destruct MM; reflexivity.
 Qed.
-
 
 Definition head {A} (MM : Trace A) : A :=
   match MM with
@@ -120,6 +130,21 @@ Definition OptTraceApp {A} (MMO1: option (Trace A)) (MMO2: option (Trace A)) : o
 
 Notation "MM1 ?^ MM2" := (OptTraceApp MM1 MM2) (at level 80).
 
+Lemma TraceAppHead {A} :
+  forall (MM NN : Trace A) (NNO : option (Trace A)),
+    MM = NN ^ NNO -> head MM = head NN.
+Proof.
+  intros MM NN NNO App.
+  destruct NN as [a | a NN].
+  - rewrite App.
+    simpl.
+    destruct NNO; simpl; auto.
+  - rewrite App.
+    simpl.
+    auto.
+Qed.
+
+    (* LEO: TODO: Should we define TracePrefix based on TraceSpan? *)
 (* TracePrefix MM1 MM2 says MM2 is a prefix of MM1. *)
 CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
 | PrefixEq  : forall m, TracePrefix (finished m) (finished m)
@@ -128,18 +153,20 @@ CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
                                   TracePrefix (notfinished m mm1)
                                               (notfinished m mm2).
 
+Notation "MM2 <<== MM1" := (TracePrefix MM1 MM2) (at level 80).
+
 (* Divide MM1 into MM2 ++ MMO such that MM2 is the longest prefix for which P holds on each element *)
 Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : Trace A) (MMO : option (Trace A)) : Prop :=
   MM1 = MM2^MMO /\ ForallTrace P MM2 /\
-  forall MM2', TracePrefix MM1 MM2'->
+  forall MM2', MM2' <<== MM1 ->
     ForallTrace P MM2' ->
-    TracePrefix MM2 MM2' .
+    MM2' <<== MM2.
 
 (* MM2 is the longest prefix of MM1 for which P holds on each element. *)
 Definition LongestPrefix {A} (P : A -> Prop) (MM1 MM2 : Trace A) : Prop :=
   exists MMO, TraceSpan P MM1 MM2 MMO.
 
-CoInductive IsEnd {A} : Trace A -> A -> Prop :=
+Inductive IsEnd {A} : Trace A -> A -> Prop :=
 | IsEndNow : forall M, IsEnd (finished M) M
 | IsEndLater : forall MM M M', IsEnd MM M -> IsEnd (notfinished M' MM) M
 .
@@ -171,50 +198,67 @@ Definition MTrace := Trace MachineState.
 CoFixpoint traceOf (M : MachineState) : MTrace :=
   match step M with
   | None => finished M
-  | Some M' => notfinished M (traceOf M')
+  | Some (M',_) => notfinished M (traceOf M')
   end.
+
+(* Confidentiality and Integrity Labels *)
+Inductive CLabel :=
+| HC
+| LC.
+
+Inductive ILabel :=
+| HI
+| LI.
+
+Definition Label := (CLabel * ILabel)%type.
+
+Definition Contour := Component -> Label.
 
 Definition integrityOf (l : Label) : ILabel := snd l.
 Definition confidentialityOf (l : Label) : CLabel := fst l.
 
-CoInductive StackIntegrity (C : Contour) : MTrace -> Prop :=
-| SI_finished : forall M, StackIntegrity C (finished M)
+(****************************)
+(***** Eager Integrity ******)
+(****************************)
+
+(* Latex-like definition. *)
+Definition EagerStackIntegrity (C : Contour) (MM: MTrace) : Prop :=
+    forall (k: Component), integrityOf (C k) = HI ->
+      forall (m: MachineState), InTrace m MM -> (head MM) k = m k.
+
+(* CoInductive variant *)
+CoInductive EagerStackIntegrity' (C : Contour) : MTrace -> Prop :=
+| SI_finished : forall M, EagerStackIntegrity' C (finished M)
 | SI_notfinished :
     forall (M0: MachineState) (MM: MTrace),
     (forall (k: Component), integrityOf (C k) = HI ->
                             M0 k = (head MM) k) ->
-    StackIntegrity C MM ->
-    StackIntegrity C (notfinished M0 MM).
+    EagerStackIntegrity' C MM ->
+    EagerStackIntegrity' C (notfinished M0 MM).
 
-
-(* APT: An equivalent alternative definition that more closely matches the latex... *)
-
-Definition StackIntegrity' (C : Contour) (MM: MTrace) : Prop :=
-    forall (k: Component), integrityOf (C k) = HI ->
-      forall (m: MachineState), InTrace m MM -> (head MM) k = m k.
 
 Lemma StackIntegrityEquiv : forall (C:Contour) (MM: MTrace),
-     StackIntegrity' C MM -> StackIntegrity C MM.
+     EagerStackIntegrity C MM -> EagerStackIntegrity' C MM.
 Proof.
   cofix COFIX.
   intros.
   destruct MM. 
   - constructor.
   - constructor.
-    + intros. unfold StackIntegrity' in H.  simpl in H. 
+    + intros. unfold EagerStackIntegrity in H.  simpl in H. 
       apply H; auto. constructor. apply head_InTrace. 
     + apply COFIX. 
-      unfold StackIntegrity' in *.  intros. simpl in H. 
+      unfold EagerStackIntegrity in *.  intros. simpl in H. 
       erewrite <- H; auto. 
       * apply H; auto.  constructor. auto.
       * constructor. apply head_InTrace.
 Qed.
 
 Lemma StackIntegrity'Equiv : forall (C:Contour) (MM: MTrace),
-     StackIntegrity C MM -> StackIntegrity' C MM.
+     EagerStackIntegrity' C MM -> EagerStackIntegrity C MM.
 Proof.
   intros.
-  unfold StackIntegrity'. 
+  unfold EagerStackIntegrity. 
   intros.
   induction H1. 
   - auto.
@@ -224,13 +268,37 @@ Proof.
     +  inversion H.  auto.
 Qed.
 
+(* NB: It doesn't matter whether we calculate this at a
+call instruction (as in a subtrace) or at the first 
+instruction of the callee (as in the top-level trace)
+assuming that registers remain LI,LC at all times. *)
+
 Definition variantOf (M N : MachineState) (C : Contour) :=
   forall (k : Component), confidentialityOf (C k) = LC ->
                           M k = N k.
 
+Definition ObsTrace := Trace Observation.
+
+CoFixpoint ObsTraceOf (MM: MTrace) : ObsTrace :=
+  match MM with
+  | finished m =>
+    finished Tau
+  | notfinished M MM' =>
+    match step M with
+    | Some (M', O) =>
+      notfinished O (ObsTraceOf MM')
+    | None => (* Shouldn't happen in wf MTrace *)
+      notfinished Tau (ObsTraceOf MM') 
+    end
+  end.
+
+(*
+Definition ObsTraceOf (MM : MTrace) : ObsTrace :=
+  mapTrace (fun M => option_map snd (step M)) MM.
+
 Definition Obs (M : MachineState) := M (Reg O).
 
-Definition ObsTrace := Trace Value.
+
 
 (* Stuttering version *)
 Definition ObsTraceOf' (MM : MTrace) := mapTrace Obs MM.
@@ -255,40 +323,241 @@ CoFixpoint ObsTraceOf (MM : MTrace) : Trace Value :=
       else notfinished v (ObsTraceOf (notfinished M' Ms'))
     end
   end.
-
-
-Definition StackConfidentiality (C : Contour) (MM : MTrace) := 
+ *)
+(* Alternate: steps have observations (options or tau) and obstrace concatenates
+   non-taus. *)
+(* LEO: Can't do this. It's not productive. Unless I'm missing something. *)
+(*
+Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) := 
   forall N, variantOf (head MM) N C ->
             let o  := ObsTraceOf MM in
             let o' := ObsTraceOf (traceOf N) in
             TracePrefix o' o. (* \/ TracePrefix o o') *)
+*)
 (* APT: just this direction: it would be bad if variant trace ended sooner than reference, right? *)
 (* LEO: I'm not sure about only one observation being a prefix of the other. What if the variant machine tries halts because of the monitor? Are we termination-sensitive? *)
 (* APT: Ah, right.  I guess we have to be termination-insensitive. *)
 (* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed 
 to fail-stop more often than the reference trace? *)
 
+CoInductive ObsTraceEq : Trace Observation -> Trace Observation -> Prop :=
+| ObsEqTau1 : forall OO OO',
+    ObsTraceEq OO OO' ->
+    ObsTraceEq (notfinished Tau OO) OO'
+| ObsEqTau2 : forall OO OO',
+    ObsTraceEq OO OO' ->
+    ObsTraceEq OO (notfinished Tau OO')
+| ObsEqNow : forall w OO OO',
+    ObsTraceEq OO OO' ->
+    ObsTraceEq (notfinished (Out w) OO) (notfinished (Out w) OO')
+| ObsEqFinishedOut : forall w,
+    ObsTraceEq (finished (Out w)) (finished (Out w))
+| ObsEqFinishedTau : 
+    ObsTraceEq (finished Tau) (finished Tau)
+(* The last thing we need is a way of handling *all-tau* traces.
+   There are a couple of ways of doing that, not sure what will
+   play better in proofs. *)
+| ObsEqAllTau : forall OO,
+     ObsTraceEq OO OO.
+(* APT: Establishing equality between traces seems hard, and this overlaps 
+the previous two cases.  Maybe try:
+   ForallTrace (fun o => o = Tau) OO -> 
+   ForallTrace (fun o => o = Tau) OO' -> 
+   ObsTraceEq OO OO'
+? 
+LEO: That was the other thing I had in mind. I'll see what makes proofs easier.
+(Note that this proposal overlaps with the first two cases, as well as the last one.)
+*)
+
+Definition ObsTracePrefix (OO OO' : Trace Observation) : Prop :=
+  exists OO'', ObsTraceEq OO OO'' /\ OO' <<== OO'' \/ ObsTraceEq OO' OO'' /\ OO' <<== OO.
+
 (* SNA: Proposed confidentiality property for eager policy; actual and variant traces
    have identical observation traces and a final state in the actual trace has a
    corresponding pre-return state in the variant, where all changes are indistinguishable. *)
-Definition isRet (Mc M: MachineState) : Prop :=
-  M (Reg PC) = wplus (Mc (Reg PC)) 4 /\ M (Reg SP) = Mc (Reg SP).
+Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) (isRet : MachineState -> Prop) :=
+  forall N NN Mret,
+               variantOf (head MM) N C ->
+               LongestPrefix (fun M => ~ isRet M) NN (traceOf N) -> 
+               ObsTraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
+               (IsEnd MM Mret -> exists Nret, 
+                 IsEnd NN Nret /\
+                 forall k,
+                 (head MM) k <> Mret k \/ (head NN) k <> Nret k ->
+                 Nret k = Mret k). 
+(* BCP suggested: should we require co-termination of MM and NN? *)
 
-Definition StackConfidentiality' (C : Contour) (MM : MTrace) :=
-  forall N NN Mret, variantOf (head MM) N C ->
-               LongestPrefix (fun M => ~ (isRet (head MM) M)) NN (traceOf N) -> (* LEO: Does this make sense at the toplevel? Won't the toplevel trace be of size 2? *)
-               TraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
-               (IsEnd MM Mret -> (* LEO: Again, toplevel concerns. I like this formalization for all the rest. *)
-                exists Nret, IsEnd NN Nret /\
-                forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k 
-                  -> Nret k = Mret k). (* LEO: Where does indistinguishability come into play here? *)
+CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
+  MTrace -> MTrace -> Prop :=
+| StrongConfStep :
+    forall M MM N NN O,
+      step M = Some (head MM, O) ->
+      step N = Some (head NN, O) ->
+      (forall k, head MM k <> M k \/ head NN k <> N k -> head MM k = head NN k) ->
+      StrongEagerStackConfidentiality R MM NN ->
+      StrongEagerStackConfidentiality R (notfinished M MM) (notfinished N NN)
+| StrongConfEnd :
+    forall M N,
+      R M -> R N ->
+      StrongEagerStackConfidentiality R (finished M) (finished N).
 
-(* TODO: Revive Leo's original version of ObsTrace equivalence and compare with others. *)
+Lemma confStepPreservesVariant :
+  forall C M M' OM N N' ON,
+    step M = Some (M', OM) -> step N = Some (N', ON) ->
+    (forall k, M' k <> M k \/ N' k <> N k -> M' k = N' k) ->
+    variantOf M N C ->
+    variantOf M' N' C.
+Proof.
+  unfold variantOf.
+  intros C M M' OM N N' ON StepM StepN Conf Var k Hk.
+  destruct (WordEqDec (M' k) (M k)) as [eqM | neqM];
+  destruct (WordEqDec (N' k) (N k)) as [eqN | neqN];
+  try solve [ apply Conf; auto ];
+  rewrite eqM; rewrite eqN; auto.
+Qed.
+
+Lemma StrongConfImpliesObsEq :
+  forall C R MM NN,
+    variantOf (head MM) (head NN) C ->
+    StrongEagerStackConfidentiality R MM NN ->
+    ObsTraceEq (ObsTraceOf MM) (ObsTraceOf NN).
+Proof.
+  cofix COFIX.
+  intros C R MM NN Var Conf.
+  inversion Conf; simpl.
+  - match goal with
+    | [ |- ObsTraceEq ?T1 ?T2 ] =>
+      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
+    end.
+    repeat match goal with
+           | [ H : step ?M = _ |- context[step ?M] ] => rewrite H; simpl
+           end.
+    destruct O0.
+    + apply ObsEqNow.
+      eapply COFIX; eauto.
+      eapply confStepPreservesVariant; eauto.
+      assert (head MM = M) as HM
+          by (destruct H3; auto).
+      assert (head NN = N) as HN
+          by (destruct H4; auto).
+      rewrite <- HM.
+      rewrite <- HN.      
+      apply Var.
+    + apply ObsEqTau1.
+      apply ObsEqTau2.
+      eapply COFIX; eauto.
+      eapply confStepPreservesVariant; eauto.
+      assert (head MM = M) as HM
+          by (destruct H3; auto).
+      assert (head NN = N) as HN
+          by (destruct H4; auto).
+      rewrite <- HM.
+      rewrite <- HN.      
+      apply Var.
+  - match goal with
+    | [ |- ObsTraceEq ?T1 ?T2 ] =>
+      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
+    end.
+    apply ObsEqFinishedTau.
+Qed.
+
+Lemma ComponentConfTrans :
+  forall (M0 M1 M2 N0 N1 N2 : MachineState),
+    (forall k : Component, M1 k <> M0 k \/ N1 k <> N0 k -> M1 k = N1 k) ->
+    (forall k : Component, M1 k <> M2 k \/ N1 k <> N2 k -> N2 k = M2 k) ->
+    (forall k : Component, M0 k <> M2 k \/ N0 k <> N2 k -> N2 k = M2 k).
+Proof.
+  intros M0 M1 M2 N0 N1 N2 H01 H12.
+  intros k [HM02 | HN02].
+  - destruct (WordEqDec (M2 k) (M1 k)) as [eqM | neqM].
+    + assert (M1 k <> M0 k) as HM01.
+      { intros Contra.
+        apply HM02.
+        rewrite Contra in eqM.
+        auto.
+      }
+      specialize (H01 k (or_introl HM01)).
+      destruct (WordEqDec (N2 k) (N1 k)) as [eqN | neqN].
+      * rewrite eqM; rewrite eqN; auto.
+      * apply H12; eauto.
+    + eapply H12; eauto.
+  - destruct (WordEqDec (N2 k) (N1 k)) as [eqN | neqN].
+    + assert (N1 k <> N0 k) as HN01.
+      { intros Contra.
+        apply HN02.
+        rewrite Contra in eqN.
+        auto.
+      }
+      specialize (H01 k (or_intror HN01)).
+      destruct (WordEqDec (M2 k) (M1 k)) as [eqM | neqM].
+      * rewrite eqM; rewrite eqN; auto.
+      * apply H12; eauto.
+    + eapply H12; eauto.
+Qed.
+
+Lemma StrongConfImpliesEndConf :
+  forall C R MM NN,
+    variantOf (head MM) (head NN) C ->
+    StrongEagerStackConfidentiality R MM NN ->
+    forall Mret,
+      IsEnd MM Mret ->
+      exists Nret : MachineState,
+        IsEnd NN Nret /\
+        forall k, (head MM) k <> Mret k \/ (head NN) k <> Nret k  ->
+                  Nret k = Mret k. 
+Proof.
+  intros C R MM NN Var Conf Mret HEnd.
+  generalize dependent NN.
+  induction HEnd; subst; eauto; intros NN Var Conf.
+  - inversion Conf; subst; eauto; clear Conf.
+    exists N.
+    split; [ constructor |].
+    simpl; intros k Hk.
+    inversion Hk; exfalso; eauto.
+  - inversion Conf; subst; eauto; clear Conf; simpl in *.
+    destruct (IHHEnd NN0) as [Nret [InNRet HNRet]]; eauto.
+    + eapply confStepPreservesVariant; eauto.
+    + exists Nret.
+      split.
+      * constructor; auto.
+      * eapply ComponentConfTrans; eauto.
+Qed.        
+
+Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MM : MTrace) :
+  (forall (NN : MTrace),
+    variantOf (head MM) (head NN) C ->
+    StrongEagerStackConfidentiality R MM NN) ->
+  EagerStackConfidentiality C MM R.
+Proof.
+  intros Conf.
+  intros N NN Mret HVar [MMO [App [NotR Pref]]].
+  specialize (Conf NN).
+  assert (head NN = N) as HN.
+  { apply TraceAppHead in App.
+    rewrite App.
+    simpl.
+    destruct (step N); simpl; auto.
+    destruct p; simpl; auto.
+  }
+  split.
+  - eapply StrongConfImpliesObsEq; eauto.
+    + rewrite HN; eauto.
+    + eapply Conf.
+      rewrite HN; eauto.
+  - intros HEnd.
+    eapply StrongConfImpliesEndConf; eauto.
+    + rewrite HN; eauto.
+    + eapply Conf.
+      rewrite HN; eauto.
+Qed.
 
 Definition CallMap := Value -> nat -> Prop. 
 
 Definition isCall (cm: CallMap) (M: MachineState) (args: nat) : Prop :=
    cm (M (Reg PC)) args.
+
+Definition isRet (Mc M: MachineState) : Prop :=
+  M (Reg PC) = wplus (Mc (Reg PC)) 4 /\ M (Reg SP) = Mc (Reg SP).
 
 Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
   fun k =>
@@ -305,6 +574,24 @@ Definition updateContour (C: Contour) (args: nat) (M: MachineState) : Contour :=
     | _ => C k
     end.
 
+(* SNA: Since we never actually use the old contour in updateContour,
+   I made this for FindCall, below. (Importantly, if we did use the old contour,
+   newer versions of subtrace would be wrong.) *)
+Definition makeContour (args : nat) (M : MachineState) : Contour :=
+  fun k =>
+    match k with
+    | Mem a => 
+      let a' := wminus (M (Reg SP)) args in
+      if wle a a' then
+        (HC, HI)
+      else if andb (wlt a' a) (wle a (M (Reg SP))) then
+        (LC, LI)                  
+      else (*if wlt (M (Reg SP)) a then*)
+        (HC, LI)
+    | _ => (LC, LI)
+    end.
+
+(*
 CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> Prop :=
   | SubNow : forall C C' MM MM' args,
       (* Current instruction is a call *)
@@ -323,37 +610,351 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
       TraceSpan (fun M => ~ (isRet (head MM) M)) MM MMskip (Some MM')  -> 
       Subtrace cm C MM' C' MM'' ->
       Subtrace cm C MM C' MM''.
+*)
+CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> Prop :=
+  | SubNow : forall C C' MM MM' args,
+      (* Current instruction is a call *)
+      isCall cm (head MM) args ->
+      (* Take the prefix until a return *)
+      LongestPrefix (fun M => ~ (isRet (head MM) M)) MM MM' ->
+      (* Construct the new contour *)
+      updateContour C args (head MM) = C' -> 
+      Subtrace cm C MM C' MM'
+  | SubNotNow: forall C MM C' MM' M,
+      Subtrace cm C MM C' MM' ->
+      Subtrace cm C (notfinished M MM) C' MM'.
 
-(* BCP: Do we really need the Subtrace part here? *)
+(* APT+SNA: rather than two subtraces, with and without suffix, we could just
+   find the starts of calls and then take prefixes/suffixes when we need them.
+   Also we don't really need to update contours so much as just generate them
+   from the state. *)
+CoInductive FindCall (cm: CallMap) : MTrace -> Contour -> MTrace -> Prop :=
+  | FindCallNow : forall C MM MM' args,
+      (* Current instruction is a call *)
+      isCall cm (head MM) args ->
+      (* Construct the contour *)
+      makeContour args (head MM) = C -> 
+      FindCall cm MM C MM'
+  | FindCallLater: forall C MM MM' M,
+      (forall args, ~ isCall cm (head MM) args) -> 
+      FindCall cm MM C MM' ->
+      FindCall cm (notfinished M MM) C MM'.
+
+(*
 CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
   ss : forall (MM : MTrace) (C : Contour),
        (StackIntegrity C MM) ->
        (StackConfidentiality C MM) ->
        (forall MM' C', Subtrace cm C MM C' MM' -> StackSafety cm MM' C') ->
        StackSafety cm MM C.
+*)
+Definition EagerStackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
+  fun (MM : MTrace) (C : Contour) =>
+    (EagerStackIntegrity C MM) /\
+    (EagerStackConfidentiality C MM (fun _ => False)) /\
+    (forall MM' C', Subtrace cm C MM C' MM' ->
+                    EagerStackIntegrity C' MM' /\
+                    EagerStackConfidentiality C' MM' (isRet (head MM'))).
+
+(* TODO: step by step property that implies the rest *)
+
+(***** TESTING Property **********)
+(* Note: This enforces lockstep due to PC equality.
+   TODO: How not to enforce lockstep? *)
+
+Definition EagerIntegrityTest (C : Contour) (M M' : MachineState) : Prop :=
+  forall (k : Component), integrityOf (C k) = HI -> M k = M' k.
+
+Definition EagerConfidentialityTest (isRet : MachineState -> Prop)  
+           (M M' N N' : MachineState) (OM ON : Observation) : Prop :=
+  OM = ON /\ 
+  forall (k : Component),  M k <> M' k \/ N k <> N' k -> M' k = N' k.
+
+(* Elements of the Variant Stack. *)
+Record VSE := {
+  init_machine : MachineState;
+  init_variant : MachineState;
+  curr_variant : MachineState;
+  contour : Contour;
+  retP : MachineState -> Prop
+}.
+
+Definition upd_curr (N' : MachineState) (vse : VSE) : VSE :=
+  {| init_machine := init_machine vse;
+     init_variant := init_variant vse;
+     curr_variant := N';
+     contour := contour vse;
+     retP := retP vse
+  |}.
+
+Inductive VSE_step : VSE -> VSE -> Prop :=
+| vse_step :
+    forall M0 N0 N N' C R,
+    (exists O, step N = Some (N', O)) ->
+    VSE_step (Build_VSE M0 N0 N  C R)
+             (Build_VSE M0 N0 N' C R).
+
+Definition VSEs_step (vses vses' : list VSE) : Prop :=
+  Forall2 VSE_step vses vses'.
+
+Inductive Last {A : Type} : A -> list A -> Prop :=
+| LastSing : forall x, Last x [x]
+| LastTail : forall x h t, Last x t -> Last x (h::t).
+
+Lemma Last_unique {A : Type} (x x' : A) (l : list A) :
+  Last x l -> Last x' l -> x = x'.
+Proof.  
+  intro H; induction H; intro HLast; inversion HLast; subst; clear HLast; eauto;
+    match goal with
+    | [ H : Last _ [] |- _ ] => inversion H
+    end.
+Qed.
+    
+Lemma VSE_step_preserves_in :
+  forall vse vses vses' N' O,
+  In vse vses ->
+  Forall2 VSE_step vses vses' ->
+  step (curr_variant vse) = Some (N',O) ->
+  In (upd_curr N' vse) vses'.
+Proof.
+  intros vse vses vses' N' O' HIn HForall HStep.
+  induction HForall.
+  - inversion HIn.
+  - inversion H; subst; eauto; clear H.
+    inversion HIn; subst; eauto.
+    + destruct H0 as [ Obs HObs ].
+      simpl in *.
+      rewrite HObs in HStep.
+      inversion HStep; subst; clear HStep.
+      left; auto.
+    + right. apply IHHForall; auto.
+Qed.
+
+Lemma VSE_step_preserves_last :
+  forall vse vses vses' N' O,
+  Last vse vses ->
+  Forall2 VSE_step vses vses' ->
+  step (curr_variant vse) = Some (N',O) ->
+  Last (upd_curr N' vse) vses'.
+Proof.
+  intros vse vses vses' N' O' HIn HForall HStep.
+  induction HForall.
+  - inversion HIn.
+  - inversion H; subst; eauto; clear H.
+    inversion HIn; subst; eauto.
+    + destruct H0 as [ Obs HObs ].
+      simpl in *.
+      rewrite HObs in HStep.
+      inversion HStep; subst; clear HStep.
+      inversion HForall; subst; clear HForall.
+      left; auto.
+    + right. apply IHHForall; auto.
+Qed.
+
+Lemma Last_implies_In {A : Type} (x : A) (l : list A) :
+  Last x l -> In x l.
+Proof.  
+  intros Last; induction Last.
+  - left; auto.
+  - right; auto.
+Qed.
+
+Definition VarStack := list VSE.
+
+(* Well-formedness conditions on the stack with respect to a current MS. *)
+Definition WellFormedVS (M : MachineState) (vs : VarStack) : Prop :=
+  (* The curr_variant field is a variant of the current state. *)
+  Forall (fun vse => variantOf M (curr_variant vse) (contour vse)) vs /\
+  (* The stack is nonempty and the last retP is const False *)
+  (exists vse, Last vse vs /\ retP vse = fun _ => False) /\
+  (* The current state is in the trace of *every* init machine. *)
+  (Forall (fun vse => InTrace M (traceOf (init_machine vse))) vs) /\
+  (* The variant state is in the trace of its own init variant. *) 
+  (Forall (fun vse => InTrace (curr_variant vse) (traceOf (init_variant vse))) vs).
+
+CoInductive EagerStackSafetyTest (cm : CallMap) : MTrace -> VarStack -> Prop :=
+| EagerTestHalt :
+    forall M vs, 
+      step M = None ->
+      WellFormedVS M vs ->
+      (forall vse, In vse vs -> step (curr_variant vse) = None) ->
+      EagerStackSafetyTest cm (finished M) vs
+| EagerTestStep :
+    forall M MM vs vs' M' OM,
+      (* Not a call or a return *)
+      (forall args, ~ isCall cm M args) ->
+      (forall vse, In vse vs -> ~ (retP vse M)) ->
+      (* Take a step. *)
+      step M = Some (M', OM) ->
+      WellFormedVS M vs ->      
+      (* Enforce confidentiality for each variant. *)
+      (forall vse,
+          In vse vs ->
+          exists N' ON, step (curr_variant vse) = Some (N', ON) /\
+          EagerConfidentialityTest (retP vse) M M' (curr_variant vse) N' OM ON) ->
+      (* Enforce integrity for main trace, but for each possible level in NCRs? *)
+      (forall vse,
+          In vse vs ->
+          EagerIntegrityTest (contour vse) M M') ->
+      (* Step all variants and just recurse *)
+      VSEs_step vs vs' ->
+      head MM = M' ->
+      EagerStackSafetyTest cm MM vs' ->
+      (* Conclude for current. *)
+      EagerStackSafetyTest cm (notfinished M MM) vs
+| EagerTestCall :
+    forall args M MM vs vs' M' OM C C',
+      (* Is a call *)
+      isCall cm M args ->
+      (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)  
+      (* Take a step. *)
+      step M = Some (M', OM) ->
+      WellFormedVS M vs ->      
+      (* Enforce confidentiality for each variant. *)
+      (forall vse,
+          In vse vs ->
+          exists N' ON, step (curr_variant vse) = Some (N', ON) /\
+          EagerConfidentialityTest (retP vse) M M' (curr_variant vse) N' OM ON) ->
+      (* Enforce integrity for main trace, but for each possible level in NCRs? *)
+      (forall vse,
+          In vse vs ->
+          EagerIntegrityTest (contour vse) M M') ->
+      (* Step all variants. *)
+      VSEs_step vs vs' ->
+      head MM = M' ->
+      (* Calculate the new contour based on the top of the variant stack. *)
+      (exists vse_top vs_rest,
+          vse_top :: vs_rest = vs /\
+          updateContour (contour vse_top) args (init_machine vse_top) = C') ->
+      (* Recurse with every variant at the new contour at the top. *)
+      (forall Mvar, variantOf M Mvar C ->
+                    EagerStackSafetyTest cm MM
+                                         ({| init_machine := M
+                                           ; init_variant := Mvar
+                                           ; curr_variant := Mvar
+                                           ; contour := C'
+                                           ; retP := isRet M
+                                          |} :: vs')) ->
+      (* Conclude for current. *)
+      EagerStackSafetyTest cm (notfinished M MM) vs
+| EagerTestRet :
+    forall M MM vs vs' M' OM,
+      (* Is a return *)
+      (* isCall cm M args -> *)
+      (exists vse, In vse vs /\ retP vse M) ->
+        (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)  
+      (* Take a step. *)
+      step M = Some (M', OM) ->
+      WellFormedVS M vs ->      
+      (* Enforce confidentiality for each variant. *)
+      (forall vse,
+          In vse vs ->
+          exists N' ON, step (curr_variant vse) = Some (N', ON) /\
+          EagerConfidentialityTest (retP vse) M M' (curr_variant vse) N' OM ON) ->
+      (* Enforce integrity for main trace, but for each possible level in NCRs? *)
+      (forall vse,
+          In vse vs ->
+          EagerIntegrityTest (contour vse) M M') ->
+      (* Step all variants. *)
+      VSEs_step vs vs' ->
+      head MM = M' ->
+      (* Recurse but take of the top of the stack. *)
+      EagerStackSafetyTest cm MM (tl vs') ->
+      (* Conclude for current. *)
+      EagerStackSafetyTest cm (notfinished M MM) vs.
+
+Definition EagerStackSafetyTest' cm C MM :=
+  forall N, variantOf (head MM) N C ->
+  EagerStackSafetyTest cm MM [Build_VSE (head MM) N N C (fun _ => False)].
+
+Ltac in_reasoning := 
+  repeat match goal with
+         | [ H : In _ [] |- _ ] => inversion H
+         | [ H : In _ [_] |- _ ] => inversion H; subst; clear H
+         | [ H : (_,_,_,_) = (_,_,_,_) |- _ ] => inversion H; subst; clear H
+         end.
+
+Ltac progress_integrity :=
+  repeat match goal with
+         | [ H : WellFormedVS ?M ?VS |- _ ] =>
+           destruct H as [HVar [[vse_last' [HLast' HRet]] [HMTrace HNTrace]]]
+         | [ H1 : Last ?X ?L, H2 : Last ?Y ?L |- _ ] =>
+           assert (Y = X) by (eapply Last_unique; eauto); subst; clear H2
+         end.
+
+Theorem TestImpliesIntegrityToplevel :
+  forall cm C MM vs,
+    (exists vse, Last vse vs /\ contour vse = C) ->
+  EagerStackSafetyTest cm MM vs -> EagerStackIntegrity' C MM.
+Proof.
+  cofix COFIX.
+  intros cm C MM vs [vse_last [HLast HC]] Safety.
+  inversion Safety; subst.
+  - apply SI_finished. 
+  - apply SI_notfinished; progress_integrity.
+    + intros k Hk.
+      unfold EagerIntegrityTest in *.
+      eauto using Last_implies_In.
+    + apply (COFIX cm (contour vse_last) MM0 vs'); auto.
+      unfold VSEs_step in *.
+      destruct (H3 vse_last (Last_implies_In vse_last vs HLast))
+        as [N' [ON [HN' HConf]]].
+      exists (upd_curr N' vse_last); split; auto.
+      eapply VSE_step_preserves_last; eauto.      
+  - apply SI_notfinished; progress_integrity.
+    + intros k Hk.
+      unfold EagerIntegrityTest in *.
+      eauto using Last_implies_In.
+    + apply (COFIX cm (contour vse_last) MM0 ((Build_VSE M M M C' (isRet M))::vs')).
+      * unfold VSEs_step in *.
+        destruct (H2 vse_last)
+          as [N' [ON [HN' HConf]]]; eauto using Last_implies_In.
+        exists (upd_curr N' vse_last); split; auto.
+        right; eauto using VSE_step_preserves_last.
+      * apply H7.
+        unfold variantOf.
+        auto.
+  - apply SI_notfinished; progress_integrity.
+    + intros k Hk.
+      unfold EagerIntegrityTest in *.
+      eauto using Last_implies_In.
+    + apply (COFIX cm (contour vse_last) MM0 (tl vs')); auto.
+      unfold VSEs_step in *.
+      destruct (H2 vse_last)
+        as [N' [ON [HN' HConf]]]; eauto using Last_implies_In.
+      destruct vs.
+      * inversion H4; subst.
+        inversion HLast.
+      * simpl in *.
+        destruct vs'; inversion H4; subst; clear H4; simpl in *.
+        inversion HLast; subst; clear HLast; eauto using VSE_step_preserves_last.
+        { destruct H as [vse [[? | Contra] Contra']].
+          + subst.
+            rewrite HRet in Contra'; exfalso; eauto.
+          + inversion Contra.
+        } 
+Qed.          
+
+(*
+Theorem TestImpliesConfidentialityToplevel :
+  forall cm C MM MNCRs,
+  (exists M N, Last (M,N,C,fun _ => False) MNCRs) ->
+  EagerStackSafetyTest cm MM MNCRs ->
+  forall N, variantOf (head MM) N C ->
+            StrongEagerStackConfidentiality (fun _ => False) MM (traceOf N).
+Proof.
+
+  cofix COFIX.
+  intros cm C MM MNCRs [M0 [N0 HLast]] Safety N Var.
+  inversion Safety; subst; clear Safety.
+  - remember HLast as HIn; clear HeqHIn; apply Last_implies_In in HIn.
+    simpl in *.
+    specialize (H0 M0 C N (fun _ => False) HIn).
+    rewrite (idTrace_eq (traceOf N)); simpl.
+    rewrite 
+ *)
 
 (* ********* SNA Beware : Lazy Properties ********* *)
-
-(* this variation of subtrace also gives us the suffix of the primary trace
-   after the subtrace, or None if the subtrace is itself a suffix *)
-CoInductive SubtraceWithSuffix (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> option MTrace -> Prop :=
-  | SubSufNow : forall C C' MM MM' MMO args,
-      (* Current instruction is a call *)
-      isCall cm (head MM) args ->
-      (* Take the prefix until a return and maybe a suffix *)
-      TraceSpan (fun M => ~ (isRet (head MM) M)) MM MM' MMO ->
-      (* Construct the new contour *)
-      updateContour C args (head MM) = C' -> 
-      SubtraceWithSuffix cm C MM C' MM' MMO
-  | SubSufNotNow: forall C C' MM MM' MMO M,
-      (forall args, ~ isCall cm (head MM) args) -> 
-      SubtraceWithSuffix cm C MM C' MM' MMO ->
-      SubtraceWithSuffix cm C (notfinished M MM) C' MM' MMO
-  | SubSufSkipCall : forall C C' MM MMskip MM' MM'' MMO args,
-      isCall cm (head MM) args -> 
-      TraceSpan (fun M => ~ (isRet (head MM) M)) MM MMskip (Some MM')  -> 
-      SubtraceWithSuffix cm C MM' C' MM'' MMO ->
-      SubtraceWithSuffix cm C MM C' MM'' MMO.
 
 (* Since eager property protects everything that is HI,
    an integrity rollback restores all HI components. *)
@@ -366,53 +967,35 @@ Definition RollbackInt (C: Contour) (Mstart Mend : MachineState) : MachineState 
 (* Observable properties take a contour and a trace, with an optional additional trace.
    The contour C represents the security levels for trace MM, and MMOouter is the
    execution following after MM when C no longer applies. *)
-CoInductive ObservableIntegrity (cm:CallMap) : Contour -> MTrace -> option MTrace -> Prop :=
-  | safetrace : forall C MM MMOouter,
-                  (* A subtrace MMsub represents a call whose contour is Csub, and MMsufO
-                     is what happens after MMsub's return (if anything), and before MMOouter. *)
-                  (forall MMsub MMsuffO MMsuf MMsuf' Csub,
-                    SubtraceWithSuffix cm C MM Csub MMsub MMsuffO ->
-                    (MMsuffO = Some MMsuf ->
-                      MMsuf' = traceOf (RollbackInt Csub (head MMsub) (head MMsuf)) ->
-                      (* The idealized trace reflects the behavior of the trace after rolling back
-                         illegal changes that took place in MMsub. The actual trace that followed
-                         MMsub should prefix it, because an error might stop the actual trace prematurely. *)
-                      let actual := MMsuf ^ MMOouter in
-                      let ideal := MMsuf' in
-                      TracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)) -> 
-                    (* Inside each subtrace, the property should also hold for Csub. *)
-                    ObservableIntegrity cm Csub MMsub (MMsuffO ?^ MMOouter)) ->
-                  ObservableIntegrity cm C MM MMOouter.
+Definition ObservableIntegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) : Prop :=
+ match MMsuffO with
+ | Some actual =>
+   let ideal := traceOf (RollbackInt C (head MM) (head actual)) in
+   ObsTracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)
+(* or ObsTraceEq ?? *)
+ | None => True
+ end.
 
 (* A confidentiality rollback aims to undo a variation, so it restores the values of the
    original, unvaried state. But if the varied values were overwritten after they were varied,
    the changes should be kept. Otherwise we are building in some integrity. *)
-Definition RollbackConf (C: Contour) (Mstart Nstart Nend : MachineState) : MachineState :=
-  fun k => match confidentialityOf (C k) with
-           | HC => if weq (Nstart k) (Nend k) then Mstart k else Nend k
-           | LC => Nend k
-           end.
+Definition RollbackConf (Mstart Nstart Nend : MachineState) : MachineState :=
+  fun k => if weq (Nstart k) (Nend k) && negb (weq (Mstart k) (Nstart k))
+           then Mstart k
+           else Nend k.
 
-CoInductive ObservableConfidentiality (cm : CallMap) : Contour -> MTrace -> option MTrace -> Prop :=
-| varytrace' : forall C MM MMOouter,
-                  (forall MMsub MMsuffO NN NNO Csub N,
-                    SubtraceWithSuffix cm C MM Csub MMsub MMsuffO ->
-                    (* The state N agrees with the start of MMsub on
-                       components that are low confidentiality in Csub,
-                       and NN is the trace from N until a return *)
-                    variantOf (head MMsub) N Csub ->
-                    TraceSpan (fun M => ~ (isRet (head MM) M)) (traceOf N) NN NNO ->
-                    let actual := MMsub ^ MMsuffO in
-                    (* The full variant trace behaves as NN until return, then a confidentiality
-                       rollback from the return onward, and its behavior must match the actual trace. *)
-                    let variant := NN ^ (option_map (fun NNsuff => traceOf (RollbackConf C (head MMsub) N (head NNsuff))) NNO) in
-                    TraceEq (ObsTraceOf variant) (ObsTraceOf actual) ->
-                    ObservableConfidentiality cm Csub MMsub (MMsuffO ?^ MMOouter)) ->
-                  ObservableConfidentiality cm C MM MMOouter.
+Definition ObservableConfidentiality (C:Contour) (MM:MTrace) (isRet:MachineState -> Prop) : Prop :=
+  forall N NN NNO, variantOf (head MM) N C ->
+                   TraceSpan (fun N' => ~ (isRet N')) (traceOf N) NN NNO ->
+                   let variant := NN ^ (option_map (fun NN => traceOf (RollbackConf (head MM) N (head NN))) NNO) in
+                   ObsTraceEq (ObsTraceOf variant) (ObsTraceOf MM).
 
-Definition LazySafety (cm:CallMap) (C:Contour) (MM:MTrace) : Prop :=
-       (ObservableIntegrity cm C MM None) /\ 
-       (ObservableConfidentiality cm C MM None).
+Definition LazyStackSafety (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
+  ObservableConfidentiality C MM (fun _ => False) /\
+  (forall MM' MM'' C' MMsuffO, FindCall cm MM C' MM' ->
+                          TraceSpan (fun M => ~isRet (head MM') M) MM' MM'' MMsuffO ->
+                          ObservableIntegrity C' MM'' MMsuffO /\
+                          ObservableConfidentiality C' MM' (isRet (head MM'))).
 
 (* More conjectural stuff follows. *)
 
@@ -420,56 +1003,34 @@ Definition LazySafety (cm:CallMap) (C:Contour) (MM:MTrace) : Prop :=
    rollback would. If a component is HI, it should always be rolled back; if HC but LI, it
    should be rolled back only if it kept the value of its variant. *)
 Definition RollbackCI (C: Contour) (Mstart Nstart Nend : MachineState) : MachineState :=
-  fun k => match C k with
-           | (_,HI) => Mstart k
-           | (HC,LI) => if weq (Nstart k) (Nend k) then Mstart k else Nend k
-           | _ => Nend k
-           end.
+  RollbackInt C Mstart (RollbackConf Mstart Nstart Nend).
 
-CoInductive ObservableConfidentegrity (cm : CallMap) : Contour -> MTrace -> option MTrace -> Prop :=
-| varysafetrace : forall C MM MMouterO,
-                    (forall MMsub MMsuffO NN NNO Csub N,
-                      SubtraceWithSuffix cm C MM Csub MMsub MMsuffO ->
-                      variantOf (head MMsub) N Csub ->
-                      TraceSpan (fun M => ~ (isRet (head MM) M)) (traceOf N) NN NNO ->
-                      let actual := MMsub ^ MMsuffO in
-                      (* This variant rolls back integrity and confidentiality together, so it is also
-                         An idealized trace as in the integrity property. Because integrity is involved,
-                         the actual trace should be a prefix of the idealized/variant. *)
-                      let variant := NN ^ (option_map (fun NNsuff => traceOf (RollbackCI C (head MMsub) N (head NNsuff))) NNO) in
-                      TracePrefix (ObsTraceOf variant) (ObsTraceOf actual) ->
-                    ObservableConfidentegrity cm Csub MMsub (MMsuffO ?^ MMouterO)) ->
-                  ObservableConfidentegrity cm C MM MMouterO.
+Definition ObservableConfidentegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) (isRet:MachineState -> Prop) : Prop :=
+  forall N NN NNO,
+    variantOf (head MM) N C ->
+    TraceSpan (fun N' => ~ isRet N') (traceOf N) NN NNO ->
+    let actual := MM ^ MMsuffO in
+    let ideal := NN ^ (option_map (fun NN' => traceOf (RollbackCI C (head MM) N (head NN'))) NNO) in
+    ObsTracePrefix (ObsTraceOf ideal) (ObsTraceOf actual).
+(* or ObsTraceEq?? *)
 
-Definition LazySafety' (cm: CallMap) (C: Contour) (MM: MTrace) : Prop :=
-        ObservableConfidentegrity cm C MM None.
+Definition LazyStackSafety' (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
+  ObservableConfidentegrity C MM None (fun _ => False) /\
+  (forall MM' MM'' C' MMsuffO, FindCall cm MM C MM' ->
+                          TraceSpan (fun M => ~isRet (head MM') M) MM' MM'' MMsuffO ->
+                          ObservableConfidentegrity C' MM'' MMsuffO (isRet (head MM''))).
 
 Conjecture EagerSafetyImpliesLazy :
   forall cm C MM,
-  StackSafety cm MM C -> LazySafety cm C MM.
+  EagerStackSafety cm MM C -> LazyStackSafety cm C MM.
 
-Conjecture ConfidentegrityImpliesConfidentiality :
-  forall cm C MM MMO,
-    ObservableConfidentegrity cm C MM MMO -> ObservableConfidentiality cm C MM MMO.
-
-Conjecture ConfidentegrityImpliesIntegrity :
-  forall cm C MM MMO,
-    ObservableConfidentegrity cm C MM MMO -> ObservableIntegrity cm C MM MMO.
-
-Theorem Lazy'ImpliesLazy :
+Conjecture Lazy'ImpliesLazy :
   forall cm C MM,
-  LazySafety' cm C MM -> LazySafety cm C MM.
-Proof.
-  intros. unfold LazySafety' in H. unfold LazySafety;split;destruct MM.
-  - apply (ConfidentegrityImpliesIntegrity cm C (finished m) None); auto.
-  - apply (ConfidentegrityImpliesIntegrity cm C (notfinished m MM) None); auto.
-  - apply (ConfidentegrityImpliesConfidentiality cm C (finished m) None); auto.
-  - apply (ConfidentegrityImpliesConfidentiality cm C (notfinished m MM) None); auto.
-Qed.
+  LazyStackSafety' cm C MM -> LazyStackSafety cm C MM.
 
 Conjecture LazyNotImpliesLazy' :
   exists cm C MM,
-  LazySafety cm C MM /\ ~ LazySafety' cm C MM.
+  LazyStackSafety cm C MM /\ ~ LazyStackSafety' cm C MM.
 (* The counterexample:
 
 main: mov #0 r1
@@ -565,8 +1126,8 @@ CoInductive TaggedStep (M: MachineState) (T : TagState) : TagState -> Prop :=
 CoInductive TaggedRun : TagState -> MTrace -> Prop :=
 | RunFinished : forall T M,
     TaggedRun T (finished M)
-| RunNotfinished : forall T T' M MM,
-    step M = Some (head MM) ->
+| RunNotfinished : forall T T' M MM O,
+    step M = Some (head MM,O) ->
     TaggedStep M T T' ->
     TaggedRun T' MM ->
     TaggedRun T (notfinished M MM).
@@ -584,7 +1145,7 @@ CoInductive EagerPolicyTrace : CallMap -> Contour -> MTrace -> Prop :=
 Conjecture EagerPolicy_StackSafety :
   forall cm MM C,
     EagerPolicyTrace cm C MM ->
-    StackSafety cm MM C.
+    EagerStackSafety cm MM C.
 
 End EagerPolicy.
 
@@ -630,8 +1191,12 @@ Variable map : forall {A B C : Type} (m : A -> B) (f : B -> C), (A -> C).
 Variable eqMap : forall {A B : Type} (m1 m2 : A -> B) (def : B -> Prop), Prop.
 Variable mapFilter :
   forall {A B : Type} (m : A -> B) (f : A -> B -> Prop), (A -> B).
-Definition eqMapFilter {A B} (m1 m2 : A -> B) f d :=   (* APT: Coq 8.8.2 - seems to ignore {} on there  Variables. *)
-  @eqMap _ _ (@mapFilter _ _ m1 f) (@mapFilter _ _ m2 f) d.
+
+Arguments eqMap {_ _} _ _ _.
+Arguments mapFilter {_ _} _ _ _.
+
+Definition eqMapFilter {A B} (m1 m2 : A -> B) f d :=   
+  eqMap (mapFilter m1 f) (mapFilter m2 f) d.
 (* More helpers for memories. *)
 Variable memLayout : TagState -> (Addr -> DescTag).
 Variable memCallers : TagState -> list Addr.
