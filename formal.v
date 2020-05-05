@@ -395,17 +395,6 @@ CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
       R M -> R N ->
       StrongEagerStackConfidentiality R (finished M) (finished N).
 
-Definition frob {A} (MM : Trace A) : Trace A :=
-  match MM with
-  | finished a => finished a
-  | notfinished a MM' => notfinished a MM'
-  end.
-
-Lemma frob_eq : forall {A} (MM : Trace A), MM = frob MM.
-Proof.
-  destruct MM; auto.
-Qed.
-
 Lemma confStepPreservesVariant :
   forall C M M' OM N N' ON,
     step M = Some (M', OM) -> step N = Some (N', ON) ->
@@ -432,7 +421,7 @@ Proof.
   inversion Conf; simpl.
   - match goal with
     | [ |- ObsTraceEq ?T1 ?T2 ] =>
-      rewrite (frob_eq T1); rewrite (frob_eq T2); simpl
+      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
     repeat match goal with
            | [ H : step ?M = _ |- context[step ?M] ] => rewrite H; simpl
@@ -461,7 +450,7 @@ Proof.
       apply Var.
   - match goal with
     | [ |- ObsTraceEq ?T1 ?T2 ] =>
-      rewrite (frob_eq T1); rewrite (frob_eq T2); simpl
+      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
     apply ObsEqFinishedTau.
 Qed.
@@ -955,7 +944,7 @@ Proof.
   - remember HLast as HIn; clear HeqHIn; apply Last_implies_In in HIn.
     simpl in *.
     specialize (H0 M0 C N (fun _ => False) HIn).
-    rewrite (frob_eq (traceOf N)); simpl.
+    rewrite (idTrace_eq (traceOf N)); simpl.
     rewrite 
  *)
 
