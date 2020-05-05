@@ -1,6 +1,7 @@
 Require Import List.
 Import ListNotations.
 Require Import Bool.
+Require Import Coq.Logic.FunctionalExtensionality.
 
 Section foo.
 
@@ -24,7 +25,6 @@ Definition Addr : Type := Word.
 Variable Register : Type.
 Variable PC : Register.
 Variable SP : Register.
-Variable O : Register. (* "output register" *)
 
 Inductive Component:=
 | Mem (a:Addr)
@@ -46,7 +46,6 @@ Variable step : MachineState -> option (MachineState * Observation).
 (* APT: Why is there an option here? Machines run forever... *)
 (* APT: Ah, is this because a tagged machine can fail-stop?
 But don't we really want top-level properties to be phrased in terms of a non-halting machine? *)
-
 
 (*******************)
 (***** Traces ******)
@@ -158,7 +157,7 @@ Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : Trace A) (MMO : option (Trac
 Definition LongestPrefix {A} (P : A -> Prop) (MM1 MM2 : Trace A) : Prop :=
   exists MMO, TraceSpan P MM1 MM2 MMO.
 
-CoInductive IsEnd {A} : Trace A -> A -> Prop :=
+Inductive IsEnd {A} : Trace A -> A -> Prop :=
 | IsEndNow : forall M, IsEnd (finished M) M
 | IsEndLater : forall MM M M', IsEnd MM M -> IsEnd (notfinished M' MM) M
 .
@@ -258,7 +257,7 @@ Proof.
   - simpl. inversion H. subst. rewrite <- IHInTrace.
     +  apply H4; auto. 
     +  inversion H.  auto.
-Qed.
+Qed. 
 
 (* NB: It doesn't matter whether we calculate this at a
 call instruction (as in a subtrace) or at the first 
@@ -277,8 +276,8 @@ CoFixpoint ObsTraceOf (MM: MTrace) : ObsTrace :=
     finished Tau
   | notfinished M MM' =>
     match step M with
-    | Some (M', O) =>
-      notfinished O (ObsTraceOf MM')
+    | Some (M', O0) =>
+      notfinished O0 (ObsTraceOf MM')
     | None => (* Shouldn't happen in wf MTrace *)
       notfinished Tau (ObsTraceOf MM') 
     end
@@ -379,6 +378,18 @@ Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) (isRet : Machin
                  Nret k = Mret k). 
 (* BCP suggested: should we require co-termination of MM and NN? *)
 
+Definition EagerStackConfidentiality' (C : Contour) (MM : MTrace) (isRet : MachineState -> Prop) :=
+  forall N NN,
+    variantOf (head MM) N C ->
+    LongestPrefix (fun M => ~ isRet M) NN (traceOf N) -> 
+    ObsTraceEq (ObsTraceOf MM) (ObsTraceOf NN) /\
+    (exists Mret, IsEnd MM Mret <-> exists Nret, IsEnd NN Nret) /\
+    (forall Mret Nret k,
+        IsEnd MM Mret ->
+        IsEnd NN Nret ->
+        (head MM) k <> Mret k \/ (head NN) k <> Nret k ->
+        Nret k = Mret k).
+
 CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
   MTrace -> MTrace -> Prop :=
 | StrongConfStep :
@@ -435,7 +446,7 @@ Proof.
     repeat match goal with
            | [ H : step ?M = _ |- context[step ?M] ] => rewrite H; simpl
            end.
-    destruct O0.
+    destruct O.
     + apply ObsEqNow.
       eapply COFIX; eauto.
       eapply confStepPreservesVariant; eauto.
@@ -908,8 +919,8 @@ Definition ObservableIntegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTrace) :
  match MMsuffO with
  | Some actual =>
    let ideal := traceOf (RollbackInt C (head MM) (head actual)) in
-   ObsTracePrefix (ObsTraceOf ideal) (ObsTraceOf actual)
-(* or ObsTraceEq ?? *)
+   ObsTraceEq (ObsTraceOf ideal) (ObsTraceOf actual)
+(* ObsTracePrefix or ObsTraceEq ?? *)
  | None => True
  end.
 
@@ -951,15 +962,114 @@ Definition ObservableConfidentegrity (C:Contour) (MM:MTrace) (MMsuffO:option MTr
     ObsTracePrefix (ObsTraceOf ideal) (ObsTraceOf actual).
 (* or ObsTraceEq?? *)
 
+Definition RealTrace (MM:MTrace) : Prop :=
+  MM = traceOf (head MM).
+
 Definition LazyStackSafety' (cm : CallMap) (C:Contour) (MM:MTrace) : Prop :=
   ObservableConfidentegrity C MM None (fun _ => False) /\
   (forall MM' MM'' C' MMsuffO, FindCall cm MM C MM' ->
                           TraceSpan (fun M => ~isRet (head MM') M) MM' MM'' MMsuffO ->
                           ObservableConfidentegrity C' MM'' MMsuffO (isRet (head MM''))).
 
-Conjecture EagerSafetyImpliesLazy :
+Axiom SpanEndsIfSuffix :
+  forall A (f : A -> Prop) (MM MM' MM'' : Trace A) (MMO : option (Trace A)),
+    TraceSpan f MM MM' MMO ->
+    MMO = Some MM'' ->
+    exists M, IsEnd MM' M.
+
+Axiom SpanSuffixIsReal :
+  forall f MM MM' MMsuff,
+    RealTrace MM ->
+    TraceSpan f MM MM' (Some MMsuff) ->
+    RealTrace MMsuff.
+    
+Axiom StepOverSpan :
+  forall f (MM MM' MMsuff : MTrace) M,
+  RealTrace MM ->
+  TraceSpan f MM MM' (Some MMsuff) ->
+  IsEnd MM' M ->
+  exists O, step M = Some (head MMsuff,O).
+
+Lemma FHoldsOnSpanContents :
+  forall A (f:A->Prop) MM MM' MMO,
+    TraceSpan f MM MM' MMO ->
+    ForallTrace f MM'.
+Proof.
+  intros. destruct H. destruct H0. auto.
+Qed.
+  
+Lemma IsEndInTrace :
+  forall A (M:A) (MM:Trace A),
+    IsEnd MM M -> InTrace M MM.
+Proof.
+  intros. induction H.
+  - constructor.
+  - constructor. auto.
+Qed.
+
+Lemma ForallInTrace :
+  forall A (f:A->Prop) MM M,
+    InTrace M MM ->
+    ForallTrace f MM ->
+    f M.
+Proof.
+  intros. induction H; inversion H0; auto.
+Qed.
+  
+Axiom ObsTraceEq_refl :
+  forall OO,
+    ObsTraceEq OO OO.
+
+Lemma EagerImpliesLazyInt :
+  forall f C args MM MM' MMO,
+    RealTrace MM ->
+    C = makeContour args (head MM) ->
+    TraceSpan f MM MM' MMO ->
+    (forall M M' a O, f M -> step M = Some (M',O) -> M' (Mem a) = M (Mem a)) ->
+    EagerStackIntegrity C MM' -> ObservableIntegrity C MM' MMO.
+Proof.
+  unfold EagerStackIntegrity. unfold ObservableIntegrity. intros.
+  destruct MMO as [MMsuff |] eqn:E; auto. rewrite <- E in H1.
+  apply (SpanEndsIfSuffix MachineState f MM MM' MMsuff MMO) in H1 as HEnd; auto. destruct HEnd as [M].
+  assert (forall k, integrityOf (C k) = HI -> (head MM') k = M k).
+  { intros; destruct k; simpl.
+    - apply H3; try apply IsEndInTrace; auto.
+    - rewrite H0 in H5. simpl in H5. discriminate. }
+  assert (exists O, step M = Some (head MMsuff,O)).
+  { apply (StepOverSpan f MM MM');auto. rewrite E in H1. auto. }
+  destruct H6 as [O H6].
+  assert (forall k, integrityOf (C k) = HI -> (head MMsuff) k = M k).
+  { intros; destruct k; simpl.
+    - apply (H2 M (head MMsuff) a O);auto.
+      apply (ForallInTrace MachineState f MM' M).
+      + apply IsEndInTrace;auto.
+      + apply (FHoldsOnSpanContents MachineState f MM MM' MMO); auto.
+    - rewrite H0 in H7. simpl in H7. discriminate. }
+  assert (RollbackInt C (head MM') (head MMsuff) = head MMsuff).
+  { unfold RollbackInt. extensionality k. destruct (integrityOf (C k)) eqn:E2.
+    + apply (H7 k) in E2 as Hright. apply (H5 k) in E2 as Hleft.
+      rewrite Hright. rewrite Hleft. auto.
+    + auto. }
+  rewrite H8. apply (SpanSuffixIsReal f MM MM' MMsuff) in H; try rewrite <- E; auto.
+  unfold RealTrace in H. rewrite <- H. apply ObsTraceEq_refl.
+Qed.
+  
+Lemma EagerImpliesLazyConf :
+  forall C MM MMO isRet,
+    EagerStackConfidentiality C MM isRet -> ObservableConfidentiality C (MM^MMO) isRet.
+Proof.
+  unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros.
+  apply (H N NN Mret) in H0.
+  - destruct H0. 
+  - 
+                                                          
+Theorem EagerSafetyImpliesLazy :
   forall cm C MM,
-  EagerStackSafety cm MM C -> LazyStackSafety cm C MM.
+    EagerStackSafety cm MM C -> LazyStackSafety cm C MM.
+Proof.
+  intros. unfold EagerStackSafety in H. unfold LazyStackSafety. split.
+  - 
+  -
 
 Conjecture Lazy'ImpliesLazy :
   forall cm C MM,
