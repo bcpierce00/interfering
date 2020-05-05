@@ -147,12 +147,14 @@ CoInductive TracePrefix {A} : Trace A -> Trace A -> Prop :=
                                   TracePrefix (notfinished m mm1)
                                               (notfinished m mm2).
 
+Notation "MM2 <<== MM1" := (TracePrefix MM1 MM2) (at level 80).
+
 (* Divide MM1 into MM2 ++ MMO such that MM2 is the longest prefix for which P holds on each element *)
 Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : Trace A) (MMO : option (Trace A)) : Prop :=
   MM1 = MM2^MMO /\ ForallTrace P MM2 /\
-  forall MM2', TracePrefix MM1 MM2'->
+  forall MM2', MM2' <<== MM1 ->
     ForallTrace P MM2' ->
-    TracePrefix MM2 MM2' .
+    MM2' <<== MM2.
 
 (* MM2 is the longest prefix of MM1 for which P holds on each element. *)
 Definition LongestPrefix {A} (P : A -> Prop) (MM1 MM2 : Trace A) : Prop :=
@@ -362,7 +364,7 @@ LEO: That was the other thing I had in mind. I'll see what makes proofs easier.
 *)
 
 Definition ObsTracePrefix (OO OO' : Trace Observation) : Prop :=
-  exists OO'', ObsTraceEq OO OO'' /\ TracePrefix OO'' OO' \/ ObsTraceEq OO' OO'' /\ TracePrefix OO OO'.
+  exists OO'', ObsTraceEq OO OO'' /\ OO' <<== OO'' \/ ObsTraceEq OO' OO'' /\ OO' <<== OO.
 
 (* SNA: Proposed confidentiality property for eager policy; actual and variant traces
    have identical observation traces and a final state in the actual trace has a
