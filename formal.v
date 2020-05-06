@@ -763,20 +763,20 @@ Record VSE := {
   retP : MachineState -> Prop
 }.
 
-Definition upd_curr (N' : MachineState) (vse : VSE) : VSE :=
+Definition upd_curr (mv : MachineState) (vse : VSE) : VSE :=
   {| init_machine := init_machine vse;
      init_variant := init_variant vse;
-     curr_variant := N';
+     curr_variant := mv;
      contour := contour vse;
      retP := retP vse
   |}.
-(*
+
 Inductive VSE_step : VSE -> VSE -> Prop :=
 | vse_step :
-    forall M0 N0 N N' C R,
-    (exists O, step N = Some (N', O)) ->
-    VSE_step (Build_VSE M0 N0 N  C R)
-             (Build_VSE M0 N0 N' C R).
+    forall m0 mv0 mv mv' C R,
+    (exists O, step mv = (mv', O)) ->
+    VSE_step (Build_VSE m0 mv0 mv  C R)
+             (Build_VSE m0 mv0 mv' C R).
 
 Definition VSEs_step (vses vses' : list VSE) : Prop :=
   Forall2 VSE_step vses vses'.
@@ -795,11 +795,11 @@ Proof.
 Qed.
 
 Lemma VSE_step_preserves_in :
-  forall vse vses vses' N' O,
+  forall vse vses vses' mv' O,
   In vse vses ->
   Forall2 VSE_step vses vses' ->
-  step (curr_variant vse) = Some (N',O) ->
-  In (upd_curr N' vse) vses'.
+  step (curr_variant vse) = (mv',O) ->
+  In (upd_curr mv' vse) vses'.
 Proof.
   intros vse vses vses' N' O' HIn HForall HStep.
   induction HForall.
@@ -818,7 +818,7 @@ Lemma VSE_step_preserves_last :
   forall vse vses vses' N' O,
   Last vse vses ->
   Forall2 VSE_step vses vses' ->
-  step (curr_variant vse) = Some (N',O) ->
+  step (curr_variant vse) = (N',O) ->
   Last (upd_curr N' vse) vses'.
 Proof.
   intros vse vses vses' N' O' HIn HForall HStep.
@@ -852,104 +852,100 @@ Definition WellFormedVS (M : MachineState) (vs : VarStack) : Prop :=
   (* The stack is nonempty and the last retP is const False *)
   (exists vse, Last vse vs /\ retP vse = fun _ => False) /\
   (* The current state is in the trace of *every* init machine. *)
-  (Forall (fun vse => InTrace M (traceOf (init_machine vse))) vs) /\
+  (Forall (fun vse => InTrace M (MTraceOf (init_machine vse))) vs) /\
   (* The variant state is in the trace of its own init variant. *)
-  (Forall (fun vse => InTrace (curr_variant vse) (traceOf (init_variant vse))) vs).
+  (Forall (fun vse => InTrace (curr_variant vse) (MTraceOf (init_variant vse))) vs).
 
-CoInductive EagerStackSafetyTest (cm : CallMap) : MTrace -> VarStack -> Prop :=
+CoInductive EagerStackSafetyTest (cm : CallMap) : MPTrace -> VarStack -> Prop :=
 | EagerTestHalt :
-    forall M vs,
-      step M = None ->
-      WellFormedVS M vs ->
-      (forall vse, In vse vs -> step (curr_variant vse) = None) ->
-      EagerStackSafetyTest cm (finished M) vs
+    forall mp vs,
+      WellFormedVS (ms mp) vs ->
+      EagerStackSafetyTest cm (finished mp) vs
 | EagerTestStep :
-    forall M MM vs vs' M' OM,
+    forall mp MP vs vs' m' p' OM,
       (* Not a call or a return *)
-      (forall args, ~ isCall cm M args) ->
-      (forall vse, In vse vs -> ~ (retP vse M)) ->
+      (forall args, ~ isCall cm (ms mp) args) ->
+      (forall vse, In vse vs -> ~ (retP vse (ms mp))) ->
       (* Take a step. *)
-      step M = Some (M', OM) ->
-      WellFormedVS M vs ->
+      mpstep mp = Some (m', p', OM) ->
+      WellFormedVS (ms mp) vs ->
       (* Enforce confidentiality for each variant. *)
       (forall vse,
           In vse vs ->
-          exists N' ON, step (curr_variant vse) = Some (N', ON) /\
-          EagerConfidentialityTest (retP vse) M M' (curr_variant vse) N' OM ON) ->
+          exists mv' OV, step (curr_variant vse) = (mv', OV) /\
+          EagerConfidentialityTest (retP vse) (ms mp) m' (curr_variant vse) mv' OM OV) ->
       (* Enforce integrity for main trace, but for each possible level in NCRs? *)
       (forall vse,
           In vse vs ->
-          EagerIntegrityTest (contour vse) M M') ->
+          EagerIntegrityTest (contour vse) (ms mp) m') ->
       (* Step all variants and just recurse *)
       VSEs_step vs vs' ->
-      head MM = M' ->
-      EagerStackSafetyTest cm MM vs' ->
+      head MP = (m',p') ->
+      EagerStackSafetyTest cm MP vs' ->
       (* Conclude for current. *)
-      EagerStackSafetyTest cm (notfinished M MM) vs
+      EagerStackSafetyTest cm (notfinished mp MP) vs
 | EagerTestCall :
-    forall args M MM vs vs' M' OM C C',
+    forall args mp MP vs vs' m' p' OM C,      
       (* Is a call *)
-      isCall cm M args ->
+      isCall cm (ms mp) args ->
       (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)
       (* Take a step. *)
-      step M = Some (M', OM) ->
-      WellFormedVS M vs ->
+      mpstep mp = Some (m', p', OM) ->
+      WellFormedVS (ms mp) vs ->
       (* Enforce confidentiality for each variant. *)
       (forall vse,
           In vse vs ->
-          exists N' ON, step (curr_variant vse) = Some (N', ON) /\
-          EagerConfidentialityTest (retP vse) M M' (curr_variant vse) N' OM ON) ->
+          exists mv' OV, step (curr_variant vse) = (mv', OV) /\
+          EagerConfidentialityTest (retP vse) (ms mp) m' (curr_variant vse) mv' OM OV) ->
       (* Enforce integrity for main trace, but for each possible level in NCRs? *)
       (forall vse,
           In vse vs ->
-          EagerIntegrityTest (contour vse) M M') ->
+          EagerIntegrityTest (contour vse) (ms mp) m') ->
       (* Step all variants. *)
       VSEs_step vs vs' ->
-      head MM = M' ->
-      (* Calculate the new contour based on the top of the variant stack. *)
-      (exists vse_top vs_rest,
-          vse_top :: vs_rest = vs /\
-          updateContour (contour vse_top) args (init_machine vse_top) = C') ->
+      head MP = (m', p') ->
+      (* Calculate the new contour based on the top of the current machine. *)
+      makeContour args (ms mp) = C ->
       (* Recurse with every variant at the new contour at the top. *)
-      (forall Mvar, variantOf M Mvar C ->
-                    EagerStackSafetyTest cm MM
-                                         ({| init_machine := M
-                                           ; init_variant := Mvar
-                                           ; curr_variant := Mvar
-                                           ; contour := C'
-                                           ; retP := isRet M
+      (forall mvar, variantOf (ms mp) mvar C ->
+                    EagerStackSafetyTest cm MP
+                                         ({| init_machine := ms mp
+                                           ; init_variant := mvar
+                                           ; curr_variant := mvar
+                                           ; contour := C
+                                           ; retP := isRet (ms mp)
                                           |} :: vs')) ->
       (* Conclude for current. *)
-      EagerStackSafetyTest cm (notfinished M MM) vs
+      EagerStackSafetyTest cm (notfinished mp MP) vs
 | EagerTestRet :
-    forall M MM vs vs' M' OM,
+    forall mp MP vs vs' m' p' OM,          
       (* Is a return *)
       (* isCall cm M args -> *)
-      (exists vse, In vse vs /\ retP vse M) ->
+      (exists vse, In vse vs /\ retP vse (ms mp)) ->
         (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)
       (* Take a step. *)
-      step M = Some (M', OM) ->
-      WellFormedVS M vs ->
+      mpstep mp = Some (m', p', OM) ->
+      WellFormedVS (ms mp) vs ->
       (* Enforce confidentiality for each variant. *)
       (forall vse,
           In vse vs ->
-          exists N' ON, step (curr_variant vse) = Some (N', ON) /\
-          EagerConfidentialityTest (retP vse) M M' (curr_variant vse) N' OM ON) ->
+          exists mv' OV, step (curr_variant vse) = (mv', OV) /\
+          EagerConfidentialityTest (retP vse) (ms mp) m' (curr_variant vse) mv' OM OV) ->
       (* Enforce integrity for main trace, but for each possible level in NCRs? *)
       (forall vse,
           In vse vs ->
-          EagerIntegrityTest (contour vse) M M') ->
+          EagerIntegrityTest (contour vse) (ms mp) m') ->
       (* Step all variants. *)
       VSEs_step vs vs' ->
-      head MM = M' ->
+      head MP = (m',p') ->
       (* Recurse but take of the top of the stack. *)
-      EagerStackSafetyTest cm MM (tl vs') ->
+      EagerStackSafetyTest cm MP (tl vs') ->
       (* Conclude for current. *)
-      EagerStackSafetyTest cm (notfinished M MM) vs.
+      EagerStackSafetyTest cm (notfinished mp MP) vs.
 
-Definition EagerStackSafetyTest' cm C MM :=
-  forall N, variantOf (head MM) N C ->
-  EagerStackSafetyTest cm MM [Build_VSE (head MM) N N C (fun _ => False)].
+Definition EagerStackSafetyTest' cm C MP :=
+  forall mv, variantOf (ms (head MP)) mv C ->
+  EagerStackSafetyTest cm MP [Build_VSE (ms (head MP)) mv mv C (fun _ => False)].
 
 Ltac in_reasoning :=
   repeat match goal with
@@ -972,14 +968,15 @@ Theorem TestImpliesIntegrityToplevel :
   EagerStackSafetyTest cm MM vs -> EagerStackIntegrity' C MM.
 Proof.
   cofix COFIX.
-  intros cm C MM vs [vse_last [HLast HC]] Safety.
+  intros cm C MP vs [vse_last [HLast HC]] Safety.
   inversion Safety; subst.
   - apply SI_finished.
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
-      unfold EagerIntegrityTest in *.
+      unfold MPState, EagerIntegrityTest in *.
+      rewrite H6; simpl.
       eauto using Last_implies_In.
-    + apply (COFIX cm (contour vse_last) MM0 vs'); auto.
+    + apply (COFIX cm (contour vse_last) MP0 vs'); auto.
       unfold VSEs_step in *.
       destruct (H3 vse_last (Last_implies_In vse_last vs HLast))
         as [N' [ON [HN' HConf]]].
@@ -987,9 +984,10 @@ Proof.
       eapply VSE_step_preserves_last; eauto.
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
-      unfold EagerIntegrityTest in *.
+      unfold MPState, EagerIntegrityTest in *.
+      rewrite H5.
       eauto using Last_implies_In.
-    + apply (COFIX cm (contour vse_last) MM0 ((Build_VSE M M M C' (isRet M))::vs')).
+    + apply (COFIX cm (contour vse_last) MP0 ((Build_VSE (ms mp) (ms mp) (ms mp) (makeContour args (ms mp)) (isRet (ms mp)))::vs')).
       * unfold VSEs_step in *.
         destruct (H2 vse_last)
           as [N' [ON [HN' HConf]]]; eauto using Last_implies_In.
@@ -1000,9 +998,10 @@ Proof.
         auto.
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
-      unfold EagerIntegrityTest in *.
+      unfold MPState, EagerIntegrityTest in *.
+      rewrite H5.
       eauto using Last_implies_In.
-    + apply (COFIX cm (contour vse_last) MM0 (tl vs')); auto.
+    + apply (COFIX cm (contour vse_last) MP0 (tl vs')); auto.
       unfold VSEs_step in *.
       destruct (H2 vse_last)
         as [N' [ON [HN' HConf]]]; eauto using Last_implies_In.
