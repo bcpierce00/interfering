@@ -2,8 +2,11 @@ Require Import List.
 Import ListNotations.
 Require Import Bool.
 Require Import Coq.Logic.FunctionalExtensionality.
+Require Import Trace.
 
 Section foo.
+
+  Import Trace.
 
 (* TODO: Make all this match the terminology in the .tex -- e.g., a
    Contour should correspond to a MachineState, not to a Trace,
@@ -61,137 +64,6 @@ Definition mpstep (mp : MPState) :=
   | None => None
   end.
 
-(*******************)
-(***** Traces ******)
-(*******************)
-
-CoInductive TraceOf (A : Type) : Type :=
-| finished : A -> TraceOf A
-| notfinished : A -> TraceOf A -> TraceOf A.
-
-Arguments finished {_} _.
-Arguments notfinished {_} _ _.
-
-Definition idTrace {A} (MM: TraceOf A) : TraceOf A :=
-  match MM with
-  | finished M => finished M
-  | notfinished M MM' => notfinished M  MM'
-  end.
-
-Lemma idTrace_eq : forall {A} (MM: TraceOf A), MM = idTrace MM.
-   destruct MM; reflexivity.
-Qed.
-
-Definition head {A} (MM : TraceOf A) : A :=
-  match MM with
-  | finished M => M
-  | notfinished M _ => M
-  end.
-
-Inductive InTrace {A} (m:A) : TraceOf A -> Prop :=
-| In_finished : InTrace m (finished m)
-| In_now : forall MM, InTrace m (notfinished m MM)
-| In_later : forall m' MM, InTrace m MM -> InTrace m (notfinished m' MM).
-
-Lemma head_InTrace :forall {A} (MM: TraceOf A), InTrace (head MM) MM.
-Proof.
-  intros.
-  destruct MM.
-  - constructor.
-  - simpl. constructor.
-Qed.
-
-CoFixpoint mapTrace {A B:Type} (f:A -> B) (MM: TraceOf A) : TraceOf B :=
-  match MM with
-  | finished M => finished (f M)
-  | notfinished M MM' => notfinished (f M) (mapTrace f MM')
-  end.
-
-CoInductive ForallTrace {A:Type} (P:A -> Prop) : TraceOf A -> Prop :=
-| Forall_finished : forall M, P M -> ForallTrace P (finished M)
-| Forall_notfinished : forall M MM', P M -> ForallTrace P MM' -> ForallTrace P (notfinished M MM')
-.
-
-CoInductive TraceEq {A} : TraceOf A -> TraceOf A -> Prop :=
-| EqFin : forall m, TraceEq (finished m) (finished m)
-| EqCons : forall m mm1 mm2, TraceEq mm1 mm2 ->
-                             TraceEq (notfinished m mm1) (notfinished m mm2).
-
-CoFixpoint TraceApp {A} (MM: TraceOf A) (MMO: option (TraceOf A)) : TraceOf A :=
-  match MM with
-  | finished m =>
-    match MMO with
-    | Some m' => notfinished m m'
-    | None => MM
-    end
-  | notfinished m MM' => notfinished m (TraceApp MM' MMO)
-  end.
-
-Notation "MM1 ^ MM2" := (TraceApp MM1 MM2).
-
-Lemma TraceAppHead {A} :
-  forall (MM NN : TraceOf A) (NNO : option (TraceOf A)),
-    MM = NN ^ NNO -> head MM = head NN.
-Proof.
-  intros MM NN NNO App.
-  destruct NN as [a | a NN].
-  - rewrite App.
-    simpl.
-    destruct NNO; simpl; auto.
-  - rewrite App.
-    simpl.
-    auto.
-Qed.
-
-(* LEO: TODO: Should we define TracePrefix based on TraceSpan? *)
-(* TracePrefix MM1 MM2 says MM2 is a prefix of MM1. *)
-CoInductive TracePrefix {A} : TraceOf A -> TraceOf A -> Prop :=
-| PrefixEq  : forall m, TracePrefix (finished m) (finished m)
-| PrefixNow : forall m mm, TracePrefix (notfinished m mm) (finished m)
-| PrefixLater : forall m mm1 mm2, TracePrefix mm1 mm2 ->
-                                  TracePrefix (notfinished m mm1)
-                                              (notfinished m mm2).
-
-Notation "MM2 <<== MM1" := (TracePrefix MM1 MM2) (at level 80).
-
-(* Divide MM1 into MM2 ++ MMO such that MM2 is the longest prefix for which P holds on each element *)
-Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : TraceOf A) (MMO : option (TraceOf A)) : Prop :=
-  MM1 = MM2^MMO /\ ForallTrace P MM2 /\
-  forall MM2', MM2' <<== MM1 ->
-    ForallTrace P MM2' ->
-    MM2' <<== MM2.
-
-(* MM2 is the longest prefix of MM1 for which P holds on each element. *)
-Definition LongestPrefix {A} (P : A -> Prop) (MM1 MM2 : TraceOf A) : Prop :=
-  exists MMO, TraceSpan P MM1 MM2 MMO.
-
-Inductive IsEnd {A} : TraceOf A -> A -> Prop :=
-| IsEndNow : forall M, IsEnd (finished M) M
-| IsEndLater : forall MM M M', IsEnd MM M -> IsEnd (notfinished M' MM) M
-.
-
-(* Definition tail {A} (MM: TraceOf A) : option (TraceOf A) := *)
-(*   match MM with *)
-(*   | finished _ => None *)
-(*   | notfinished _ M => Some M *)
-(*   end. *)
-
-(* Fixpoint ith {A} (i:nat) (MM: TraceOf A) : option A := *)
-(*   match i with *)
-(*   | O => Some (head MM) *)
-(*   | S i' => match tail MM with *)
-(*             | Some MM' => ith i' MM' *)
-(*             | None => None                               *)
-(*             end *)
-(*   end. *)
-
-(* Lemma head_ith : forall {A} (MM: TraceOf A), ith O MM = Some (head MM). *)
-(* Proof. *)
-(*   destruct MM. *)
-(*   - auto. *)
-(*   - auto. *)
-(* Qed. *)
-
 (* todo: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MTrace := TraceOf MachineState.
 
@@ -206,8 +78,13 @@ CoFixpoint MPTraceOf (mp : MPState) : MPTrace :=
   | Some p' => notfinished mp (MPTraceOf (fst (step (ms mp)), p'))
   end.
 
-
 (* LEO: TODO: Add well formedness that a MTrace/MPTrace is compatible with the steps. *)
+(* SNA: This is what I've been using. *)
+Definition RealMTrace (M:MTrace) : Prop :=
+  M = MTraceOf (head M).
+
+Definition RealMPTrace (MP:MPTrace) : Prop :=
+  RealMTrace (mapTrace ms MP).
 
 (* Confidentiality and Integrity Labels *)
 Inductive CLabel :=
@@ -551,7 +428,7 @@ Proof.
     inversion Conf; subst; eauto; clear Conf; simpl in *.
     + exists m.
       constructor.
-    + destruct (IHHEnd M'0); eauto using confStepPreservesVariant.
+    + destruct (IHHEnd M'); eauto using confStepPreservesVariant.
       exists x; constructor; eauto.
   - intros [mvret HEnd].
     generalize dependent MP.
@@ -718,7 +595,9 @@ CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
        (StackConfidentiality C MM) ->
        (forall MM' C', Subtrace cm C MM C' MM' -> StackSafety cm MM' C') ->
        StackSafety cm MM C.
-*)
+ *)
+(* SNA: Changed this so that it can include the return, which helps with my proofs
+   and doesn't seem to break anyone else's. *)
 Definition EagerStackSafety (cm : CallMap) : MPTrace -> Contour -> Prop :=
   fun (MP : MPTrace) (C : Contour) =>
     (EagerStackIntegrity C MP) /\
@@ -1091,48 +970,11 @@ Definition ObservableConfidentegrity (C:Contour) (MP:MPTrace) (MPsuffO:option MP
     let ideal := N ^ (option_map (fun N' => MTraceOf (RollbackCI C (ms (head MP)) n (head N'))) NO) in
     ObsTracePrefix (ObsTraceOfM ideal) (ObsTraceOf actual).
 
-Definition RealMTrace (M:MTrace) : Prop :=
-  M = MTraceOf (head M).
-
-Definition RealMPTrace (MP:MPTrace) : Prop :=
-  RealMTrace (mapTrace ms MP).
-
 Definition LazyStackSafety' (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentegrity (makeContour 0 (ms (head MP))) MP None (fun _ => False) /\
   (forall MP' MP'' C' MPsuffO, FindCall cm (mapTrace ms MP) C' (mapTrace ms MP') ->
                           TraceSpan (fun mp => ~isRet (ms (head MP')) (ms mp)) MP' MP'' MPsuffO ->
                           ObservableConfidentegrity C' MP'' MPsuffO (isRet (ms (head MP'')))).    
-
-Lemma FHoldsOnSpanContents :
-  forall A (f:A->Prop) T T' TO,
-    TraceSpan f T T' TO ->
-    ForallTrace f T'.
-Proof.
-  intros. destruct H. destruct H0. auto.
-Qed.
-  
-Lemma IsEndInTrace :
-  forall A (t:A) (T:TraceOf A),
-    IsEnd T t -> InTrace t T.
-Proof.
-  intros. induction H.
-  - constructor.
-  - constructor. auto.
-Qed.
-
-Lemma ForallInTrace :
-  forall A (f:A->Prop) T t,
-    InTrace t T ->
-    ForallTrace f T ->
-    f t.
-Proof.
-  intros. induction H; inversion H0; auto.
-Qed.
-
-Axiom SpanRemainderNotProp :
-  forall A P (T T' T'': TraceOf A),
-    TraceSpan P T T' (Some T'') ->
-    ~ (P (head T'')).
 
 Axiom isRet_dec :
   forall M1 M2,
@@ -1158,14 +1000,6 @@ Axiom RealTraceApp :
 Axiom ObsTraceMToObsTrace :
   forall MP,
     ObsTraceOf MP = ObsTraceOfM (mapTrace ms MP).
-
-Axiom TracePrefix_refl :
-  forall A (T:TraceOf A),
-    T <<== T.
-
-Axiom IsEndAppFinish :
-  forall A (T:TraceOf A) (a:A),
-    IsEnd (T^Some (finished a)) a.
 
 Lemma EagerImpliesLazyInt :
   forall C MP MPEager MPLazy MPLazyO,
@@ -1202,36 +1036,16 @@ Admitted.
     RealMPTrace MP ->
     LongestPrefix (fun mp => IsRet 
     EagerStackConfidentiality C MM isRet -> ObservableConfidentiality C (MM^MMO) isRet. *)
-
-Axiom ForallTraceApp :
-  forall A f (T1 T2 : TraceOf A),
-    ForallTrace f T1 ->
-    ForallTrace f T2 ->
-    ForallTrace f (T1^Some T2).
-
-Axiom TraceAppNoneID :
-  forall A (T : TraceOf A),
-    T = T^None.
-
-Axiom TraceAppAssoc :
-  forall A (T1 T2 : TraceOf A) TO,
-    T1 ^ Some (T2 ^ TO) = (T1 ^ Some T2) ^ TO.
-
-Axiom TraceAppFinished :
-  forall A (a:A) (T:TraceOf A),
-    finished a ^ Some T = notfinished a T.
-
-Axiom ForallImplication :
-  forall A (P Q: A -> Prop) (T:TraceOf A),
-    (forall a, P a -> Q a) ->
-    ForallTrace P T ->
-    ForallTrace Q T.
-
-Axiom PrefixToApp :
-  forall A (T1 T2 : TraceOf A),
-    T1 <<== T2 ->
-    exists TO, T2 = T1^TO.
-
+Lemma EagerImpliesLazyConf :
+  forall C MP MPEager MPLazy MPLazyO (isRet: MachineState -> Prop),
+    RealMPTrace MP ->
+    LongestPrefix (fun mp => isRet (ms mp) -> IsEnd MPEager mp) MP MPEager ->
+    TraceSpan (fun mp => ~isRet (ms mp)) MP MPLazy MPLazyO ->
+    EagerStackConfidentiality C MPEager isRet ->
+    ObservableConfidentiality C (MPLazy^MPLazyO) isRet.
+Proof.
+  Admitted.
+  
 Theorem EagerSafetyImpliesLazy :
   forall cm MP,
     RealMPTrace MP ->
@@ -1262,7 +1076,7 @@ Proof.
             + unfold P. constructor. apply IsEndAppFinish. }
         destruct H3. destruct MPSuff.
         { exists None. unfold TraceSpan. split; try split.
-          - rewrite H2. unfold MPEager. simpl. rewrite <- TraceAppNoneID. auto.
+          - rewrite H2. unfold MPEager. simpl. rewrite <- TraceAppNone. auto.
           - simpl in MPEager. unfold MPEager. simpl.  auto. 
           - intros. unfold MPEager. unfold head. rewrite <- H2. auto. }
         { exists (Some MPSuff). unfold TraceSpan. split; try split.
@@ -1278,7 +1092,7 @@ Proof.
         assert (LongestPrefix Q MP' MPEager). 
         { unfold LongestPrefix. unfold MPEager. destruct H3. destruct MPSuff as [| m MPSuff'] eqn:E.
           - simpl. exists None. unfold TraceSpan. split;try split.
-            + rewrite H2. apply TraceAppNoneID.
+            + rewrite H2. apply TraceAppNone.
             + apply ForallTraceApp.
               * apply (ForallImplication MPState P Q); unfold P; unfold Q; intros; auto; contradiction.
               * unfold Q. apply (ForallImplication MPState P' Q); unfold P'; unfold Q; intros; auto; simpl.
@@ -1290,26 +1104,24 @@ Proof.
               * apply (ForallImplication MPState P Q); unfold P; unfold Q; intros; simpl; auto; contradiction.
               * unfold Q. apply (ForallImplication MPState P' Q); unfold P'; unfold Q; intros; auto; simpl.
                 constructor. apply IsEndAppFinish.
-            + intros. admit. }
-        
+            + intros. admit. }        
         apply H5 in H1.
         { destruct H1. auto. }
         unfold Q in H6.
         admit. (* This is where I need to use the fact that anything after (head MPSuff) is not in the
                   prefix. *)
-        { 
-  }
-      unfold ObservableIntegrity. auto.
-    + admit. (* still admitting confidentiality *)
+    + pose (H3 := H2). unfold TraceSpan in H3. destruct H3. rewrite H3.
+      pose (MPEager := MP''^(option_map (fun MPO => finished (head MPO)) MPsuffO)).
+      apply (EagerImpliesLazyConf C' MP' MPEager MP'' MPsuffO). 
 Admitted.
 
-Conjecture Lazy'ImpliesLazy :
+(*Conjecture Lazy'ImpliesLazy :
   forall cm C MM,
   LazyStackSafety' cm C MM -> LazyStackSafety cm C MM.
 
 Conjecture LazyNotImpliesLazy' :
   exists cm C MM,
-  LazyStackSafety cm C MM /\ ~ LazyStackSafety' cm C MM.
+  LazyStackSafety cm C MM /\ ~ LazyStackSafety' cm C MM.*)
 (* The counterexample:
 
 main: mov #0 r1
