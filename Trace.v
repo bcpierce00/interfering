@@ -1,5 +1,3 @@
-Module Trace.
-
 CoInductive TraceOf (A : Type) : Type :=
 | finished : A -> TraceOf A
 | notfinished : A -> TraceOf A -> TraceOf A.
@@ -163,5 +161,3 @@ Axiom SpanRemainderNotProp :
     TraceSpan P T T' (Some T'') ->
     ~ (P (head T'')).
 
-
-End Trace.

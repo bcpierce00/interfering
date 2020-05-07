@@ -6,8 +6,6 @@ Require Import Trace.
 
 Section foo.
 
-  Import Trace.
-
 (* TODO: Make all this match the terminology in the .tex -- e.g., a
    Contour should correspond to a MachineState, not to a Trace,
    etc. *)
