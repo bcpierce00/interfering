@@ -429,6 +429,10 @@ CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
     forall mp m,
       R (ms mp) -> R m ->
       StrongEagerStackConfidentiality R (finished mp) (finished m).
+(* RB: Is this property too strong to use in practice, in particular when combined
+   with the eager safety testing property? From the halting case in that property,
+   can we infer that the MTrace finishes when the MPTrace does, even though the
+   stepping function itself never halts? *)
 
 Lemma confStepPreservesVariant :
   forall C mp m' p' OM mv mv' ON,
