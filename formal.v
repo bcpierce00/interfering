@@ -577,7 +577,6 @@ CoInductive FindCall (cm: CallMap) : MTrace -> Contour -> MTrace -> Prop :=
       makeContour args (head MM) = C ->
       FindCall cm MM C MM'
   | FindCallLater: forall C MM MM' M,
-      (forall args, ~ isCall cm (head MM) args) ->
       FindCall cm MM C MM' ->
       FindCall cm (notfinished M MM) C MM'.
 
