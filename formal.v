@@ -129,14 +129,6 @@ CoFixpoint TraceApp {A} (MM: TraceOf A) (MMO: option (TraceOf A)) : TraceOf A :=
 
 Notation "MM1 ^ MM2" := (TraceApp MM1 MM2).
 
-Definition OptTraceApp {A} (MMO1: option (TraceOf A)) (MMO2: option (TraceOf A)) : option (TraceOf A) :=
-  match MMO1 with
-  | Some MM => Some (TraceApp MM MMO2)
-  | None => MMO2
-  end.
-
-Notation "MM1 ?^ MM2" := (OptTraceApp MM1 MM2) (at level 80).
-
 Lemma TraceAppHead {A} :
   forall (MM NN : TraceOf A) (NNO : option (TraceOf A)),
     MM = NN ^ NNO -> head MM = head NN.
@@ -729,7 +721,7 @@ Definition EagerStackSafety (cm : CallMap) : MPTrace -> Contour -> Prop :=
     (EagerStackConfidentiality C MP (fun _ => False)) /\
     (forall (MPpre' MP' : MPTrace) C',
         FindCallMP cm MP C' MP' -> (* Find call*)
-        LongestPrefix (fun mp => ~ (isRet (ms (head MP)) (ms mp))) MP' MPpre' ->
+        LongestPrefix (fun mp => isRet (ms (head MP')) (ms mp) -> IsEnd MP' mp) MP' MPpre' ->
         EagerStackIntegrity C' MPpre' /\
         EagerStackConfidentiality C' MPpre' (isRet (ms (head MPpre')))).
 
@@ -1074,7 +1066,7 @@ Definition ObservableConfidentiality (C:Contour) (MP:MPTrace) (isRet:MachineStat
 Definition LazyStackSafety (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentiality (makeContour 0 (ms (head MP))) MP (fun _ => False) /\
   (forall MP' MP'' C' MPsuffO,
-    FindCall cm (mapTrace ms MP) C' (mapTrace ms MP') ->
+    FindCallMP cm MP C' MP' ->
     TraceSpan (fun mp => ~isRet (ms (head MP')) (ms mp)) MP' MP'' MPsuffO ->
     ObservableIntegrity C' MP'' MPsuffO /\
     ObservableConfidentiality C' MP' (isRet (ms (head MP')))).
@@ -1105,38 +1097,19 @@ Definition LazyStackSafety' (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentegrity (makeContour 0 (ms (head MP))) MP None (fun _ => False) /\
   (forall MP' MP'' C' MPsuffO, FindCall cm (mapTrace ms MP) C' (mapTrace ms MP') ->
                           TraceSpan (fun mp => ~isRet (ms (head MP')) (ms mp)) MP' MP'' MPsuffO ->
-                          ObservableConfidentegrity C' MP'' MPsuffO (isRet (ms (head MP'')))).
-
-Axiom SpanEndsIfSuffix :
-  forall A (f : A -> Prop) (MM MM' MM'' : Trace A) (MMO : option (Trace A)),
-    TraceSpan f MM MM' MMO ->
-    MMO = Some MM'' ->
-    exists M, IsEnd MM' M.
-
-Axiom SpanSuffixIsReal :
-  forall f MM MM' MMsuff,
-    RealTrace MM ->
-    TraceSpan f MM MM' (Some MMsuff) ->
-    RealTrace MMsuff.
-    
-Axiom StepOverSpan :
-  forall f (MM MM' MMsuff : MTrace) M,
-  RealTrace MM ->
-  TraceSpan f MM MM' (Some MMsuff) ->
-  IsEnd MM' M ->
-  exists O, step M = Some (head MMsuff,O).
+                          ObservableConfidentegrity C' MP'' MPsuffO (isRet (ms (head MP'')))).    
 
 Lemma FHoldsOnSpanContents :
-  forall A (f:A->Prop) MM MM' MMO,
-    TraceSpan f MM MM' MMO ->
-    ForallTrace f MM'.
+  forall A (f:A->Prop) T T' TO,
+    TraceSpan f T T' TO ->
+    ForallTrace f T'.
 Proof.
   intros. destruct H. destruct H0. auto.
 Qed.
   
 Lemma IsEndInTrace :
-  forall A (M:A) (MM:Trace A),
-    IsEnd MM M -> InTrace M MM.
+  forall A (t:A) (T:TraceOf A),
+    IsEnd T t -> InTrace t T.
 Proof.
   intros. induction H.
   - constructor.
@@ -1144,68 +1117,187 @@ Proof.
 Qed.
 
 Lemma ForallInTrace :
-  forall A (f:A->Prop) MM M,
-    InTrace M MM ->
-    ForallTrace f MM ->
-    f M.
+  forall A (f:A->Prop) T t,
+    InTrace t T ->
+    ForallTrace f T ->
+    f t.
 Proof.
   intros. induction H; inversion H0; auto.
 Qed.
-  
-Axiom ObsTraceEq_refl :
-  forall OO,
-    ObsTraceEq OO OO.
+
+Axiom SpanRemainderNotProp :
+  forall A P (T T' T'': TraceOf A),
+    TraceSpan P T T' (Some T'') ->
+    ~ (P (head T'')).
+
+Axiom isRet_dec :
+  forall M1 M2,
+    isRet M1 M2 \/ ~isRet M1 M2.
+
+Lemma MapTraceHead :
+  forall MP,
+    head (mapTrace ms MP) = ms (head MP).
+Proof.
+  intros. destruct MP; simpl; auto.
+Qed.
+
+Axiom FindCallApp :
+  forall MP MP' cm C,
+    FindCall cm (mapTrace ms MP) C (mapTrace ms MP') ->
+    exists MPpre, MP = MPpre ^ Some MP'.
+
+Axiom RealTraceApp :
+  forall (MP MP' : MPTrace),
+    RealMPTrace (MP^Some MP') ->
+    RealMPTrace MP /\ RealMPTrace MP'.
+
+Axiom ObsTraceMToObsTrace :
+  forall MP,
+    ObsTraceOf MP = ObsTraceOfM (mapTrace ms MP).
+
+Axiom TracePrefix_refl :
+  forall A (T:TraceOf A),
+    T <<== T.
+
+Axiom IsEndAppFinish :
+  forall A (T:TraceOf A) (a:A),
+    IsEnd (T^Some (finished a)) a.
 
 Lemma EagerImpliesLazyInt :
-  forall f C args MM MM' MMO,
-    RealTrace MM ->
-    C = makeContour args (head MM) ->
-    TraceSpan f MM MM' MMO ->
-    (forall M M' a O, f M -> step M = Some (M',O) -> M' (Mem a) = M (Mem a)) ->
-    EagerStackIntegrity C MM' -> ObservableIntegrity C MM' MMO.
+  forall C MP MPEager MPLazy MPLazyO,
+    RealMPTrace MP ->
+    LongestPrefix (fun mp => isRet (ms (head MP)) (ms mp) -> IsEnd MPEager mp) MP MPEager ->
+    TraceSpan (fun mp => ~isRet (ms (head MP)) (ms mp)) MP MPLazy MPLazyO ->
+    EagerStackIntegrity C MPEager ->
+    ObservableIntegrity C MPLazy MPLazyO.
 Proof.
   unfold EagerStackIntegrity. unfold ObservableIntegrity. intros.
-  destruct MMO as [MMsuff |] eqn:E; auto. rewrite <- E in H1.
-  apply (SpanEndsIfSuffix MachineState f MM MM' MMsuff MMO) in H1 as HEnd; auto. destruct HEnd as [M].
-  assert (forall k, integrityOf (C k) = HI -> (head MM') k = M k).
-  { intros; destruct k; simpl.
-    - apply H3; try apply IsEndInTrace; auto.
-    - rewrite H0 in H5. simpl in H5. discriminate. }
-  assert (exists O, step M = Some (head MMsuff,O)).
-  { apply (StepOverSpan f MM MM');auto. rewrite E in H1. auto. }
-  destruct H6 as [O H6].
-  assert (forall k, integrityOf (C k) = HI -> (head MMsuff) k = M k).
-  { intros; destruct k; simpl.
-    - apply (H2 M (head MMsuff) a O);auto.
-      apply (ForallInTrace MachineState f MM' M).
-      + apply IsEndInTrace;auto.
-      + apply (FHoldsOnSpanContents MachineState f MM MM' MMO); auto.
-    - rewrite H0 in H7. simpl in H7. discriminate. }
-  assert (RollbackInt C (head MM') (head MMsuff) = head MMsuff).
+  destruct MPLazyO as [MPsuff |] eqn:E; auto.
+  assert (IsEnd MPEager (head MPsuff)).
+  { admit. (* I think I've got everything I need here, I just can't quite put it together. *) }
+  apply IsEndInTrace in H3.
+  assert (forall k, integrityOf (C k) = HI -> (ms (head MPEager)) k = (ms (head MPsuff)) k).
+  { intros. apply H2; auto. }
+  assert (RollbackInt C (ms (head MPEager)) (ms (head MPsuff)) = (ms (head MPsuff))).
   { unfold RollbackInt. extensionality k. destruct (integrityOf (C k)) eqn:E2.
-    + apply (H7 k) in E2 as Hright. apply (H5 k) in E2 as Hleft.
-      rewrite Hright. rewrite Hleft. auto.
-    + auto. }
-  rewrite H8. apply (SpanSuffixIsReal f MM MM' MMsuff) in H; try rewrite <- E; auto.
-  unfold RealTrace in H. rewrite <- H. apply ObsTraceEq_refl.
-Qed.
-  
-Lemma EagerImpliesLazyConf :
-  forall C MM MMO isRet,
-    EagerStackConfidentiality C MM isRet -> ObservableConfidentiality C (MM^MMO) isRet.
-Proof.
-  unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros.
-  apply (H N NN Mret) in H0.
-  - destruct H0. 
-  - 
-                                                          
+    - apply H4; auto.
+    - auto. }
+  assert (head MPEager = head MPLazy).
+  { admit. }
+  rewrite <- H6. rewrite H5.
+  destruct H1. rewrite H1 in H. apply (RealTraceApp MPLazy MPsuff) in H. destruct H.
+  unfold RealMPTrace in H8. unfold RealMTrace in H8. rewrite <- MapTraceHead.
+  rewrite <- H8. rewrite ObsTraceMToObsTrace.
+  unfold ObsTracePrefix. exists (ObsTraceOfM (mapTrace ms MPsuff)). left. split.
+  - constructor.
+  - apply TracePrefix_refl.
+Admitted.
+    
+(*Lemma EagerImpliesLazyConf :
+  forall C MP MPEager MPLazy MPLazyO isRet,
+    RealMPTrace MP ->
+    LongestPrefix (fun mp => IsRet 
+    EagerStackConfidentiality C MM isRet -> ObservableConfidentiality C (MM^MMO) isRet. *)
+
+Axiom ForallTraceApp :
+  forall A f (T1 T2 : TraceOf A),
+    ForallTrace f T1 ->
+    ForallTrace f T2 ->
+    ForallTrace f (T1^Some T2).
+
+Axiom TraceAppNoneID :
+  forall A (T : TraceOf A),
+    T = T^None.
+
+Axiom TraceAppAssoc :
+  forall A (T1 T2 : TraceOf A) TO,
+    T1 ^ Some (T2 ^ TO) = (T1 ^ Some T2) ^ TO.
+
+Axiom TraceAppFinished :
+  forall A (a:A) (T:TraceOf A),
+    finished a ^ Some T = notfinished a T.
+
+Axiom ForallImplication :
+  forall A (P Q: A -> Prop) (T:TraceOf A),
+    (forall a, P a -> Q a) ->
+    ForallTrace P T ->
+    ForallTrace Q T.
+
+Axiom PrefixToApp :
+  forall A (T1 T2 : TraceOf A),
+    T1 <<== T2 ->
+    exists TO, T2 = T1^TO.
+
 Theorem EagerSafetyImpliesLazy :
-  forall cm C MM,
-    EagerStackSafety cm MM C -> LazyStackSafety cm C MM.
+  forall cm MP,
+    RealMPTrace MP ->
+    EagerStackSafety cm MP (makeContour 0 (ms (head MP))) -> LazyStackSafety cm MP.
 Proof.
-  intros. unfold EagerStackSafety in H. unfold LazyStackSafety. split.
-  - 
-  -
+  unfold EagerStackSafety. unfold LazyStackSafety. intros. split.
+  - admit. (* admitting all confidentiality for now *)
+  - intros. split.
+    + destruct H2. destruct MPsuffO as [MPSuff | ]; unfold ObservableIntegrity; auto.
+      pose (MPEager := MP''^(Some (finished (head MPSuff)))). simpl in MPEager.
+      apply (EagerImpliesLazyInt C' MP' MPEager MP'' (Some MPSuff)).
+      * apply FindCallApp in H1. destruct H1 as [MPpre]. rewrite H1 in H. apply RealTraceApp in H.
+        destruct H. auto.
+      * unfold LongestPrefix.
+        assert (ForallTrace (fun mp : MPState => isRet (ms (head MP')) (ms mp)
+                                                 -> IsEnd (MP'' ^ Some (finished (head MPSuff))) mp)
+                            (MP'' ^ Some (finished (head MPSuff)))).
+        { apply ForallTraceApp.
+          - pose (P := fun mp => ~isRet (ms (head MP')) (ms mp)).
+            pose (Q := fun mp => isRet (ms (head MP')) (ms mp) -> IsEnd (MP'' ^ Some (finished (head MPSuff))) mp).
+            apply (ForallImplication MPState P Q MP'').
+            + unfold P. unfold Q. intros. contradiction.
+            + unfold P. destruct H3. auto.
+          - pose (P := fun mp => IsEnd (MP'' ^ Some (finished (head MPSuff))) mp).
+            pose (Q := fun mp => isRet (ms (head MP')) (ms mp) -> IsEnd (MP'' ^ Some (finished (head MPSuff))) mp).
+            apply (ForallImplication MPState P Q (finished (head MPSuff))).
+            + unfold P. unfold Q. intros. auto.
+            + unfold P. constructor. apply IsEndAppFinish. }
+        destruct H3. destruct MPSuff.
+        { exists None. unfold TraceSpan. split; try split.
+          - rewrite H2. unfold MPEager. simpl. rewrite <- TraceAppNoneID. auto.
+          - simpl in MPEager. unfold MPEager. simpl.  auto. 
+          - intros. unfold MPEager. unfold head. rewrite <- H2. auto. }
+        { exists (Some MPSuff). unfold TraceSpan. split; try split.
+          - unfold MPEager. simpl. simpl in MPEager. rewrite <- TraceAppAssoc.
+              rewrite H2. rewrite <- TraceAppFinished. auto.
+          - unfold MPEager. simpl. auto.
+          - admit. }
+      * unfold TraceSpan. split; try split; destruct H3; auto.
+      * destruct H0. destruct H4. specialize H5 with MPEager MP' C'.
+        pose (P := fun mp => ~isRet (ms (head MP')) (ms mp)).
+        pose (P' := fun mp => IsEnd (MP'' ^ Some (finished (head MPSuff))) mp).
+        pose (Q := fun mp => isRet (ms (head MP')) (ms mp) -> IsEnd (MP'' ^ Some (finished (head MPSuff))) mp).    
+        assert (LongestPrefix Q MP' MPEager). 
+        { unfold LongestPrefix. unfold MPEager. destruct H3. destruct MPSuff as [| m MPSuff'] eqn:E.
+          - simpl. exists None. unfold TraceSpan. split;try split.
+            + rewrite H2. apply TraceAppNoneID.
+            + apply ForallTraceApp.
+              * apply (ForallImplication MPState P Q); unfold P; unfold Q; intros; auto; contradiction.
+              * unfold Q. apply (ForallImplication MPState P' Q); unfold P'; unfold Q; intros; auto; simpl.
+                constructor. apply IsEndAppFinish.
+            + intros. rewrite <- H2. auto.
+          - simpl. exists (Some MPSuff'). unfold TraceSpan. split; try split.
+            + rewrite <- TraceAppAssoc. rewrite TraceAppFinished. auto.
+            + apply ForallTraceApp.
+              * apply (ForallImplication MPState P Q); unfold P; unfold Q; intros; simpl; auto; contradiction.
+              * unfold Q. apply (ForallImplication MPState P' Q); unfold P'; unfold Q; intros; auto; simpl.
+                constructor. apply IsEndAppFinish.
+            + intros. admit. }
+        
+        apply H5 in H1.
+        { destruct H1. auto. }
+        unfold Q in H6.
+        admit. (* This is where I need to use the fact that anything after (head MPSuff) is not in the
+                  prefix. *)
+        { 
+  }
+      unfold ObservableIntegrity. auto.
+    + admit. (* still admitting confidentiality *)
+Admitted.
 
 Conjecture Lazy'ImpliesLazy :
   forall cm C MM,
