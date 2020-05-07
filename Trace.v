@@ -50,6 +50,41 @@ CoInductive TraceEq {A} : TraceOf A -> TraceOf A -> Prop :=
 | EqCons : forall m mm1 mm2, TraceEq mm1 mm2 ->
                              TraceEq (notfinished m mm1) (notfinished m mm2).
 
+Lemma TraceEqRefl: forall {A} (M: TraceOf A),
+    TraceEq M M.
+Proof.
+  cofix COFIX.
+  intros. 
+  destruct M. 
+  - constructor.
+  - constructor; apply COFIX.     
+Qed.
+
+Lemma TraceEqTrans : forall {A} (M1 M2 M3: TraceOf A),
+    TraceEq M1 M2 ->
+    TraceEq M2 M3 ->
+    TraceEq M1 M3. 
+Proof.
+  cofix COFIX.
+  intros.
+  inversion H; subst.
+  - inversion H0; subst. 
+    constructor. 
+  - inversion H0; subst. 
+    constructor. eapply COFIX; eauto. 
+Qed.
+
+Lemma TraceEqSym : forall {A} (M1 M2: TraceOf A),
+    TraceEq M1 M2 ->
+    TraceEq M2 M1.
+Proof.
+  cofix COFIX.
+  intros.
+  inversion H; subst.
+  - constructor.
+  - constructor. apply COFIX; auto. 
+Qed.
+
 CoFixpoint TraceApp {A} (T: TraceOf A) (TO: option (TraceOf A)) : TraceOf A :=
   match T with
   | finished a =>
@@ -98,6 +133,7 @@ Inductive IsEnd {A} : TraceOf A -> A -> Prop :=
 | IsEndNow : forall a, IsEnd (finished a) a
 | IsEndLater : forall T a a', IsEnd T a -> IsEnd (notfinished a' T) a
 .
+
 
 (************************
  Trace Lemmas and axioms 

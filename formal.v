@@ -580,6 +580,7 @@ CoInductive FindCall (cm: CallMap) : MTrace -> Contour -> MTrace -> Prop :=
       FindCall cm MM C MM' ->
       FindCall cm (notfinished M MM) C MM'.
 
+
 Definition FindCallMP (cm : CallMap) (MP : MPTrace) (C : Contour) (MP' : MPTrace) :=
   FindCall cm (mapTrace ms MP) C (mapTrace ms MP').
 
@@ -593,6 +594,18 @@ CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
        (forall MM' C', Subtrace cm C MM C' MM' -> StackSafety cm MM' C') ->
        StackSafety cm MM C.
  *)
+
+Inductive FindRet (isRet : MachineState -> Prop) : MTrace -> MTrace -> MachineState -> option MTrace -> Prop :=
+| FindRetDone: forall m,
+    isRet m -> FindRet isRet (finished m) (finished m) m None 
+| FindRetNotDone: forall m M,
+    isRet m -> FindRet isRet (notfinished m M) (finished m) m (Some M)
+| FindRetLater: forall m M M2 mr MO,
+    ~isRet m ->
+    FindRet isRet M M2 mr MO ->
+    FindRet isRet (notfinished m M) (notfinished m M2) mr MO.
+(* maybe useful ?? *)
+
 (* SNA: Changed this so that it can include the return, which helps with my proofs
    and doesn't seem to break anyone else's. *)
 Definition EagerStackSafety (cm : CallMap) : MPTrace -> Contour -> Prop :=
@@ -951,6 +964,17 @@ Definition LazyStackSafety (cm : CallMap) (MP:MPTrace) : Prop :=
     ObservableIntegrity C' MP'' MPsuffO /\
     ObservableConfidentiality C' MP' (isRet (ms (head MP')))).
 
+(*
+Definition LazyStackSafety (cm : CallMap) (MP:MPTrace) : Prop :=
+  ObservableConfidentiality (makeContour 0 (ms (head MP))) MP (fun _ => False) /\
+  (forall MP' MP'' C' MPsuffO,
+    FindCallMP cm MP C' MP' ->
+(*     (there is a suffix -> ObservableIntegrity on suffix) ->  *)
+    TraceSpan (fun mp => ~isRet (ms (head MP')) (ms mp)) MP' MP'' MPsuffO ->
+    ObservableIntegrity C' MP'' MPsuffO /\
+    ObservableConfidentiality C' MP' (isRet (ms (head MP')))).
+ *)
+
 (* More conjectural stuff follows. *)
 
 (* This is meant to rollback in all of the cases that either an integrity or a confidentiality
@@ -973,9 +997,17 @@ Definition LazyStackSafety' (cm : CallMap) (MP:MPTrace) : Prop :=
                           TraceSpan (fun mp => ~isRet (ms (head MP')) (ms mp)) MP' MP'' MPsuffO ->
                           ObservableConfidentegrity C' MP'' MPsuffO (isRet (ms (head MP'')))).    
 
-Axiom isRet_dec :
+Lemma isRet_dec :
   forall M1 M2,
     isRet M1 M2 \/ ~isRet M1 M2.
+Proof.
+  unfold isRet. intros.
+  destruct (WordEqDec (M2 (Reg PC)) (wplus (M1 (Reg PC)) 4)).
+  - destruct (WordEqDec (M2 (Reg SP)) (M1 (Reg SP))).
+    + left; rewrite e, e0; auto. 
+    + right. intros [H1 H2]. rewrite H2 in n; apply n; auto.
+  - right. intros [H1 H2].  rewrite H1 in n; apply n; auto.
+Qed.
 
 Lemma MapTraceHead :
   forall MP,
@@ -997,6 +1029,7 @@ Axiom RealTraceApp :
 Axiom ObsTraceMToObsTrace :
   forall MP,
     ObsTraceOf MP = ObsTraceOfM (mapTrace ms MP).
+(* probably not provable with equality *)
 
 Lemma EagerImpliesLazyInt :
   forall C MP MPEager MPLazy MPLazyO,
