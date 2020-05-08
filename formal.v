@@ -273,7 +273,7 @@ Definition ObsTracePrefix (OO OO' : TraceOf Observation) : Prop :=
 Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace) (isRet : MachineState -> Prop) :=
   forall m' M',
     variantOf (ms (head MP)) m' C ->
-    LongestPrefix (fun m => isRet m -> IsEnd (mapTrace fst MP) m) M' (MTraceOf m') ->
+    LongestPrefix (fun m => isRet m -> IsEnd (mapTrace fst MP) m) (MTraceOf m') M' ->
     ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M') /\
     ((exists mpret, IsEnd MP mpret) <-> (exists mret', IsEnd M' mret')) /\
     (forall mpret mret' k,
