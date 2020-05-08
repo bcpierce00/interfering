@@ -150,10 +150,33 @@ Proof.
   intros. induction H; constructor; auto.
 Qed.
 
+Lemma SplitInclusiveHead {A} (p : A -> Prop) (T Tpre Tsuff : TraceOf A) :
+  SplitInclusive p T Tpre Tsuff -> head T = head Tpre.
+Proof.
+  intros H; inversion H; auto.
+Qed.
+
+Lemma SplitInclusiveHasEnd {A : Type} (p : A -> Prop) :
+  forall T Tpre Tsuff, SplitInclusive p T Tpre Tsuff ->
+                       exists a, IsEnd Tpre a.
+Proof.
+  intros T Tpre Tsuff H; induction H.
+  - eexists; econstructor.
+  - eexists; econstructor.
+  - destruct IHSplitInclusive; eexists; econstructor; eauto.
+Qed.
+  
 Definition PrefixUpTo {A} (p : A -> Prop) (T Tpre : TraceOf A) : Prop :=
   (exists Tsuff, SplitInclusive p T Tpre Tsuff) \/
   ForallTrace (fun m => ~ (p m)) T /\ TraceEq T Tpre.
 
+Lemma PrefixUpToHead {A} (p : A -> Prop) (T Tpre : TraceOf A) :
+  PrefixUpTo p T Tpre -> head T = head Tpre.
+Proof.
+  intros [[Tsuff Hpre] | [? Eq]].
+  - eapply SplitInclusiveHead; eauto.
+  - inversion Eq; auto.
+Qed.
 
 (************************
  Trace Lemmas and axioms 
