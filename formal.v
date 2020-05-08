@@ -303,7 +303,12 @@ CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
 | StrongConfEnd :
     forall mp m,
       R (ms mp) -> R m ->
+      StrongEagerStackConfidentiality R (finished mp) (finished m)
+| StrongConfNotMStep :
+    forall mp m,
+      mpstep mp = None -> 
       StrongEagerStackConfidentiality R (finished mp) (finished m).
+
 (* RB: Is this property too strong to use in practice, in particular when combined
    with the eager safety testing property? From the halting case in that property,
    can we infer that the MTrace finishes when the MPTrace does, even though the
@@ -377,6 +382,10 @@ Proof.
       rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
     apply ObsEqFinishedTau.
+  - rewrite (idTrace_eq (ObsTraceOf (finished mp))).
+    rewrite (idTrace_eq (ObsTraceOfM (finished m))).
+    simpl.
+    apply ObsEqFinishedTau.
 Qed.
 
 Lemma ComponentConfTrans :
@@ -426,6 +435,7 @@ Proof.
     inversion Conf; subst; eauto; clear Conf; simpl in *.
     + exists m.
       constructor.
+    + exists m. constructor.
     + destruct (IHHEnd M'); eauto using confStepPreservesVariant.
       exists x; constructor; eauto.
   - intros [mvret HEnd].
@@ -434,6 +444,7 @@ Proof.
     inversion Conf; subst; eauto; clear Conf; simpl in *.
     + exists mp.
       constructor.
+    + exists mp; constructor.
     + destruct (IHHEnd MP0); eauto using confStepPreservesVariant.
       exists x; constructor; eauto.
 Qed.
@@ -454,6 +465,8 @@ Proof.
   - intros k Hk.
     inversion HMVEnd; subst; clear HMVEnd; eauto.
     inversion Hk; exfalso; eauto.
+  - inversion HMVEnd; subst; clear HMVEnd; eauto.
+    intros k [Contra | Contra]; exfalso; eauto.
   - inversion HMVEnd; subst; clear HMVEnd; eauto.
     eapply ComponentConfTrans; eauto.
     intros k Hk.
@@ -903,15 +916,18 @@ Qed.
 
 (*
 Theorem TestImpliesConfidentialityToplevel :
-  forall cm C MM MNCRs,
-  (exists M N, Last (M,N,C,fun _ => False) MNCRs) ->
-  EagerStackSafetyTest cm MM MNCRs ->
-  forall N, variantOf (head MM) N C ->
-            StrongEagerStackConfidentiality (fun _ => False) MM (traceOf N).
+  forall cm C MP,
+    (forall vs, (exists vse, Last vse vs /\ contour vse = C) ->
+                WellFormedVS (ms (head MP)) vs ->
+                EagerStackSafetyTest cm MP vs) ->
+    (forall mv, variantOf (ms (head MP)) mv C ->
+                StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf mv)).
 Proof.
-
   cofix COFIX.
-  intros cm C MM MNCRs [M0 [N0 HLast]] Safety N Var.
+  intros cm C MP Safety mv Var.
+  destruct MP.
+  - apply StrongConfNotMStep.
+  
   inversion Safety; subst; clear Safety.
   - remember HLast as HIn; clear HeqHIn; apply Last_implies_In in HIn.
     simpl in *.
