@@ -34,6 +34,22 @@ Proof.
   - simpl. constructor.
 Qed.
 
+Inductive SplitInclusive {A} (P:A -> Prop) : TraceOf A -> TraceOf A -> TraceOf A -> Prop :=
+| PNowFinished : forall a, P a -> SplitInclusive P (finished a) (finished a) (finished a)
+| PNowNotFinished : forall a T, P a -> SplitInclusive P (notfinished a T) (finished a) (notfinished a T)
+| PLater : forall a T Tpre Tsuff,
+    ~ P a ->
+    SplitInclusive P T Tpre Tsuff ->
+    SplitInclusive P (notfinished a T) (notfinished a Tpre) Tsuff.
+
+Lemma SplitInclusiveIsInclusive :
+  forall {A} P (T1 T2 T3 : TraceOf A),
+    SplitInclusive P T1 T2 T3 ->
+    InTrace (head T3) T2.
+Proof.
+  intros. induction H; constructor; auto.
+Qed.
+  
 CoFixpoint mapTrace {A B:Type} (f:A -> B) (T: TraceOf A) : TraceOf B :=
   match T with
   | finished a => finished (f a)

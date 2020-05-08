@@ -82,7 +82,7 @@ Definition RealMTrace (M:MTrace) : Prop :=
   M = MTraceOf (head M).
 
 Definition RealMPTrace (MP:MPTrace) : Prop :=
-  RealMTrace (mapTrace ms MP).
+  MP = MPTraceOf (head MP).
 
 (* Confidentiality and Integrity Labels *)
 Inductive CLabel :=
@@ -569,7 +569,7 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
    find the starts of calls and then take prefixes/suffixes when we need them.
    Also we don't really need to update contours so much as just generate them
    from the state. *)
-CoInductive FindCall (cm: CallMap) : MTrace -> Contour -> MTrace -> Prop :=
+(*CoInductive FindCall (cm: CallMap) : MTrace -> Contour -> MTrace -> Prop :=
   | FindCallNow : forall C MM MM' args,
       (* Current instruction is a call *)
       isCall cm (head MM) args ->
@@ -578,8 +578,18 @@ CoInductive FindCall (cm: CallMap) : MTrace -> Contour -> MTrace -> Prop :=
       FindCall cm MM C MM'
   | FindCallLater: forall C MM MM' M,
       FindCall cm MM C MM' ->
-      FindCall cm (notfinished M MM) C MM'.
+      FindCall cm (notfinished M MM) C MM'. *)
 
+Inductive FindCall (cm: CallMap) : MTrace -> Contour -> MTrace -> Prop :=
+| NextCall : forall C M Mpre Msuff args,
+    SplitInclusive (fun m => isCall cm m args) M Mpre Msuff ->
+    makeContour args (head Msuff) = C ->
+    FindCall cm M C Msuff
+| LaterCall : forall C C' m M M' Msuff Mcall,
+    FindCall cm M C Msuff ->
+    Msuff = notfinished m M' ->
+    FindCall cm M' C' Mcall ->
+    FindCall cm M C' Mcall.
 
 Definition FindCallMP (cm : CallMap) (MP : MPTrace) (C : Contour) (MP' : MPTrace) :=
   FindCall cm (mapTrace ms MP) C (mapTrace ms MP').
@@ -595,16 +605,13 @@ CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
        StackSafety cm MM C.
  *)
 
-Inductive FindRet (isRet : MachineState -> Prop) : MTrace -> MTrace -> MachineState -> option MTrace -> Prop :=
-| FindRetDone: forall m,
-    isRet m -> FindRet isRet (finished m) (finished m) m None 
-| FindRetNotDone: forall m M,
-    isRet m -> FindRet isRet (notfinished m M) (finished m) m (Some M)
-| FindRetLater: forall m M M2 mr MO,
-    ~isRet m ->
-    FindRet isRet M M2 mr MO ->
-    FindRet isRet (notfinished m M) (notfinished m M2) mr MO.
-(* maybe useful ?? *)
+Definition EagerReturn (isRet : MachineState -> Prop) (M Mpre : MTrace) : Prop :=
+  (exists Msuff, SplitInclusive isRet M Mpre Msuff)
+  \/ ForallTrace (fun m => ~ (isRet m)) M /\ TraceEq M Mpre.
+
+Definition EagerReturnMP (isRet : MPState -> Prop) (MP MPpre : MPTrace) : Prop :=
+  (exists MPsuff, SplitInclusive isRet MP MPpre MPsuff)
+  \/ ForallTrace (fun m => ~ (isRet m)) MP /\ TraceEq MP MPpre.
 
 (* SNA: Changed this so that it can include the return, which helps with my proofs
    and doesn't seem to break anyone else's. *)
@@ -614,7 +621,7 @@ Definition EagerStackSafety (cm : CallMap) : MPTrace -> Contour -> Prop :=
     (EagerStackConfidentiality C MP (fun _ => False)) /\
     (forall (MPpre' MP' : MPTrace) C',
         FindCallMP cm MP C' MP' -> (* Find call*)
-        LongestPrefix (fun mp => isRet (ms (head MP')) (ms mp) -> IsEnd MP' mp) MP' MPpre' ->
+        EagerReturnMP (fun mp => isRet (ms (head MP')) (ms mp)) MP' MPpre' ->
         EagerStackIntegrity C' MPpre' /\
         EagerStackConfidentiality C' MPpre' (isRet (ms (head MPpre')))).
 
@@ -956,13 +963,17 @@ Definition ObservableConfidentiality (C:Contour) (MP:MPTrace) (isRet:MachineStat
     let variant := N ^ (option_map (fun N' => MTraceOf (RollbackConf (ms (head MP)) n (head N'))) NO) in
     ObsTracePrefix (ObsTraceOfM variant) (ObsTraceOf MP).
 
+Definition LazyReturnMP (isRet : MPState -> Prop) (MP MPpre : MPTrace) (MPsuffO : option MPTrace) : Prop :=
+  (exists MPsuff, MPsuffO = Some MPsuff /\ SplitInclusive isRet MP MPpre MPsuff)
+  \/ (ForallTrace (fun m => ~ (isRet m)) MP /\ TraceEq MP MPpre /\ MPsuffO = None).
+
 Definition LazyStackSafety (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentiality (makeContour 0 (ms (head MP))) MP (fun _ => False) /\
-  (forall MP' MP'' C' MPsuffO,
-    FindCallMP cm MP C' MP' ->
-    TraceSpan (fun mp => ~isRet (ms (head MP')) (ms mp)) MP' MP'' MPsuffO ->
-    ObservableIntegrity C' MP'' MPsuffO /\
-    ObservableConfidentiality C' MP' (isRet (ms (head MP')))).
+  (forall MPcall MPpre C' MPsuffO,
+    FindCallMP cm MP C' MPcall ->
+    LazyReturnMP (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuffO ->
+    ObservableIntegrity C' MPpre MPsuffO /\
+    ObservableConfidentiality C' MPcall (isRet (ms (head MPcall)))).
 
 (*
 Definition LazyStackSafety (cm : CallMap) (MP:MPTrace) : Prop :=
@@ -1028,45 +1039,40 @@ Axiom RealTraceApp :
 
 Axiom ObsTraceMToObsTrace :
   forall MP,
-    ObsTraceOf MP = ObsTraceOfM (mapTrace ms MP).
+    ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM (mapTrace ms MP)).
 (* probably not provable with equality *)
 
 Lemma EagerImpliesLazyInt :
-  forall C MP MPEager MPLazy MPLazyO,
-    RealMPTrace MP ->
-    LongestPrefix (fun mp => isRet (ms (head MP)) (ms mp) -> IsEnd MPEager mp) MP MPEager ->
-    TraceSpan (fun mp => ~isRet (ms (head MP)) (ms mp)) MP MPLazy MPLazyO ->
-    EagerStackIntegrity C MPEager ->
-    ObservableIntegrity C MPLazy MPLazyO.
+  forall C MPcall MPpre MPsuffO,
+    RealMPTrace MPcall ->
+    LazyReturnMP (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuffO ->
+    EagerStackIntegrity C MPpre ->
+    ObservableIntegrity C MPpre MPsuffO.
 Proof.
   unfold EagerStackIntegrity. unfold ObservableIntegrity. intros.
-  destruct MPLazyO as [MPsuff |] eqn:E; auto.
-  assert (IsEnd MPEager (head MPsuff)).
-  { admit. (* I think I've got everything I need here, I just can't quite put it together. *) }
-  apply IsEndInTrace in H3.
-  assert (forall k, integrityOf (C k) = HI -> (ms (head MPEager)) k = (ms (head MPsuff)) k).
-  { intros. apply H2; auto. }
-  assert (RollbackInt C (ms (head MPEager)) (ms (head MPsuff)) = (ms (head MPsuff))).
+  destruct MPsuffO as [MPsuff |] eqn:E; auto.
+  assert (InTrace (head MPsuff) MPpre).
+  { unfold LazyReturnMP in H0. destruct H0.
+    - destruct H0 as [MPsuff0]. destruct H0. apply SplitInclusiveIsInclusive in H2.
+      injection H0. intros. rewrite H3. auto.
+    - destruct H0. destruct H2. discriminate.
+  }
+  assert (forall k, integrityOf (C k) = HI -> (ms (head MPpre)) k = (ms (head MPsuff)) k).
+  { intros. apply H1; auto. }
+  assert (RollbackInt C (ms (head MPpre)) (ms (head MPsuff)) = (ms (head MPsuff))).
   { unfold RollbackInt. extensionality k. destruct (integrityOf (C k)) eqn:E2.
-    - apply H4; auto.
+    - apply H3; auto.
     - auto. }
-  assert (head MPEager = head MPLazy).
-  { admit. }
-  rewrite <- H6. rewrite H5.
-  destruct H1. rewrite H1 in H. apply (RealTraceApp MPLazy MPsuff) in H. destruct H.
-  unfold RealMPTrace in H8. unfold RealMTrace in H8. rewrite <- MapTraceHead.
-  rewrite <- H8. rewrite ObsTraceMToObsTrace.
-  unfold ObsTracePrefix. exists (ObsTraceOfM (mapTrace ms MPsuff)). left. split.
-  - constructor.
-  - apply TracePrefix_refl.
+  rewrite H4.  
+  (* This part is likely to change as we adjust the treatment of traces *)
 Admitted.
-    
+
 (*Lemma EagerImpliesLazyConf :
   forall C MP MPEager MPLazy MPLazyO isRet,
     RealMPTrace MP ->
     LongestPrefix (fun mp => IsRet 
     EagerStackConfidentiality C MM isRet -> ObservableConfidentiality C (MM^MMO) isRet. *)
-Lemma EagerImpliesLazyConf :
+(*Lemma EagerImpliesLazyConf :
   forall C MP MPEager MPLazy MPLazyO (isRet: MachineState -> Prop),
     RealMPTrace MP ->
     LongestPrefix (fun mp => isRet (ms mp) -> IsEnd MPEager mp) MP MPEager ->
@@ -1074,8 +1080,8 @@ Lemma EagerImpliesLazyConf :
     EagerStackConfidentiality C MPEager isRet ->
     ObservableConfidentiality C (MPLazy^MPLazyO) isRet.
 Proof.
-  Admitted.
-  
+  Admitted. *)
+
 Theorem EagerSafetyImpliesLazy :
   forall cm MP,
     RealMPTrace MP ->
@@ -1084,65 +1090,16 @@ Proof.
   unfold EagerStackSafety. unfold LazyStackSafety. intros. split.
   - admit. (* admitting all confidentiality for now *)
   - intros. split.
-    + destruct H2. destruct MPsuffO as [MPSuff | ]; unfold ObservableIntegrity; auto.
-      pose (MPEager := MP''^(Some (finished (head MPSuff)))). simpl in MPEager.
-      apply (EagerImpliesLazyInt C' MP' MPEager MP'' (Some MPSuff)).
-      * apply FindCallApp in H1. destruct H1 as [MPpre]. rewrite H1 in H. apply RealTraceApp in H.
-        destruct H. auto.
-      * unfold LongestPrefix.
-        assert (ForallTrace (fun mp : MPState => isRet (ms (head MP')) (ms mp)
-                                                 -> IsEnd (MP'' ^ Some (finished (head MPSuff))) mp)
-                            (MP'' ^ Some (finished (head MPSuff)))).
-        { apply ForallTraceApp.
-          - pose (P := fun mp => ~isRet (ms (head MP')) (ms mp)).
-            pose (Q := fun mp => isRet (ms (head MP')) (ms mp) -> IsEnd (MP'' ^ Some (finished (head MPSuff))) mp).
-            apply (ForallImplication MPState P Q MP'').
-            + unfold P. unfold Q. intros. contradiction.
-            + unfold P. destruct H3. auto.
-          - pose (P := fun mp => IsEnd (MP'' ^ Some (finished (head MPSuff))) mp).
-            pose (Q := fun mp => isRet (ms (head MP')) (ms mp) -> IsEnd (MP'' ^ Some (finished (head MPSuff))) mp).
-            apply (ForallImplication MPState P Q (finished (head MPSuff))).
-            + unfold P. unfold Q. intros. auto.
-            + unfold P. constructor. apply IsEndAppFinish. }
-        destruct H3. destruct MPSuff.
-        { exists None. unfold TraceSpan. split; try split.
-          - rewrite H2. unfold MPEager. simpl. rewrite <- TraceAppNone. auto.
-          - simpl in MPEager. unfold MPEager. simpl.  auto. 
-          - intros. unfold MPEager. unfold head. rewrite <- H2. auto. }
-        { exists (Some MPSuff). unfold TraceSpan. split; try split.
-          - unfold MPEager. simpl. simpl in MPEager. rewrite <- TraceAppAssoc.
-              rewrite H2. rewrite <- TraceAppFinished. auto.
-          - unfold MPEager. simpl. auto.
-          - admit. }
-      * unfold TraceSpan. split; try split; destruct H3; auto.
-      * destruct H0. destruct H4. specialize H5 with MPEager MP' C'.
-        pose (P := fun mp => ~isRet (ms (head MP')) (ms mp)).
-        pose (P' := fun mp => IsEnd (MP'' ^ Some (finished (head MPSuff))) mp).
-        pose (Q := fun mp => isRet (ms (head MP')) (ms mp) -> IsEnd (MP'' ^ Some (finished (head MPSuff))) mp).    
-        assert (LongestPrefix Q MP' MPEager). 
-        { unfold LongestPrefix. unfold MPEager. destruct H3. destruct MPSuff as [| m MPSuff'] eqn:E.
-          - simpl. exists None. unfold TraceSpan. split;try split.
-            + rewrite H2. apply TraceAppNone.
-            + apply ForallTraceApp.
-              * apply (ForallImplication MPState P Q); unfold P; unfold Q; intros; auto; contradiction.
-              * unfold Q. apply (ForallImplication MPState P' Q); unfold P'; unfold Q; intros; auto; simpl.
-                constructor. apply IsEndAppFinish.
-            + intros. rewrite <- H2. auto.
-          - simpl. exists (Some MPSuff'). unfold TraceSpan. split; try split.
-            + rewrite <- TraceAppAssoc. rewrite TraceAppFinished. auto.
-            + apply ForallTraceApp.
-              * apply (ForallImplication MPState P Q); unfold P; unfold Q; intros; simpl; auto; contradiction.
-              * unfold Q. apply (ForallImplication MPState P' Q); unfold P'; unfold Q; intros; auto; simpl.
-                constructor. apply IsEndAppFinish.
-            + intros. admit. }        
-        apply H5 in H1.
-        { destruct H1. auto. }
-        unfold Q in H6.
-        admit. (* This is where I need to use the fact that anything after (head MPSuff) is not in the
-                  prefix. *)
-    + pose (H3 := H2). unfold TraceSpan in H3. destruct H3. rewrite H3.
-      pose (MPEager := MP''^(option_map (fun MPO => finished (head MPO)) MPsuffO)).
-      apply (EagerImpliesLazyConf C' MP' MPEager MP'' MPsuffO). 
+    + destruct H2.
+      * destruct H2 as [MPsuff]. destruct H2.
+        apply (EagerImpliesLazyInt C' MPcall MPpre MPsuffO).
+        { admit. (* need to fix up lemmas about RealTrace *)}
+        { constructor. exists MPsuff. split; auto. }
+        destruct H0. destruct H4. specialize H5 with MPpre MPcall C'.
+        apply H5 in H1. destruct H1;auto. constructor.
+        exists MPsuff. auto.
+      * destruct H2. destruct H3. rewrite H4. unfold ObservableIntegrity. auto.
+    + admit. (* still admitting confidentiality. *)
 Admitted.
 
 (*Conjecture Lazy'ImpliesLazy :
