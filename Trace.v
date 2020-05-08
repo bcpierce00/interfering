@@ -129,10 +129,30 @@ Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : TraceOf A) (MMO : option (Tr
 Definition LongestPrefix {A} (P : A -> Prop) (MM1 MM2 : TraceOf A) : Prop :=
   exists MMO, TraceSpan P MM1 MM2 MMO.
 
+(* TODO: Rename to Last *)
 Inductive IsEnd {A} : TraceOf A -> A -> Prop :=
 | IsEndNow : forall a, IsEnd (finished a) a
 | IsEndLater : forall T a a', IsEnd T a -> IsEnd (notfinished a' T) a
 .
+
+Inductive SplitInclusive {A} (P:A -> Prop) : TraceOf A -> TraceOf A -> TraceOf A -> Prop :=
+| PNowFinished : forall a, P a -> SplitInclusive P (finished a) (finished a) (finished a)
+| PNowNotFinished : forall a T, P a -> SplitInclusive P (notfinished a T) (finished a) (notfinished a T)
+| PLater : forall a T Tpre Tsuff,
+    ~ P a ->
+    SplitInclusive P T Tpre Tsuff ->
+    SplitInclusive P (notfinished a T) (notfinished a Tpre) Tsuff.
+
+Lemma SplitInclusiveIsInclusive : forall {A} P (T1 T2 T3 : TraceOf A),
+    SplitInclusive P T1 T2 T3 ->
+    InTrace (head T3) T2.
+Proof.
+  intros. induction H; constructor; auto.
+Qed.
+
+Definition PrefixUpTo {A} (p : A -> Prop) (T Tpre : TraceOf A) : Prop :=
+  (exists Tsuff, SplitInclusive p T Tpre Tsuff) \/
+  ForallTrace (fun m => ~ (p m)) T /\ TraceEq T Tpre.
 
 
 (************************
