@@ -483,11 +483,9 @@ Proof.
   intros mv MV HVar [MMO [App [NotR Pref]]].
   specialize (Conf MV).
   assert (head MV = mv) as HN.
-  { apply TraceAppHead in App.
-    rewrite App.
-    simpl.
-    destruct (step mv); simpl; auto.
-  }
+  { apply TraceAppHead in App.  
+    auto. 
+  } 
   split; [|split].
   - eapply StrongConfImpliesObsEq; eauto.
     + rewrite HN; eauto.
