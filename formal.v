@@ -867,18 +867,23 @@ Inductive VSE_step : VSE -> VSE -> Prop :=
 Definition VSEs_step (vses vses' : list VSE) : Prop :=
   Forall2 VSE_step vses vses'.
 
-(*
-Inductive Last {A : Type} : A -> list A -> Prop :=
-| LastSing : forall x, Last x [x]
-| LastTail : forall x h t, Last x t -> Last x (h::t).
+Inductive FinLast {A : Type} : A -> list A -> Prop :=
+| FLastSing : forall x, FinLast x [x]
+| FLastTail : forall x h t, FinLast x t -> FinLast x (h::t).
 
-Lemma Last_unique {A : Type} (x x' : A) (l : list A) :
-  Last x l -> Last x' l -> x = x'.
+Lemma FinLast_unique {A : Type} (x x' : A) (l : list A) :
+  FinLast x l -> FinLast x' l -> x = x'.
 Proof.
   intro H; induction H; intro HLast; inversion HLast; subst; clear HLast; eauto;
     match goal with
-    | [ H : Last _ [] |- _ ] => inversion H
+    | [ H : FinLast _ [] |- _ ] => inversion H
     end.
+Qed.
+
+Lemma FinLast_singleton {A : Type} (x x' : A) :
+  FinLast x [x'] -> x = x'.
+Proof.
+  intros H. inversion H; easy.
 Qed.
 
 Lemma VSE_step_preserves_in :
@@ -903,10 +908,10 @@ Qed.
 
 Lemma VSE_step_preserves_last :
   forall vse vses vses' N' O,
-  Last vse vses ->
+  FinLast vse vses ->
   Forall2 VSE_step vses vses' ->
   step (curr_variant vse) = (N',O) ->
-  Last (upd_curr N' vse) vses'.
+  FinLast (upd_curr N' vse) vses'.
 Proof.
   intros vse vses vses' N' O' HIn HForall HStep.
   induction HForall.
@@ -922,8 +927,8 @@ Proof.
     + right. apply IHHForall; auto.
 Qed.
 
-Lemma Last_implies_In {A : Type} (x : A) (l : list A) :
-  Last x l -> In x l.
+Lemma FinLast_implies_In {A : Type} (x : A) (l : list A) :
+  FinLast x l -> In x l.
 Proof.
   intros Last; induction Last.
   - left; auto.
@@ -937,7 +942,7 @@ Definition WellFormedVS (M : MachineState) (vs : VarStack) : Prop :=
   (* The curr_variant field is a variant of the current state. *)
   Forall (fun vse => variantOf M (curr_variant vse) (contour vse)) vs /\
   (* The stack is nonempty and the last retP is const False *)
-  (exists vse, Last vse vs /\ retP vse = fun _ => False) /\
+  (exists vse, FinLast vse vs /\ retP vse = fun _ => False) /\
   (* The current state is in the trace of *every* init machine. *)
   (Forall (fun vse => InTrace M (MTraceOf (init_machine vse))) vs) /\
   (* The variant state is in the trace of its own init variant. *)
@@ -1046,12 +1051,12 @@ Ltac progress_integrity :=
          | [ H : WellFormedVS ?M ?VS |- _ ] =>
            destruct H as [HVar [[vse_last' [HLast' HRet]] [HMTrace HNTrace]]]
          | [ H1 : Last ?X ?L, H2 : Last ?Y ?L |- _ ] =>
-           assert (Y = X) by (eapply Last_unique; eauto); subst; clear H2
+           assert (Y = X) by (eapply FinLast_unique; eauto); subst; clear H2
          end.
 
 Theorem TestImpliesIntegrityToplevel :
   forall cm C MM vs,
-    (exists vse, Last vse vs /\ contour vse = C) ->
+    (exists vse, FinLast vse vs /\ contour vse = C) ->
   EagerStackSafetyTest cm MM vs -> EagerStackIntegrity' C MM.
 Proof.
   cofix COFIX.
@@ -1062,10 +1067,10 @@ Proof.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H6; simpl.
-      eauto using Last_implies_In.
+      eauto using FinLast_implies_In.
     + apply (COFIX cm (contour vse_last) MP0 vs'); auto.
       unfold VSEs_step in *.
-      destruct (H3 vse_last (Last_implies_In vse_last vs HLast))
+      destruct (H3 vse_last (FinLast_implies_In vse_last vs HLast))
         as [N' [ON [HN' HConf]]].
       exists (upd_curr N' vse_last); split; auto.
       eapply VSE_step_preserves_last; eauto.
@@ -1073,11 +1078,11 @@ Proof.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H5.
-      eauto using Last_implies_In.
+      eauto using FinLast_implies_In.
     + apply (COFIX cm (contour vse_last) MP0 ((Build_VSE (ms mp) (ms mp) (ms mp) (makeContour args (ms mp)) (isRet (ms mp)))::vs')).
       * unfold VSEs_step in *.
         destruct (H2 vse_last)
-          as [N' [ON [HN' HConf]]]; eauto using Last_implies_In.
+          as [N' [ON [HN' HConf]]]; eauto using FinLast_implies_In.
         exists (upd_curr N' vse_last); split; auto.
         right; eauto using VSE_step_preserves_last.
       * apply H7.
@@ -1087,11 +1092,11 @@ Proof.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H5.
-      eauto using Last_implies_In.
+      eauto using FinLast_implies_In.
     + apply (COFIX cm (contour vse_last) MP0 (tl vs')); auto.
       unfold VSEs_step in *.
       destruct (H2 vse_last)
-        as [N' [ON [HN' HConf]]]; eauto using Last_implies_In.
+        as [N' [ON [HN' HConf]]]; eauto using FinLast_implies_In.
       destruct vs.
       * inversion H4; subst.
         inversion HLast.
@@ -1100,6 +1105,7 @@ Proof.
         inversion HLast; subst; clear HLast; eauto using VSE_step_preserves_last.
         { destruct H as [vse [[? | Contra] Contra']].
           + subst.
+            apply FinLast_singleton in HLast'; subst.
             rewrite HRet in Contra'; exfalso; eauto.
           + inversion Contra.
         }
@@ -1126,7 +1132,6 @@ Proof.
     rewrite (idTrace_eq (traceOf N)); simpl.
     rewrite
  *)
-*)
 
 (* ********* SNA Beware : Lazy Properties ********* *)
 
@@ -1264,9 +1269,9 @@ Proof.
   destruct H1. rewrite H1 in H. apply (RealTraceApp MPLazy MPsuff) in H. destruct H.
   unfold RealMPTrace in H8. unfold RealMTrace in H8. rewrite <- MapTraceHead.
   rewrite <- H8. rewrite ObsTraceMToObsTrace.
-  unfold ObsTracePrefix. exists (ObsTraceOfM (mapTrace ms MPsuff)). left. split.
-  - constructor.
-  - apply TracePrefix_refl.
+  (* unfold ObsTracePrefix. exists (ObsTraceOfM (mapTrace ms MPsuff)). left. split. *)
+  (* - constructor. *)
+  (* - apply TracePrefix_refl. *)
 Admitted.
     
 (*Lemma EagerImpliesLazyConf :
