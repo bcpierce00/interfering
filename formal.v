@@ -1145,6 +1145,52 @@ Proof.
     rewrite
  *)
 
+(*
+Lemma MTraceOf_eq M : MTraceOf M = notfinished M (MTraceOf (fst (step M))).
+Admitted.
+
+Lemma mpstep_step_some mp m p OM :
+  mpstep mp = Some (m, p, OM) -> step (ms mp) = (m, OM).
+Proof.
+  unfold mpstep.
+  destruct (step (ms mp)) as [m' OM'].
+  destruct (pstep mp) as [mp' |];
+    intros H;
+    now inversion H.
+Qed.
+
+Definition StrongEagerStackConfidentiality' (MP : MPTrace) (m : MachineState) :=
+  StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf m).
+
+Goal
+  forall (cm : CallMap) (MP : MPTrace) (C : Contour),
+    EagerStackSafetyTest' cm C MP ->
+  forall (m : MachineState),
+    variantOf (ms (head MP)) m C ->
+    (* StrongEagerStackConfidentiality' MP m. *)
+    StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf m).
+Proof.
+  cofix CH.
+  intros cm MP C Htest n Hvariant.
+  specialize (Htest n Hvariant).
+  inversion Htest
+    as [ mp' vs' Hwf
+       | mp' MP' ? vs' m' p' OM Hcall Hret Hstep Hwf Hconf Hint Hvsstep Hhead Htest'
+       | |];
+    subst; clear Htest;
+    try match goal with
+    | H : WellFormedVS _ ?VS |- _ => remember VS as vs eqn:Hvs
+    end.
+  - now apply StrongConfNotMStep.
+  - rewrite MTraceOf_eq.
+    apply StrongConfStep with OM.
+    + rewrite Hstep.
+      now setoid_rewrite Hhead.
+    + admit.
+    + admit.
+    + apply CH with cm C.
+*)
+
 (* ********* SNA Beware : Lazy Properties ********* *)
 
 (* Since eager property protects everything that is HI,
