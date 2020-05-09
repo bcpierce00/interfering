@@ -286,6 +286,18 @@ CoInductive ObsTracePrefix : TraceOf Observation -> TraceOf Observation -> Prop 
 | ObsPreAllTau : forall OO,
      ObsTracePrefix OO OO.
 
+Lemma ObsTracePrefix_refl : forall OO, ObsTracePrefix OO OO.
+Proof.
+  cofix CH.
+  intros [o | o OO].
+  - destruct o as [w |].
+    + now apply ObsPreFinishedOut1.
+    + now apply ObsPreFinishedTau.
+  - destruct o as [w |].
+    + now apply ObsPreNow, CH.
+    + now apply ObsPreTau1, ObsPreTau2, CH.
+Qed.
+
 (* LEO: I didn't like the non-coinductive nature of this... 
 Definition ObsTracePrefix (OO OO' : TraceOf Observation) : Prop :=
   exists OO'', ObsTraceEq OO OO'' /\ OO' <<== OO'' \/ ObsTraceEq OO' OO'' /\ OO' <<== OO.
@@ -1269,9 +1281,7 @@ Proof.
   destruct H1. rewrite H1 in H. apply (RealTraceApp MPLazy MPsuff) in H. destruct H.
   unfold RealMPTrace in H8. unfold RealMTrace in H8. rewrite <- MapTraceHead.
   rewrite <- H8. rewrite ObsTraceMToObsTrace.
-  (* unfold ObsTracePrefix. exists (ObsTraceOfM (mapTrace ms MPsuff)). left. split. *)
-  (* - constructor. *)
-  (* - apply TracePrefix_refl. *)
+  apply ObsTracePrefix_refl.
 Admitted.
     
 (*Lemma EagerImpliesLazyConf :
