@@ -286,6 +286,8 @@ CoInductive ObsTracePrefix : TraceOf Observation -> TraceOf Observation -> Prop 
 | ObsPreAllTau : forall OO,
      ObsTracePrefix OO OO.
 
+Notation "OO' <=_O OO" := (ObsTracePrefix OO OO') (at level 80).
+
 Lemma ObsTracePrefix_refl : forall OO, ObsTracePrefix OO OO.
 Proof.
   cofix CH.
@@ -341,8 +343,7 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
         - The observations of the MP trace are a prefix of the 
           observations of M'.
       *)
-     (* TODO: Make order clear for this with notation. *)
-     ObsTracePrefix (ObsTraceOfM M') (ObsTraceOf MP)) /\
+     (ObsTraceOf MP) <=_O (ObsTraceOfM M')) /\
     
     (* 3. The callee trace never returns. *) 
     ((forall mpret, ~ Last MP mpret) ->
@@ -460,7 +461,7 @@ Lemma StrongConfImpliesObsEq_Fault :
     StrongEagerStackConfidentiality R MP MV ->
     forall mpret,
       Last MP mpret -> ~ (R (ms mpret)) ->
-      ObsTracePrefix (ObsTraceOfM MV) (ObsTraceOf MP).
+      (ObsTraceOf MP) <=_O (ObsTraceOfM MV).
 Proof.  
   cofix COFIX.
   intros C R MP MV Var Conf.
@@ -1208,7 +1209,7 @@ Definition ObservableIntegrity (C:Contour) (MP:MPTrace) (MPsuffO:option MPTrace)
  match MPsuffO with
  | Some actual =>
    let ideal := MTraceOf (RollbackInt C (ms (head MP)) (ms (head actual))) in
-   ObsTracePrefix (ObsTraceOfM ideal) (ObsTraceOf actual)
+   (ObsTraceOf actual) <=_O (ObsTraceOfM ideal)
  | None => True
  end.
 
@@ -1225,7 +1226,7 @@ Definition ObservableConfidentiality (C:Contour) (MP:MPTrace) (isRet:MachineStat
     variantOf (ms (head MP)) n C ->
     TraceSpan (fun n' => ~ isRet n') (MTraceOf n) N NO ->
     let variant := N ^ (option_map (fun N' => MTraceOf (RollbackConf (ms (head MP)) n (head N'))) NO) in
-    ObsTracePrefix (ObsTraceOfM variant) (ObsTraceOf MP).
+    (ObsTraceOf MP) <=_O (ObsTraceOfM variant).
 
 Definition LazyStackSafety (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentiality (makeContour 0 (ms (head MP))) MP (fun _ => False) /\
@@ -1260,7 +1261,7 @@ Definition ObservableConfidentegrity (C:Contour) (MP:MPTrace) (MPsuffO:option MP
     TraceSpan (fun n' => ~ isRet n') (MTraceOf n) N NO ->
     let actual := MP ^ MPsuffO in
     let ideal := N ^ (option_map (fun N' => MTraceOf (RollbackCI C (ms (head MP)) n (head N'))) NO) in
-    ObsTracePrefix (ObsTraceOfM ideal) (ObsTraceOf actual).
+    (ObsTraceOf actual) <=_O (ObsTraceOfM ideal).
 
 Definition LazyStackSafety' (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentegrity (makeContour 0 (ms (head MP))) MP None (fun _ => False) /\
