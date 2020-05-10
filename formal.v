@@ -1160,6 +1160,11 @@ Proof.
     now inversion H.
 Qed.
 
+Lemma In_singleton {A : Type} (x : A) : In x [x].
+Proof.
+  left. reflexivity.
+Qed.
+
 Definition StrongEagerStackConfidentiality' (MP : MPTrace) (m : MachineState) :=
   StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf m).
 
@@ -1179,8 +1184,9 @@ Proof.
        | mp' MP' ? vs' m' p' OM Hcall Hret Hstep Hwf Hconf Hint Hvsstep Hhead Htest'
        | |];
     subst; clear Htest;
+    (* Give a name to the variant so as to keep the context clean. *)
     try match goal with
-    | H : WellFormedVS _ ?VS |- _ => remember VS as vs eqn:Hvs
+    | H : WellFormedVS _ [?VSE] |- _ => remember VSE as vse eqn:Hvse
     end.
   - now apply StrongConfNotMStep.
   - rewrite MTraceOf_eq.
@@ -1189,7 +1195,18 @@ Proof.
       now setoid_rewrite Hhead.
     + admit.
     + admit.
-    + apply CH with cm C.
+    + (* Introduce names before applying CH. *)
+      specialize (Hconf _ (In_singleton vse)) as [n' [OM' [Hstep' Hconf]]].
+      rewrite Hvse in Hstep'. simpl in Hstep'.
+      apply CH with cm C.
+      * intros n_ Hvariant_.
+        (* apply EagerTestStep. *)
+        admit.
+      * eapply confStepPreservesVariant;
+          [ setoid_rewrite Hhead; now apply Hstep
+          | now rewrite Hstep'
+          |
+          | now apply Hvariant].
 *)
 
 (* ********* SNA Beware : Lazy Properties ********* *)
