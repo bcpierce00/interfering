@@ -34,14 +34,6 @@ Proof.
   - simpl. constructor.
 Qed.
 
-Inductive SplitInclusive {A} (P:A -> Prop) : TraceOf A -> TraceOf A -> TraceOf A -> Prop :=
-| PNowFinished : forall a, P a -> SplitInclusive P (finished a) (finished a) (finished a)
-| PNowNotFinished : forall a T, P a -> SplitInclusive P (notfinished a T) (finished a) (notfinished a T)
-| PLater : forall a T Tpre Tsuff,
-    ~ P a ->
-    SplitInclusive P T Tpre Tsuff ->
-    SplitInclusive P (notfinished a T) (notfinished a Tpre) Tsuff.
-  
 CoFixpoint mapTrace {A B:Type} (f:A -> B) (T: TraceOf A) : TraceOf B :=
   match T with
   | finished a => finished (f a)
@@ -142,9 +134,57 @@ Inductive Last {A} : TraceOf A -> A -> Prop :=
 | LastLater : forall T a a', Last T a -> Last (notfinished a' T) a
 .
 
+Inductive SplitInclusive {A} (P:A -> Prop) : TraceOf A -> TraceOf A -> TraceOf A -> Prop :=
+| PNowFinished : forall a, P a -> SplitInclusive P (finished a) (finished a) (finished a)
+| PNowNotFinished : forall a T, P a -> SplitInclusive P (notfinished a T) (finished a) (notfinished a T)
+| PLater : forall a T Tpre Tsuff,
+    ~ P a ->
+    SplitInclusive P T Tpre Tsuff ->
+    SplitInclusive P (notfinished a T) (notfinished a Tpre) Tsuff.
+
+Lemma SplitInclusiveHeadEq :
+  forall {A} (P:A->Prop) T1 T2 T3,
+    SplitInclusive P T1 T2 T3 ->
+    head T1 = head T2.
+Proof.
+  intros. induction H; auto.
+Qed.
+
+Lemma SplitInclusiveIsInclusive :
+  forall {A} P (T1 T2 T3 : TraceOf A),
+    SplitInclusive P T1 T2 T3 ->
+    Last T2 (head T3).
+Proof.
+  intros. induction H; constructor; auto.
+Qed.
+
+Lemma SplitInclusiveHead {A} (p : A -> Prop) (T Tpre Tsuff : TraceOf A) :
+  SplitInclusive p T Tpre Tsuff -> head T = head Tpre.
+Proof.
+  intros H; inversion H; auto.
+Qed.
+
+Lemma SplitInclusiveHasLast {A : Type} (p : A -> Prop) :
+  forall T Tpre Tsuff, SplitInclusive p T Tpre Tsuff ->
+                       exists a, Last Tpre a.
+Proof.
+  intros T Tpre Tsuff H; induction H.
+  - eexists; econstructor.
+  - eexists; econstructor.
+  - destruct IHSplitInclusive; eexists; econstructor; eauto.
+Qed.
+  
 Definition PrefixUpTo {A} (p : A -> Prop) (T Tpre : TraceOf A) : Prop :=
   (exists Tsuff, SplitInclusive p T Tpre Tsuff) \/
   ForallTrace (fun m => ~ (p m)) T /\ TraceEq T Tpre.
+
+Lemma PrefixUpToHead {A} (p : A -> Prop) (T Tpre : TraceOf A) :
+  PrefixUpTo p T Tpre -> head T = head Tpre.
+Proof.
+  intros [[Tsuff Hpre] | [? Eq]].
+  - eapply SplitInclusiveHead; eauto.
+  - inversion Eq; auto.
+Qed.
 
 (************************
  Trace Lemmas and axioms 
@@ -174,22 +214,6 @@ Lemma ForallTraceTautology :
 Proof.
   cofix COFIX. intros. destruct T;constructor;auto.
   Guarded.
-Qed.
-
-Lemma SplitInclusiveHeadEq :
-  forall {A} (P:A->Prop) T1 T2 T3,
-    SplitInclusive P T1 T2 T3 ->
-    head T1 = head T2.
-Proof.
-  intros. induction H; auto.
-Qed.
-
-Lemma SplitInclusiveIsInclusive :
-  forall {A} P (T1 T2 T3 : TraceOf A),
-    SplitInclusive P T1 T2 T3 ->
-    Last T2 (head T3).
-Proof.
-  intros. induction H; constructor; auto.
 Qed.
 
 Lemma SplitInclusivePHead :

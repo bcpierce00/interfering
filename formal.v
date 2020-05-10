@@ -264,10 +264,46 @@ the previous two cases.  Maybe try:
 ?
 LEO: That was the other thing I had in mind. I'll see what makes proofs easier.
 (Note that this proposal overlaps with the first two cases, as well as the last one.)
-*)
+ *)
 
+(* The second is a prefix of the first, up to Tau *)
+CoInductive ObsTracePrefix : TraceOf Observation -> TraceOf Observation -> Prop :=
+| ObsPreTau1 : forall OO OO',
+    ObsTracePrefix OO OO' ->
+    ObsTracePrefix (notfinished Tau OO) OO'
+| ObsPreTau2 : forall OO OO',
+    ObsTracePrefix OO OO' ->
+    ObsTracePrefix OO (notfinished Tau OO')
+| ObsPreNow : forall w OO OO',
+    ObsTracePrefix OO OO' ->
+    ObsTracePrefix (notfinished (Out w) OO) (notfinished (Out w) OO')
+| ObsPreFinishedOut1 : forall w,
+    ObsTracePrefix (finished (Out w)) (finished (Out w))
+| ObsPreFinishedOut2 : forall w OO,
+    ObsTracePrefix (notfinished (Out w) OO) (finished (Out w))
+| ObsPreFinishedTau : forall OO,
+    ObsTracePrefix OO (finished Tau)
+| ObsPreAllTau : forall OO,
+     ObsTracePrefix OO OO.
+
+Notation "OO' <=_O OO" := (ObsTracePrefix OO OO') (at level 80).
+
+Lemma ObsTracePrefix_refl : forall OO, ObsTracePrefix OO OO.
+Proof.
+  cofix CH.
+  intros [o | o OO].
+  - destruct o as [w |].
+    + now apply ObsPreFinishedOut1.
+    + now apply ObsPreFinishedTau.
+  - destruct o as [w |].
+    + now apply ObsPreNow, CH.
+    + now apply ObsPreTau1, ObsPreTau2, CH.
+Qed.
+
+(* LEO: I didn't like the non-coinductive nature of this... 
 Definition ObsTracePrefix (OO OO' : TraceOf Observation) : Prop :=
   exists OO'', ObsTraceEq OO OO'' /\ OO' <<== OO'' \/ ObsTraceEq OO' OO'' /\ OO' <<== OO.
+*)
 
 (* The entire trace MP represents a callee, that terminates when (and if)
    control has returned to the caller, according to the "justReturned" predicate.
@@ -305,8 +341,7 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
         - The observations of the MP trace are a prefix of the 
           observations of M'.
       *)
-     (* TODO: Make order clear for this with notation. *)
-     ObsTracePrefix (ObsTraceOfM M') (ObsTraceOf MP)) /\
+     (ObsTraceOf MP) <=_O (ObsTraceOfM M')) /\
     
     (* 3. The callee trace never returns. *) 
     ((forall mpret, ~ Last MP mpret) ->
@@ -316,20 +351,6 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
       *)
      forall mret', ~ Last M' mret' /\
                    ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M')).
-                   
-    
-    
-    
-                                 
-    
-
-(* Old, not co-terminating formalization: 
-    (IsEnd MP mpret -> exists mret', IsEnd M' mret' /\
-                 forall k,
-                 ms (head MP) k <> ms mpret k \/ (head M') k <> mret' k ->
-                 ms mpret k = mret' k).
-
-*)
 
 CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
   MPTrace -> MTrace -> Prop :=
@@ -348,10 +369,9 @@ CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
       StrongEagerStackConfidentiality R (finished mp) (finished m)
 | StrongConfNotMStep :
     forall mp MV,
-      mpstep mp = None -> 
+      ~ (R (ms mp)) ->
+      (* mpstep mp = None ->  *)
       StrongEagerStackConfidentiality R (finished mp) MV.
-
-(*
 
 Lemma confStepPreservesVariant :
   forall C mp m' p' OM mv mv' ON,
@@ -369,16 +389,19 @@ Proof.
   rewrite eqM; rewrite eqN; auto.
 Qed.
 
-Lemma StrongConfImpliesObsEq :
+Lemma StrongConfImpliesObsEq_Ret :
   forall C R MP MV,
     variantOf (ms (head MP)) (head MV) C ->
     StrongEagerStackConfidentiality R MP MV ->
-    ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
+    forall mpret,
+      Last MP mpret -> R (ms mpret) ->
+      ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
 Proof.
   cofix COFIX.
   intros C R MP MV Var Conf.
   inversion Conf; simpl.
-  - match goal with
+  - intros mpret HLast HR.
+    match goal with
     | [ |- ObsTraceEq ?T1 ?T2 ] =>
       rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
@@ -402,6 +425,7 @@ Proof.
         rewrite <- HM.
         rewrite <- HN.  
         apply Var.
+      * inversion HLast; eauto.
     + apply ObsEqTau1.
       apply ObsEqTau2.
       eapply COFIX; eauto.
@@ -416,16 +440,134 @@ Proof.
         rewrite <- HM.
         rewrite <- HN.
         apply Var.
-  - match goal with
+      * inversion HLast; eauto.
+  - intros mpret HLast HR.
+    match goal with
     | [ |- ObsTraceEq ?T1 ?T2 ] =>
       rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
     apply ObsEqFinishedTau.
-  - rewrite (idTrace_eq (ObsTraceOf (finished mp))).
-    rewrite (idTrace_eq (ObsTraceOfM (finished m))).
-    simpl.
-    apply ObsEqFinishedTau.
+  - intros mpret HLast HR.
+    rewrite (idTrace_eq (ObsTraceOf (finished mp))).
+    inversion HLast; subst; clear HLast; auto.
+    exfalso; eauto.
 Qed.
+
+Lemma StrongConfImpliesObsEq_Fault :
+  forall C R MP MV,
+    variantOf (ms (head MP)) (head MV) C ->
+    StrongEagerStackConfidentiality R MP MV ->
+    forall mpret,
+      Last MP mpret -> ~ (R (ms mpret)) ->
+      (ObsTraceOf MP) <=_O (ObsTraceOfM MV).
+Proof.  
+  cofix COFIX.
+  intros C R MP MV Var Conf.
+  inversion Conf; simpl.
+  - intros mpret HLast HR.
+    match goal with
+    | [ |- ObsTracePrefix ?T1 ?T2 ] =>
+      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
+    end.
+    unfold mpstep in *.
+    destruct (step (ms mp)) eqn:HStepMP.
+    destruct (pstep mp) eqn:HPStepMP; inversion H; subst; clear H.    
+    repeat match goal with
+           | [ H : step ?M = _ |- context[step ?M] ] => rewrite H; simpl
+           end.
+    destruct O.
+    + apply ObsPreNow.
+      eapply COFIX; eauto.
+      eapply confStepPreservesVariant; eauto.
+      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
+        subst.
+        eauto.
+      * inversion HLast; eauto.
+    + apply ObsPreTau1.
+      apply ObsPreTau2.
+      eapply COFIX; eauto.
+      eapply confStepPreservesVariant; eauto.
+      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
+        subst.
+        eauto.
+      * inversion HLast; eauto.
+  - intros mpret HLast HR.
+    inversion HLast; subst; clear HLast; auto.
+    exfalso; eauto.
+  - intros mpret HLast HR.
+    match goal with
+    | [ |- ObsTracePrefix ?T1 ?T2 ] =>
+      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
+    end.
+    destruct MV.
+    + apply ObsPreFinishedTau.
+    + destruct (step m).
+      apply ObsPreFinishedTau.
+Qed.
+
+Lemma StrongConfImpliesObsEq_Inf :
+  forall C R MP MV,
+    variantOf (ms (head MP)) (head MV) C ->
+    StrongEagerStackConfidentiality R MP MV ->
+    (forall mpret, ~ Last MP mpret) ->
+    ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
+Proof.
+  cofix COFIX.
+  intros C R MP MV Var Conf.
+  inversion Conf; simpl.
+  - intros HNotR.
+    match goal with
+    | [ |- ObsTraceEq ?T1 ?T2 ] =>
+      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
+    end.
+    repeat match goal with
+           | [ H : step ?M = _ |- context[step ?M] ] => rewrite H; simpl
+           end.
+    unfold mpstep in *.
+    destruct (step (ms mp)) eqn:HStepMP.
+    destruct (pstep mp) eqn:HPStepMP; inversion H.
+    destruct O.
+    + apply ObsEqNow.
+      eapply COFIX; eauto.
+      eapply confStepPreservesVariant; eauto.
+      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
+        subst.
+        eauto.
+      * assert (head MP = mp) as HM
+          by (destruct H3; auto).
+        assert (head MV = m') as HN
+          by (destruct H4; auto).
+        rewrite <- HM.
+        rewrite <- HN.  
+        apply Var.
+      * subst.
+        intros mpret HNotLast; eapply HNotR; econstructor; eauto.
+    + apply ObsEqTau1.
+      apply ObsEqTau2.
+      eapply COFIX; eauto.
+      eapply confStepPreservesVariant; eauto.
+      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
+        subst.
+        eauto.
+      * assert (head MP = mp) as HM
+          by (destruct H3; auto).
+        assert (head MV = m') as HN
+          by (destruct H4; auto).
+        rewrite <- HM.
+        rewrite <- HN.
+        apply Var.
+      * subst.
+        intros mpret HNotLast; eapply HNotR; econstructor; eauto.        
+  - intros HNotLast. 
+    match goal with
+    | [ |- ObsTraceEq ?T1 ?T2 ] =>
+      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
+    end.
+    apply ObsEqFinishedTau.
+  - intros HNotLast.
+    exfalso.
+    eapply HNotLast; econstructor.
+Qed.    
 
 Lemma ComponentConfTrans :
   forall (M0 M1 M2 N0 N1 N2 : MachineState),
@@ -461,6 +603,7 @@ Proof.
     + eapply H12; eauto.
 Qed.
 
+(*
 Lemma StrongConfImpliesCotermination :
   forall C R MP MV,
     variantOf (ms (head MP)) (head MV) C ->
@@ -487,30 +630,53 @@ Proof.
     + destruct (IHHEnd MP0); eauto using confStepPreservesVariant.
       exists x; constructor; eauto.
 Qed.
+ *)
 
-Lemma StrongConfImpliesEndConf :
-  forall C R MP MV mpret mvret,
+Lemma StrongConfImpliesIndist_Ret :
+  forall C R MP MV,
     variantOf (ms (head MP)) (head MV) C ->
     StrongEagerStackConfidentiality R MP MV ->
-    IsEnd MP mpret -> IsEnd MV mvret ->
-    forall k, ms (head MP) k <> ms mpret k \/ (head MV) k <> mvret k  ->
-              ms mpret k = mvret k.
+    (forall mpret, Last MP mpret -> R (ms mpret) ->
+      (exists mret, Last MV mret /\
+                     forall k, 
+                       (ms (head MP) k <> ms mpret k \/ (head MV) k <> mret k) ->
+                       ms mpret k = mret k)).
 Proof.
-  intros C R MP MV mpret mvret Var Conf HMPEnd HMVEnd.
+  intros C R MP MV Var Conf mpret HLast HR.
   generalize dependent MV.
-  generalize dependent mvret.
-  induction HMPEnd; subst; eauto; intros mvret MV Var Conf HMVEnd;
-    inversion Conf; subst; eauto; clear Conf; simpl in *.
-  - intros k Hk.
-    inversion HMVEnd; subst; clear HMVEnd; eauto.
-    inversion Hk; exfalso; eauto.
-  - inversion HMVEnd; subst; clear HMVEnd; eauto.
-    intros k [Contra | Contra]; exfalso; eauto.
-  - inversion HMVEnd; subst; clear HMVEnd; eauto.
-    eapply ComponentConfTrans; eauto.
+  induction HLast; subst; eauto; intros MV Var Conf;
+  inversion Conf; subst; eauto; clear Conf; simpl in *.
+  - exists m; split; [constructor|].
     intros k Hk.
-    eapply IHHMPEnd; eauto using confStepPreservesVariant.
-Qed.    
+    inversion Hk; exfalso; eauto.
+  - exfalso; eauto.
+  - destruct (IHHLast HR M') as [mret [HLastMret HConf]];
+      eauto using confStepPreservesVariant.
+    exists mret; split.
+    + constructor; auto.
+    + intros k Hk.
+      eauto using ComponentConfTrans.
+Qed.
+
+Lemma StrongConfImpliesInf_Inf : 
+  forall C R MP MV,
+    variantOf (ms (head MP)) (head MV) C ->
+    StrongEagerStackConfidentiality R MP MV ->
+    (forall mpret, ~ Last MP mpret) ->
+    (forall mv, ~ Last MV mv).
+Proof.
+  intros C R MP MV Var Conf HNotLast mv HLast.
+  generalize dependent MP.
+  induction HLast.
+  - intros MP Var Conf HNotLast.
+    inversion Conf; subst; clear Conf; eauto;
+      eapply HNotLast; econstructor.
+  - intros MP Var Conf HNotLast.
+    inversion Conf; subst; clear Conf; simpl in *; eauto.
+    + eapply (IHHLast MP0); eauto using confStepPreservesVariant.
+      intros mpret HLast'; eapply HNotLast; econstructor; eauto.
+    + eapply HNotLast; econstructor; eauto.
+Qed.
 
 Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MP : MPTrace) :
   (forall (MV : MTrace),
@@ -519,27 +685,23 @@ Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MP : MPTra
   EagerStackConfidentiality C MP R.
 Proof.
   intros Conf.
-  intros mv MV HVar [MMO [App [NotR Pref]]].
+  unfold EagerStackConfidentiality.
+  intros mv MV HVar HPre.
   specialize (Conf MV).
-  assert (head MV = mv) as HN.
-  { apply TraceAppHead in App.  
-    auto. 
-  } 
+  assert (head MV = mv) as HN
+      by (erewrite <- PrefixUpToHead; eauto; auto).
+  rewrite <- HN in HVar.
+  specialize (Conf HVar).
   split; [|split].
-  - eapply StrongConfImpliesObsEq; eauto.
-    + rewrite HN; eauto.
-    + eapply Conf.
-      rewrite HN; eauto.
-  - eapply StrongConfImpliesCotermination; eauto.
-    + rewrite HN; eauto.
-    + eapply Conf; rewrite HN; eauto.
-  - intros mpret mret k HMPEnd HMVEnd.
-    eapply StrongConfImpliesEndConf; eauto.
-    + rewrite HN; eauto.
-    + eapply Conf.
-      rewrite HN; eauto.
-Qed.
- *)
+  - intros mpret HLast HR; split.
+    + eapply StrongConfImpliesIndist_Ret; eauto.
+    + eapply StrongConfImpliesObsEq_Ret; eauto.
+  - intros mpret HLast HNotR.
+    eapply StrongConfImpliesObsEq_Fault; eauto.
+  - intros HNotLast mvret'. split.
+    * eapply StrongConfImpliesInf_Inf; eauto.
+    * eapply StrongConfImpliesObsEq_Inf; eauto.
+Qed.        
 
 Definition CallMap := Value -> nat -> Prop.
 
@@ -712,18 +874,23 @@ Inductive VSE_step : VSE -> VSE -> Prop :=
 Definition VSEs_step (vses vses' : list VSE) : Prop :=
   Forall2 VSE_step vses vses'.
 
-(*
-Inductive Last {A : Type} : A -> list A -> Prop :=
-| LastSing : forall x, Last x [x]
-| LastTail : forall x h t, Last x t -> Last x (h::t).
+Inductive FinLast {A : Type} : A -> list A -> Prop :=
+| FLastSing : forall x, FinLast x [x]
+| FLastTail : forall x h t, FinLast x t -> FinLast x (h::t).
 
-Lemma Last_unique {A : Type} (x x' : A) (l : list A) :
-  Last x l -> Last x' l -> x = x'.
+Lemma FinLast_unique {A : Type} (x x' : A) (l : list A) :
+  FinLast x l -> FinLast x' l -> x = x'.
 Proof.
   intro H; induction H; intro HLast; inversion HLast; subst; clear HLast; eauto;
     match goal with
-    | [ H : Last _ [] |- _ ] => inversion H
+    | [ H : FinLast _ [] |- _ ] => inversion H
     end.
+Qed.
+
+Lemma FinLast_singleton {A : Type} (x x' : A) :
+  FinLast x [x'] -> x = x'.
+Proof.
+  intros H. inversion H; easy.
 Qed.
 
 Lemma VSE_step_preserves_in :
@@ -748,10 +915,10 @@ Qed.
 
 Lemma VSE_step_preserves_last :
   forall vse vses vses' N' O,
-  Last vse vses ->
+  FinLast vse vses ->
   Forall2 VSE_step vses vses' ->
   step (curr_variant vse) = (N',O) ->
-  Last (upd_curr N' vse) vses'.
+  FinLast (upd_curr N' vse) vses'.
 Proof.
   intros vse vses vses' N' O' HIn HForall HStep.
   induction HForall.
@@ -767,8 +934,8 @@ Proof.
     + right. apply IHHForall; auto.
 Qed.
 
-Lemma Last_implies_In {A : Type} (x : A) (l : list A) :
-  Last x l -> In x l.
+Lemma FinLast_implies_In {A : Type} (x : A) (l : list A) :
+  FinLast x l -> In x l.
 Proof.
   intros Last; induction Last.
   - left; auto.
@@ -782,7 +949,7 @@ Definition WellFormedVS (M : MachineState) (vs : VarStack) : Prop :=
   (* The curr_variant field is a variant of the current state. *)
   Forall (fun vse => variantOf M (curr_variant vse) (contour vse)) vs /\
   (* The stack is nonempty and the last retP is const False *)
-  (exists vse, Last vse vs /\ retP vse = fun _ => False) /\
+  (exists vse, FinLast vse vs /\ retP vse = fun _ => False) /\
   (* The current state is in the trace of *every* init machine. *)
   (Forall (fun vse => InTrace M (MTraceOf (init_machine vse))) vs) /\
   (* The variant state is in the trace of its own init variant. *)
@@ -891,12 +1058,12 @@ Ltac progress_integrity :=
          | [ H : WellFormedVS ?M ?VS |- _ ] =>
            destruct H as [HVar [[vse_last' [HLast' HRet]] [HMTrace HNTrace]]]
          | [ H1 : Last ?X ?L, H2 : Last ?Y ?L |- _ ] =>
-           assert (Y = X) by (eapply Last_unique; eauto); subst; clear H2
+           assert (Y = X) by (eapply FinLast_unique; eauto); subst; clear H2
          end.
 
 Theorem TestImpliesIntegrityToplevel :
   forall cm C MM vs,
-    (exists vse, Last vse vs /\ contour vse = C) ->
+    (exists vse, FinLast vse vs /\ contour vse = C) ->
   EagerStackSafetyTest cm MM vs -> EagerStackIntegrity' C MM.
 Proof.
   cofix COFIX.
@@ -907,10 +1074,10 @@ Proof.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H6; simpl.
-      eauto using Last_implies_In.
+      eauto using FinLast_implies_In.
     + apply (COFIX cm (contour vse_last) MP0 vs'); auto.
       unfold VSEs_step in *.
-      destruct (H3 vse_last (Last_implies_In vse_last vs HLast))
+      destruct (H3 vse_last (FinLast_implies_In vse_last vs HLast))
         as [N' [ON [HN' HConf]]].
       exists (upd_curr N' vse_last); split; auto.
       eapply VSE_step_preserves_last; eauto.
@@ -918,11 +1085,11 @@ Proof.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H5.
-      eauto using Last_implies_In.
+      eauto using FinLast_implies_In.
     + apply (COFIX cm (contour vse_last) MP0 ((Build_VSE (ms mp) (ms mp) (ms mp) (makeContour args (ms mp)) (isRet (ms mp)))::vs')).
       * unfold VSEs_step in *.
         destruct (H2 vse_last)
-          as [N' [ON [HN' HConf]]]; eauto using Last_implies_In.
+          as [N' [ON [HN' HConf]]]; eauto using FinLast_implies_In.
         exists (upd_curr N' vse_last); split; auto.
         right; eauto using VSE_step_preserves_last.
       * apply H7.
@@ -932,11 +1099,11 @@ Proof.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H5.
-      eauto using Last_implies_In.
+      eauto using FinLast_implies_In.
     + apply (COFIX cm (contour vse_last) MP0 (tl vs')); auto.
       unfold VSEs_step in *.
       destruct (H2 vse_last)
-        as [N' [ON [HN' HConf]]]; eauto using Last_implies_In.
+        as [N' [ON [HN' HConf]]]; eauto using FinLast_implies_In.
       destruct vs.
       * inversion H4; subst.
         inversion HLast.
@@ -945,6 +1112,7 @@ Proof.
         inversion HLast; subst; clear HLast; eauto using VSE_step_preserves_last.
         { destruct H as [vse [[? | Contra] Contra']].
           + subst.
+            apply FinLast_singleton in HLast'; subst.
             rewrite HRet in Contra'; exfalso; eauto.
           + inversion Contra.
         }
@@ -971,6 +1139,68 @@ Proof.
     rewrite (idTrace_eq (traceOf N)); simpl.
     rewrite
  *)
+
+(*
+Lemma MTraceOf_eq M : MTraceOf M = notfinished M (MTraceOf (fst (step M))).
+Admitted.
+
+Lemma mpstep_step_some mp m p OM :
+  mpstep mp = Some (m, p, OM) -> step (ms mp) = (m, OM).
+Proof.
+  unfold mpstep.
+  destruct (step (ms mp)) as [m' OM'].
+  destruct (pstep mp) as [mp' |];
+    intros H;
+    now inversion H.
+Qed.
+
+Lemma In_singleton {A : Type} (x : A) : In x [x].
+Proof.
+  left. reflexivity.
+Qed.
+
+Definition StrongEagerStackConfidentiality' (MP : MPTrace) (m : MachineState) :=
+  StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf m).
+
+Goal
+  forall (cm : CallMap) (MP : MPTrace) (C : Contour),
+    EagerStackSafetyTest' cm C MP ->
+  forall (m : MachineState),
+    variantOf (ms (head MP)) m C ->
+    (* StrongEagerStackConfidentiality' MP m. *)
+    StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf m).
+Proof.
+  cofix CH.
+  intros cm MP C Htest n Hvariant.
+  specialize (Htest n Hvariant).
+  inversion Htest
+    as [ mp' vs' Hwf
+       | mp' MP' ? vs' m' p' OM Hcall Hret Hstep Hwf Hconf Hint Hvsstep Hhead Htest'
+       | |];
+    subst; clear Htest;
+    (* Give a name to the variant so as to keep the context clean. *)
+    try match goal with
+    | H : WellFormedVS _ [?VSE] |- _ => remember VSE as vse eqn:Hvse
+    end.
+  - now apply StrongConfNotMStep.
+  - rewrite MTraceOf_eq.
+    apply StrongConfStep with OM.
+    + rewrite Hstep.
+      now setoid_rewrite Hhead.
+    + admit.
+    + admit.
+    + (* Introduce names before applying CH. *)
+      specialize (Hconf _ (In_singleton vse)) as [n' [OM' [Hstep' Hconf]]].
+      rewrite Hvse in Hstep'. simpl in Hstep'.
+      apply CH with cm C.
+      * intros n_ Hvariant_.
+        (* apply EagerTestStep. *)
+        admit.
+      * eapply confStepPreservesVariant;
+          [ setoid_rewrite Hhead; now apply Hstep
+          | now rewrite Hstep'
+          |
+          | now apply Hvariant].
 *)
 
 (* ********* SNA Beware : Lazy Properties ********* *)
@@ -990,7 +1220,7 @@ Definition ObservableIntegrity (C:Contour) (MP:MPTrace) (MPsuffO:option MPTrace)
  match MPsuffO with
  | Some actual =>
    let ideal := MTraceOf (RollbackInt C (ms (head MP)) (ms (head actual))) in
-   ObsTracePrefix (ObsTraceOfM ideal) (ObsTraceOf actual)
+   (ObsTraceOf actual) <=_O (ObsTraceOfM ideal)
  | None => True
  end.
 
@@ -1053,7 +1283,7 @@ Definition ObservableConfidentegrity (C:Contour) (MP:MPTrace) (MPsuffO:option MP
     TraceSpan (fun n' => ~ isRet n') (MTraceOf n) N NO ->
     let actual := MP ^ MPsuffO in
     let ideal := N ^ (option_map (fun N' => MTraceOf (RollbackCI C (ms (head MP)) n (head N'))) NO) in
-    ObsTracePrefix (ObsTraceOfM ideal) (ObsTraceOf actual).
+    (ObsTraceOf actual) <=_O (ObsTraceOfM ideal).
 
 Definition LazyStackSafety' (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentegrity (makeContour 0 (ms (head MP))) MP None (fun _ => False) /\
