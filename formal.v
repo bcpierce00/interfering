@@ -1159,6 +1159,11 @@ Proof.
   left. reflexivity.
 Qed.
 
+Lemma InTrace_MTraceOf m : InTrace m (MTraceOf m).
+Proof.
+  rewrite MTraceOf_eq. now apply In_now.
+Qed.
+
 Definition StrongEagerStackConfidentiality' (MP : MPTrace) (m : MachineState) :=
   StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf m).
 
@@ -1175,7 +1180,7 @@ Proof.
   specialize (Htest n Hvariant).
   inversion Htest
     as [ mp' vs' Hwf
-       | mp' MP' ? vs' m' p' OM Hcall Hret Hstep Hwf Hconf Hint Hvsstep Hhead Htest'
+       | mp MP' ? vs' m' p' OM Hcall Hret Hstep Hwf Hconf Hint Hvssteps Hhead Htest'
        | |];
     subst; clear Htest;
     (* Give a name to the variant so as to keep the context clean and readable. *)
@@ -1205,10 +1210,35 @@ Proof.
         right. now auto.
     + apply CH with cm C.
       * intros n_ Hvariant_.
-        destruct MP' as [mp'' | mp'' MP'].
+        destruct MP' as [mp' | mp' MP'].
         -- apply EagerTestHalt.
-           admit.
-        -- admit.
+           split; [| split; [| split]].
+           ++ constructor; [| now constructor].
+              simpl. now apply Hvariant_.
+           ++ match goal with
+              | |- exists _, FinLast _ [?VSE] /\ _ => exists VSE
+              end.
+              split.
+              ** now constructor.
+              ** reflexivity.
+           ++ constructor; [| now constructor].
+              simpl. now apply InTrace_MTraceOf.
+           ++ constructor; [| now constructor].
+              simpl. now apply InTrace_MTraceOf.
+        -- simpl.
+           inversion Hvssteps as [| v1 vse' l1 l2 Hvsstep HForall2 Heq Hcons];
+             subst v1 l1.
+           inversion HForall2; subst l2 vs'; clear Hvssteps HForall2.
+           rewrite Hvse in Hvsstep.
+           inversion Hvsstep as [m1 m2 m3 n'_ C1 R [OM' Hstep'_]];
+             subst m1 m2 m3 C1 R vse'.
+           rewrite Hstep' in Hstep'_.
+           inversion Hstep'_; subst n'_ OM'; clear Hstep'_ Hvsstep.
+           simpl in Hhead; subst mp'.
+           destruct mp as [m p]. simpl in *.
+
+           (* Print EagerStackSafetyTest. *)
+
       * eapply confStepPreservesVariant;
           [ setoid_rewrite Hhead; now apply Hstep
           | now rewrite Hstep'
