@@ -1178,29 +1178,45 @@ Proof.
        | mp' MP' ? vs' m' p' OM Hcall Hret Hstep Hwf Hconf Hint Hvsstep Hhead Htest'
        | |];
     subst; clear Htest;
-    (* Give a name to the variant so as to keep the context clean. *)
+    (* Give a name to the variant so as to keep the context clean and readable. *)
     try match goal with
     | H : WellFormedVS _ [?VSE] |- _ => remember VSE as vse eqn:Hvse
     end.
   - now apply StrongConfNotMStep.
   - rewrite MTraceOf_eq.
+    specialize (Hconf _ (In_singleton vse)) as [n' [OM' [Hstep' Hconf]]].
+    specialize (Hret _ (In_singleton vse)).
+    specialize (Hint _ (In_singleton vse)).
+    rewrite Hvse in Hstep'. simpl in Hstep'.
+    destruct Hconf as [HOM Hvary]; subst OM'. (* EagerConfidentialityTest *)
+    rewrite Hstep'. simpl.
     apply StrongConfStep with OM.
     + rewrite Hstep.
       now setoid_rewrite Hhead.
-    + admit.
-    + admit.
-    + (* Introduce names before applying CH. *)
-      specialize (Hconf _ (In_singleton vse)) as [n' [OM' [Hstep' Hconf]]].
-      rewrite Hvse in Hstep'. simpl in Hstep'.
-      apply CH with cm C.
+    + now rewrite Hstep'.
+    + (* Proof tree repeats below. *)
+      setoid_rewrite Hhead. simpl.
+      intros k Hvary'.
+      specialize (Hvary k).
+      apply Hvary.
+      destruct Hvary' as [Hvary' | Hvary'].
+      * left. now auto.
+      * rewrite Hvse. simpl.
+        right. now auto.
+    + apply CH with cm C.
       * intros n_ Hvariant_.
-        (* apply EagerTestStep. *)
-        admit.
+        destruct MP' as [mp'' | mp'' MP'].
+        -- apply EagerTestHalt.
+           admit.
+        -- admit.
       * eapply confStepPreservesVariant;
           [ setoid_rewrite Hhead; now apply Hstep
           | now rewrite Hstep'
           |
           | now apply Hvariant].
+        -- (* Same subproof as above. *)
+           admit.
+  -
 *)
 
 (* ********* SNA Beware : Lazy Properties ********* *)
