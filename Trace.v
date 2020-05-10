@@ -41,14 +41,6 @@ Inductive SplitInclusive {A} (P:A -> Prop) : TraceOf A -> TraceOf A -> TraceOf A
     ~ P a ->
     SplitInclusive P T Tpre Tsuff ->
     SplitInclusive P (notfinished a T) (notfinished a Tpre) Tsuff.
-
-Lemma SplitInclusiveIsInclusive :
-  forall {A} P (T1 T2 T3 : TraceOf A),
-    SplitInclusive P T1 T2 T3 ->
-    InTrace (head T3) T2.
-Proof.
-  intros. induction H; constructor; auto.
-Qed.
   
 CoFixpoint mapTrace {A B:Type} (f:A -> B) (T: TraceOf A) : TraceOf B :=
   match T with
@@ -130,7 +122,7 @@ Qed.
 (* TracePrefix MM1 MM2 says MM2 is a prefix of MM1. *)
 Definition TracePrefix {A} (T1 T2: TraceOf A): Prop :=
   exists TO,
-    T1 = T2^TO.
+    TraceEq T1 (T2^TO).
 
 Notation "MM2 <<== MM1" := (TracePrefix MM1 MM2) (at level 80).
 
@@ -145,39 +137,22 @@ Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : TraceOf A) (MMO : option (Tr
 Definition LongestPrefix {A} (P : A -> Prop) (MM1 MM2 : TraceOf A) : Prop :=
   exists MMO, TraceSpan P MM1 MM2 MMO.
 
-(* TODO: Rename to Last *)
-Inductive IsEnd {A} : TraceOf A -> A -> Prop :=
-| IsEndNow : forall a, IsEnd (finished a) a
-| IsEndLater : forall T a a', IsEnd T a -> IsEnd (notfinished a' T) a
+Inductive Last {A} : TraceOf A -> A -> Prop :=
+| LastNow : forall a, Last (finished a) a
+| LastLater : forall T a a', Last T a -> Last (notfinished a' T) a
 .
-
-Inductive SplitInclusive {A} (P:A -> Prop) : TraceOf A -> TraceOf A -> TraceOf A -> Prop :=
-| PNowFinished : forall a, P a -> SplitInclusive P (finished a) (finished a) (finished a)
-| PNowNotFinished : forall a T, P a -> SplitInclusive P (notfinished a T) (finished a) (notfinished a T)
-| PLater : forall a T Tpre Tsuff,
-    ~ P a ->
-    SplitInclusive P T Tpre Tsuff ->
-    SplitInclusive P (notfinished a T) (notfinished a Tpre) Tsuff.
-
-Lemma SplitInclusiveIsInclusive : forall {A} P (T1 T2 T3 : TraceOf A),
-    SplitInclusive P T1 T2 T3 ->
-    InTrace (head T3) T2.
-Proof.
-  intros. induction H; constructor; auto.
-Qed.
 
 Definition PrefixUpTo {A} (p : A -> Prop) (T Tpre : TraceOf A) : Prop :=
   (exists Tsuff, SplitInclusive p T Tpre Tsuff) \/
   ForallTrace (fun m => ~ (p m)) T /\ TraceEq T Tpre.
 
-
 (************************
  Trace Lemmas and axioms 
 *************************)
 
-Lemma IsEndInTrace :
+Lemma LastInTrace :
   forall A (t:A) (T:TraceOf A),
-    IsEnd T t -> InTrace t T.
+    Last T t -> InTrace t T.
 Proof.
   intros. induction H.
   - constructor.
@@ -193,10 +168,56 @@ Proof.
   intros. induction H; inversion H0; auto.
 Qed.
 
-Axiom TraceAppNone :
-  forall A (T : TraceOf A),
-    T = T^None.
+Lemma ForallTraceTautology :
+  forall A (P:A->Prop) (T:TraceOf A),
+    (forall a, P a) -> ForallTrace P T.
+Proof.
+  cofix COFIX. intros. destruct T;constructor;auto.
+  Guarded.
+Qed.
 
+Lemma SplitInclusiveHeadEq :
+  forall {A} (P:A->Prop) T1 T2 T3,
+    SplitInclusive P T1 T2 T3 ->
+    head T1 = head T2.
+Proof.
+  intros. induction H; auto.
+Qed.
+
+Lemma SplitInclusiveIsInclusive :
+  forall {A} P (T1 T2 T3 : TraceOf A),
+    SplitInclusive P T1 T2 T3 ->
+    Last T2 (head T3).
+Proof.
+  intros. induction H; constructor; auto.
+Qed.
+
+Lemma SplitInclusivePHead :
+  forall {A} P (T1 T2 T3 : TraceOf A),
+    SplitInclusive P T1 T2 T3 ->
+    P (head T3).
+Proof.
+  intros. induction H; auto.
+Qed.
+
+Lemma LastUnique :
+  forall {A} (a1 a2 : A) T,
+    Last T a1 ->
+    Last T a2 ->
+    a1 = a2.
+Proof.
+  intros. induction H; inversion H0; auto.
+Qed.
+
+Lemma TraceAppNone :
+  forall A (T : TraceOf A),
+    TraceEq T (T^None).
+Proof.
+  cofix COFIX. intros. rewrite idTrace_eq. destruct T.
+  - simpl. constructor.
+  - simpl. constructor. apply COFIX. Guarded.
+Qed.
+  
 Lemma TracePrefix_refl :
   forall A (T:TraceOf A),
     T <<== T.
@@ -204,13 +225,9 @@ Proof.
   intros. exists None. apply TraceAppNone.
 Qed.
 
-Axiom TraceAppFinished :
+(*Axiom TraceAppFinished :
   forall A (a:A) (T:TraceOf A),
     finished a ^ Some T = notfinished a T.
-
-Axiom IsEndAppFinish :
-  forall A (T:TraceOf A) (a:A),
-    IsEnd (T^Some (finished a)) a.
 
 Axiom ForallTraceApp :
   forall A f (T1 T2 : TraceOf A),
@@ -233,3 +250,4 @@ Axiom SpanRemainderNotProp :
     TraceSpan P T T' (Some T'') ->
     ~ (P (head T'')).
 
+*)
