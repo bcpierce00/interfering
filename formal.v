@@ -1337,6 +1337,11 @@ Qed.
    They mostly are dependent on how we implement ObsTrace and RealTrace (what
    I've been calling the well-formedness condition on traces.) *)
 
+(* APT: I thought some of these might be approachable if we change to this
+definition but I couldn't actually make any of the proofs go through. *)
+Definition RealMPTrace' (MP:MPTrace) : Prop :=
+  TraceEq MP (MPTraceOf (head MP)).
+
 Axiom ObsTraceMToObsTrace :
   forall MP:MPTrace,
     RealMPTrace MP ->
@@ -1344,9 +1349,15 @@ Axiom ObsTraceMToObsTrace :
 (* If we run a policy trace without the policy, we should be guaranteed an
    extension of it.*)
 
-Axiom ObsTraceEq_sym :
+Lemma ObsTraceEq_sym :
   forall O O',
     ObsTraceEq O O' -> ObsTraceEq O' O.
+Proof.
+  cofix COFIX. 
+  intros.
+  inversion H; subst; clear H;
+    try (constructor; apply COFIX; auto). 
+Qed.
 
 Axiom SplitSuffixReal :
   forall P MP1 MP2 MP3,
@@ -1364,6 +1375,7 @@ Axiom ObsTracePrefApp :
     ObsTraceEq O1 O1' ->
     ObsTracePrefix O2 O2' ->
     ObsTracePrefix (O1^(Some O2)) (O1'^(Some O2')).
+(* APT: This seems very dubious if O1 is infinite. *)
 
 (* End axioms *)
 
