@@ -1409,8 +1409,28 @@ Qed.
 
 (* APT: I thought some of these might be approachable if we change to this
 definition but I couldn't actually make any of the proofs go through. *)
-Definition RealMPTrace' (MP:MPTrace) : Prop :=
-  TraceEq MP (MPTraceOf (head MP)).
+(* Definition RealMPTrace' (MP:MPTrace) : Prop := 
+  TraceEq MP (MPTraceOf (head MP)).*)
+
+CoInductive RealMPTrace' : MPState -> MPTrace -> Prop :=
+| RMP0 : forall mp, pstep mp = None -> RealMPTrace' mp (finished mp)
+| RMP1 : forall mp MP p', pstep mp = Some p' ->
+                       RealMPTrace' (fst (step (ms mp)), p') MP -> 
+                       RealMPTrace' mp (notfinished mp MP).
+
+Lemma RealMPTraceSame : forall MP, RealMPTrace MP -> RealMPTrace' (head MP) MP. 
+Proof.
+  cofix COFIX.
+  intros.
+  unfold RealMPTrace in H.
+  rewrite H. simpl.
+  destruct (pstep (head MP)) eqn:?.
+  - destruct MP. simpl in Heqo. 
+    rewrite idTrace_eq. simpl. 
+    rewrite Heqo. 
+    econstructor. eauto.
+Admitted. (* ?? *)
+  
 
 Axiom ObsTraceMToObsTrace :
   forall MP:MPTrace,
@@ -1429,16 +1449,26 @@ Proof.
     try (constructor; apply COFIX; auto). 
 Qed.
 
+
 Axiom SplitSuffixReal :
   forall P MP1 MP2 MP3,
     RealMPTrace MP1 ->
     SplitInclusive P MP1 MP2 MP3 ->
     RealMPTrace MP3.
 
-Axiom RealTail :
+Lemma RealTail :
   forall mp MP,
-    RealMPTrace (notfinished mp MP) ->
-    RealMPTrace MP.  
+    RealMPTrace' mp (notfinished mp MP) ->
+    RealMPTrace' (head MP) MP.  
+Proof.
+  intros.
+  inversion H; subst; clear H. 
+  destruct MP. 
+  - simpl. inversion H3; subst; clear H3. constructor. auto.
+  - simpl. inversion H3; subst; clear H3.
+    econstructor.  eauto.
+    auto.
+Qed.
 
 Axiom ObsTracePrefApp :
   forall O1 O1' O2 O2',
