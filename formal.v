@@ -1278,40 +1278,80 @@ Definition RollbackConf (Mstart Nstart Nend : MachineState) : MachineState :=
            then Mstart k
            else Nend k.
 
+Definition LazyReturnMP (justReturned : MachineState -> Prop) (MP MPpre : MPTrace) (MPsuffO : option MPTrace) :=
+  (exists MPsuff, MPsuffO = Some MPsuff /\ SplitInclusive (fun mp => justReturned (ms mp)) MP MPpre MPsuff)
+  \/ (ForallTrace (fun mp => ~ (justReturned (ms mp))) MP /\ TraceEq MP MPpre /\ MPsuffO = None).
+
+Definition LazyReturnM (justReturned : MachineState -> Prop) (M Mpre : MTrace) (MsuffO : option MTrace) :=
+  (exists Msuff, MsuffO = Some Msuff /\ SplitInclusive justReturned M Mpre Msuff)
+  \/ (ForallTrace (fun m => ~ (justReturned m)) M /\ TraceEq M Mpre /\ MsuffO = None).
+
+(* MP is a callee's trace that terminates when/if control has just returned to the caller
+   according to justReturned. MPsuffO is the trace of the caller starting when control has
+   just returned to it, or None if MP does not return, either due to nontermination or
+   because it is cut short by a monitor fault.
+   In a top level trace justReturned will never hold. *)
 Definition ObservableConfidentiality (C : Contour) (MP:MPTrace) (MPsuffO:option MPTrace)
            (justReturned : MachineState -> Prop) :=
-  forall m',
+  forall m' M' M'suffO,
     (* If m' is a variant of the initial state of MP... *)
     variantOf (ms (head MP)) m' C ->
-    (* There are two cases to consider now, with two sub-cases: *)
-    (* 1. The variant does return, and M' ends. So we must restore varied state
-          and consider the remainder of its execution. *)
-    let O := ObsTraceOf MP ^ (option_map ObsTraceOf MPsuffO) in
-    (forall M'pre M'suff, SplitInclusive justReturned (MTraceOf m') M'pre M'suff ->
-                          (* mret maintains any changes, but restores varied components to their
-                             original state *)
-                          let mret := RollbackConf (ms (head MP)) m' (head M'suff) in
-                          let O' := (ObsTraceOfM M'pre)^(Some (ObsTraceOfM (MTraceOf mret))) in
-                          (* If MP doesn't failstop, then its trace is equal to the constructed trace
-                             and if it does, it might be a strict prefix *)
-                          (* TODO: ((forall m, ~(Last MP m)) -> ObsTraceEq O' O) /\ *)
-                          ObsTracePrefix O' O) /\
-    (* 2. The variant does not return. *)
-    (ForallTrace (fun m => ~(justReturned m)) (MTraceOf m') ->
-     (* in this case, again we should say something about when it's exactly equal, but the
-        actual trace is at least a prefix of the variant *)
-     (* TODO: (forall m, ~(Last MP m)) -> ObsTraceEq (ObsTraceOfM (MTraceOf m')) (ObsTraceOf MP)) /\ *)
-      ObsTracePrefix (ObsTraceOfM (MTraceOf m')) O).
+    (* If the trace from m' return control to the caller at some state,
+       M'pre is its prefix up to and including that state,
+       and M'suffO is the (non-empty) trace of the caller starting at that state
+       (with the caller's memory still varied.)
+       If the trace from m' does not return control, M'pre is the whole
+       trace and M'suffO is None. *)
+    LazyReturnM justReturned (MTraceOf m') M' M'suffO ->
+    (* Here are the three cases from EagerConf: *)
 
-Definition LazyReturnMP (isRet : MPState -> Prop) (MP MPpre : MPTrace) (MPsuffO : option MPTrace) : Prop :=
-  (exists MPsuff, MPsuffO = Some MPsuff /\ SplitInclusive isRet MP MPpre MPsuff)
-  \/ (ForallTrace (fun m => ~ (isRet m)) MP /\ TraceEq MP MPpre /\ MPsuffO = None).
+    (* 1. The callee ends successfully with a return. *)
+    (forall MPsuff,
+        MPsuffO = Some MPsuff ->
+        let mpret := head MPsuff in
+       (* Previously: forall mpret, Last MP mpret ->
+                      justReturned (ms mpret) -> 
+          But these should fall out of LazyReturnMP *)
+
+
+        (* Then M'pre also terminates in some state mret'.
+           And we rollback mret' to undo the variation to
+           get its trace, etc. *)
+        (exists M'suff, M'suffO = Some M'suff /\
+         let mret' := RollbackConf (ms (head MP)) m' (head M'suff) in
+         (* Callee observation traces are identical *)
+         ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M') /\
+         (* Two sub-cases: either MPsuffO is an infinite trace,
+            or it stops short due to the monitor. In the first
+            case it should produce the same observation trace as M'suff,
+            in the latter a prefix. *)
+         (exists mpfin, Last MPsuff mpfin) -> ObsTraceOf MPsuff <=_O ObsTraceOfM M'suff /\
+         (* ^ Above exists is superfluous, but demonstrates that these are disjoint cases *)
+         (forall mpfin, ~(Last MPsuff mpfin)) -> ObsTraceEq (ObsTraceOf MPsuff) (ObsTraceOfM M'suff))) /\
+
+    (* 2. The callee is cut short by a monitor fault. *)
+    (forall mpret, Last MP mpret -> (* mpstep mpret = None -> *)
+                   ~ justReturned (ms mpret) ->
+     (* Then: 
+        - The observations of the MP trace are a prefix of the 
+          observations of M'.
+      *)
+     (ObsTraceOf MP) <=_O (ObsTraceOfM M')) /\
+    
+    (* 3. The callee trace never returns. *) 
+    ((forall mpret, ~ Last MP mpret) ->
+     (* Then: 
+        - The variant trace never returns.
+        - The observations of MP and M' are the same. 
+      *)
+     forall mret', ~ Last M' mret' /\
+                   ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M')).
 
 Definition LazyStackSafety (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentiality (makeContour 0 (ms (head MP))) MP None (fun _ => False) /\
   (forall MPcall MPpre C' MPsuffO,
     FindCallMP cm MP C' MPcall ->
-    LazyReturnMP (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuffO ->
+    LazyReturnMP (fun m => isRet (ms (head MPcall)) m) MPcall MPpre MPsuffO ->
     ObservableIntegrity C' MPpre MPsuffO /\
     ObservableConfidentiality C' MPpre MPsuffO (isRet (ms (head MPcall)))).
 
@@ -1569,7 +1609,7 @@ Qed.
 Lemma EagerImpliesLazyInt :
   forall C MPcall MPpre MPsuffO,
     RealMPTrace MPcall ->
-    LazyReturnMP (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuffO ->
+    LazyReturnMP (fun m => isRet (ms (head MPcall)) m) MPcall MPpre MPsuffO ->
     EagerStackIntegrity C MPpre ->
     ObservableIntegrity C MPpre MPsuffO.
 Proof.
@@ -1605,10 +1645,11 @@ Variable not_weq_implies_neq :
 Lemma EagerImpliesLazyConf :
   forall C MPcall MPpre MPsuffO justReturned,
     RealMPTrace MPcall ->
-    LazyReturnMP (fun mp => justReturned (ms mp)) MPcall MPpre MPsuffO ->
+    LazyReturnMP justReturned MPcall MPpre MPsuffO ->
     EagerStackConfidentiality C MPpre justReturned -> ObservableConfidentiality C MPpre MPsuffO justReturned.
 Proof.
-  unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros.
+Admitted.
+(*  unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros.
   destruct MPsuffO as [MPsuff |] eqn:E; split.
   - intros. specialize H1 with m' M'pre. destruct H1;auto.
     + constructor. exists M'suff. auto.
@@ -1657,7 +1698,7 @@ Proof.
     + right. split; auto. apply TraceEqRefl.
     + simpl. destruct H4. admit. (* neither returns *)
 Admitted.
-
+*)
 Theorem EagerSafetyImpliesLazy :
   forall cm MP,
     RealMPTrace MP ->
