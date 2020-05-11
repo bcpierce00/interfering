@@ -1406,6 +1406,151 @@ Axiom ObsTracePrefApp :
     ObsTracePrefix O2 O2' ->
     ObsTracePrefix (O1^(Some O2)) (O1'^(Some O2')).
 (* APT: This seems very dubious if O1 is infinite. *)
+(* LEO: Agreed, but you should be able to do it by induction
+   on a "Last" *)
+
+Ltac app_frobber :=
+  repeat match goal with
+         | |- context[(finished ?T) ^ ?OT] =>
+           rewrite (idTrace_eq (finished T ^ OT)); simpl
+         | |- context[(notfinished ?O ?T) ^ ?OT] =>
+           rewrite (idTrace_eq (notfinished O T ^ OT)); simpl
+         | [H: context[(finished ?T) ^ ?OT] |- _ ] =>
+           rewrite (idTrace_eq (finished T ^ OT)) in H; simpl in H
+         | [H: context[(notfinished ?O ?T) ^ ?OT] |- _ ] =>
+           rewrite (idTrace_eq (notfinished O T ^ OT)) in H; simpl in H
+         end.
+
+Lemma ObsTraceEqRemoveTau1 :
+  forall T T', ObsTraceEq (notfinished Tau T) T' -> ObsTraceEq T T'.
+Proof.
+  cofix COFIX.
+  intros T T' Eq.
+  inversion Eq; subst; clear Eq.
+  + auto.
+  + eapply ObsEqTau2.
+    eapply COFIX; auto.
+  + eapply ObsEqTau2.
+    eapply ObsEqAllTau.
+Qed.
+
+Lemma ObsTraceEqRemoveTau2 :
+  forall T T', ObsTraceEq T (notfinished Tau T') -> ObsTraceEq T T'.
+Proof.
+  cofix COFIX.
+  intros T T' Eq.
+  inversion Eq; subst; clear Eq.
+  + eapply ObsEqTau1.
+    eapply COFIX.
+    auto.
+  + auto. 
+  + eapply ObsEqTau1.
+    eapply ObsEqAllTau.
+Qed.
+
+Fixpoint tauN (n : nat) (T : TraceOf Observation) : TraceOf Observation :=
+  match n with
+  | O => T
+  | S n' => notfinished Tau (tauN n' T)
+  end.
+
+Lemma EqOut_tauN : forall T' t',
+    Last T' t' ->
+    forall w T, 
+      ObsTraceEq (notfinished (Out w) T) T' ->
+      exists n, T' = tauN n (finished (Out w)) \/ exists  T'', T' = tauN n (notfinished (Out w) T'').
+Proof.
+  intros T' t' HL.
+  induction HL; intros w Tw Eq.
+  - exists 0. left. simpl.
+    inversion Eq.
+  - destruct a'.
+    + inversion Eq; subst; clear Eq.
+      * exists 0.
+        right.
+        exists T; simpl; auto.
+      * exists 0.
+        right.
+        exists T; simpl; auto.
+    + inversion Eq; subst; clear Eq.
+      destruct (IHHL w Tw H1) as [n [HTau | [T'' HTau]]].
+      * exists (S n).
+        left.
+        simpl.
+        rewrite HTau.
+        auto.
+      * exists (S n).
+        right.
+        simpl.
+        exists T''.
+        rewrite HTau.
+        auto.
+Qed.
+
+Definition ObsTracePrefApp' :
+  forall O1 O1' O2 O2' o1 o1',
+    Last O1 o1 -> Last O1' o1' -> 
+    ObsTraceEq O1 O1' ->
+    ObsTracePrefix O2 O2' ->
+    ObsTracePrefix (O1^(Some O2)) (O1'^(Some O2')).
+Proof.
+  intros O1 O1' O2 O2' o1 o1' H;
+    (* I really want SSR... *)
+    generalize dependent O1';
+    generalize dependent O2;
+    generalize dependent O2';
+    generalize dependent o1'.
+  induction H as [o1|]; intros o1' O2' O2 O1' Last' Eq Pref.
+  - generalize dependent O2;
+    generalize dependent O2';
+    generalize dependent Eq.
+    induction Last';
+      intros Eq O2' O2 Pref.
+    + inversion Eq; subst; simpl in *; clear Eq; app_frobber.
+      (* Hint constructors doesn't work for this? *)
+      * apply ObsPreNow; auto.
+      * apply ObsPreTau1; apply ObsPreTau2; auto.
+      * destruct a.
+        -- apply ObsPreNow; auto.
+        -- apply ObsPreTau1; apply ObsPreTau2; auto.
+    + inversion Eq; subst; simpl in *; clear Eq.
+      specialize (IHLast' H1 O2' O2 Pref).      
+      app_frobber.
+      eapply ObsPreTau2.
+      auto.
+  (* Try by inversion. *)
+  - destruct a'.
+    + destruct (EqOut_tauN O1' o1' Last' w T Eq) as [n [HTau | [T' HTau]]].
+      * rewrite HTau in *.
+        clear HTau.
+        induction n; simpl in *; subst; app_frobber.
+        -- apply ObsPreNow.
+           inversion Eq. (* This makes me feel strange *)
+        -- apply ObsPreTau2.
+           inversion Last'; subst; clear Last'.
+           apply ObsTraceEqRemoveTau2 in Eq.
+           specialize (IHn H3 Eq).
+           auto.
+      * rewrite HTau in *.
+        clear HTau.
+        induction n; simpl in *; subst; app_frobber.
+        -- apply ObsPreNow.
+           inversion Eq; subst; clear Eq.
+           ++ inversion Last'; subst; clear Last'.
+              eauto.
+           ++ inversion Last'; subst; clear Last'.
+              eauto using ObsEqAllTau.
+        -- inversion Last'; subst; clear Last'.
+           specialize (IHn H3).
+           apply ObsTraceEqRemoveTau2 in Eq.
+           specialize (IHn Eq).
+           apply ObsPreTau2.
+           auto.
+    + apply ObsTraceEqRemoveTau1 in Eq.
+      app_frobber.
+      apply ObsPreTau1.
+      eauto.
+Qed.
 
 (* End axioms *)
 
