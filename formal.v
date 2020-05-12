@@ -1417,19 +1417,36 @@ CoInductive RealMPTrace' : MPState -> MPTrace -> Prop :=
                        RealMPTrace' (fst (step (ms mp)), p') MP -> 
                        RealMPTrace' mp (notfinished mp MP).
 
+Lemma MPTraceOfHead: forall mp, mp = head (MPTraceOf mp).
+Proof.
+  intros. destruct mp.  simpl. 
+  destruct (pstep (m,p)); auto.
+Qed.
+
 Lemma RealMPTraceSame : forall MP, RealMPTrace MP -> RealMPTrace' (head MP) MP. 
 Proof.
+  unfold RealMPTrace.
   cofix COFIX.
   intros.
-  unfold RealMPTrace in H.
-  rewrite H. simpl.
-  destruct (pstep (head MP)) eqn:?.
-  - destruct MP. simpl in Heqo. 
-    rewrite idTrace_eq. simpl. 
-    rewrite Heqo. 
-    econstructor. eauto.
-Admitted. (* ?? *)
-  
+  rewrite idTrace_eq in H. simpl in H. 
+  destruct MP as [m | m MP'] eqn:?. 
+  - simpl in *. 
+    destruct (pstep m) eqn:?. 
+    + inversion H. 
+    + constructor; auto.
+  - simpl in *. 
+    destruct (pstep m) eqn:?. 
+    + inversion H. 
+      econstructor; eauto.
+      set (mp' := (fst (step (ms m)), p)).
+      rewrite (MPTraceOfHead mp') at 1. 
+      apply COFIX. (* NO! Not guarded! Is this just a technical problem? *)
+      rewrite (MPTraceOfHead mp') at 1. auto.
+    + inversion H. 
+Admitted. 
+
+(* Converse most likely impossible *)
+
 
 Axiom ObsTraceMToObsTrace :
   forall MP:MPTrace,
@@ -1455,11 +1472,23 @@ Axiom SplitSuffixReal :
     SplitInclusive P MP1 MP2 MP3 ->
     RealMPTrace MP3.
 
+Lemma SplitSuffixReal' :
+  forall P MP1 MP2 MP3,
+    SplitInclusive P MP1 MP2 MP3 ->
+    RealMPTrace' (head MP1) MP1 ->
+    RealMPTrace' (head MP3) MP3.
+Proof.
+  induction 1; intros; auto. 
+  apply IHSplitInclusive.
+  simpl in H1. 
+  inversion H1; subst.
+  inversion H5; subst; clear H5; econstructor; eauto. 
+Qed.  
+
 Axiom RealTail :
   forall mp MP,
     RealMPTrace (notfinished mp MP) -> 
     RealMPTrace MP.  
-
 
 Lemma RealTail' :
   forall mp MP,
