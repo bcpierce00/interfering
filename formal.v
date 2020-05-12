@@ -1308,7 +1308,6 @@ Definition ObservableConfidentiality (C : Contour) (MP:MPTrace) (MPsuffO:option 
     (* 1. The callee ends successfully with a return. *)
     (forall MPsuff,
         MPsuffO = Some MPsuff ->
-        let mpret := head MPsuff in
        (* Previously: forall mpret, Last MP mpret ->
                       justReturned (ms mpret) -> 
           But these should fall out of LazyReturnMP *)
@@ -1318,15 +1317,16 @@ Definition ObservableConfidentiality (C : Contour) (MP:MPTrace) (MPsuffO:option 
            And we rollback mret' to undo the variation to
            get its trace, etc. *)
         (exists M'suff, M'suffO = Some M'suff /\
-         let mret' := RollbackConf (ms (head MP)) m' (head M'suff) in
          (* Callee observation traces are identical *)
          ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M') /\
          (* Two sub-cases: either MPsuffO is an infinite trace,
             or it stops short due to the monitor. In the first
             case it should produce the same observation trace as M'suff,
             in the latter a prefix. *)
-         (exists mpfin, Last MPsuff mpfin) -> ObsTraceOf MPsuff <=_O ObsTraceOfM M'suff /\
-         (* ^ Above exists is superfluous, but demonstrates that these are disjoint cases *)
+         ((exists mpfin, Last MPsuff mpfin) ->
+                        let mret' := RollbackConf (ms (head MP)) m' (head M'suff) in
+                        ObsTraceOf MPsuff <=_O ObsTraceOfM (MTraceOf mret')) /\
+         (* Above exists is superfluous, but demonstrates that these are disjoint cases *)
          (forall mpfin, ~(Last MPsuff mpfin)) -> ObsTraceEq (ObsTraceOf MPsuff) (ObsTraceOfM M'suff))) /\
 
     (* 2. The callee is cut short by a monitor fault. *)
@@ -1456,7 +1456,7 @@ Axiom SplitSuffixReal :
     SplitInclusive P MP1 MP2 MP3 ->
     RealMPTrace MP3.
 
-Lemma RealTail :
+Lemma RealTail' :
   forall mp MP,
     RealMPTrace' mp (notfinished mp MP) ->
     RealMPTrace' (head MP) MP.  
@@ -1470,6 +1470,12 @@ Proof.
     auto.
 Qed.
 
+Axiom RealTail :
+  forall mp MP,
+    RealMPTrace (notfinished mp MP) ->
+    RealMPTrace MP.
+Proof.
+  
 Axiom ObsTracePrefApp :
   forall O1 O1' O2 O2',
     ObsTraceEq O1 O1' ->
@@ -1678,17 +1684,24 @@ Lemma EagerImpliesLazyConf :
     LazyReturnMP justReturned MPcall MPpre MPsuffO ->
     EagerStackConfidentiality C MPpre justReturned -> ObservableConfidentiality C MPpre MPsuffO justReturned.
 Proof.
-Admitted.
-(*  unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros.
-  destruct MPsuffO as [MPsuff |] eqn:E; split.
-  - intros. specialize H1 with m' M'pre. destruct H1;auto.
-    + constructor. exists M'suff. auto.
+  unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros. split.
+  - intros. specialize H1 with m' M'. destruct H1;auto.
+    + destruct H3.
+      * destruct H1 as [M'suff]. left. exists M'suff. destruct H1. auto.
+      * right. destruct H1. destruct H3. split; auto.
     + specialize H1 with (head MPsuff). destruct H0.
       * destruct H0 as [MPsuffAgain]. destruct H0.
-        assert (H6 := H5).
+        assert (Hsplit := H6).
         apply (SplitInclusiveIsInclusive (fun mp => justReturned (ms mp))) in H6.
-        injection H0; intros. rewrite <- H7 in H6. apply H1 in H6.
-        destruct H6. destruct H6 as [mret']. destruct H6.
+        rewrite H0 in H4.
+        injection H4; intros. rewrite H7 in H6. destruct H1; auto.
+        { apply SplitInclusiveProp in Hsplit. rewrite <- H7; auto. }
+        destruct H1 as [m'suffhead]. exists (MTraceOf m'suffhead).
+        intros. destruct H9. destruct H10.
+      * admit.
+  -
+
+        destruct H6.
         assert (m' = head M'pre).
         { apply SplitInclusiveHeadEq in H3. rewrite MTraceOfHead in H3. auto. }
         assert (mret' = head M'suff).
