@@ -1314,6 +1314,13 @@ Definition ObservableConfidentiality (C : Contour) (MP:MPTrace) (MPsuffO:option 
           But these should fall out of LazyReturnMP *)
 
 
+        (* APT: Note that this version is a little bit stronger than
+        the original one in which we compared concatenated traces, since
+        it requires observations to be divided between callee/caller in
+        the same way in actual and variant. Arguably the weaker 
+        version is preferable for an "observational" property?*)
+           
+
         (* Then M'pre also terminates in some state mret'.
            And we rollback mret' to undo the variation to
            get its trace, etc. *)
@@ -1456,7 +1463,13 @@ Axiom SplitSuffixReal :
     SplitInclusive P MP1 MP2 MP3 ->
     RealMPTrace MP3.
 
-Lemma RealTail :
+Axiom RealTail :
+  forall mp MP,
+    RealMPTrace (notfinished mp MP) -> 
+    RealMPTrace MP.  
+
+
+Lemma RealTail' :
   forall mp MP,
     RealMPTrace' mp (notfinished mp MP) ->
     RealMPTrace' (head MP) MP.  
