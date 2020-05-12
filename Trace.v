@@ -5,31 +5,31 @@ CoInductive TraceOf (A : Type) : Type :=
 Arguments finished {_} _.
 Arguments notfinished {_} _ _.
 
-Definition idTrace {A} (MM: TraceOf A) : TraceOf A :=
-  match MM with
-  | finished M => finished M
-  | notfinished M MM' => notfinished M  MM'
+Definition idTrace {A} (T: TraceOf A) : TraceOf A :=
+  match T with
+  | finished a => finished a
+  | notfinished a T' => notfinished a T'
   end.
 
-Lemma idTrace_eq : forall {A} (MM: TraceOf A), MM = idTrace MM.
-   destruct MM; reflexivity.
+Lemma idTrace_eq : forall {A} (T: TraceOf A), T = idTrace T.
+   destruct T; reflexivity.
 Qed.
 
-Definition head {A} (MM : TraceOf A) : A :=
-  match MM with
-  | finished M => M
-  | notfinished M _ => M
+Definition head {A} (T : TraceOf A) : A :=
+  match T with
+  | finished T => T
+  | notfinished T _ => T
   end.
 
-Inductive InTrace {A} (m:A) : TraceOf A -> Prop :=
-| In_finished : InTrace m (finished m)
-| In_now : forall MM, InTrace m (notfinished m MM)
-| In_later : forall m' MM, InTrace m MM -> InTrace m (notfinished m' MM).
+Inductive InTrace {A} (a:A) : TraceOf A -> Prop :=
+| In_finished : InTrace a (finished a)
+| In_now : forall T, InTrace a (notfinished a T)
+| In_later : forall a' T, InTrace a T -> InTrace a (notfinished a' T).
 
-Lemma head_InTrace :forall {A} (MM: TraceOf A), InTrace (head MM) MM.
+Lemma head_InTrace :forall {A} (T: TraceOf A), InTrace (head T) T.
 Proof.
   intros.
-  destruct MM.
+  destruct T.
   - constructor.
   - simpl. constructor.
 Qed.
@@ -46,24 +46,24 @@ CoInductive ForallTrace {A:Type} (P:A -> Prop) : TraceOf A -> Prop :=
 .
 
 CoInductive TraceEq {A} : TraceOf A -> TraceOf A -> Prop :=
-| EqFin : forall m, TraceEq (finished m) (finished m)
-| EqCons : forall m mm1 mm2, TraceEq mm1 mm2 ->
-                             TraceEq (notfinished m mm1) (notfinished m mm2).
+| EqFin : forall a, TraceEq (finished a) (finished a)
+| EqCons : forall a T1 T2, TraceEq T1 T2 ->
+                             TraceEq (notfinished a T1) (notfinished a T2).
 
-Lemma TraceEqRefl: forall {A} (M: TraceOf A),
-    TraceEq M M.
+Lemma TraceEqRefl: forall {A} (T: TraceOf A),
+    TraceEq T T.
 Proof.
   cofix COFIX.
-  intros. 
-  destruct M. 
+  intros.
+  destruct T.
   - constructor.
   - constructor; apply COFIX.     
 Qed.
 
-Lemma TraceEqTrans : forall {A} (M1 M2 M3: TraceOf A),
-    TraceEq M1 M2 ->
-    TraceEq M2 M3 ->
-    TraceEq M1 M3. 
+Lemma TraceEqTrans : forall {A} (T1 T2 T3: TraceOf A),
+    TraceEq T1 T2 ->
+    TraceEq T2 T3 ->
+    TraceEq T1 T3. 
 Proof.
   cofix COFIX.
   intros.
@@ -74,9 +74,9 @@ Proof.
     constructor. eapply COFIX; eauto. 
 Qed.
 
-Lemma TraceEqSym : forall {A} (M1 M2: TraceOf A),
-    TraceEq M1 M2 ->
-    TraceEq M2 M1.
+Lemma TraceEqSym : forall {A} (T1 T2: TraceOf A),
+    TraceEq T1 T2 ->
+    TraceEq T2 T1.
 Proof.
   cofix COFIX.
   intros.
@@ -111,23 +111,23 @@ Proof.
     auto.
 Qed.
 
-(* TracePrefix MM1 MM2 says MM2 is a prefix of MM1. *)
+(* TracePrefix T1 T2 says T2 is a prefix of T1. *)
 Definition TracePrefix {A} (T1 T2: TraceOf A): Prop :=
   exists TO,
     TraceEq T1 (T2^TO).
 
-Notation "MM2 <<== MM1" := (TracePrefix MM1 MM2) (at level 80).
+Notation "T2 <<== T1" := (TracePrefix T1 T2) (at level 80).
 
 (* Divide MM1 into MM2 ++ MMO such that MM2 is the longest prefix for which P holds on each element *)
-Definition TraceSpan {A} (P : A -> Prop) (MM1 MM2 : TraceOf A) (MMO : option (TraceOf A)) : Prop :=
-  MM1 = MM2^MMO /\ ForallTrace P MM2 /\
-  forall MM2', MM2' <<== MM1 ->
-    ForallTrace P MM2' ->
-    MM2' <<== MM2.
+Definition TraceSpan {A} (P : A -> Prop) (T1 T2 : TraceOf A) (TO : option (TraceOf A)) : Prop :=
+  T1 = T2^TO /\ ForallTrace P T2 /\
+  forall T2', T2' <<== T1 ->
+    ForallTrace P T2' ->
+    T2' <<== T2.
 
-(* MM2 is the longest prefix of MM1 for which P holds on each element. *)
-Definition LongestPrefix {A} (P : A -> Prop) (MM1 MM2 : TraceOf A) : Prop :=
-  exists MMO, TraceSpan P MM1 MM2 MMO.
+(* T2 is the longest prefix of T1 for which P holds on each element. *)
+Definition LongestPrefix {A} (P : A -> Prop) (T1 T2 : TraceOf A) : Prop :=
+  exists TO, TraceSpan P T1 T2 TO.
 
 Inductive Last {A} : TraceOf A -> A -> Prop :=
 | LastNow : forall a, Last (finished a) a
@@ -173,7 +173,14 @@ Proof.
   - eexists; econstructor.
   - destruct IHSplitInclusive; eexists; econstructor; eauto.
 Qed.
-  
+
+Lemma SplitInclusiveProp {A} (p : A -> Prop) :
+  forall T Tpre Tsuff, SplitInclusive p T Tpre Tsuff ->
+                       p (head Tsuff).
+Proof.
+  intros. induction H; simpl; auto.
+Qed.
+
 Definition PrefixUpTo {A} (p : A -> Prop) (T Tpre : TraceOf A) : Prop :=
   (exists Tsuff, SplitInclusive p T Tpre Tsuff) \/
   ForallTrace (fun m => ~ (p m)) T /\ TraceEq T Tpre.

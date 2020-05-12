@@ -1303,6 +1303,8 @@ Definition ObservableConfidentiality (C : Contour) (MP:MPTrace) (MPsuffO:option 
        If the trace from m' does not return control, M'pre is the whole
        trace and M'suffO is None. *)
     LazyReturnM justReturned (MTraceOf m') M' M'suffO ->
+
+    let O := (ObsTraceOf MP)^(option_map ObsTraceOf MPsuffO) in
     (* Here are the three cases from EagerConf: *)
 
     (* 1. The callee ends successfully with a return. *)
@@ -1312,22 +1314,19 @@ Definition ObservableConfidentiality (C : Contour) (MP:MPTrace) (MPsuffO:option 
                       justReturned (ms mpret) -> 
           But these should fall out of LazyReturnMP *)
 
-
-        (* Then M'pre also terminates in some state mret'.
-           And we rollback mret' to undo the variation to
-           get its trace, etc. *)
-        (exists M'suff, M'suffO = Some M'suff /\
-         (* Callee observation traces are identical *)
-         ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M') /\
-         (* Two sub-cases: either MPsuffO is an infinite trace,
-            or it stops short due to the monitor. In the first
-            case it should produce the same observation trace as M'suff,
-            in the latter a prefix. *)
-         ((exists mpfin, Last MPsuff mpfin) ->
-                        let mret' := RollbackConf (ms (head MP)) m' (head M'suff) in
-                        ObsTraceOf MPsuff <=_O ObsTraceOfM (MTraceOf mret')) /\
-         (* Above exists is superfluous, but demonstrates that these are disjoint cases *)
-         (forall mpfin, ~(Last MPsuff mpfin)) -> ObsTraceEq (ObsTraceOf MPsuff) (ObsTraceOfM M'suff))) /\
+        (* Then M'pre also terminates in some state, which is at the head of M'suff.
+           And we rollback the head of M'suff to undo the variation and get its trace. *)
+        (exists M'suff M'roll,
+              M'suffO = Some M'suff /\
+              M'roll = MTraceOf (RollbackConf (ms (head MP)) m' (head M'suff)) /\
+              let O' := (ObsTraceOfM M') ^ Some (ObsTraceOfM M'roll) in
+              (* Two sub-cases: either MPsuffO is an infinite trace,
+                 or it stops short due to the monitor. In the first
+                 case it should produce the same observation trace as M'suff,
+                 in the latter a prefix. *)
+              ((exists mpfin, Last MPsuff mpfin) -> O <=_O O' /\
+              (* Above exists is superfluous, but demonstrates that these are disjoint cases *)
+              (forall mpfin, ~(Last MPsuff mpfin)) -> ObsTraceEq (ObsTraceOf MPsuff) (ObsTraceOfM M'suff)))) /\
 
     (* 2. The callee is cut short by a monitor fault. *)
     (forall mpret, Last MP mpret -> (* mpstep mpret = None -> *)
@@ -1456,6 +1455,12 @@ Axiom SplitSuffixReal :
     SplitInclusive P MP1 MP2 MP3 ->
     RealMPTrace MP3.
 
+Axiom RealTail :
+  forall mp MP,
+    RealMPTrace (notfinished mp MP) -> 
+    RealMPTrace MP.  
+
+
 Lemma RealTail' :
   forall mp MP,
     RealMPTrace' mp (notfinished mp MP) ->
@@ -1470,12 +1475,6 @@ Proof.
     auto.
 Qed.
 
-Axiom RealTail :
-  forall mp MP,
-    RealMPTrace (notfinished mp MP) ->
-    RealMPTrace MP.
-Proof.
-  
 Axiom ObsTracePrefApp :
   forall O1 O1' O2 O2',
     ObsTraceEq O1 O1' ->
@@ -1697,11 +1696,15 @@ Proof.
         injection H4; intros. rewrite H7 in H6. destruct H1; auto.
         { apply SplitInclusiveProp in Hsplit. rewrite <- H7; auto. }
         destruct H1 as [m'suffhead]. exists (MTraceOf m'suffhead).
-        intros. destruct H9. destruct H10.
-      * admit.
-  -
-
-        destruct H6.
+        pose (M'roll := MTraceOf (RollbackConf (ms (head MPpre)) m' (head (MTraceOf m'suffhead)))).
+        exists M'roll.
+        assert (head M'roll = ms (head MPsuff)).
+        { admit. (* this is where the big cases thing below goes *) }
+        admit. (* then M'roll must be the same as MPsuff, modulo MPsuff terminating early *)
+      * admit. (* this is case 2. *)
+  - admit. (* this is case 3. *)
+Admitted.
+(*        destruct H6.
         assert (m' = head M'pre).
         { apply SplitInclusiveHeadEq in H3. rewrite MTraceOfHead in H3. auto. }
         assert (mret' = head M'suff).
