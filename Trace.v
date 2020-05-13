@@ -256,6 +256,18 @@ Proof.
   intros. exists None. apply TraceAppNone.
 Qed.
 
+Axiom LastTraceEq :
+  forall {A} (a:A) T1 T2,
+    Last T1 a ->
+    TraceEq T1 T2 ->
+    Last T2 a.
+(*Proof.
+  intros. inversion H0.
+  - inversion H.
+    + rewrite <- H3 in H1. inversion H1. rewrite H4.  constructor.
+    + rewrite <- H4 in H1. discriminate.
+  - *)
+  
 (*Axiom TraceAppFinished :
   forall A (a:A) (T:TraceOf A),
     finished a ^ Some T = notfinished a T.

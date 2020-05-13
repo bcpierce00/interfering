@@ -1658,6 +1658,47 @@ Proof.
       eauto.
 Qed.
 
+Lemma MPObsLast :
+  forall MP mp,
+    Last MP mp ->
+    Last (ObsTraceOf MP) Tau.
+Proof.
+  intros. induction H.
+  - rewrite (idTrace_eq (ObsTraceOf (finished a))). unfold ObsTraceOf. simpl. constructor.
+  - destruct T.
+    + rewrite (idTrace_eq (ObsTraceOf (notfinished a' (finished m)))). unfold ObsTraceOf. simpl.
+      destruct (step (ms a')). constructor. auto.
+    + rewrite (idTrace_eq (ObsTraceOf (notfinished a' (notfinished m T)))). unfold ObsTraceOf. simpl.
+      destruct (step (ms a')). constructor. auto.
+Qed.
+
+Lemma MObsLast :
+  forall M m,
+    Last M m ->
+    Last (ObsTraceOfM M) Tau.
+Proof.
+  intros. induction H.
+  - rewrite (idTrace_eq (ObsTraceOfM (finished a))). unfold ObsTraceOfM. simpl. constructor.
+  - destruct T.
+    + rewrite (idTrace_eq (ObsTraceOfM (notfinished a' (finished m)))). unfold ObsTraceOfM. simpl.
+      destruct (step a'). constructor. auto.
+    + rewrite (idTrace_eq (ObsTraceOfM (notfinished a' (notfinished m T)))). unfold ObsTraceOfM. simpl.
+      destruct (step a'). constructor. auto.
+Qed.
+
+Axiom ObsTraceEqApp :
+  forall O1 O1' O2 O2' o1 o1',
+    Last O1 o1 -> Last O1' o1' -> 
+    ObsTraceEq O1 O1' ->
+    ObsTraceEq O2 O2' ->
+    ObsTraceEq (O1^(Some O2)) (O1'^(Some O2')).
+
+Axiom MTraceOfInf :
+  forall m m',
+    ~ Last (MTraceOf m) m'.
+(* SNA: strongly suspect we can't prove this, but several of our cases are based
+   on the assumption that MTraces never end. *)
+
 (* End axioms *)
 
 Lemma FindCallReal :
@@ -1714,7 +1755,7 @@ Lemma EagerImpliesLazyConf :
     LazyReturnMP justReturned MPcall MPpre MPsuffO ->
     EagerStackConfidentiality C MPpre justReturned -> ObservableConfidentiality C MPpre MPsuffO justReturned.
 Proof.
-  unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros. split.
+  unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros. split;try split.
 
   - (* this is case 1 *)
     intros. destruct H0.
@@ -1722,26 +1763,30 @@ Proof.
     destruct H0 as [MPsuffAgain]. destruct H0 as [H0 HSplit].
     assert (MPsuffAgain = MPsuff). { rewrite H0 in H4; inversion H4; auto. }
     specialize H1 with m' M'.
-    (* so assert right off the bat the M' returns *)
+    (* so assert right off the bat that M' returns *)
+    
     assert (HM'sEx : exists M'suff, M'suffO = Some M'suff /\ SplitInclusive justReturned (MTraceOf m') M' M'suff).
     { destruct H3.
       - auto.
       - destruct H1; auto.
-        + right. destruct H3. destruct H3.  split; auto.
+        + right. destruct H3. destruct H3. split; auto.
         + specialize H1 with (head MPsuff).
           destruct H1.
           * apply SplitInclusiveIsInclusive in HSplit. rewrite H5 in HSplit. auto.
           * apply SplitInclusiveProp in HSplit. rewrite H5 in HSplit. auto.
-          * destruct H6. destruct H1 as [mret']. destruct H1. admit.
-            (* So here we have Last M' mret', and M' should be infinite,
-               need some lemma reflecting this. *)
-    }
+          * destruct H1 as [mret']. destruct H1. destruct H3. destruct H9.
+            apply TraceEqSym in H9.
+            apply (LastTraceEq mret' M' (MTraceOf m')) in H1; auto.
+            destruct H6.
+            admit. (* I would like to be able to say that an MTrace derived
+                      from MTraceOf never has a last. Plausible?*) }
+
     destruct HM'sEx as [M'suff HM'sEx]. destruct HM'sEx as [HM'sEx Hsplit'].
     destruct H1;auto.
     + left. exists M'suff. auto.
     + specialize H1 with (head MPsuff).
       * rewrite H5 in HSplit.
-        assert (HSplit2 := HSplit).
+        assert (HSplit2 := HSplit). assert (HSplit3 := HSplit).
         apply (SplitInclusiveIsInclusive (fun mp => justReturned (ms mp))) in HSplit2.
         apply SplitInclusiveProp in HSplit. rewrite H0 in H4.
         destruct H1; auto.
@@ -1768,27 +1813,37 @@ Proof.
               apply Hksame. right. rewrite H8. auto.
           - apply not_weq_implies_neq in Unchanged.
             apply Hksame. left. auto. }
-        split; auto. split; auto. rewrite H0. simpl. split.
+        assert (HRealsuff : RealMPTrace MPsuff).
+        { apply (SplitSuffixReal (fun mp => justReturned (ms mp)) MPcall MPpre MPsuff); auto. }
+        split; auto. split; auto. rewrite H0. simpl.
+        rewrite H5. assert (Last (ObsTraceOf MPpre) Tau).
+        { apply (MPObsLast MPpre (head MPsuff)). auto. }
+        assert (Last (ObsTraceOfM M') Tau).
+        { apply (MObsLast M' (head M'suff)). apply SplitInclusiveIsInclusive in Hsplit'. auto. }
+        split.
         { intro Hfin. destruct Hfin as [mpfin Hfin].          
           apply (HaltingMPTracePrefixMTrace (head MPsuff) (head M'roll) mpfin) in HHeadsEq.
-          - admit.
-          - admit. }
+          - eapply ObsTracePrefApp'; eauto.
+            + apply ObsTraceEq_sym. auto.
+            + simpl in HHeadsEq.
+              rewrite HRealsuff. auto.
+          - rewrite <- HRealsuff. auto. }
         { intros. apply (MTraceEqInfMPTrace (head MPsuff) (head M'roll)) in HHeadsEq.
-          - admit.
-          - admit. }
-      
-  - (* In cases 2 and 3, there is no return, and therefore no Msuff. *)
-    assert (HNoRet : ForallTrace (fun mp => ~ justReturned (ms mp)) MPcall /\ MPsuffO = None).
-    { admit. }
-    destruct HNoRet as [HNoRet HNoSuff]. split.
-    + (* Case 2: MPcall stops short *)
+          - eapply ObsTraceEqApp; eauto. simpl in HHeadsEq. rewrite HRealsuff. auto.
+          - rewrite <- HRealsuff. auto. }
+        
+  - (* Case 2: MPcall stops short *)
+    intros. specialize H1 with m' M'. destruct H1; auto.
+    + destruct H3.
+      * left. destruct H1 as [MPsuff]. exists MPsuff. destruct H1. auto.
+      * right. destruct H1. destruct H3. split;auto.
+    + destruct H6. specialize H6 with mpret. apply H6; auto.
+  - (* Case 3: MPcall diverges *)
       intros. specialize H1 with m' M'. destruct H1; auto.
-      * admit. (* think about this more; may be about decidability of last *)
-      * destruct H6. specialize H6 with mpret. apply H6; auto.
-    + (* Case 3: MPcall diverges *)
-      intros. specialize H1 with m' M'. destruct H1; auto.
-      * right. admit. (* this is easier because we do know it doesn't terminate. *)
-      * destruct H5. apply H6; auto.
+      + destruct H3.
+        * left. destruct H1 as [Msuff]. destruct H1. eauto.
+        * right. destruct H1. destruct H3. split; auto.
+      + destruct H5. apply H6; auto.
 Admitted.
 (*        destruct H6.
         assert (m' = head M'pre).
