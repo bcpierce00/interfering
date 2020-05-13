@@ -45,10 +45,18 @@ Inductive Observation :=
 (* A Machine State can step to a new Machine State plus an Observation. *)
 Variable step : MachineState -> MachineState * Observation.
 
+Definition CallMap := Value -> nat -> Prop.
+
+Definition isCall (cm: CallMap) (m: MachineState) (args: nat) : Prop :=
+   cm (m (Reg PC)) args.
+
+Definition isRet (mc m: MachineState) : Prop :=
+  m (Reg PC) = wplus (mc (Reg PC)) 4 /\ m (Reg SP) = mc (Reg SP).
+
 Variable PolicyState : Type.
 Variable pstep : MachineState * PolicyState -> option PolicyState.
-(* TODO: CallMap as an argument? *)
-Variable initPolicyState : MachineState -> PolicyState.
+(* TODO: Does this ever fail? *)
+Variable initPolicyState : MachineState -> CallMap -> PolicyState.
 
 Definition MPState : Type := MachineState * PolicyState.
 
@@ -703,13 +711,6 @@ Proof.
     * eapply StrongConfImpliesObsEq_Inf; eauto.
 Qed.        
 
-Definition CallMap := Value -> nat -> Prop.
-
-Definition isCall (cm: CallMap) (m: MachineState) (args: nat) : Prop :=
-   cm (m (Reg PC)) args.
-
-Definition isRet (mc m: MachineState) : Prop :=
-  m (Reg PC) = wplus (mc (Reg PC)) 4 /\ m (Reg SP) = mc (Reg SP).
 
 Definition updateContour (C: Contour) (args: nat) (m: MachineState) : Contour :=
   fun k =>
@@ -726,6 +727,7 @@ Definition updateContour (C: Contour) (args: nat) (m: MachineState) : Contour :=
     | _ => C k
     end.
 
+(* LEO: TODO: Instruction memory should be tagged LC HI *)
 (* SNA: Since we never actually use the old contour in updateContour,
    I made this for FindCall, below. (Importantly, if we did use the old contour,
    newer versions of subtrace would be wrong.) *)
@@ -827,6 +829,13 @@ Definition EagerStackSafety (cm : CallMap) : MPTrace -> Contour -> Prop :=
         PrefixUpTo (fun mp => isRet (ms (head MP')) (ms mp)) MP' MPpre' ->
         EagerStackIntegrity C' MPpre' /\
         EagerStackConfidentiality C' MPpre' (isRet (ms (head MPpre')))).
+
+Definition EagerStackSafety' (cm : CallMap) (m : MachineState) :=
+  let initC := makeContour 0 m in
+  let p := initPolicyState m cm in
+  let MP := MPTraceOf (m,p) in
+  EagerStackSafety cm MP initC.                 
+
 
 (* TODO: step by step property that implies the rest *)
 
@@ -1126,7 +1135,12 @@ CoInductive MPStepCompatible : MPTrace -> Prop :=
       MPStepCompatible MP ->
       MPStepCompatible (notfinished mp MP).
 
-(*               
+(*
+Lemma preserve...
+(forall vs, (exists vse, FinLast vse vs /\ contour vse = C) ->
+                WellFormedVS (ms (head MP)) vs ->
+                EagerStackSafetyTest cm MP vs)
+
 Theorem TestImpliesConfidentialityToplevel :
   forall cm C MP,
     MPStepCompatible MP ->
@@ -1550,6 +1564,7 @@ Proof.
   destruct (pstep (m,p)); auto.
 Qed.
 
+(* LEO: TODO: Look at this. *)
 Lemma RealMPTraceSame : forall MP, RealMPTrace MP -> RealMPTrace' (head MP) MP. 
 Proof.
   unfold RealMPTrace.
@@ -1729,11 +1744,8 @@ Definition ObsTracePrefApp' :
 Proof.
   intros O1 O1' O2 O2' o1 o1' H;
     (* I really want SSR... *)
-    generalize dependent O1';
-    generalize dependent O2;
-    generalize dependent O2';
-    generalize dependent o1'.
-  induction H as [o1|]; intros o1' O2' O2 O1' Last' Eq Pref.
+    revert O1' O2 O2' o1'.
+  induction H as [o1|]; intros O1' O2 O2' o1' Last' Eq Pref.
   - generalize dependent O2;
     generalize dependent O2';
     generalize dependent Eq.
@@ -1820,11 +1832,22 @@ Axiom ObsTraceEqApp :
     ObsTraceEq O2 O2' ->
     ObsTraceEq (O1^(Some O2)) (O1'^(Some O2')).
 
-Axiom MTraceOfInf :
+Lemma MTraceOfInf :
   forall m m',
     ~ Last (MTraceOf m) m'.
-(* SNA: strongly suspect we can't prove this, but several of our cases are based
-   on the assumption that MTraces never end. *)
+Proof.  
+  intros m m' H.
+  remember (MTraceOf m) as M.
+  generalize dependent m.
+  induction H; intros m HeqM.
+  - rewrite (idTrace_eq (MTraceOf m)) in HeqM.
+    simpl in *.
+    inversion HeqM.
+  - rewrite (idTrace_eq (MTraceOf m)) in HeqM.
+    simpl in *.
+    inversion HeqM; subst; clear HeqM.
+    eapply IHLast; eauto.
+Qed.
 
 (* End axioms *)
 
