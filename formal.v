@@ -1118,27 +1118,154 @@ Proof.
         }
 Qed.
 
-(*
+CoInductive MPStepCompatible : MPTrace -> Prop :=
+| CompFin  : forall mp, MPStepCompatible (finished mp)
+| CompStep :
+    forall mp MP,
+      (exists o, mpstep mp = Some (ms (head MP), ps (head MP), o)) ->
+      MPStepCompatible MP ->
+      MPStepCompatible (notfinished mp MP).
+
+(*               
 Theorem TestImpliesConfidentialityToplevel :
   forall cm C MP,
-    (forall vs, (exists vse, Last vse vs /\ contour vse = C) ->
+    MPStepCompatible MP ->
+    (forall vs, (exists vse, FinLast vse vs /\ contour vse = C) ->
                 WellFormedVS (ms (head MP)) vs ->
                 EagerStackSafetyTest cm MP vs) ->
     (forall mv, variantOf (ms (head MP)) mv C ->
                 StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf mv)).
 Proof.
   cofix COFIX.
-  intros cm C MP Safety mv Var.
+  intros cm C MP Comp Safety mv Var.
   destruct MP.
   - apply StrongConfNotMStep.
-  
-  inversion Safety; subst; clear Safety.
-  - remember HLast as HIn; clear HeqHIn; apply Last_implies_In in HIn.
-    simpl in *.
-    specialize (H0 M0 C N (fun _ => False) HIn).
-    rewrite (idTrace_eq (traceOf N)); simpl.
-    rewrite
- *)
+    intros Contra. inversion Contra.
+  - destruct (MTraceOf mv) as [mv' | mv' MV] eqn:HMV;
+    rewrite (idTrace_eq (MTraceOf mv)) in HMV; simpl in *;
+      inversion HMV; subst; clear HMV; rename mv' into mv.
+    inversion Comp; subst; clear Comp.
+    match goal with
+    | [H : exists _, _ |- _] => destruct H as [o MPStep]
+    end.
+
+    (* Setting up things for later *)
+    remember (Build_VSE (ms m) mv mv C (fun _ => False)) as vse.
+    assert (Safety': EagerStackSafetyTest cm (notfinished m MP) [vse]).
+    { apply Safety.
+      - exists vse; split.
+        + constructor.
+        + rewrite Heqvse; simpl; auto.
+      - unfold WellFormedVS.
+        split; [|split]; [ | | split].
+        + constructor.
+          * rewrite Heqvse; simpl; auto.
+          * constructor.
+        + exists vse; split.
+          * constructor.
+          * rewrite Heqvse; simpl; auto.
+        + constructor.
+          * rewrite Heqvse; simpl.
+            rewrite (idTrace_eq (MTraceOf (ms m))); simpl.
+            apply In_now.
+          * constructor.
+        + constructor.
+          * rewrite Heqvse; simpl.
+            rewrite (idTrace_eq (MTraceOf (mv))); simpl.
+            apply In_now.
+          * constructor.
+    }
+    
+    unfold mpstep in MPStep.
+    destruct (step (ms m)) as [m' o'] eqn:MStep.
+    destruct (pstep m) eqn:PStep; inversion MPStep; subst; clear MPStep.
+    destruct (step mv) as [mv' o'] eqn:StepV.
+    
+    inversion Safety'; subst; clear Safety';
+      remember (Build_VSE (ms m) mv mv C (fun _ => False)) as vse.
+    + destruct (H6 vse) as [mv'' [ov [VStep VConf]]]; [left; auto|].
+      rewrite Heqvse in VStep; simpl in VStep.
+      rewrite VStep in StepV.
+      inversion StepV; subst; clear StepV;
+        remember (Build_VSE (ms m) mv mv C (fun _ => False)) as vse.
+      destruct VConf as [HO HConf].
+      (* TODO: Make this robust. *)
+      rewrite HO in H4; auto.
+      unfold mpstep in H4.
+      rewrite MStep in H4.
+      rewrite PStep in H4.
+      inversion H4; subst; clear H4;
+        remember (Build_VSE (ms m) mv mv C (fun _ => False)) as vse.
+      simpl; auto.
+      
+      eapply StrongConfStep; simpl in *; eauto.
+      * unfold mpstep.
+        rewrite MStep.
+        rewrite PStep.
+        auto.
+      * intros k [Diff | Diff].
+        -- apply HConf.
+           left. intros Contra. apply Diff. auto.
+        -- apply HConf.
+           right.
+           rewrite Heqvse; simpl.
+           intros Contra; auto.
+      * eapply COFIX; eauto.
+        (* LEO: Here. *)
+        (*
+  Safety : forall vs : list VSE,
+           (exists vse : VSE, FinLast vse vs /\ contour vse = C) ->
+           WellFormedVS (ms m) vs -> EagerStackSafetyTest cm (notfinished m MP) vs
+          *) 
+           eapply StrongConfStep; simpl in *; eauto.
+    + unfold mpstep in MPStep.
+      destruct (step (ms m)) as [m' o'] eqn:MStep.
+      destruct (pstep m) eqn:PStep; inversion MPStep; subst; clear MPStep.
+      destruct (step mv) as [mv' o'] eqn:StepV.
+      * destruct (H6 vse) as [mv'' [ov [VStep VConf]]]; [left; auto|].
+        rewrite Heqvse in VStep; simpl in VStep.
+        rewrite VStep in StepV.
+        inversion StepV; subst; clear StepV;
+          remember (Build_VSE (ms m) mv mv C (fun _ => False)) as vse.
+        destruct VConf as [HO HConf].
+        (* TODO: Make this robust. *)
+        rewrite HO in H4; auto.
+        unfold mpstep in H4.
+        rewrite MStep in H4.
+        rewrite PStep in H4.
+        inversion H4; subst; clear H4;
+          remember (Build_VSE (ms m) mv mv C (fun _ => False)) as vse.
+        simpl; auto.
+      * destruct (H5 vse) as [mv'' [ov [VStep VConf]]]; [left; auto|].
+        rewrite Heqvse in VStep; simpl in VStep.
+        rewrite VStep in StepV.
+        inversion StepV; subst; clear StepV;
+          remember (Build_VSE (ms m) mv mv C (fun _ => False)) as vse.
+        destruct VConf as [HO HConf].
+        (* TODO: Make this robust. *)
+        rewrite HO in H3; auto.
+        unfold mpstep in H3.
+        rewrite MStep in H3.
+        rewrite PStep in H3.
+        inversion H3; subst; clear H3;
+          remember (Build_VSE (ms m) mv mv C (fun _ => False)) as vse.
+        simpl; auto.
+      * destruct (H5 vse) as [mv'' [ov [VStep VConf]]]; [left; auto|].
+        rewrite Heqvse in VStep; simpl in VStep.
+        rewrite VStep in StepV.
+        inversion StepV; subst; clear StepV;
+          remember (Build_VSE (ms m) mv mv C (fun _ => False)) as vse.
+        destruct VConf as [HO HConf].
+        (* TODO: Make this robust. *)
+        rewrite HO in H3; auto.
+        unfold mpstep in H3.
+        rewrite MStep in H3.
+        rewrite PStep in H3.
+        inversion H3; subst; clear H3;
+          remember (Build_VSE (ms m) mv mv C (fun _ => False)) as vse.
+        simpl; auto.
+    + 
+      *)
 
 (*
 Lemma MTraceOf_eq M : MTraceOf M = notfinished M (MTraceOf (fst (step M))).
