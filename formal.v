@@ -1582,8 +1582,8 @@ Proof.
     + inversion H. 
       econstructor; eauto.
       set (mp' := (fst (step (ms m)), p)).
-      pattern mp' at 1.   (* Can't use rewrite...at ! *)
-      rewrite (MPTraceOfHead mp').    
+      pattern mp' at 1.   (* Can't use rewrite...at with cofix! *)
+      rewrite MPTraceOfHead.  
       apply COFIX. 
       rewrite (MPTraceOfHead mp') at 1. auto.
     + inversion H. 
