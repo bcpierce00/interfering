@@ -1564,6 +1564,7 @@ Proof.
   destruct (pstep (m,p)); auto.
 Qed.
 
+(* APT: Fixed with some help from paco tutorial...even without using paco! *)
 (* LEO: TODO: Look at this. *)
 Lemma RealMPTraceSame : forall MP, RealMPTrace MP -> RealMPTrace' (head MP) MP. 
 Proof.
@@ -1581,13 +1582,14 @@ Proof.
     + inversion H. 
       econstructor; eauto.
       set (mp' := (fst (step (ms m)), p)).
-      rewrite (MPTraceOfHead mp') at 1. 
-      apply COFIX. (* NO! Not guarded! Is this just a technical problem? *)
+      pattern mp' at 1.   (* Can't use rewrite...at ! *)
+      rewrite (MPTraceOfHead mp').    
+      apply COFIX. 
       rewrite (MPTraceOfHead mp') at 1. auto.
     + inversion H. 
-Admitted.
-(* Converse most likely impossible *)
+Qed.
 
+(* Converse most likely impossible *)
 
 Axiom ObsTraceMToObsTrace :
   forall MP:MPTrace,
