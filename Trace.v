@@ -85,6 +85,11 @@ Proof.
   - constructor. apply COFIX; auto. 
 Qed.
 
+Lemma TraceEqHead : forall {A} (T1 T2: TraceOf A), TraceEq T1 T2 -> head T1 = head T2. 
+Proof.
+  destruct 1; auto. 
+Qed.
+
 CoFixpoint TraceApp {A} (T: TraceOf A) (TO: option (TraceOf A)) : TraceOf A :=
   match T with
   | finished a =>

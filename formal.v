@@ -1589,7 +1589,81 @@ Proof.
     + inversion H. 
 Qed.
 
-(* Converse most likely impossible *)
+(* APT: Should abandon RealMPTrace for RealMPTrace'',
+which is provably equivalent to RealMPTrace'. *)
+Definition RealMPTrace'' MP := TraceEq MP (MPTraceOf (head MP)).
+
+Ltac inv H := inversion H; subst; clear H. 
+
+Lemma RealMPTrace'Same : forall m MP, RealMPTrace' m MP ->
+                                    TraceEq MP (MPTraceOf m).
+Proof.
+ cofix COFIX.
+ intros.
+ inv H. 
+ - rewrite idTrace_eq; simpl.
+   rewrite H0. 
+   apply TraceEqRefl.
+ - rewrite idTrace_eq; simpl. 
+   rewrite H0. 
+   constructor. 
+   eapply COFIX; eauto.
+Qed.
+
+
+Lemma RealMPTrace'Eq : forall m MP,
+    RealMPTrace' m MP ->
+    forall MP1,
+      TraceEq MP MP1 ->
+      RealMPTrace' m MP1. 
+Proof.
+  cofix COFIX. 
+  intros.
+  inv H. 
+  - destruct MP1. 
+    + inv H0. constructor; auto.
+    + inv H0.
+  - destruct MP1.       
+    + inv H0. 
+    + inv H0. 
+      econstructor; eauto.
+Qed.
+
+Lemma RealMPTrace''Same : forall MP, RealMPTrace'' MP -> RealMPTrace' (head MP) MP. 
+Proof.
+  unfold RealMPTrace''.
+  intro MP. 
+  remember (head MP) as m0. 
+  generalize dependent m0. 
+  generalize dependent MP. 
+  cofix COFIX.
+  intros.
+  rewrite idTrace_eq in H. simpl in H. 
+  destruct MP as [m | m MP'] eqn:?. 
+  - destruct (pstep m0) eqn:?. 
+    + inversion H. 
+    + subst m0. constructor; auto.
+  - destruct (pstep m0) eqn:?. 
+    + inv H. 
+      econstructor; eauto.
+      simpl. 
+      set (mp' := (fst (step (ms m)), p)).
+      simpl in *. 
+      apply COFIX. 
+      * rewrite (TraceEqHead _ _ H1). 
+        apply MPTraceOfHead. 
+      * apply H1. 
+    + inversion H. 
+Qed.
+
+
+Lemma RealMPEquiv : forall MP, RealMPTrace'' MP <-> RealMPTrace' (head MP) MP.
+Proof.
+  split; intros.
+  - apply RealMPTrace''Same; auto.
+  -  apply RealMPTrace'Same; auto.
+Qed.
+
 
 Axiom ObsTraceMToObsTrace :
   forall MP:MPTrace,
