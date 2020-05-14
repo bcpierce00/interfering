@@ -1,3 +1,7 @@
+Require Export Setoid.
+
+Ltac inv H := inversion H; subst; clear H.
+
 CoInductive TraceOf (A : Type) : Type :=
 | finished : A -> TraceOf A
 | notfinished : A -> TraceOf A -> TraceOf A.
@@ -50,6 +54,9 @@ CoInductive TraceEq {A} : TraceOf A -> TraceOf A -> Prop :=
 | EqCons : forall a T1 T2, TraceEq T1 T2 ->
                              TraceEq (notfinished a T1) (notfinished a T2).
 
+
+Notation "T1 ~= T2" := (TraceEq T1 T2) (at level 80). 
+
 Lemma TraceEqRefl: forall {A} (T: TraceOf A),
     TraceEq T T.
 Proof.
@@ -85,10 +92,23 @@ Proof.
   - constructor. apply COFIX; auto. 
 Qed.
 
+Add Parametric Relation A : (TraceOf A) (@TraceEq A)
+    reflexivity proved by (TraceEqRefl (A := A))
+    symmetry proved by (TraceEqSym (A := A))                            
+    transitivity proved by (TraceEqTrans (A := A))
+as TraceEq_rel                             
+.                                        
+
 Lemma TraceEqHead : forall {A} (T1 T2: TraceOf A), TraceEq T1 T2 -> head T1 = head T2. 
 Proof.
   destruct 1; auto. 
 Qed.
+
+Add Parametric Morphism A: (@head A)
+   with signature (@TraceEq A) ==> (@eq A) as head_mor.                             
+Proof.
+  exact (@TraceEqHead A). 
+Qed.   
 
 CoFixpoint TraceApp {A} (T: TraceOf A) (TO: option (TraceOf A)) : TraceOf A :=
   match T with
@@ -102,6 +122,42 @@ CoFixpoint TraceApp {A} (T: TraceOf A) (TO: option (TraceOf A)) : TraceOf A :=
 
 Notation "T1 ^ T2" := (TraceApp T1 T2).
 
+Definition OpTraceEq {A} (TO1 TO2 : option(TraceOf A)) : Prop :=
+  match TO1,TO2 with
+  | None,None => True
+  | Some T1, Some T2 => TraceEq T1 T2
+  | _,_ => False
+  end.
+                                
+Lemma TraceAppEq {A} : 
+      forall (T1 T1' : TraceOf A) ,
+        TraceEq T1 T1' ->
+       forall (TO2 TO2': option(TraceOf A)),
+        OpTraceEq TO2 TO2' ->
+        TraceEq (T1 ^ TO2) (T1' ^ TO2'). 
+Proof.
+  cofix COFIX.
+  intros. 
+  inv H.
+  - rewrite idTrace_eq. rewrite (idTrace_eq (finished a ^ TO2)). simpl. 
+    destruct TO2, TO2'; simpl in H0.
+    * constructor. auto. 
+    * inv H0. 
+    * inv H0. 
+    * constructor. 
+  - rewrite idTrace_eq. rewrite (idTrace_eq (notfinished a T0 ^ TO2)). simpl. 
+    constructor. apply COFIX; auto. 
+Qed.
+
+
+
+Add Parametric Morphism A: (@TraceApp A)
+   with signature (@TraceEq A) ==> (@OpTraceEq A) ==> (@TraceEq A) as app_mor.                             
+Proof.
+  exact (@TraceAppEq A). 
+Qed.   
+
+
 Lemma TraceAppHead {A} :
   forall (T1 T2 : TraceOf A) (TO : option (TraceOf A)),
     T1 = T2 ^ TO -> head T1 = head T2.
@@ -113,6 +169,19 @@ Proof.
     destruct TO; simpl; auto.
   - rewrite App.
     simpl.
+    auto.
+Qed.
+
+Lemma TraceAppHead' {A} :
+  forall (T1 T2 : TraceOf A) (TO : option (TraceOf A)),
+    TraceEq T1 (T2 ^ TO) -> head T1 = head T2.
+Proof.
+  intros T1 T2 TO App.
+  rewrite App.
+  destruct T2 as [a | a T2'].
+  -  simpl. 
+    destruct TO; simpl; auto.
+  - simpl.
     auto.
 Qed.
 
@@ -261,7 +330,6 @@ Proof.
   intros. exists None. apply TraceAppNone.
 Qed.
 
-Ltac inv H := inversion H; subst; clear H.
 
 Lemma LastTraceEq :
   forall {A} (a:A) T1 T2,
