@@ -1407,7 +1407,8 @@ Definition ObservableIntegrity (C:Contour) (MP:MPTrace) (MPsuffO:option MPTrace)
  match MPsuffO with
  | Some actual =>
    let ideal := MTraceOf (RollbackInt C (ms (head MP)) (ms (head actual))) in
-   (ObsTraceOf actual) <=_O (ObsTraceOfM ideal)
+   ((exists mpfin, Last actual mpfin) -> (ObsTraceOf actual) <=_O (ObsTraceOfM ideal)) /\
+   ((forall mp, ~ Last actual mp) -> ObsTraceEq (ObsTraceOf actual) (ObsTraceOfM ideal))
  | None => True
  end.
 
@@ -1543,10 +1544,6 @@ Proof.
   intros. destruct MP; simpl; auto.
 Qed.
 
-(* SNA: Rob and Leo, these are the axioms that should be useful about traces.
-   They mostly are dependent on how we implement ObsTrace and RealTrace (what
-   I've been calling the well-formedness condition on traces.) *)
-
 (* APT: I thought some of these might be approachable if we change to this
 definition but I couldn't actually make any of the proofs go through. *)
 (* Definition RealMPTrace' (MP:MPTrace) : Prop := 
@@ -1610,7 +1607,6 @@ Proof.
    eapply COFIX; eauto.
 Qed.
 
-
 Lemma RealMPTrace'Eq : forall m MP,
     RealMPTrace' m MP ->
     forall MP1,
@@ -1656,21 +1652,12 @@ Proof.
     + inversion H. 
 Qed.
 
-
 Lemma RealMPEquiv : forall MP, RealMPTrace'' MP <-> RealMPTrace' (head MP) MP.
 Proof.
   split; intros.
   - apply RealMPTrace''Same; auto.
   -  apply RealMPTrace'Same; auto.
 Qed.
-
-
-Axiom ObsTraceMToObsTrace :
-  forall MP:MPTrace,
-    RealMPTrace MP ->
-    ObsTracePrefix (ObsTraceOfM (MTraceOf (ms (head MP)))) (ObsTraceOf MP).
-(* If we run a policy trace without the policy, we should be guaranteed an
-   extension of it.*)
 
 Lemma ObsTraceEq_sym :
   forall O O',
@@ -1681,7 +1668,6 @@ Proof.
   inversion H; subst; clear H;
     try (constructor; apply COFIX; auto). 
 Qed.
-
 
 Axiom SplitSuffixReal :
   forall P MP1 MP2 MP3,
@@ -1726,7 +1712,7 @@ Axiom HaltingMPTracePrefixMTrace :
     ms mp = m ->
     Last (MPTraceOf mp) mpfin ->
     ObsTraceOf (MPTraceOf mp) <=_O ObsTraceOfM (MTraceOf m).
-
+  
 Axiom MTraceEqInfMPTrace :
   forall mp m,
     ms mp = m ->
@@ -1948,23 +1934,24 @@ Lemma EagerImpliesLazyInt :
 Proof.
   unfold EagerStackIntegrity. unfold ObservableIntegrity. intros.
   destruct MPsuffO as [MPsuff |] eqn:E; auto.
-  assert (InTrace (head MPsuff) MPpre).
+  assert (HSplit : SplitInclusive (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuff).
   { unfold LazyReturnMP in H0. destruct H0.
-    - destruct H0 as [MPsuff0]. destruct H0. apply SplitInclusiveIsInclusive in H2.
-      injection H0. intros. rewrite H3. apply LastInTrace in H2. auto.
-    - destruct H0. destruct H2. discriminate.
-  }
+    - destruct H0 as [MPsuffAgain]. destruct H0. inversion H0. eauto.
+    - destruct H0. destruct H2. discriminate. }
+  assert (InTrace (head MPsuff) MPpre).
+  {  apply SplitInclusiveIsInclusive in HSplit. apply LastInTrace in HSplit. auto. }
   assert (forall k, integrityOf (C k) = HI -> (ms (head MPpre)) k = (ms (head MPsuff)) k).
   { intros. apply H1; auto. }
   assert (RollbackInt C (ms (head MPpre)) (ms (head MPsuff)) = (ms (head MPsuff))).
   { unfold RollbackInt. extensionality k. destruct (integrityOf (C k)) eqn:E2.
     - apply H3; auto.
     - auto. }
-  rewrite H4. apply ObsTraceMToObsTrace.
-  apply (SplitSuffixReal (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuff); auto.
-  destruct H0.
-  - destruct H0 as [MPsuffAgain]. destruct H0. injection H0. intros. rewrite H6. auto.
-  - destruct H0. destruct H5. discriminate.
+  rewrite H4. assert (RealMPTrace MPsuff).
+  { apply (SplitSuffixReal (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuff); auto. }
+  pose (mp := head MPsuff). rewrite H5. replace (head MPsuff) with mp; auto. rewrite <- MPTraceOfHead.
+  split.
+  - intros. destruct H6 as [mpfin]. apply (HaltingMPTracePrefixMTrace mp (ms mp) mpfin); auto.
+  - intros. apply MTraceEqInfMPTrace; auto.
 Qed.
 
 Variable weq_implies_eq :
@@ -2003,9 +1990,7 @@ Proof.
           * destruct H1 as [mret']. destruct H1. destruct H3. destruct H9.
             apply TraceEqSym in H9.
             apply (LastTraceEq mret' M' (MTraceOf m')) in H1; auto.
-            destruct H6.
-            admit. (* I would like to be able to say that an MTrace derived
-                      from MTraceOf never has a last. Plausible?*) }
+            destruct H6. apply MTraceOfInf in H1. contradiction. }
 
     destruct HM'sEx as [M'suff HM'sEx]. destruct HM'sEx as [HM'sEx Hsplit'].
     destruct H1;auto.
@@ -2070,7 +2055,7 @@ Proof.
         * left. destruct H1 as [Msuff]. destruct H1. eauto.
         * right. destruct H1. destruct H3. split; auto.
       + destruct H5. apply H6; auto.
-Admitted.
+Qed.
 (*        destruct H6.
         assert (m' = head M'pre).
         { apply SplitInclusiveHeadEq in H3. rewrite MTraceOfHead in H3. auto. }
