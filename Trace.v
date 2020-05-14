@@ -1,4 +1,5 @@
 Require Export Setoid.
+Require Coq.Classes.RelationClasses.
 
 Ltac inv H := inversion H; subst; clear H.
 
@@ -67,6 +68,7 @@ Proof.
   - constructor; apply COFIX.     
 Qed.
 
+
 Lemma TraceEqTrans : forall {A} (T1 T2 T3: TraceOf A),
     TraceEq T1 T2 ->
     TraceEq T2 T3 ->
@@ -129,6 +131,35 @@ Definition OpTraceEq {A} (TO1 TO2 : option(TraceOf A)) : Prop :=
   | _,_ => False
   end.
                                 
+Lemma OpTraceEqRefl {A} : forall (T: option(TraceOf A)), OpTraceEq T T.
+Proof.
+  unfold OpTraceEq; destruct T; auto. reflexivity.
+Qed.
+
+Lemma OpTraceEqSym {A} : forall (T1 T2: option(TraceOf A)), OpTraceEq T1 T2 -> OpTraceEq T2 T1.
+Proof.
+  intros.
+  unfold OpTraceEq in * ; destruct T1, T2; auto. symmetry; auto. 
+Qed.
+
+Lemma OpTraceEqTrans {A} : forall (T1 T2 T3: option(TraceOf A)),
+    OpTraceEq T1 T2 ->
+    OpTraceEq T2 T3 ->
+    OpTraceEq T1 T3.
+Proof.
+  intros.
+  unfold OpTraceEq in * ; destruct T1, T2, T3; auto. eapply TraceEqTrans; eauto. inversion H. 
+Qed.
+
+
+Add Parametric Relation A : (option(TraceOf A)) (@OpTraceEq A)
+    reflexivity proved by (OpTraceEqRefl (A := A))
+    symmetry proved by (OpTraceEqSym (A := A))                            
+    transitivity proved by (OpTraceEqTrans (A := A))
+as OpTraceEq_rel                             
+.                                        
+
+
 Lemma TraceAppEq {A} : 
       forall (T1 T1' : TraceOf A) ,
         TraceEq T1 T1' ->
@@ -148,7 +179,6 @@ Proof.
   - rewrite idTrace_eq. rewrite (idTrace_eq (notfinished a T0 ^ TO2)). simpl. 
     constructor. apply COFIX; auto. 
 Qed.
-
 
 
 Add Parametric Morphism A: (@TraceApp A)
@@ -185,12 +215,87 @@ Proof.
     auto.
 Qed.
 
+Lemma TraceAppNone :
+  forall {A} (T : TraceOf A),
+    TraceEq T (T^None).
+Proof.
+  cofix COFIX. intros. rewrite idTrace_eq. destruct T.
+  - simpl. constructor.
+  - simpl. constructor. apply COFIX. Guarded.
+Qed.
+
+Lemma TraceAppAssoc :
+  forall A (T1 T2 : TraceOf A) TO,
+    T1 ^ Some (T2 ^ TO) ~= (T1 ^ Some T2) ^ TO.
+Proof.
+  cofix COFIX.
+  intros.
+  destruct T1.
+  - destruct T2. 
+    + rewrite idTrace_eq. rewrite (idTrace_eq (finished a ^ Some (finished a0 ^ TO))). simpl.
+      reflexivity.
+    + rewrite idTrace_eq. rewrite (idTrace_eq (finished a ^ Some (notfinished a0 T2 ^ TO))). simpl.
+      reflexivity.
+  - destruct T2. 
+Admitted.
+
+
 (* TracePrefix T1 T2 says T2 is a prefix of T1. *)
 Definition TracePrefix {A} (T1 T2: TraceOf A): Prop :=
   exists TO,
     TraceEq T1 (T2^TO).
 
 Notation "T2 <<== T1" := (TracePrefix T1 T2) (at level 80).
+
+Lemma TracePrefix_refl :
+  forall {A} (T:TraceOf A),
+    T <<== T.
+Proof.
+  intros. exists None. apply TraceAppNone.
+Qed.
+
+Lemma TracePrefix_trans:
+  forall {A} (T1 T2 T3: TraceOf A),
+     T2 <<== T1 -> T3 <<== T2 -> T3 <<== T1.
+Proof.
+  intros.
+  destruct H as [TO P].  destruct H0 as [TO' P'].
+  rewrite P' in P.
+  destruct TO, TO'. 
+  - rewrite <- TraceAppAssoc in P. 
+    eexists; eauto. 
+  - rewrite <- TraceAppNone in P. 
+    eexists; eauto.
+  - rewrite <- TraceAppNone in P. 
+    eexists; eauto.
+  - repeat rewrite <- TraceAppNone in P. 
+    eexists. 
+    rewrite <- TraceAppNone. auto.
+Qed.
+
+
+Add Parametric Relation A : (TraceOf A) (@TracePrefix A)
+    reflexivity proved by (TracePrefix_refl (A := A))
+    transitivity proved by (TracePrefix_trans (A := A))
+as TracePrefix_rel                             
+.                                        
+
+Lemma TracePrefixEq {A}: 
+      forall (T1 T1' : TraceOf A) ,
+        TraceEq T1 T1' ->
+      forall (T2 T2' : TraceOf A) ,
+        TraceEq T2 T2' ->
+        TracePrefix T1 T2 ->
+        TracePrefix T1' T2'. 
+Proof.
+  unfold TracePrefix. 
+  intros. 
+  destruct H1 as [TO P]. 
+  exists TO.
+  rewrite <- H. rewrite <- H0. auto.
+Qed.
+
+(* Hmm. Want to add something Morphism-like for TracePrefix, but not sure how. *)
 
 (* Divide MM1 into MM2 ++ MMO such that MM2 is the longest prefix for which P holds on each element *)
 Definition TraceSpan {A} (P : A -> Prop) (T1 T2 : TraceOf A) (TO : option (TraceOf A)) : Prop :=
@@ -314,21 +419,7 @@ Proof.
   intros. induction H; inversion H0; auto.
 Qed.
 
-Lemma TraceAppNone :
-  forall A (T : TraceOf A),
-    TraceEq T (T^None).
-Proof.
-  cofix COFIX. intros. rewrite idTrace_eq. destruct T.
-  - simpl. constructor.
-  - simpl. constructor. apply COFIX. Guarded.
-Qed.
   
-Lemma TracePrefix_refl :
-  forall A (T:TraceOf A),
-    T <<== T.
-Proof.
-  intros. exists None. apply TraceAppNone.
-Qed.
 
 
 Lemma LastTraceEq :
