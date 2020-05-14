@@ -1188,7 +1188,7 @@ Proof.
     inversion Comp; subst; eauto.
     destruct H1 as [o' Step'].
     rewrite MStep in Step'; inversion Step'; subst; auto.
-    destruct MM; simpl; constructor.
+    destruct H2; simpl; constructor.
   - apply In_later. eapply IHInTrace; eauto.
     inversion Comp; eauto.
 Qed.
@@ -2241,7 +2241,7 @@ Proof.
           * apply SplitInclusiveProp in HSplit. rewrite H5 in HSplit. auto.
           * destruct H1 as [mret']. destruct H1. destruct H3. destruct H9.
             apply TraceEqSym in H9.
-            apply (LastTraceEq mret' M' (MTraceOf m')) in H1; auto.
+            eapply LastTraceEq in H1; eauto.
             destruct H6. apply MTraceOfInf in H1. contradiction. }
 
     destruct HM'sEx as [M'suff HM'sEx]. destruct HM'sEx as [HM'sEx Hsplit'].
@@ -2325,7 +2325,7 @@ Qed.
                                  (ObsTraceOf MPsuff)). 
           - apply ObsTraceEq_sym; auto.
           - admit. }
-        apply SplitInclusivePHead in H5. rewrite H7. auto.
+        apply SplitInclusiveProp in H5. rewrite H7. auto.
       * destruct H0. destruct H5. discriminate.
   - admit. (* variant returns but original doesn't *)
   - intros. admit. (* original returns but variant doesn't *)
