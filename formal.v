@@ -1925,17 +1925,51 @@ Proof.
     auto.
 Qed.
 
-Axiom HaltingMPTracePrefixMTrace :
-  forall mp m mpfin,
-    ms mp = m ->
-    Last (MPTraceOf mp) mpfin ->
+Lemma HaltingMPTracePrefixMTrace :
+  forall mp m  (* mpfin *),
+     ms mp = m -> 
+(*  APT: unnecessary hypothesis:  Last (MPTraceOf mp) mpfin -> *)
     ObsTraceOf (MPTraceOf mp) <=_O ObsTraceOfM (MTraceOf m).
-  
-Axiom MTraceEqInfMPTrace :
+Proof.
+  cofix COFIX. 
+  intros.
+  destruct mp. simpl in *.  subst.
+  rewrite idTrace_eq. pattern (ObsTraceOfM (MTraceOf m)) at 1.  rewrite idTrace_eq.  simpl. 
+  destruct (pstep (m,p)); simpl. 
+  - destruct (step m).  simpl. 
+    destruct o. 
+    * constructor. apply COFIX. auto. 
+    * constructor. constructor. apply COFIX. auto. 
+  - destruct (step m). simpl. 
+    constructor. 
+Qed.
+
+Lemma MTraceEqInfMPTrace :
   forall mp m,
     ms mp = m ->
     (forall mpfin, ~ (Last (MPTraceOf mp) mpfin)) ->
     ObsTraceEq (ObsTraceOf (MPTraceOf mp)) (ObsTraceOfM (MTraceOf m)).
+Proof.
+  cofix COFIX. 
+  intros. 
+  destruct mp. simpl in *. subst. 
+  rewrite idTrace_eq. rewrite (idTrace_eq (ObsTraceOf (MPTraceOf (m,p)))).  simpl. 
+  destruct (pstep (m,p)) eqn:?; simpl. 
+  - destruct (step m) eqn:?.  simpl. 
+    assert (Q: forall mpfin : MPState, ~ Last (MPTraceOf (m0, p0)) mpfin). 
+    { intros. intro.
+      apply (H0 mpfin). 
+      rewrite (idTrace_eq (MPTraceOf (m,p))). simpl. 
+      rewrite Heqo. rewrite Heqp1.  simpl. 
+      constructor.  auto. }
+    destruct o. 
+    + constructor. apply COFIX; auto.  
+    + constructor. constructor. apply COFIX; auto. 
+  - exfalso. eapply (H0 (m,p)). 
+    rewrite (idTrace_eq (MPTraceOf (m,p))).  simpl. 
+    rewrite Heqo. 
+    constructor.
+Qed.
 
 Ltac app_frobber :=
   repeat match goal with
@@ -2168,7 +2202,7 @@ Proof.
   { apply (SplitSuffixReal (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuff); auto. }
   pose (mp := head MPsuff). rewrite H5. replace (head MPsuff) with mp; auto. rewrite <- MPTraceOfHead.
   split.
-  - intros. destruct H6 as [mpfin]. apply (HaltingMPTracePrefixMTrace mp (ms mp) mpfin); auto.
+  - intros. destruct H6 as [mpfin]. apply (HaltingMPTracePrefixMTrace mp (ms mp) (* mpfin*)); auto.
   - intros. apply MTraceEqInfMPTrace; auto.
 Qed.
 
@@ -2251,12 +2285,12 @@ Proof.
         { apply (MObsLast M' (head M'suff)). apply SplitInclusiveIsInclusive in Hsplit'. auto. }
         split.
         { intro Hfin. destruct Hfin as [mpfin Hfin].          
-          apply (HaltingMPTracePrefixMTrace (head MPsuff) (head M'roll) mpfin) in HHeadsEq.
-          - eapply ObsTracePrefApp'; eauto.
+          apply (HaltingMPTracePrefixMTrace (head MPsuff) (head M'roll) (* mpfin *)) in HHeadsEq.
+          (* - *) eapply ObsTracePrefApp'; eauto.
             + apply ObsTraceEq_sym. auto.
             + simpl in HHeadsEq.
               rewrite HRealsuff. auto.
-          - rewrite <- HRealsuff. auto. }
+          (* - rewrite <- HRealsuff. auto. *)  }
         { intros. apply (MTraceEqInfMPTrace (head MPsuff) (head M'roll)) in HHeadsEq.
           - eapply ObsTraceEqApp; eauto. simpl in HHeadsEq. rewrite HRealsuff. auto.
           - rewrite <- HRealsuff. auto. }
