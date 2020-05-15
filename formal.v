@@ -349,8 +349,8 @@ Proof.
   intros C mp m' p' OM mv mv' ON StepM StepN Conf Var k Hk.
   destruct (WordEqDec (m' k) (ms mp k)) as [eqM | neqM];
   destruct (WordEqDec (mv' k) (mv k)) as [eqN | neqN];
-  try solve [ apply Conf; auto ];
-  rewrite eqM; rewrite eqN; auto.
+  try solve [ apply Conf; auto ];    
+  rewrite eqM; rewrite eqN; auto.  
 Qed.
 
 Hint Resolve confStepPreservesVariant : StackSafety.
@@ -391,6 +391,16 @@ Ltac last_reasoning :=
   | [ H : Last (notfinished _ _ ) _ |- _ ] => inversion H; subst; clear H
   end.
 
+Lemma NotLastProgress {A} : forall (M : TraceOf A) m m',
+    ~ Last (notfinished m M) m' -> ~ Last M m'.
+Proof.
+  intros. intro.
+  eapply H.
+  constructor; auto.
+Qed.
+
+Hint Resolve NotLastProgress : StackSafety.
+
 Ltac frobber F :=
   match goal with
   | [ |- context[(F ?T)] ] =>
@@ -418,6 +428,15 @@ Ltac invert F :=
   | [ H : F _ _ _ _ _ |- _ ] => inversion H; subst; clear H; simpl in *
   end.
 
+Ltac induct F :=
+  match goal with 
+  | [ H : F _ |- _ ] => induction H; subst; clear H; simpl in *
+  | [ H : F _ _ |- _ ] => induction H; subst; clear H; simpl in *
+  | [ H : F _ _ _ |- _ ] => induction H; subst; clear H; simpl in *
+  | [ H : F _ _ _ _ |- _ ] => induction H; subst; clear H; simpl in *
+  | [ H : F _ _ _ _ _ |- _ ] => induction H; subst; clear H; simpl in *
+  end.
+
 Ltac destruct_observations :=
   match goal with
   | |- context[notfinished Tau _] => idtac
@@ -425,18 +444,26 @@ Ltac destruct_observations :=
   | |- context[notfinished ?O _] => destruct O
   end.
 
+Ltac simplifications :=
+  match goal with
+  | [ |- _ /\ _ ] => split
+  | [H : _ \/ _ |- _ ] => destruct H
+  | [H : _ /\ _ |- _ ] => destruct H                              
+  end.
+
 Ltac conf_progress :=
   repeat progress (try all frobber (ObsTraceOf, ObsTraceOfM);
                    try extract_mpstep;
                    try rewriteHyp;
                    try last_reasoning;
-                   try destruct_observations
+                   try destruct_observations;
+                   try simplifications
                   ).
 
 Ltac seauto :=
   try intros;
-  eauto with core StackSafety;
-  try solve [exfalso; eauto with core StackSafety].
+  eauto 10 with core StackSafety;
+  try solve [exfalso; eauto 10 with core StackSafety].
 
 Lemma StrongConfImpliesObsEq_Ret :
   forall C R MP MV,
@@ -471,18 +498,8 @@ Lemma StrongConfImpliesObsEq_Inf :
     (forall mpret, ~ Last MP mpret) ->
     ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
 Proof.
-  cofix COFIX.
+  unfold not; cofix COFIX.
   intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
-  - apply ObsEqNow.
-    eapply COFIX; eauto.
-    eapply confStepPreservesVariant; seauto.
-    autounfold with StackSafety in *.
-    seauto. (* WHY *)
-  - apply ObsEqTau1; apply ObsEqTau2.
-    eapply COFIX; seauto.
-    intros HNotR.
-    eapply H1; seauto.
-  - exfalso; eapply H1; seauto.
 Qed.
 
 Lemma ComponentConfTrans :
@@ -572,6 +589,17 @@ Proof.
     + constructor; auto.
     + intros k Hk.
       eauto using ComponentConfTrans.
+
+(*
+  intros. generalize dependent MV.
+  induct (@Last MPState); seauto.
+  invert StrongEagerStackConfidentiality; seauto.
+  - eexists; repeat (conf_progress; seauto).
+  - edestruct (IHLast H2 MV) as [? [? ?]]; seauto.
+    eapply confStepPreservesVariant; seauto.
+    conf_progress; seauto.
+*)  
+      
 Qed.
 
 Lemma StrongConfImpliesInf_Inf : 
@@ -581,17 +609,11 @@ Lemma StrongConfImpliesInf_Inf :
     (forall mpret, ~ Last MP mpret) ->
     (forall mv, ~ Last MV mv).
 Proof.
-  intros C R MP MV Var Conf HNotLast mv HLast.
-  generalize dependent MP.
-  induction HLast.
-  - intros MP Var Conf HNotLast.
-    inversion Conf; subst; clear Conf; eauto;
-      eapply HNotLast; econstructor.
-  - intros MP Var Conf HNotLast.
-    inversion Conf; subst; clear Conf; simpl in *; eauto.
-    + eapply (IHHLast MP0); eauto using confStepPreservesVariant.
-      intros mpret HLast'; eapply HNotLast; econstructor; eauto.
-    + eapply HNotLast; econstructor; eauto.
+  unfold not.
+  intros; generalize dependent MP.
+  induct (@Last MachineState); intros; 
+  invert StrongEagerStackConfidentiality;
+  conf_progress; seauto.
 Qed.
 
 Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MP : MPTrace) :
@@ -1803,7 +1825,13 @@ Lemma ObsTraceEq_trans :
 Proof.
   cofix COFIX.
   intros. inv H.
-  - constructor. apply (COFIX OO O2 O3); auto.
+  6:{
+    
+    - constructor. apply (COFIX OO O2 O3); auto.
+  - admit.
+  - admit.
+  - admit.
+  - 
 Admitted.
  
 Lemma SplitSuffixReal' :
@@ -2271,7 +2299,8 @@ Lemma EagerImpliesLazyConf :
   forall C MPcall MPpre MPsuffO justReturned,
     RealMPTrace'' MPcall ->
     LazyReturnMP justReturned MPcall MPpre MPsuffO ->
-    EagerStackConfidentiality C MPpre justReturned -> ObservableConfidentiality C MPpre MPsuffO justReturned.
+    EagerStackConfidentiality C MPpre justReturned ->
+    ObservableConfidentiality C MPpre MPsuffO justReturned.
 Proof.
   unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros. split;try split.
 
