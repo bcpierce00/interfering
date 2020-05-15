@@ -1096,7 +1096,7 @@ Proof.
     inversion Comp; subst; eauto.
     destruct H1 as [o' Step'].
     rewrite MStep in Step'; inversion Step'; subst; auto.
-    destruct MM; simpl; constructor.
+    destruct H2; simpl; constructor.
   - apply In_later. eapply IHInTrace; eauto.
     inversion Comp; eauto.
 Qed.
@@ -1795,12 +1795,17 @@ Proof.
     try (constructor; apply COFIX; auto). 
 Qed.
 
-Axiom SplitSuffixReal :
-  forall P MP1 MP2 MP3,
-    RealMPTrace MP1 ->
-    SplitInclusive P MP1 MP2 MP3 ->
-    RealMPTrace MP3.
-
+Lemma ObsTraceEq_trans :
+  forall O1 O2 O3,
+    ObsTraceEq O1 O2 ->
+    ObsTraceEq O2 O3 ->
+    ObsTraceEq O1 O3.
+Proof.
+  cofix COFIX.
+  intros. inv H.
+  - constructor. apply (COFIX OO O2 O3); auto.
+Admitted.
+ 
 Lemma SplitSuffixReal' :
   forall P MP1 MP2 MP3,
     SplitInclusive P MP1 MP2 MP3 ->
@@ -1813,11 +1818,6 @@ Proof.
   inversion H1; subst.
   inversion H5; subst; clear H5; econstructor; eauto. 
 Qed.  
-
-Axiom RealTail :
-  forall mp MP,
-    RealMPTrace (notfinished mp MP) -> 
-    RealMPTrace MP.  
 
 Lemma RealTail' :
   forall mp MP,
@@ -1833,11 +1833,10 @@ Proof.
     auto.
 Qed.
 
-Lemma HaltingMPTracePrefixMTrace :
-  forall mp m  (* mpfin *),
+Lemma MPTracePrefixMTrace :
+  forall mp m,
      ms mp = m -> 
-(*  APT: unnecessary hypothesis:  Last (MPTraceOf mp) mpfin -> *)
-    ObsTraceOf (MPTraceOf mp) <=_O ObsTraceOfM (MTraceOf m).
+     ObsTraceOf (MPTraceOf mp) <=_O ObsTraceOfM (MTraceOf m).
 Proof.
   cofix COFIX. 
   intros.
@@ -2047,12 +2046,149 @@ Proof.
       destruct (step a'). constructor. auto.
 Qed.
 
-Axiom ObsTraceEqApp :
+Lemma ObsTraceEqApp :
   forall O1 O1' O2 O2' o1 o1',
     Last O1 o1 -> Last O1' o1' -> 
     ObsTraceEq O1 O1' ->
     ObsTraceEq O2 O2' ->
     ObsTraceEq (O1^(Some O2)) (O1'^(Some O2')).
+Proof.
+    intros O1 O1' O2 O2' o1 o1' H;
+    revert O1' O2 O2' o1'.
+  induction H as [o1|]; intros O1' O2 O2' o1' Last' Eq1 Eq2.
+  - generalize dependent O2;
+    generalize dependent O2';
+    generalize dependent Eq1.
+    induction Last';
+      intros Eq1 O2' O2 Eq2.
+    + inversion Eq1; subst; simpl in *; clear Eq1; app_frobber.
+      * apply ObsEqNow; auto.
+      * apply ObsEqTau1; apply ObsEqTau2; auto.
+      * destruct a.
+        -- apply ObsEqNow; auto.
+        -- apply ObsEqTau1; apply ObsEqTau2; auto.
+    + inversion Eq1; subst; simpl in *; clear Eq1.
+      specialize (IHLast' H1 O2' O2 Eq2).      
+      app_frobber.
+      eapply ObsEqTau2.
+      auto.
+  - destruct a'.
+    + destruct (EqOut_tauN O1' o1' Last' w T Eq1) as [n [HTau | [T' HTau]]].
+      * rewrite HTau in *.
+        clear HTau.
+        induction n; simpl in *; subst; app_frobber.
+        -- apply ObsEqNow.
+           inversion Eq1.
+        -- apply ObsEqTau2.
+           inversion Last'; subst; clear Last'.
+           apply ObsTraceEqRemoveTau2 in Eq1.
+           specialize (IHn H3 Eq1).
+           auto.
+      * rewrite HTau in *.
+        clear HTau.
+        induction n; simpl in *; subst; app_frobber.
+        -- apply ObsEqNow.
+           inversion Eq1; subst; clear Eq1.
+           ++ inversion Last'; subst; clear Last'.
+              eauto.
+           ++ inversion Last'; subst; clear Last'.
+              eauto using ObsEqAllTau.
+        -- inversion Last'; subst; clear Last'.
+           specialize (IHn H3).
+           apply ObsTraceEqRemoveTau2 in Eq1.
+           specialize (IHn Eq1).
+           apply ObsEqTau2.
+           auto.
+    + apply ObsTraceEqRemoveTau1 in Eq1.
+      app_frobber.
+      apply ObsEqTau1.
+      eauto.
+Qed.
+
+Lemma ObsTraceOfTraceEq :
+  forall MP MP',
+    MP ~= MP' ->
+    (ObsTraceOf MP) ~= (ObsTraceOf MP').
+Proof.
+  cofix COFIX. intros. inv H.
+  - rewrite (idTrace_eq (ObsTraceOf (finished a))).
+    unfold ObsTraceOf. simpl. constructor.
+  - rewrite (idTrace_eq (ObsTraceOf (notfinished a T1))).
+    rewrite (idTrace_eq (ObsTraceOf (notfinished a T2))).
+    destruct a. unfold ObsTraceOf. simpl.
+    destruct (step m) eqn:?.
+    constructor. apply COFIX. auto.
+Qed.
+
+Lemma TraceEqImpliesObsTraceEq :
+  forall O O',
+    O ~= O' ->
+    ObsTraceEq O O'.
+Proof.
+  cofix COFIX. intros. inv H.
+  - constructor.
+  - destruct a.
+    + constructor. auto.
+    + constructor. constructor. auto.
+Qed.
+
+Lemma ObsTraceEqImpliesPrefix :
+  forall O O',
+    ObsTraceEq O O' ->
+    O <=_O O'.
+Proof.
+  cofix COFIX. intros. inv H; constructor; apply COFIX; auto.
+Qed.
+
+Lemma ObsTracePrefRemoveTau1 :
+  forall T T', (notfinished Tau T) <=_O T' -> T <=_O T'.
+Proof.
+  cofix COFIX.
+  intros T T' Pref.
+  inversion Pref; subst; clear Pref.
+  + constructor. apply COFIX. auto.
+  + auto. Guarded.
+  + constructor. constructor.
+Qed.
+
+Lemma ObsPrefOverEq :
+  forall O1 O1' O2,
+    O1 ~= O1' ->
+    O1 <=_O O2 ->
+    O1' <=_O O2.
+Proof.
+  cofix COFIX. intros. inv H.
+  - apply H0.
+  - destruct a.
+    + inv H0.
+      * constructor.
+        apply (COFIX (notfinished (Out w) T1) (notfinished (Out w) T2) OO).
+        -- constructor. auto.
+        -- auto.
+      * constructor. apply (COFIX T1 T2 OO); auto.
+      * constructor. apply ObsTraceEqImpliesPrefix. apply TraceEqImpliesObsTraceEq in H1.
+        apply ObsTraceEq_sym. auto.
+    + constructor. apply (COFIX T1 T2 O2); auto. apply ObsTracePrefRemoveTau1. auto.
+Qed.
+
+Lemma ObsEqOverEq :
+  forall O1 O1' O2,
+    O1 ~= O1' ->
+    ObsTraceEq O1 O2 ->
+    ObsTraceEq O1' O2.
+Proof.
+  cofix COFIX. intros. inv H.
+  - apply H0.
+  - destruct a.
+    + inv H0.
+      * constructor.
+        apply (COFIX (notfinished (Out w) T1) (notfinished (Out w) T2) OO'). Guarded.
+        -- constructor. auto.
+        -- auto.
+      * constructor. apply (COFIX T1 T2 OO'); auto.
+      * constructor. apply ObsTraceEq_sym. apply TraceEqImpliesObsTraceEq. auto.
+    + constructor. apply (COFIX T1 T2 O2); auto. apply ObsTraceEqRemoveTau1. auto.
+Qed.
 
 Lemma MTraceOfInf :
   forall m m',
@@ -2071,23 +2207,21 @@ Proof.
     eapply IHLast; eauto.
 Qed.
 
-(* End axioms *)
-
 Lemma FindCallReal :
   forall C MP C' MPcall,
-    RealMPTrace MP ->
+    RealMPTrace'' MP ->
     FindCallMP C MP C' MPcall  ->
-    RealMPTrace MPcall.
+    RealMPTrace'' MPcall.
 Proof.
   intros. induction H0.
-  - apply SplitSuffixReal in H0; auto.
-  - apply IHFindCallMP1 in H. rewrite H0 in H. apply RealTail in H.
-    apply IHFindCallMP2; auto.
+  - apply SplitSuffixReal' in H0; apply RealMPEquiv; auto.
+  - apply IHFindCallMP1 in H. rewrite H0 in H. apply RealMPEquiv in H. apply RealTail' in H.
+    apply IHFindCallMP2; auto. apply RealMPEquiv. auto.
 Qed.
 
 Lemma EagerImpliesLazyInt :
   forall C MPcall MPpre MPsuffO,
-    RealMPTrace MPcall ->
+    RealMPTrace'' MPcall ->
     LazyReturnMP (fun m => isRet (ms (head MPcall)) m) MPcall MPpre MPsuffO ->
     EagerStackIntegrity C MPpre ->
     ObservableIntegrity C MPpre MPsuffO.
@@ -2106,12 +2240,23 @@ Proof.
   { unfold RollbackInt. extensionality k. destruct (integrityOf (C k)) eqn:E2.
     - apply H3; auto.
     - auto. }
-  rewrite H4. assert (RealMPTrace MPsuff).
-  { apply (SplitSuffixReal (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuff); auto. }
-  pose (mp := head MPsuff). rewrite H5. replace (head MPsuff) with mp; auto. rewrite <- MPTraceOfHead.
+  rewrite H4. assert (RealMPTrace'' MPsuff).
+  { apply RealMPEquiv. apply RealMPEquiv in H.
+    apply (SplitSuffixReal' (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuff); auto. }
+  pose (mp := head MPsuff). unfold RealMPTrace'' in H5.
+  replace (head MPsuff) with mp; auto. replace (head MPsuff) with mp in H5; auto.
+  assert (ObsTraceEq (ObsTraceOf MPsuff) (ObsTraceOf (MPTraceOf mp))).
+  { apply ObsTraceOfTraceEq in H5. apply TraceEqImpliesObsTraceEq. auto. }
   split.
-  - intros. destruct H6 as [mpfin]. apply (HaltingMPTracePrefixMTrace mp (ms mp) (* mpfin*)); auto.
-  - intros. apply MTraceEqInfMPTrace; auto.
+  - intros. apply (ObsPrefOverEq (ObsTraceOf (MPTraceOf mp)) (ObsTraceOf MPsuff)).
+    + apply ObsTraceOfTraceEq. apply TraceEqSym. auto.
+    + apply (MPTracePrefixMTrace mp (ms mp) (* mpfin*)). auto.
+  - intros. auto.
+    apply (ObsTraceEq_trans (ObsTraceOf MPsuff) (ObsTraceOf (MPTraceOf mp)) (ObsTraceOfM (MTraceOf (ms mp)))).
+    + auto.
+    + apply MTraceEqInfMPTrace; auto. unfold not. intros. 
+      specialize H7 with mpfin. apply TraceEqSym in H5.
+      apply (LastTraceEq (MPTraceOf mp) MPsuff) in H8; auto.
 Qed.
 
 Variable weq_implies_eq :
@@ -2124,7 +2269,7 @@ Variable not_weq_implies_neq :
 
 Lemma EagerImpliesLazyConf :
   forall C MPcall MPpre MPsuffO justReturned,
-    RealMPTrace MPcall ->
+    RealMPTrace'' MPcall ->
     LazyReturnMP justReturned MPcall MPpre MPsuffO ->
     EagerStackConfidentiality C MPpre justReturned -> ObservableConfidentiality C MPpre MPsuffO justReturned.
 Proof.
@@ -2149,7 +2294,7 @@ Proof.
           * apply SplitInclusiveProp in HSplit. rewrite H5 in HSplit. auto.
           * destruct H1 as [mret']. destruct H1. destruct H3. destruct H9.
             apply TraceEqSym in H9.
-            apply (LastTraceEq mret' M' (MTraceOf m')) in H1; auto.
+            eapply LastTraceEq in H1; eauto.
             destruct H6. apply MTraceOfInf in H1. contradiction. }
 
     destruct HM'sEx as [M'suff HM'sEx]. destruct HM'sEx as [HM'sEx Hsplit'].
@@ -2184,25 +2329,35 @@ Proof.
               apply Hksame. right. rewrite H8. auto.
           - apply not_weq_implies_neq in Unchanged.
             apply Hksame. left. auto. }
-        assert (HRealsuff : RealMPTrace MPsuff).
-        { apply (SplitSuffixReal (fun mp => justReturned (ms mp)) MPcall MPpre MPsuff); auto. }
+        assert (HRealsuff : RealMPTrace'' MPsuff).
+        { apply RealMPEquiv.
+          apply (SplitSuffixReal' (fun mp => justReturned (ms mp)) MPcall MPpre MPsuff); auto.
+          apply RealMPEquiv. auto. }
         split; auto. split; auto. rewrite H0. simpl.
         rewrite H5. assert (Last (ObsTraceOf MPpre) Tau).
         { apply (MPObsLast MPpre (head MPsuff)). auto. }
         assert (Last (ObsTraceOfM M') Tau).
         { apply (MObsLast M' (head M'suff)). apply SplitInclusiveIsInclusive in Hsplit'. auto. }
         split.
-        { intro Hfin. destruct Hfin as [mpfin Hfin].          
-          apply (HaltingMPTracePrefixMTrace (head MPsuff) (head M'roll) (* mpfin *)) in HHeadsEq.
-          (* - *) eapply ObsTracePrefApp'; eauto.
-            + apply ObsTraceEq_sym. auto.
-            + simpl in HHeadsEq.
-              rewrite HRealsuff. auto.
-          (* - rewrite <- HRealsuff. auto. *)  }
-        { intros. apply (MTraceEqInfMPTrace (head MPsuff) (head M'roll)) in HHeadsEq.
-          - eapply ObsTraceEqApp; eauto. simpl in HHeadsEq. rewrite HRealsuff. auto.
-          - rewrite <- HRealsuff. auto. }
-        
+        -- intro Hfin. destruct Hfin as [mpfin Hfin].          
+           apply (MPTracePrefixMTrace (head MPsuff) (head M'roll) (* mpfin *)) in HHeadsEq.
+           eapply ObsTracePrefApp'; eauto.
+           { apply ObsTraceEq_sym. auto. }
+           { apply (ObsPrefOverEq (ObsTraceOf (MPTraceOf (head MPsuff)))
+                                   (ObsTraceOf MPsuff)
+                                   (ObsTraceOfM (MTraceOf (head M'roll)))).
+             - apply ObsTraceOfTraceEq. apply TraceEqSym. apply HRealsuff.
+             - auto. }
+        -- intros. apply (MTraceEqInfMPTrace (head MPsuff) (head M'roll)) in HHeadsEq.
+           { eapply ObsTraceEqApp; eauto.
+              apply (ObsEqOverEq (ObsTraceOf (MPTraceOf (head MPsuff)))
+                                 (ObsTraceOf MPsuff)
+                                 (ObsTraceOfM (MTraceOf (head M'roll)))).
+             - apply ObsTraceOfTraceEq. apply TraceEqSym. apply HRealsuff.
+             - auto. }
+           unfold not. intros. specialize H10 with mpfin.
+           apply (LastTraceEq (MPTraceOf (head MPsuff)) MPsuff) in H11; auto.
+           apply TraceEqSym. apply HRealsuff.
   - (* Case 2: MPcall stops short *)
     intros. specialize H1 with m' M'. destruct H1; auto.
     + destruct H3.
@@ -2216,35 +2371,10 @@ Proof.
         * right. destruct H1. destruct H3. split; auto.
       + destruct H5. apply H6; auto.
 Qed.
-(*        destruct H6.
-        assert (m' = head M'pre).
-        { apply SplitInclusiveHeadEq in H3. rewrite MTraceOfHead in H3. auto. }
-        assert (mret' = head M'suff).
-        { apply SplitInclusiveIsInclusive in H3.
-          apply (LastUnique mret' (head M'suff) M'pre); auto. }
-        assert (RollbackConf (ms (head MPpre)) m' (head M'suff) = ms (head MPsuff)).
-        { extensionality k. unfold RollbackConf.
 
-          . }
-        { rewrite H12. unfold option_map.
-          apply (ObsTracePrefApp (ObsTraceOfM M'pre)
-                                 (ObsTraceOf MPpre)
-                                 (ObsTraceOfM (MTraceOf (ms (head MPsuff))))
-                                 (ObsTraceOf MPsuff)). 
-          - apply ObsTraceEq_sym; auto.
-          - admit. }
-        apply SplitInclusivePHead in H5. rewrite H7. auto.
-      * destruct H0. destruct H5. discriminate.
-  - admit. (* variant returns but original doesn't *)
-  - intros. admit. (* original returns but variant doesn't *)
-  - intros. specialize H1 with m' (MTraceOf m'). destruct H1; auto.
-    + right. split; auto. apply TraceEqRefl.
-    + simpl. destruct H4. admit. (* neither returns *)
-Admitted.
-*)
 Theorem EagerSafetyImpliesLazy :
   forall cm MP,
-    RealMPTrace MP ->
+    RealMPTrace'' MP ->
     EagerStackSafety cm MP (makeContour 0 (ms (head MP))) -> LazyStackSafety cm MP.
 Proof.
   unfold EagerStackSafety. unfold LazyStackSafety. intros. split.
@@ -2254,7 +2384,7 @@ Proof.
       * apply ForallTraceTautology. unfold not. intros. contradiction.
       * apply TraceEqRefl.
     + destruct H1. auto.
-  - intros. assert (RealMPTrace MPcall).
+  - intros. assert (RealMPTrace'' MPcall).
     { apply FindCallReal in H1; auto. }
     split.
     + destruct H2.
