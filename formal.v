@@ -1887,17 +1887,7 @@ Proof.
     try (constructor; apply COFIX; auto). 
 Qed.
 
-Lemma ObsTraceEq_trans :
-  forall O1 O2 O3,
-    ObsTraceEq O1 O2 ->
-    ObsTraceEq O2 O3 ->
-    ObsTraceEq O1 O3.
-Proof.
-  cofix COFIX.
-  intros. inv H.
-  - constructor. apply (COFIX OO O2 O3); auto.
-Admitted.
- 
+
 Lemma SplitSuffixReal' :
   forall P MP1 MP2 MP3,
     SplitInclusive P MP1 MP2 MP3 ->
@@ -2344,8 +2334,8 @@ Proof.
     + apply ObsTraceOfTraceEq. apply TraceEqSym. auto.
     + apply (MPTracePrefixMTrace mp (ms mp) (* mpfin*)). auto.
   - intros. auto.
-    apply (ObsTraceEq_trans (ObsTraceOf MPsuff) (ObsTraceOf (MPTraceOf mp)) (ObsTraceOfM (MTraceOf (ms mp)))).
-    + auto.
+    apply (ObsEqOverEq (ObsTraceOf (MPTraceOf mp)) (ObsTraceOf MPsuff) (ObsTraceOfM (MTraceOf (ms mp)))).
+    + apply ObsTraceOfTraceEq. symmetry. auto.
     + apply MTraceEqInfMPTrace; auto. unfold not. intros. 
       specialize H7 with mpfin. apply TraceEqSym in H5.
       apply (LastTraceEq (MPTraceOf mp) MPsuff) in H8; auto.
