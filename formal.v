@@ -118,6 +118,8 @@ Definition EagerStackIntegrity (C : Contour) (MP: MPTrace) : Prop :=
       forall (mp : MPState),
         InTrace mp MP -> ms (head MP) k = ms mp k.
 
+Create HintDb StackSafety.
+
 (* CoInductive variant *)
 CoInductive EagerStackIntegrity' (C : Contour) : MPTrace -> Prop :=
 | SI_finished : forall mp, EagerStackIntegrity' C (finished mp)
@@ -126,6 +128,8 @@ CoInductive EagerStackIntegrity' (C : Contour) : MPTrace -> Prop :=
     (forall (k: Component), integrityOf (C k) = HI -> ms mp k = ms (head MP) k) ->
     EagerStackIntegrity' C MP ->
     EagerStackIntegrity' C (notfinished mp MP).
+
+Hint Constructors EagerStackIntegrity' : StackSafety.
 
 Lemma StackIntegrityEquiv : forall (C:Contour) (MP: MPTrace),
      EagerStackIntegrity C MP -> EagerStackIntegrity' C MP.
@@ -167,6 +171,8 @@ Definition variantOf (M N : MachineState) (C : Contour) :=
   forall (k : Component), confidentialityOf (C k) = LC ->
                           M k = N k.
 
+Hint Unfold variantOf : StackSafety.
+
 Definition ObsTrace := TraceOf Observation.
 
 CoFixpoint ObsTraceOfM (M: MTrace) : ObsTrace :=
@@ -186,64 +192,6 @@ CoFixpoint ObsTraceOf (MP: MPTrace) : ObsTrace :=
     let (m', O) := step (ms mp) in
     notfinished O (ObsTraceOf MP')
   end.
-(*                
-    match pstep mp with
-    | Some p' =>
-      notfinished O (ObsTraceOf MP')
-    | None => (* This should never happen in a valid MPTrace *)
-      finished O
-    end
-*)
-
-(* TODO: If MPTrace is well formed, then it is a prefix of the induced one *)
-
-(*
-Definition ObsTraceOf (MM : MTrace) : ObsTrace :=
-  mapTrace (fun M => option_map snd (step M)) MM.
-
-Definition Obs (M : MachineState) := M (Reg O).
-
-
-
-(* Stuttering version *)
-Definition ObsTraceOf' (MM : MTrace) := mapTrace Obs MM.
-
-(* SNA: alternative obs: non-stuttering trace of output register *)
-CoFixpoint ObsTraceOf (MM : MTrace) : Trace Value :=
-  match MM with
-  | finished M =>
-    finished (M (Reg O))
-  | notfinished M Ms =>
-    let v := M (Reg O) in
-    match Ms with
-    | finished M' =>
-      let v' := M' (Reg O) in
-      if weq v v'
-      then finished v
-      else notfinished v (finished v')
-    | notfinished M' Ms' =>
-      let v' := M' (Reg O) in
-      if weq v v'
-      then notfinished v (ObsTraceOf Ms')
-      else notfinished v (ObsTraceOf (notfinished M' Ms'))
-    end
-  end.
- *)
-(* Alternate: steps have observations (options or tau) and obstrace concatenates
-   non-taus. *)
-(* LEO: Can't do this. It's not productive. Unless I'm missing something. *)
-(*
-Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) :=
-  forall N, variantOf (head MM) N C ->
-            let o  := ObsTraceOf MM in
-            let o' := ObsTraceOf (traceOf N) in
-            TracePrefix o' o. (* \/ TracePrefix o o') *)
-*)
-(* APT: just this direction: it would be bad if variant trace ended sooner than reference, right? *)
-(* LEO: I'm not sure about only one observation being a prefix of the other. What if the variant machine tries halts because of the monitor? Are we termination-sensitive? *)
-(* APT: Ah, right.  I guess we have to be termination-insensitive. *)
-(* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed
-to fail-stop more often than the reference trace? *)
 
 CoInductive ObsTraceEq : TraceOf Observation -> TraceOf Observation -> Prop :=
 | ObsEqTau1 : forall OO OO',
@@ -274,6 +222,8 @@ LEO: That was the other thing I had in mind. I'll see what makes proofs easier.
 (Note that this proposal overlaps with the first two cases, as well as the last one.)
  *)
 
+Hint Constructors ObsTraceEq : StackSafety.
+
 (* The second is a prefix of the first, up to Tau *)
 CoInductive ObsTracePrefix : TraceOf Observation -> TraceOf Observation -> Prop :=
 | ObsPreTau1 : forall OO OO',
@@ -295,6 +245,8 @@ CoInductive ObsTracePrefix : TraceOf Observation -> TraceOf Observation -> Prop 
      ObsTracePrefix OO OO.
 
 Notation "OO' <=_O OO" := (ObsTracePrefix OO OO') (at level 80).
+
+Hint Constructors ObsTracePrefix : StackSafety.
 
 Lemma ObsTracePrefix_refl : forall OO, ObsTracePrefix OO OO.
 Proof.
@@ -360,6 +312,8 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
      forall mret', ~ Last M' mret' /\
                    ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M')).
 
+Hint Unfold EagerStackConfidentiality : StackSafety.
+
 CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
   MPTrace -> MTrace -> Prop :=
 | StrongConfStep :
@@ -381,6 +335,8 @@ CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
       (* mpstep mp = None ->  *)
       StrongEagerStackConfidentiality R (finished mp) MV.
 
+Hint Constructors StrongEagerStackConfidentiality : StackSafety.
+
 Lemma confStepPreservesVariant :
   forall C mp m' p' OM mv mv' ON,
     mpstep mp = Some (m', p', OM) ->
@@ -397,6 +353,91 @@ Proof.
   rewrite eqM; rewrite eqN; auto.
 Qed.
 
+Hint Resolve confStepPreservesVariant : StackSafety.
+
+Ltac frob x :=
+  rewrite (idTrace_eq x); simpl.
+
+Ltac extract_mpstep :=
+  match goal with
+  | [H : mpstep ?MP = Some (?M, ?P, ?O) |- _ ] =>
+    match goal with
+    | [ H'  : step (ms MP) = _ , H'' : pstep MP = _
+        |- _ ] => fail 1
+    | _ => 
+      unfold mpstep in H;
+      let m' := fresh "m" in
+      let o' := fresh "o" in
+      let MStep := fresh "MStep" in
+      let PStep := fresh "PStep" in
+      destruct (step (ms MP)) as [m' o'] eqn:MStep;
+      destruct (pstep MP) eqn:PStep;
+      inversion H; subst; clear H;
+      assert (H: mpstep MP = Some (M, P, O))
+        by (unfold mpstep; rewrite MStep; rewrite PStep; auto)
+    end
+  end.
+
+Ltac rewriteHyp :=
+  match goal with
+    | [ H : _ |- _ ] => rewrite H by solve [ auto ]
+  end.
+
+Hint Constructors Last : StackSafety.
+
+Ltac last_reasoning :=
+  match goal with
+  | [ H : Last (finished _) _ |- _ ] => inversion H; subst; clear H
+  | [ H : Last (notfinished _ _ ) _ |- _ ] => inversion H; subst; clear H
+  end.
+
+Ltac frobber F :=
+  match goal with
+  | [ |- context[(F ?T)] ] =>
+    match goal with
+    | [ |- context[notfinished _ (F T)] ] => fail 1
+    | _ => frob (F T); simpl
+    end
+  end.
+
+(** Run [f] on every element of [ls], not just the first that doesn't fail. *)
+Ltac all f ls :=
+  match ls with
+    | (?LS, ?X) => f X; all f LS
+    | (_, _) => fail 1
+    | _ => f ls
+  end.
+
+(* Invert a particular symbol. *)
+Ltac invert F :=
+  match goal with 
+  | [ H : F _ |- _ ] => inversion H; subst; clear H; simpl in *
+  | [ H : F _ _ |- _ ] => inversion H; subst; clear H; simpl in *
+  | [ H : F _ _ _ |- _ ] => inversion H; subst; clear H; simpl in *
+  | [ H : F _ _ _ _ |- _ ] => inversion H; subst; clear H; simpl in *
+  | [ H : F _ _ _ _ _ |- _ ] => inversion H; subst; clear H; simpl in *
+  end.
+
+Ltac destruct_observations :=
+  match goal with
+  | |- context[notfinished Tau _] => idtac
+  | |- context[notfinished (Out _) _] => idtac
+  | |- context[notfinished ?O _] => destruct O
+  end.
+
+Ltac conf_progress :=
+  repeat progress (try all frobber (ObsTraceOf, ObsTraceOfM);
+                   try extract_mpstep;
+                   try rewriteHyp;
+                   try last_reasoning;
+                   try destruct_observations
+                  ).
+
+Ltac seauto :=
+  try intros;
+  eauto with core StackSafety;
+  try solve [exfalso; eauto with core StackSafety].
+
 Lemma StrongConfImpliesObsEq_Ret :
   forall C R MP MV,
     variantOf (ms (head MP)) (head MV) C ->
@@ -406,59 +447,7 @@ Lemma StrongConfImpliesObsEq_Ret :
       ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
 Proof.
   cofix COFIX.
-  intros C R MP MV Var Conf.
-  inversion Conf; simpl.
-  - intros mpret HLast HR.
-    match goal with
-    | [ |- ObsTraceEq ?T1 ?T2 ] =>
-      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
-    end.
-    repeat match goal with
-           | [ H : step ?M = _ |- context[step ?M] ] => rewrite H; simpl
-           end.
-    unfold mpstep in *.
-    destruct (step (ms mp)) eqn:HStepMP.
-    destruct (pstep mp) eqn:HPStepMP; inversion H.
-    destruct O.
-    + apply ObsEqNow.
-      eapply COFIX; eauto.
-      eapply confStepPreservesVariant; eauto.
-      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
-        subst.
-        eauto.
-      * assert (head MP = mp) as HM
-          by (destruct H3; auto).
-        assert (head MV = m') as HN
-          by (destruct H4; auto).
-        rewrite <- HM.
-        rewrite <- HN.  
-        apply Var.
-      * inversion HLast; eauto.
-    + apply ObsEqTau1.
-      apply ObsEqTau2.
-      eapply COFIX; eauto.
-      eapply confStepPreservesVariant; eauto.
-      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
-        subst.
-        eauto.
-      * assert (head MP = mp) as HM
-          by (destruct H3; auto).
-        assert (head MV = m') as HN
-          by (destruct H4; auto).
-        rewrite <- HM.
-        rewrite <- HN.
-        apply Var.
-      * inversion HLast; eauto.
-  - intros mpret HLast HR.
-    match goal with
-    | [ |- ObsTraceEq ?T1 ?T2 ] =>
-      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
-    end.
-    apply ObsEqFinishedTau.
-  - intros mpret HLast HR.
-    rewrite (idTrace_eq (ObsTraceOf (finished mp))).
-    inversion HLast; subst; clear HLast; auto.
-    exfalso; eauto.
+  intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
 Qed.
 
 Lemma StrongConfImpliesObsEq_Fault :
@@ -470,49 +459,11 @@ Lemma StrongConfImpliesObsEq_Fault :
       (ObsTraceOf MP) <=_O (ObsTraceOfM MV).
 Proof.  
   cofix COFIX.
-  intros C R MP MV Var Conf.
-  inversion Conf; simpl.
-  - intros mpret HLast HR.
-    match goal with
-    | [ |- ObsTracePrefix ?T1 ?T2 ] =>
-      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
-    end.
-    unfold mpstep in *.
-    destruct (step (ms mp)) eqn:HStepMP.
-    destruct (pstep mp) eqn:HPStepMP; inversion H; subst; clear H.    
-    repeat match goal with
-           | [ H : step ?M = _ |- context[step ?M] ] => rewrite H; simpl
-           end.
-    destruct O.
-    + apply ObsPreNow.
-      eapply COFIX; eauto.
-      eapply confStepPreservesVariant; eauto.
-      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
-        subst.
-        eauto.
-      * inversion HLast; eauto.
-    + apply ObsPreTau1.
-      apply ObsPreTau2.
-      eapply COFIX; eauto.
-      eapply confStepPreservesVariant; eauto.
-      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
-        subst.
-        eauto.
-      * inversion HLast; eauto.
-  - intros mpret HLast HR.
-    inversion HLast; subst; clear HLast; auto.
-    exfalso; eauto.
-  - intros mpret HLast HR.
-    match goal with
-    | [ |- ObsTracePrefix ?T1 ?T2 ] =>
-      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
-    end.
-    destruct MV.
-    + apply ObsPreFinishedTau.
-    + destruct (step m).
-      apply ObsPreFinishedTau.
-Qed.
+  intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
+Qed.  
+Hint Transparent not : StackSafety.
 
+Hint Unfold not : StackSafety.
 Lemma StrongConfImpliesObsEq_Inf :
   forall C R MP MV,
     variantOf (ms (head MP)) (head MV) C ->
@@ -521,61 +472,18 @@ Lemma StrongConfImpliesObsEq_Inf :
     ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
 Proof.
   cofix COFIX.
-  intros C R MP MV Var Conf.
-  inversion Conf; simpl.
-  - intros HNotR.
-    match goal with
-    | [ |- ObsTraceEq ?T1 ?T2 ] =>
-      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
-    end.
-    repeat match goal with
-           | [ H : step ?M = _ |- context[step ?M] ] => rewrite H; simpl
-           end.
-    unfold mpstep in *.
-    destruct (step (ms mp)) eqn:HStepMP.
-    destruct (pstep mp) eqn:HPStepMP; inversion H.
-    destruct O.
-    + apply ObsEqNow.
-      eapply COFIX; eauto.
-      eapply confStepPreservesVariant; eauto.
-      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
-        subst.
-        eauto.
-      * assert (head MP = mp) as HM
-          by (destruct H3; auto).
-        assert (head MV = m') as HN
-          by (destruct H4; auto).
-        rewrite <- HM.
-        rewrite <- HN.  
-        apply Var.
-      * subst.
-        intros mpret HNotLast; eapply HNotR; econstructor; eauto.
-    + apply ObsEqTau1.
-      apply ObsEqTau2.
-      eapply COFIX; eauto.
-      eapply confStepPreservesVariant; eauto.
-      * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
-        subst.
-        eauto.
-      * assert (head MP = mp) as HM
-          by (destruct H3; auto).
-        assert (head MV = m') as HN
-          by (destruct H4; auto).
-        rewrite <- HM.
-        rewrite <- HN.
-        apply Var.
-      * subst.
-        intros mpret HNotLast; eapply HNotR; econstructor; eauto.        
-  - intros HNotLast. 
-    match goal with
-    | [ |- ObsTraceEq ?T1 ?T2 ] =>
-      rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
-    end.
-    apply ObsEqFinishedTau.
-  - intros HNotLast.
-    exfalso.
-    eapply HNotLast; econstructor.
-Qed.    
+  intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
+  - apply ObsEqNow.
+    eapply COFIX; eauto.
+    eapply confStepPreservesVariant; seauto.
+    autounfold with StackSafety in *.
+    seauto. (* WHY *)
+  - apply ObsEqTau1; apply ObsEqTau2.
+    eapply COFIX; seauto.
+    intros HNotR.
+    eapply H1; seauto.
+  - exfalso; eapply H1; seauto.
+Qed.
 
 Lemma ComponentConfTrans :
   forall (M0 M1 M2 N0 N1 N2 : MachineState),
@@ -1199,7 +1107,7 @@ Corollary InMTrace_step : forall m m0, InTrace m (MTraceOf m0) ->
 Proof.
   intros; eapply InMTrace_Compatible; eauto using MTraceOf_Compatible.
 Qed.
-
+(*
 Ltac extract_mpstep :=
   match goal with
   | [H : mpstep ?MP = Some (?M, ?P, ?O) |- _ ] =>
@@ -1214,7 +1122,7 @@ Ltac extract_mpstep :=
     assert (H: mpstep MP = Some (M, P, O))
       by (unfold mpstep; rewrite MStep; rewrite PStep; auto)
   end.
-                       
+*)                       
 Lemma VSE_step_preserves_WellFormed :
   forall vs mp, WellFormedVS (ms mp) vs ->
   forall m' p' o', mpstep mp = Some (m', p', o') ->
