@@ -3,6 +3,7 @@ Import ListNotations.
 Require Import Bool.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Trace.
+Require Import ObsTrace.
 
 Section foo.
 
@@ -36,11 +37,6 @@ Definition Value : Type := Word.
 
 (* A Machine State is just a map from Components to Values. *)
 Definition MachineState := Component -> Value.
-
-(* Observations are values, or silent (tau) *)
-Inductive Observation :=
-| Out (w : Word)
-| Tau.
 
 (* A Machine State can step to a new Machine State plus an Observation. *)
 Variable step : MachineState -> MachineState * Observation.
@@ -83,14 +79,6 @@ CoFixpoint MPTraceOf (mp : MPState) : MPTrace :=
   | None => finished mp
   | Some p' => notfinished mp (MPTraceOf (fst (step (ms mp)), p'))
   end.
-
-(* LEO: TODO: Add well formedness that a MTrace/MPTrace is compatible with the steps. *)
-(* SNA: This is what I've been using. *)
-Definition RealMTrace (M:MTrace) : Prop :=
-  M = MTraceOf (head M).
-
-Definition RealMPTrace (MP:MPTrace) : Prop :=
-  MP = MPTraceOf (head MP).
 
 (* Confidentiality and Integrity Labels *)
 Inductive CLabel :=
@@ -173,8 +161,6 @@ Definition variantOf (M N : MachineState) (C : Contour) :=
 
 Hint Unfold variantOf : StackSafety.
 
-Definition ObsTrace := TraceOf Observation.
-
 CoFixpoint ObsTraceOfM (M: MTrace) : ObsTrace :=
   match M with
   | finished m =>
@@ -193,58 +179,7 @@ CoFixpoint ObsTraceOf (MP: MPTrace) : ObsTrace :=
     notfinished O (ObsTraceOf MP')
   end.
 
-CoInductive ObsTraceEq : TraceOf Observation -> TraceOf Observation -> Prop :=
-| ObsEqTau1 : forall OO OO',
-    ObsTraceEq OO OO' ->
-    ObsTraceEq (notfinished Tau OO) OO'
-| ObsEqTau2 : forall OO OO',
-    ObsTraceEq OO OO' ->
-    ObsTraceEq OO (notfinished Tau OO')
-| ObsEqNow : forall w OO OO',
-    ObsTraceEq OO OO' ->
-    ObsTraceEq (notfinished (Out w) OO) (notfinished (Out w) OO')
-| ObsEqFinishedOut : forall w,
-    ObsTraceEq (finished (Out w)) (finished (Out w))
-| ObsEqFinishedTau :
-    ObsTraceEq (finished Tau) (finished Tau)
-(* The last thing we need is a way of handling *all-tau* traces.
-   There are a couple of ways of doing that, not sure what will
-   play better in proofs. *)
-| ObsEqAllTau : forall OO,
-     ObsTraceEq OO OO.
-(* APT: Establishing equality between traces seems hard, and this overlaps
-the previous two cases.  Maybe try:
-   ForallTrace (fun o => o = Tau) OO ->
-   ForallTrace (fun o => o = Tau) OO' ->
-   ObsTraceEq OO OO'
-?
-LEO: That was the other thing I had in mind. I'll see what makes proofs easier.
-(Note that this proposal overlaps with the first two cases, as well as the last one.)
- *)
-
 Hint Constructors ObsTraceEq : StackSafety.
-
-(* The second is a prefix of the first, up to Tau *)
-CoInductive ObsTracePrefix : TraceOf Observation -> TraceOf Observation -> Prop :=
-| ObsPreTau1 : forall OO OO',
-    ObsTracePrefix OO OO' ->
-    ObsTracePrefix (notfinished Tau OO) OO'
-| ObsPreTau2 : forall OO OO',
-    ObsTracePrefix OO OO' ->
-    ObsTracePrefix OO (notfinished Tau OO')
-| ObsPreNow : forall w OO OO',
-    ObsTracePrefix OO OO' ->
-    ObsTracePrefix (notfinished (Out w) OO) (notfinished (Out w) OO')
-| ObsPreFinishedOut1 : forall w,
-    ObsTracePrefix (finished (Out w)) (finished (Out w))
-| ObsPreFinishedOut2 : forall w OO,
-    ObsTracePrefix (notfinished (Out w) OO) (finished (Out w))
-| ObsPreFinishedTau : forall OO,
-    ObsTracePrefix OO (finished Tau)
-| ObsPreAllTau : forall OO,
-     ObsTracePrefix OO OO.
-
-Notation "OO' <=_O OO" := (ObsTracePrefix OO OO') (at level 80).
 
 Hint Constructors ObsTracePrefix : StackSafety.
 
@@ -1674,12 +1609,12 @@ Proof.
 Qed.
 
 Lemma isRet_dec :
-  forall M1 M2,
-    isRet M1 M2 \/ ~isRet M1 M2.
+  forall m1 m2,
+    isRet m1 m2 \/ ~isRet m1 m2.
 Proof.
   unfold isRet. intros.
-  destruct (WordEqDec (M2 (Reg PC)) (wplus (M1 (Reg PC)) 4)).
-  - destruct (WordEqDec (M2 (Reg SP)) (M1 (Reg SP))).
+  destruct (WordEqDec (m2 (Reg PC)) (wplus (m1 (Reg PC)) 4)).
+  - destruct (WordEqDec (m2 (Reg SP)) (m1 (Reg SP))).
     + left; rewrite e, e0; auto. 
     + right. intros [H1 H2]. rewrite H2 in n; apply n; auto.
   - right. intros [H1 H2].  rewrite H1 in n; apply n; auto.
@@ -1709,33 +1644,6 @@ Proof.
   destruct (pstep (m,p)); auto.
 Qed.
 
-(* APT: Fixed with some help from paco tutorial...even without using paco! *)
-(* LEO: TODO: Look at this. *)
-Lemma RealMPTraceSame : forall MP, RealMPTrace MP -> RealMPTrace' (head MP) MP. 
-Proof.
-  unfold RealMPTrace.
-  cofix COFIX.
-  intros.
-  rewrite idTrace_eq in H. simpl in H. 
-  destruct MP as [m | m MP'] eqn:?. 
-  - simpl in *. 
-    destruct (pstep m) eqn:?. 
-    + inversion H. 
-    + constructor; auto.
-  - simpl in *. 
-    destruct (pstep m) eqn:?. 
-    + inversion H. 
-      econstructor; eauto.
-      set (mp' := (fst (step (ms m)), p)).
-      pattern mp' at 1.   (* Can't use rewrite...at with cofix! *)
-      rewrite MPTraceOfHead.  
-      apply COFIX. 
-      rewrite (MPTraceOfHead mp') at 1. auto.
-    + inversion H. 
-Qed.
-
-(* APT: Should abandon RealMPTrace for RealMPTrace'',
-which is provably equivalent to RealMPTrace'. *)
 Definition RealMPTrace'' MP := TraceEq MP (MPTraceOf (head MP)).
 
 Ltac inv H := inversion H; subst; clear H. 
@@ -1805,16 +1713,6 @@ Proof.
   split; intros.
   - apply RealMPTrace''Same; auto.
   -  apply RealMPTrace'Same; auto.
-Qed.
-
-Lemma ObsTraceEq_sym :
-  forall O O',
-    ObsTraceEq O O' -> ObsTraceEq O' O.
-Proof.
-  cofix COFIX. 
-  intros.
-  inversion H; subst; clear H;
-    try (constructor; apply COFIX; auto). 
 Qed.
 
 Lemma SplitSuffixReal' :
@@ -1889,146 +1787,6 @@ Proof.
     constructor.
 Qed.
 
-Ltac app_frobber :=
-  repeat match goal with
-         | |- context[(finished ?T) ^ ?OT] =>
-           rewrite (idTrace_eq (finished T ^ OT)); simpl
-         | |- context[(notfinished ?O ?T) ^ ?OT] =>
-           rewrite (idTrace_eq (notfinished O T ^ OT)); simpl
-         | [H: context[(finished ?T) ^ ?OT] |- _ ] =>
-           rewrite (idTrace_eq (finished T ^ OT)) in H; simpl in H
-         | [H: context[(notfinished ?O ?T) ^ ?OT] |- _ ] =>
-           rewrite (idTrace_eq (notfinished O T ^ OT)) in H; simpl in H
-         end.
-
-Lemma ObsTraceEqRemoveTau1 :
-  forall T T', ObsTraceEq (notfinished Tau T) T' -> ObsTraceEq T T'.
-Proof.
-  cofix COFIX.
-  intros T T' Eq.
-  inversion Eq; subst; clear Eq.
-  + auto.
-  + eapply ObsEqTau2.
-    eapply COFIX; auto.
-  + eapply ObsEqTau2.
-    eapply ObsEqAllTau.
-Qed.
-
-Lemma ObsTraceEqRemoveTau2 :
-  forall T T', ObsTraceEq T (notfinished Tau T') -> ObsTraceEq T T'.
-Proof.
-  cofix COFIX.
-  intros T T' Eq.
-  inversion Eq; subst; clear Eq.
-  + eapply ObsEqTau1.
-    eapply COFIX.
-    auto.
-  + auto. 
-  + eapply ObsEqTau1.
-    eapply ObsEqAllTau.
-Qed.
-
-Fixpoint tauN (n : nat) (T : TraceOf Observation) : TraceOf Observation :=
-  match n with
-  | O => T
-  | S n' => notfinished Tau (tauN n' T)
-  end.
-
-Lemma EqOut_tauN : forall T' t',
-    Last T' t' ->
-    forall w T, 
-      ObsTraceEq (notfinished (Out w) T) T' ->
-      exists n, T' = tauN n (finished (Out w)) \/ exists  T'', T' = tauN n (notfinished (Out w) T'').
-Proof.
-  intros T' t' HL.
-  induction HL; intros w Tw Eq.
-  - exists 0. left. simpl.
-    inversion Eq.
-  - destruct a'.
-    + inversion Eq; subst; clear Eq.
-      * exists 0.
-        right.
-        exists T; simpl; auto.
-      * exists 0.
-        right.
-        exists T; simpl; auto.
-    + inversion Eq; subst; clear Eq.
-      destruct (IHHL w Tw H1) as [n [HTau | [T'' HTau]]].
-      * exists (S n).
-        left.
-        simpl.
-        rewrite HTau.
-        auto.
-      * exists (S n).
-        right.
-        simpl.
-        exists T''.
-        rewrite HTau.
-        auto.
-Qed.
-
-Definition ObsTracePrefApp' :
-  forall O1 O1' O2 O2' o1 o1',
-    Last O1 o1 -> Last O1' o1' -> 
-    ObsTraceEq O1 O1' ->
-    ObsTracePrefix O2 O2' ->
-    ObsTracePrefix (O1^(Some O2)) (O1'^(Some O2')).
-Proof.
-  intros O1 O1' O2 O2' o1 o1' H;
-    (* I really want SSR... *)
-    revert O1' O2 O2' o1'.
-  induction H as [o1|]; intros O1' O2 O2' o1' Last' Eq Pref.
-  - generalize dependent O2;
-    generalize dependent O2';
-    generalize dependent Eq.
-    induction Last';
-      intros Eq O2' O2 Pref.
-    + inversion Eq; subst; simpl in *; clear Eq; app_frobber.
-      (* Hint constructors doesn't work for this? *)
-      * apply ObsPreNow; auto.
-      * apply ObsPreTau1; apply ObsPreTau2; auto.
-      * destruct a.
-        -- apply ObsPreNow; auto.
-        -- apply ObsPreTau1; apply ObsPreTau2; auto.
-    + inversion Eq; subst; simpl in *; clear Eq.
-      specialize (IHLast' H1 O2' O2 Pref).      
-      app_frobber.
-      eapply ObsPreTau2.
-      auto.
-  (* Try by inversion. *)
-  - destruct a'.
-    + destruct (EqOut_tauN O1' o1' Last' w T Eq) as [n [HTau | [T' HTau]]].
-      * rewrite HTau in *.
-        clear HTau.
-        induction n; simpl in *; subst; app_frobber.
-        -- apply ObsPreNow.
-           inversion Eq. (* This makes me feel strange *)
-        -- apply ObsPreTau2.
-           inversion Last'; subst; clear Last'.
-           apply ObsTraceEqRemoveTau2 in Eq.
-           specialize (IHn H3 Eq).
-           auto.
-      * rewrite HTau in *.
-        clear HTau.
-        induction n; simpl in *; subst; app_frobber.
-        -- apply ObsPreNow.
-           inversion Eq; subst; clear Eq.
-           ++ inversion Last'; subst; clear Last'.
-              eauto.
-           ++ inversion Last'; subst; clear Last'.
-              eauto using ObsEqAllTau.
-        -- inversion Last'; subst; clear Last'.
-           specialize (IHn H3).
-           apply ObsTraceEqRemoveTau2 in Eq.
-           specialize (IHn Eq).
-           apply ObsPreTau2.
-           auto.
-    + apply ObsTraceEqRemoveTau1 in Eq.
-      app_frobber.
-      apply ObsPreTau1.
-      eauto.
-Qed.
-
 Lemma MPObsLast :
   forall MP mp,
     Last MP mp ->
@@ -2057,64 +1815,6 @@ Proof.
       destruct (step a'). constructor. auto.
 Qed.
 
-Lemma ObsTraceEqApp :
-  forall O1 O1' O2 O2' o1 o1',
-    Last O1 o1 -> Last O1' o1' -> 
-    ObsTraceEq O1 O1' ->
-    ObsTraceEq O2 O2' ->
-    ObsTraceEq (O1^(Some O2)) (O1'^(Some O2')).
-Proof.
-    intros O1 O1' O2 O2' o1 o1' H;
-    revert O1' O2 O2' o1'.
-  induction H as [o1|]; intros O1' O2 O2' o1' Last' Eq1 Eq2.
-  - generalize dependent O2;
-    generalize dependent O2';
-    generalize dependent Eq1.
-    induction Last';
-      intros Eq1 O2' O2 Eq2.
-    + inversion Eq1; subst; simpl in *; clear Eq1; app_frobber.
-      * apply ObsEqNow; auto.
-      * apply ObsEqTau1; apply ObsEqTau2; auto.
-      * destruct a.
-        -- apply ObsEqNow; auto.
-        -- apply ObsEqTau1; apply ObsEqTau2; auto.
-    + inversion Eq1; subst; simpl in *; clear Eq1.
-      specialize (IHLast' H1 O2' O2 Eq2).      
-      app_frobber.
-      eapply ObsEqTau2.
-      auto.
-  - destruct a'.
-    + destruct (EqOut_tauN O1' o1' Last' w T Eq1) as [n [HTau | [T' HTau]]].
-      * rewrite HTau in *.
-        clear HTau.
-        induction n; simpl in *; subst; app_frobber.
-        -- apply ObsEqNow.
-           inversion Eq1.
-        -- apply ObsEqTau2.
-           inversion Last'; subst; clear Last'.
-           apply ObsTraceEqRemoveTau2 in Eq1.
-           specialize (IHn H3 Eq1).
-           auto.
-      * rewrite HTau in *.
-        clear HTau.
-        induction n; simpl in *; subst; app_frobber.
-        -- apply ObsEqNow.
-           inversion Eq1; subst; clear Eq1.
-           ++ inversion Last'; subst; clear Last'.
-              eauto.
-           ++ inversion Last'; subst; clear Last'.
-              eauto using ObsEqAllTau.
-        -- inversion Last'; subst; clear Last'.
-           specialize (IHn H3).
-           apply ObsTraceEqRemoveTau2 in Eq1.
-           specialize (IHn Eq1).
-           apply ObsEqTau2.
-           auto.
-    + apply ObsTraceEqRemoveTau1 in Eq1.
-      app_frobber.
-      apply ObsEqTau1.
-      eauto.
-Qed.
 
 Lemma ObsTraceOfTraceEq :
   forall MP MP',
