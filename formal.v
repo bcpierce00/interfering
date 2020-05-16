@@ -808,25 +808,14 @@ Definition upd_curr (mv : MachineState) (vse : VSE) : VSE :=
      retP := retP vse
   |}.
 
-(*
 Definition VSE_step (vse : VSE) :=
   match step (curr_variant vse) with
   | (mv',_) => upd_curr mv' vse
   end.
-*)
-Inductive VSE_step : VSE -> VSE -> Prop :=
-| vse_step :
-    forall m0 mv0 mv mv' C R,
-    (exists O, step mv = (mv', O)) ->
-    VSE_step (Build_VSE m0 mv0 mv  C R)
-             (Build_VSE m0 mv0 mv' C R).
 
-Hint Constructors VSE_step : StackSafety.
+Definition VarStack := list VSE.
 
-Definition VSEs_step (vses vses' : list VSE) : Prop :=
-  Forall2 VSE_step vses vses'.
-
-Hint Unfold VSEs_step : StackSafety.
+Definition VSEs_step (vs : VarStack) := map VSE_step vs.
 
 Inductive FinLast {A : Type} : A -> list A -> Prop :=
 | FLastSing : forall x, FinLast x [x]
@@ -884,106 +873,79 @@ Proof.
   - apply FinLastN_length2 in H; omega.
 Qed.
 
-Lemma VSE_step_unique : forall vse vse', VSE_step vse vse' ->
-                        forall vse'', VSE_step vse vse'' ->
-                                      vse' = vse''.
-Proof.
-  intros.
-  inversion H; inversion H0; subst; simpl in *; eauto;
-  destruct H1; destruct H4; eauto;
-    inversion H5; inversion H6; subst; eauto.
-  rewrite H1 in H2; inversion H2; subst; eauto.
-Qed.
-  
-Lemma VSEs_step_unique : forall vs vs', VSEs_step vs vs' ->
-                         forall vs'', VSEs_step vs vs'' ->
-                         vs' = vs''.
-Proof.
-  intros vs vs' H; induction H; intros vs'' Step;
-    inversion Step; subst; simpl in *; clear Step; eauto.
-  assert (y = y0) by (eapply VSE_step_unique; eauto); subst.
-  f_equal.
-  eauto.
-Qed.
-
-Lemma VSEs_step_preserves_length: forall vs vs', VSEs_step vs vs' ->
+Lemma VSEs_step_preserves_length: forall vs vs', VSEs_step vs = vs' ->
                                   forall n, length vs = n -> length vs' = n.
 Proof.
-  intros vs vs' H; induction H; intros n Len; simpl in *; eauto.
-  erewrite IHForall2; eauto.
-Qed.  
+  intros.
+  unfold VSEs_step in *.
+  rewrite <- H.
+  rewrite <- H0.
+  apply map_length; eauto.
+Qed.
   
 Lemma VSE_step_preserves_LastN :
   forall n VS vs, FinLastN n VS vs ->
   forall VS' vs', 
-    VSEs_step vs vs' ->
-    VSEs_step VS VS' ->
+    VSEs_step vs = vs' ->
+    VSEs_step VS = VS' ->
     FinLastN n VS' vs'.
 Proof.
   intros n Vs vs H; induction H; intros VS' vs' SV Sv.
-  - assert (vs' = VS') by (eapply VSEs_step_unique; eauto).
-    subst.
-    eapply FinLastNow.
-    eapply VSEs_step_preserves_length; eauto.
-  - inversion Sv; subst; simpl in *; clear Sv.
+  - rewrite SV in Sv; subst; eapply FinLastNow; eapply VSEs_step_preserves_length; eauto.
+  - inversion Sv; subst; simpl in *.
     eapply FinLastLater.
     eapply IHFinLastN; eauto.
 Qed.    
     
 Lemma VSE_step_preserves_in :
-  forall vse vses vses' mv' O,
-  In vse vses ->
-  Forall2 VSE_step vses vses' ->
-  step (curr_variant vse) = (mv',O) ->
-  In (upd_curr mv' vse) vses'.
+  forall vse vs vs' mv' O,
+    In vse vs ->
+    VSEs_step vs = vs' ->
+    step (curr_variant vse) = (mv',O) ->
+    In (upd_curr mv' vse) vs'.
 Proof.
-  intros vse vses vses' N' O' HIn HForall HStep.
-  induction HForall.
-  - inversion HIn.
-  - inversion H; subst; eauto; clear H.
-    inversion HIn; subst; eauto.
-    + destruct H0 as [ Obs HObs ].
-      simpl in *.
-      rewrite HObs in HStep.
-      inversion HStep; subst; clear HStep.
-      left; auto.
-    + right. apply IHHForall; auto.
+  intros vse vs vs' mv' O HIn HForall HStep.
+  rewrite <- HForall.
+  apply in_map_iff.
+  exists vse.
+  split; auto.
+  unfold VSE_step. rewrite HStep.
+  auto.
 Qed.
 
 Hint Resolve VSE_step_preserves_in : StackSafety.
 
-Lemma VSE_step_preserves_last :
-  forall vse vse' vses vses' N' O,
-  FinLast vse vses ->
-  Forall2 VSE_step vses vses' ->
-  step (curr_variant vse) = (N',O) ->
-  upd_curr N' vse = vse' ->
-  FinLast vse' vses'.
+Lemma map_preserves_last :
+  forall {A B} (f : A -> B)  x l, FinLast x l -> FinLast (f x) (map f l).
 Proof.
-  intros vse vse' vses vses' N' O' HIn HForall HStep Upd.
-  induction HForall.
-  - inversion HIn.
-  - inversion H; subst; eauto; clear H.
-    inversion HIn; subst; eauto.
-    + destruct H0 as [ Obs HObs ].
-      simpl in *.
-      rewrite HObs in HStep.
-      inversion HStep; subst; clear HStep.
-      inversion HForall; subst; clear HForall.
-      left; auto.
-    + right. apply IHHForall; auto.
+  intros A B f x l H; induction H; simpl in *; seauto.
+Qed.
+
+Lemma VSE_step_preserves_last :
+  forall vse vse' vs vs',
+    FinLast vse vs ->
+    VSEs_step vs = vs' ->
+    VSE_step vse = vse' ->
+  FinLast vse' vs'.
+Proof.
+  intros vse vse' vs vs' HLast HVS HVSE.
+  rewrite <- HVS.
+  unfold VSEs_step.
+  rewrite <- HVSE.
+  apply map_preserves_last; auto.
 Qed.
 
 Hint Resolve VSE_step_preserves_last : StackSafety.
 
 Corollary VSE_step_preserves_last' :
   forall vse vses vses' N' O,
-  FinLast vse vses ->
-  Forall2 VSE_step vses vses' ->
+    FinLast vse vses ->
+    VSEs_step vses = vses' ->
   step (curr_variant vse) = (N',O) ->
   FinLast (upd_curr N' vse) vses'.
 Proof.
   intros; eapply VSE_step_preserves_last; eauto.
+  unfold VSE_step. rewriteHyp. auto.
 Qed.  
 
 Hint Resolve VSE_step_preserves_last' : StackSafety.
@@ -1008,7 +970,6 @@ Proof.
   - right; eauto.
 Qed.
     
-Definition VarStack := list VSE.
 
 (* Well-formedness conditions on the stack with respect to a current MS. *)
 Definition WellFormedVS (M : MachineState) (vs : VarStack) : Prop :=
@@ -1027,6 +988,7 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MPTrace -> VarStack -> Prop :=
 | EagerTestHalt :
     forall mp vs,
       WellFormedVS (ms mp) vs ->
+      mpstep mp = None ->
       EagerStackSafetyTest cm (finished mp) vs
 | EagerTestStep :
     forall mp MP vs vs' m' p' OM,
@@ -1046,7 +1008,7 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MPTrace -> VarStack -> Prop :=
           In vse vs ->
           EagerIntegrityTest (contour vse) (ms mp) m') ->
       (* Step all variants and just recurse *)
-      VSEs_step vs vs' ->
+      VSEs_step vs = vs' ->
       head MP = (m',p') ->
       EagerStackSafetyTest cm MP vs' ->
       (* Conclude for current. *)
@@ -1055,7 +1017,8 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MPTrace -> VarStack -> Prop :=
     forall args mp MP vs vs' m' p' OM C,      
       (* Is a call *)
       isCall cm (ms mp) args ->
-      (* (forall N C R, In (N,C,R) NCRs -> ~ R M) -> *)
+      (* Also need it to NOT be a return *)
+      (forall vse, In vse vs -> ~ (retP vse (ms mp))) ->      
       (* Take a step. *)
       mpstep mp = Some (m', p', OM) ->
       WellFormedVS (ms mp) vs ->
@@ -1069,7 +1032,7 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MPTrace -> VarStack -> Prop :=
           In vse vs ->
           EagerIntegrityTest (contour vse) (ms mp) m') ->
       (* Step all variants. *)
-      VSEs_step vs vs' ->
+      VSEs_step vs = vs' ->
       head MP = (m', p') ->
       (* Calculate the new contour based on the top of the current machine. *)
       (* LEO: TODO: Current machine, or HEAD MP? *)
@@ -1104,7 +1067,7 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MPTrace -> VarStack -> Prop :=
           In vse vs ->
           EagerIntegrityTest (contour vse) (ms mp) m') ->
       (* Step all variants. *)
-      VSEs_step vs vs' ->
+      VSEs_step vs = vs' ->
       head MP = (m',p') ->
       (* Recurse but take of the top of the stack. *)
       EagerStackSafetyTest cm MP (tl vs') ->
@@ -1142,6 +1105,157 @@ Ltac int_progress' :=
 
 Ltac int_progress := repeat progress int_progress'.
 
+Theorem TestImpliesIntegrityNested :
+  forall cm C MM vs n vscall vse,
+         FinLastN n vs vscall ->
+         hd_error vscall = Some vse ->
+         contour vse = C ->
+         (forall mp, InTrace mp MM -> ~ (retP vse (ms mp)) \/ mpstep mp = None) ->
+  EagerStackSafetyTest cm MM vs -> EagerStackIntegrity' C MM.
+Proof.
+  cofix COFIX.
+  intros cm C MP vs n vscall vse Last Hvse HC HNotR Safety.
+  inversion Safety; subst; clear Safety.
+  - apply SI_finished.
+  - apply SI_notfinished; progress_integrity.
+    + intros k Hk.
+      unfold MPState, EagerIntegrityTest in *.
+      rewrite H6; simpl.
+      eapply H4; eauto using FinLastNHead_implies_In.
+    + eapply (COFIX cm (contour vse) MP0 (VSEs_step vs) n (VSEs_step vscall) (VSE_step vse)); eauto.
+      * eapply VSE_step_preserves_LastN; eauto.
+      * destruct vscall; inversion Hvse; subst; simpl; auto.
+      * unfold VSE_step; simpl; auto.
+        destruct (step (curr_variant vse)); simpl; auto.
+      * unfold not; intros; eauto.
+        destruct (HNotR mp0).
+        -- apply In_later; auto.
+        -- left; intros.
+           eapply H5.
+           unfold VSE_step in *; simpl in *.
+           destruct (step (curr_variant vse)); simpl in *.
+           auto.
+        -- right; auto.
+  - apply SI_notfinished; progress_integrity.
+    + intros k Hk.
+      unfold MPState, EagerIntegrityTest in *.
+      rewrite H6; simpl.
+      eauto using FinLastNHead_implies_In.
+    + apply (COFIX cm (contour vse) MP0 ((Build_VSE (ms mp) (ms (head MP0)) (ms (head MP0)) (makeContour args (ms mp)) (isRet (ms mp)))::(VSEs_step vs)) n (VSEs_step vscall) (VSE_step vse)); eauto.
+      * eapply FinLastLater.
+        eapply VSE_step_preserves_LastN; eauto.
+      * destruct vscall; inversion Hvse; subst; simpl; auto.
+      * unfold VSE_step; simpl; auto.
+        destruct (step (curr_variant vse)); simpl; auto.
+      * unfold not; intros; eauto.
+        destruct (HNotR mp0).
+        -- apply In_later; auto.
+        -- left; intros.
+           eapply H5.
+           unfold VSE_step in *; simpl in *.
+           destruct (step (curr_variant vse)); simpl in *.
+           auto.
+        -- right; auto.
+      * apply H8.
+        unfold variantOf.
+        intros k Hk.
+        auto.
+  - apply SI_notfinished; progress_integrity.
+    + intros k Hk.
+      unfold MPState, EagerIntegrityTest in *.
+      rewrite H5.
+      eauto using FinLastNHead_implies_In.
+    + apply (COFIX cm (contour vse) MP0 (tl (VSEs_step vs)) n (VSEs_step vscall) (VSE_step vse)); auto.
+      * destruct vs; simpl in *.
+        -- inversion Last; subst; simpl in *; try solve [constructor]; eauto.
+        -- inversion Last; subst; simpl in *; eauto.
+           ++ inversion Hvse; subst; simpl in *.
+              destruct H as [vseC [vsrest [Eq Hret]]].
+              exfalso.
+              inversion Eq; subst.
+              destruct (HNotR mp).
+              ** apply In_now; auto.
+              ** apply H; auto.
+              ** congruence.
+           ++ eapply VSE_step_preserves_LastN; eauto.
+      * destruct vscall; inversion Hvse; subst; eauto.
+      * unfold VSE_step; simpl; auto.
+        destruct (step (curr_variant vse)); simpl; auto.
+      * unfold not; intros; eauto.
+        destruct (HNotR mp0).
+        -- apply In_later; auto.
+        -- left; intros.
+           eapply H4.
+           unfold VSE_step in *; simpl in *.
+           destruct (step (curr_variant vse)); simpl in *.
+           auto.
+        -- right; auto.
+Qed.
+
+Lemma FinLastN1_FinLast : forall {A} (l : list A) x,
+    FinLastN 1 l [x] -> FinLast x l.
+Proof.
+  intros.
+  remember 1.
+  remember [x].
+  generalize dependent x.
+  induction H; intros; subst; seauto.
+Qed.
+
+Lemma FinLast_FinLastN1 : forall {A} (l : list A) x,
+    FinLast x l -> FinLastN 1 l [x].
+Proof.
+  intros.
+  induction H.
+  - constructor; simpl; auto.
+  - constructor; eauto.
+Qed.
+
+(*
+Lemma EagerTestTermination :
+  forall cm MP vs, EagerStackSafetyTest cm MP vs ->
+  forall vse, FinLast vse vs ->
+  forall mp, InTrace mp MP -> 
+             ~ retP vse (ms mp) \/ mpstep mp = None.
+Proof.
+  intros.
+  induction H1; inversion H; subst; simpl in *; eauto.
+  - left; eauto using FinLast_implies_In.
+  - left; eauto using FinLast_implies_In.
+  - 
+    *)
+
+Corollary TestImpliesIntegrityToplevel :
+  forall cm C MM vs,
+    (exists vse, FinLast vse vs /\ contour vse = C) ->
+    EagerStackSafetyTest cm MM vs -> EagerStackIntegrity' C MM.
+Proof.
+  intros.
+  destruct H as [vse [Last HC]].
+  eapply TestImpliesIntegrityNested with (n:=1) (vscall := [vse]); eauto.
+  - eapply FinLast_FinLastN1; auto.
+  - simpl; auto.
+  - intros mp H.
+    invert EagerStackSafetyTest.
+    + destruct H1 as [Var [[vse' [Last' Ret]] [InM InV]]] eqn:wf.
+      assert (vse = vse') by (eapply FinLast_unique; eauto).
+      subst.
+      rewrite Ret; left; auto.
+    + destruct H4 as [Var [[vse' [Last' Ret]] [InM InV]]] eqn:wf.
+      assert (vse = vse') by (eapply FinLast_unique; eauto).
+      subst.
+      rewrite Ret; left; auto.
+    + destruct H4 as [Var [[vse' [Last' Ret]] [InM InV]]] eqn:wf.
+      assert (vse = vse') by (eapply FinLast_unique; eauto).
+      subst.
+      rewrite Ret; left; auto.
+    + destruct H3 as [Var [[vse' [Last' Ret]] [InM InV]]] eqn:wf.
+      assert (vse = vse') by (eapply FinLast_unique; eauto).
+      subst.
+      rewrite Ret; left; auto.
+Qed.
+
+(*
 Theorem TestImpliesIntegrityToplevel :
   forall cm C MM vs,
     (exists vse, FinLast vse vs /\ contour vse = C) ->
@@ -1201,70 +1315,9 @@ Proof.
             * inversion H4.
         }
 Qed.
-(*
-Theorem TestImpliesIntegrityNested :
-  forall cm C MM vs n vscall vse,
-         FinLastN n vs vscall ->
-         hd_error vscall = Some vse ->
-         contour vse = C ->
-  EagerStackSafetyTest cm MM vs -> EagerStackIntegrity' C MM.
-Proof.
-  cofix COFIX.
-  intros cm C MP vs n vscall vse Last Hvse HC Safety.
-  inversion Safety; subst; clear Safety.
-  - apply SI_finished.
-  - apply SI_notfinished; progress_integrity.
-    + intros k Hk.
-      unfold MPState, EagerIntegrityTest in *.
-      rewrite H6; simpl.
-      eapply H4; eauto using FinLastNHead_implies_In.
-    + eapply (COFIX cm (contour vse) MP0 vs'); eauto.
-      unfold VSEs_step in *.
-      destruct (H3 vse_last (FinLast_implies_In vse_last vs HLast))
-        as [N' [ON [HN' HConf]]].
-      exists (upd_curr N' vse_last); split; auto.
-      eapply VSE_step_preserves_last'; eauto.
-  - apply SI_notfinished; progress_integrity.
-    + intros k Hk.
-      unfold MPState, EagerIntegrityTest in *.
-      rewrite H5.
-      eauto using FinLast_implies_In.
-    + apply (COFIX cm (contour vse_last) MP0 ((Build_VSE (ms mp) (ms (head MP0)) (ms (head MP0)) (makeContour args (ms mp)) (isRet (ms mp)))::vs')).
-      * unfold VSEs_step in *.
-        destruct (H2 vse_last)
-          as [N' [ON [HN' HConf]]]; eauto using FinLast_implies_In.
-        exists (upd_curr N' vse_last); split; auto.
-        right; eauto using VSE_step_preserves_last.
-      * apply H7.
-        unfold variantOf.
-        intros k Hk.
-        auto.
-  - apply SI_notfinished; progress_integrity.
-    + intros k Hk.
-      unfold MPState, EagerIntegrityTest in *.
-      rewrite H5.
-      eauto using FinLast_implies_In.
-    + apply (COFIX cm (contour vse_last) MP0 (tl vs')); auto.
-      unfold VSEs_step in *.
-      destruct (H2 vse_last)
-        as [N' [ON [HN' HConf]]]; eauto using FinLast_implies_In.
-      destruct vs.
-      * inversion H4; subst.
-        inversion HLast.
-      * simpl in *.
-        destruct vs'; inversion H4; subst; clear H4; simpl in *.
-        inversion HLast; subst; clear HLast; eauto using VSE_step_preserves_last.
-        { destruct H as [vse [vserest [Contra Contra']]].
-          + subst.
-            inversion HLast'; subst.
-            * inversion Contra; subst.
-              rewrite HRet in Contra'.
-              inversion Contra'.
-            * inversion H4.
-        }
-Qed.
-
 *)
+
+
 Ltac mfrob :=
   match goal with
   | |- context[MTraceOf ?M] =>
@@ -1341,7 +1394,7 @@ Ltac extract_mpstep :=
 Lemma VSE_step_preserves_WellFormed :
   forall vs mp, WellFormedVS (ms mp) vs ->
   forall m' p' o', mpstep mp = Some (m', p', o') ->
-  forall vs', VSEs_step vs vs' ->
+  forall vs', VSEs_step vs = vs' ->
   (forall vse : VSE,
        In vse vs ->
        exists (mv' : MachineState) (OV : Observation),
@@ -1350,60 +1403,64 @@ Lemma VSE_step_preserves_WellFormed :
   WellFormedVS m' vs'.              
 Proof.
   intro vs; induction vs; intros mp WF m' p' o' MPStep vs' Step Conf.
-  - inversion Step; subst; clear Step.
+  - inversion Step; subst.
     destruct WF as [Var [[vse [Last Ret]] [InM InV]]] eqn:wf.
     inversion Last.
-  - inversion Step; subst; clear Step.
+  - inversion Step; subst.
     destruct WF as [Var [[vse [Last Ret]] [InM InV]]] eqn:wf.
     extract_mpstep.    
     inversion Var; inversion Last; inversion InM; inversion InV; subst; simpl in *.
     + inversion H3; subst; clear H3.
-      inversion H1; subst; clear H1.
+(*       inversion H1; subst; clear H1.*)
       repeat split.
       * constructor; simpl in *; eauto.
-        remember (Build_VSE m0 mv0 mv C R) as vse.
-        specialize (Conf vse (or_introl eq_refl)).
+(*        remember (Build_VSE m0 mv0 mv C R) as vse. *)
+        specialize (Conf a (or_introl eq_refl)).
         destruct Conf as [mv'' [ov'' [MVStep [OEq Conf]]]].
-        destruct H as [ov Hov].
-        rewrite Heqvse in MVStep.
         simpl in *.
-        rewrite Hov in MVStep.
-        inversion MVStep.
-        rewrite <- H0 in *.
-        rewrite <- H1 in *.
         rewrite OEq in *.
-        clear H0; clear H1; clear OEq; clear MVStep.
+(*        clear H0; clear H1; clear OEq; clear MVStep. *)
         eapply confStepPreservesVariant; eauto.
-        intros k Hk; eapply Conf; eauto.
-        rewrite Heqvse; simpl.
-        destruct Hk; [ left | right ]; eauto.
-      * remember (Build_VSE m0 mv0 mv C R) as vse.
-        remember (Build_VSE m0 mv0 mv' C R) as vse'.        
-        exists vse'.
-        split; subst; simpl; auto using FLastSing.
+        -- unfold VSE_step.
+           rewrite MVStep.
+           eauto.
+        -- intros k Hk.
+           unfold VSE_step in *.
+           rewrite MVStep in *.
+           simpl.
+           eapply Conf; eauto.
+           destruct Hk; [ left | right ]; eauto.
+        -- unfold VSE_step in *; rewrite MVStep; eauto.
+      * exists (VSE_step a); split; auto using FLastSing.
+        unfold VSE_step in *.
+        destruct (step (curr_variant a)); simpl; auto.
       * constructor; simpl in *; eauto.
         eapply InMTrace_step; eauto.
+        unfold VSE_step; destruct (step (curr_variant a)); simpl; auto.
       * constructor; simpl in *; eauto.
+        unfold VSE_step; destruct (step (curr_variant a)) eqn:S; simpl; eauto.
         destruct H; eapply InMTrace_step; eauto.
-    + inversion H1; subst; clear H1.
-      destruct H as [o Ho].
-      repeat split.
+    + repeat split.
       * constructor; simpl in *; eauto.
         -- eapply confStepPreservesVariant; eauto.
-           remember (Build_VSE m0 mv0 mv C R) as vse'.
-           specialize (Conf vse' (or_introl eq_refl)).
-           destruct Conf as [mv'' [ov'' [MVStep [OEq Conf]]]].
-           rewrite Heqvse' in MVStep.
-           simpl in *.
-           rewrite Ho in MVStep.
-           inversion MVStep.
-           rewrite <- H0 in *.
-           rewrite <- H1 in *.
-           rewrite OEq in *.
-           clear H0; clear H1; clear OEq; clear MVStep.
-           intros k Hk; eapply Conf; eauto.
-           rewrite Heqvse'; simpl.
-           destruct Hk; [ left | right ]; eauto.
+           ++ specialize (Conf a (or_introl eq_refl)).
+              unfold VSE_step in *; simpl in *.           
+              destruct Conf as [mv'' [ov'' [MVStep [OEq Conf]]]].
+              simpl in *.
+              rewrite MVStep; eauto.
+              rewrite OEq in *; eauto.
+           ++ intros k Hk.
+              unfold VSE_step in *; simpl in *.
+              destruct (Conf a (or_introl eq_refl)) as [mv'' [ov'' [MVStep [OEq Conf']]]].
+              rewrite MVStep in *; simpl in *.
+              eapply Conf'.
+              destruct Hk; [left | right]; eauto.
+           ++ intros k Hk.
+              unfold VSE_step in *; simpl in *.
+              destruct (Conf a (or_introl eq_refl)) as [mv'' [ov'' [MVStep [OEq Conf']]]].
+              rewrite MVStep in *; simpl in *.
+              unfold variantOf in H2.
+              eapply H2; eauto.
         -- eapply IHvs; eauto.
            repeat split; eauto.
       * destruct (step (curr_variant vse)) as (mv'', ov'') eqn:Step_vse.
@@ -1411,12 +1468,19 @@ Proof.
         split; subst; simpl; auto.
         apply FLastTail.
         eapply VSE_step_preserves_last; eauto.
+        unfold VSE_step in *; simpl in *.
+        rewrite Step_vse; auto.
       * constructor; simpl in *; eauto.
         -- eapply InMTrace_step; eauto.
+           unfold VSE_step in *; simpl.
+           destruct (step (curr_variant a)); simpl; auto.
         -- eapply IHvs; eauto.
            repeat split; eauto.
-      * constructor; simpl in *; eauto.
-        -- eapply InMTrace_step; eauto.
+      * destruct (step (curr_variant a)) eqn:S; simpl; eauto.           
+        constructor; simpl in *; eauto.
+        -- unfold VSE_step in *.
+           rewrite S; simpl in *.
+           eapply InMTrace_step; eauto.
         -- eapply IHvs; eauto.
            repeat split; eauto.
 Qed.
@@ -1441,6 +1505,7 @@ Lemma preserve...
                 EagerStackSafetyTest cm MP vs)
  *)
 
+(*
 Theorem TestImpliesConfidentialityToplevel :
   forall cm C MP vs,
     MPStepCompatible MP ->
@@ -1621,6 +1686,7 @@ Proof.
            unfold mpstep; rewrite MStep; rewrite PStep; eauto.
            intros k [Hk | Hk]; eapply HConf; [left | right]; eauto.
 Qed.
+*)
 
 (*
 Lemma MTraceOf_eq M : MTraceOf M = notfinished M (MTraceOf (fst (step M))).
