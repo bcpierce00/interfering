@@ -216,7 +216,7 @@ Lemma TraceAppNone :
 Proof.
   cofix COFIX. intros. rewrite idTrace_eq. destruct T.
   - simpl. constructor.
-  - simpl. constructor. apply COFIX. Guarded.
+  - simpl. constructor. apply COFIX. 
 Qed.
 
 Lemma TraceAppAssoc :
@@ -312,7 +312,6 @@ Lemma ForallTraceTautology :
     (forall a, P a) -> ForallTrace P T.
 Proof.
   cofix COFIX. intros. destruct T;constructor;auto.
-  Guarded.
 Qed.
 
 Lemma ForallTraceEq:

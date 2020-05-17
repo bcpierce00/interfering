@@ -2,69 +2,10 @@ Require Import List.
 Import ListNotations.
 Require Import Bool.
 Require Import Coq.Logic.FunctionalExtensionality.
+Require Import Omega.
 Require Import Trace.
+Require Import Machine.
 Require Import ObsTrace.
-
-Section foo.
-
-(* TODO: Make all this match the terminology in the .tex -- e.g., a
-   Contour should correspond to a MachineState, not to a Trace,
-   etc. *)
-
-(* Primitive Abstractions. *)
-
-Variable Word : Type.
-Variable wlt : Word -> Word -> bool.
-Variable weq : Word -> Word -> bool.
-Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
-Variable wplus : Word -> nat -> Word.
-Variable wminus : Word -> nat -> Word.
-
-Variable WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2}.
-
-Definition Addr : Type := Word.
-
-Variable Register : Type.
-Variable PC : Register.
-Variable SP : Register.
-
-Inductive Component:=
-| Mem (a:Addr)
-| Reg (r:Register).
-
-(* A Value is a Word. *)
-Definition Value : Type := Word.
-
-(* A Machine State is just a map from Components to Values. *)
-Definition MachineState := Component -> Value.
-
-(* A Machine State can step to a new Machine State plus an Observation. *)
-Variable step : MachineState -> MachineState * Observation.
-
-Definition CallMap := Value -> nat -> Prop.
-
-Definition isCall (cm: CallMap) (m: MachineState) (args: nat) : Prop :=
-   cm (m (Reg PC)) args.
-
-Definition isRet (mc m: MachineState) : Prop :=
-  m (Reg PC) = wplus (mc (Reg PC)) 4 /\ m (Reg SP) = mc (Reg SP).
-
-Variable PolicyState : Type.
-Variable pstep : MachineState * PolicyState -> option PolicyState.
-(* TODO: Does this ever fail? *)
-Variable initPolicyState : MachineState -> CallMap -> PolicyState.
-
-Definition MPState : Type := MachineState * PolicyState.
-
-Definition ms (mp : MPState) := fst mp.
-Definition ps (mp : MPState) := snd mp.
-
-Definition mpstep (mp : MPState) :=
-  let (m', O) := step (ms mp) in
-  match pstep mp with
-  | Some p' => Some (m', p', O)
-  | None => None
-  end.
 
 (* todo: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MTrace := TraceOf MachineState.
@@ -80,21 +21,6 @@ CoFixpoint MPTraceOf (mp : MPState) : MPTrace :=
   | Some p' => notfinished mp (MPTraceOf (fst (step (ms mp)), p'))
   end.
 
-(* Confidentiality and Integrity Labels *)
-Inductive CLabel :=
-| HC
-| LC.
-
-Inductive ILabel :=
-| HI
-| LI.
-
-Definition Label := (CLabel * ILabel)%type.
-
-Definition Contour := Component -> Label.
-
-Definition integrityOf (l : Label) : ILabel := snd l.
-Definition confidentialityOf (l : Label) : CLabel := fst l.
 
 (****************************)
 (***** Eager Integrity ******)
@@ -161,6 +87,7 @@ Definition variantOf (M N : MachineState) (C : Contour) :=
 
 Hint Unfold variantOf : StackSafety.
 
+
 CoFixpoint ObsTraceOfM (M: MTrace) : ObsTrace :=
   match M with
   | finished m =>
@@ -170,7 +97,7 @@ CoFixpoint ObsTraceOfM (M: MTrace) : ObsTrace :=
     notfinished O (ObsTraceOfM M')
   end.
 
-CoFixpoint ObsTraceOf (MP: MPTrace) : ObsTrace :=
+CoFixpoint ObsTraceOf (MP: MPTrace) : ObsTrace := 
   match MP with
   | finished mp =>
     finished Tau
@@ -183,22 +110,6 @@ Hint Constructors ObsTraceEq : StackSafety.
 
 Hint Constructors ObsTracePrefix : StackSafety.
 
-Lemma ObsTracePrefix_refl : forall OO, ObsTracePrefix OO OO.
-Proof.
-  cofix CH.
-  intros [o | o OO].
-  - destruct o as [w |].
-    + now apply ObsPreFinishedOut1.
-    + now apply ObsPreFinishedTau.
-  - destruct o as [w |].
-    + now apply ObsPreNow, CH.
-    + now apply ObsPreTau1, ObsPreTau2, CH.
-Qed.
-
-(* LEO: I didn't like the non-coinductive nature of this... 
-Definition ObsTracePrefix (OO OO' : TraceOf Observation) : Prop :=
-  exists OO'', ObsTraceEq OO OO'' /\ OO' <<== OO'' \/ ObsTraceEq OO' OO'' /\ OO' <<== OO.
- *)
 
 (* The entire trace MP represents a callee, that terminates when (and if)
    control has returned to the caller, according to the "justReturned" predicate.
@@ -227,7 +138,7 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
                      forall k, 
                        (ms (head MP) k <> ms mpret k \/ (head M') k <> mret' k) ->
                        ms mpret k = mret' k) /\
-      ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M')) /\
+      (ObsTraceOf MP) ~=_O (ObsTraceOfM M')) /\
 
     (* 2. The callee trace is cut short by a monitor fault. *)
     (forall mpret, Last MP mpret -> (* mpstep mpret = None -> *)
@@ -245,7 +156,7 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
         - The observations of MP and M' are the same. 
       *)
      forall mret', ~ Last M' mret' /\
-                   ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M')).
+                   (ObsTraceOf MP) ~=_O (ObsTraceOfM M')).
 
 Hint Unfold EagerStackConfidentiality : StackSafety.
 
@@ -407,9 +318,9 @@ Lemma StrongConfImpliesObsEq_Ret :
     StrongEagerStackConfidentiality R MP MV ->
     forall mpret,
       Last MP mpret -> R (ms mpret) ->
-      ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
+      (ObsTraceOf MP) ~=_O (ObsTraceOfM MV).
 Proof.
-  cofix COFIX.
+  cofix COFIX. 
   intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
 Qed.
 
@@ -795,7 +706,6 @@ Proof.
     eauto.
 Qed.
 
-Require Import Omega.
 
 Lemma FinLastN_unique {A : Type} n (l l' L : list A) :
   FinLastN n L l -> FinLastN n L l' -> l = l'.
@@ -2090,75 +2000,6 @@ Proof.
     constructor. apply COFIX. auto.
 Qed.
 
-Lemma TraceEqImpliesObsTraceEq :
-  forall O O',
-    O ~= O' ->
-    ObsTraceEq O O'.
-Proof.
-  cofix COFIX. intros. inv H.
-  - constructor.
-  - destruct a.
-    + constructor. auto.
-    + constructor. constructor. auto.
-Qed.
-
-Lemma ObsTraceEqImpliesPrefix :
-  forall O O',
-    ObsTraceEq O O' ->
-    O <=_O O'.
-Proof.
-  cofix COFIX. intros. inv H; constructor; apply COFIX; auto.
-Qed.
-
-Lemma ObsTracePrefRemoveTau1 :
-  forall T T', (notfinished Tau T) <=_O T' -> T <=_O T'.
-Proof.
-  cofix COFIX.
-  intros T T' Pref.
-  inversion Pref; subst; clear Pref.
-  + constructor. apply COFIX. auto.
-  + auto. Guarded.
-  + constructor. constructor.
-Qed.
-
-Lemma ObsPrefOverEq :
-  forall O1 O1' O2,
-    O1 ~= O1' ->
-    O1 <=_O O2 ->
-    O1' <=_O O2.
-Proof.
-  cofix COFIX. intros. inv H.
-  - apply H0.
-  - destruct a.
-    + inv H0.
-      * constructor.
-        apply (COFIX (notfinished (Out w) T1) (notfinished (Out w) T2) OO).
-        -- constructor. auto.
-        -- auto.
-      * constructor. apply (COFIX T1 T2 OO); auto.
-      * constructor. apply ObsTraceEqImpliesPrefix. apply TraceEqImpliesObsTraceEq in H1.
-        apply ObsTraceEq_sym. auto.
-    + constructor. apply (COFIX T1 T2 O2); auto. apply ObsTracePrefRemoveTau1. auto.
-Qed.
-
-Lemma ObsEqOverEq :
-  forall O1 O1' O2,
-    O1 ~= O1' ->
-    ObsTraceEq O1 O2 ->
-    ObsTraceEq O1' O2.
-Proof.
-  cofix COFIX. intros. inv H.
-  - apply H0.
-  - destruct a.
-    + inv H0.
-      * constructor.
-        apply (COFIX (notfinished (Out w) T1) (notfinished (Out w) T2) OO'). Guarded.
-        -- constructor. auto.
-        -- auto.
-      * constructor. apply (COFIX T1 T2 OO'); auto.
-      * constructor. apply ObsTraceEq_sym. apply TraceEqImpliesObsTraceEq. auto.
-    + constructor. apply (COFIX T1 T2 O2); auto. apply ObsTraceEqRemoveTau1. auto.
-Qed.
 
 Lemma MTraceOfInf :
   forall m m',
@@ -2229,13 +2070,6 @@ Proof.
       apply (LastTraceEq (MPTraceOf mp) MPsuff) in H8; auto.
 Qed.
 
-Variable weq_implies_eq :
-  forall w1 w2,
-    weq w1 w2 = true -> w1 = w2.
-
-Variable not_weq_implies_neq :
-  forall w1 w2,
-    weq w1 w2 = false -> w1 <> w2.
 
 Lemma EagerImpliesLazyConf :
   forall C MPcall MPpre MPsuffO justReturned,
@@ -2478,6 +2312,7 @@ CoInductive TaggedStep (M: MachineState) (T : TagState) : TagState -> Prop :=
     TaggedStep M T T'
 (* ... *)
 .
+
 
 CoInductive TaggedRun : TagState -> MTrace -> Prop :=
 | RunFinished : forall T M,

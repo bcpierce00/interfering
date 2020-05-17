@@ -1,11 +1,5 @@
 Require Import Trace.
-
-Variable Word:Type.
-
-(* Observations are values, or silent (tau) *)
-Inductive Observation :=
-| Out (w : Word)
-| Tau.
+Require Import Machine.
 
 Definition ObsTrace := TraceOf Observation.
 
@@ -23,7 +17,7 @@ Ltac app_frobber :=
 
 (********************** ObsTrace Equivalence *************************)
 
-CoInductive ObsTraceEq : TraceOf Observation -> TraceOf Observation -> Prop :=
+CoInductive ObsTraceEq : ObsTrace -> ObsTrace -> Prop :=
 | ObsEqTau1 : forall OO OO',
     ObsTraceEq OO OO' ->
     ObsTraceEq (notfinished Tau OO) OO'
@@ -51,6 +45,8 @@ the previous two cases.  Maybe try:
 LEO: That was the other thing I had in mind. I'll see what makes proofs easier.
 (Note that this proposal overlaps with the first two cases, as well as the last one.)
  *)
+
+Notation "OO' ~=_O OO" := (ObsTraceEq OO' OO) (at level 80).
 
 Lemma ObsTraceEq_sym :
   forall O O',
@@ -89,7 +85,7 @@ Proof.
     eapply ObsEqAllTau.
 Qed.
 
-Fixpoint tauN (n : nat) (T : TraceOf Observation) : TraceOf Observation :=
+Fixpoint tauN (n : nat) (T : ObsTrace) : ObsTrace := 
   match n with
   | O => T
   | S n' => notfinished Tau (tauN n' T)
@@ -189,8 +185,13 @@ Qed.
 
 (********************** ObsTrace Prefix *************************)
 
+(* LEO: I didn't like the non-coinductive nature of this... 
+Definition ObsTracePrefix (OO OO' : TraceOf Observation) : Prop :=
+  exists OO'', ObsTraceEq OO OO'' /\ OO' <<== OO'' \/ ObsTraceEq OO' OO'' /\ OO' <<== OO.
+ *)
+
 (* The second is a prefix of the first, up to Tau *)
-CoInductive ObsTracePrefix : TraceOf Observation -> TraceOf Observation -> Prop :=
+CoInductive ObsTracePrefix : ObsTrace -> ObsTrace -> Prop :=
 | ObsPreTau1 : forall OO OO',
     ObsTracePrefix OO OO' ->
     ObsTracePrefix (notfinished Tau OO) OO'
@@ -271,4 +272,90 @@ Proof.
       app_frobber.
       apply ObsPreTau1.
       eauto.
+Qed.
+
+Lemma ObsTracePrefix_refl : forall OO, ObsTracePrefix OO OO.
+Proof.
+  cofix CH.
+  intros [o | o OO].
+  - destruct o as [w |].
+    + now apply ObsPreFinishedOut1.
+    + now apply ObsPreFinishedTau.
+  - destruct o as [w |].
+    + now apply ObsPreNow, CH.
+    + now apply ObsPreTau1, ObsPreTau2, CH.
+Qed.
+
+
+(********************** Relationship betweeen Traces and ObsTraces  *************************)
+
+
+Lemma TraceEqImpliesObsTraceEq :
+  forall O O',
+    O ~= O' ->
+    ObsTraceEq O O'.
+Proof.
+  cofix COFIX. intros. inv H.
+  - constructor.
+  - destruct a.
+    + constructor. auto.
+    + constructor. constructor. auto.
+Qed.
+
+Lemma ObsTraceEqImpliesPrefix :
+  forall O O',
+    ObsTraceEq O O' ->
+    O <=_O O'.
+Proof.
+  cofix COFIX. intros. inv H; constructor; apply COFIX; auto.
+Qed.
+
+Lemma ObsTracePrefRemoveTau1 :
+  forall T T', (notfinished Tau T) <=_O T' -> T <=_O T'.
+Proof.
+  cofix COFIX.
+  intros T T' Pref.
+  inversion Pref; subst; clear Pref.
+  + constructor. apply COFIX. auto.
+  + auto. 
+  + constructor. constructor.
+Qed.
+
+Lemma ObsPrefOverEq :
+  forall O1 O1' O2,
+    O1 ~= O1' ->
+    O1 <=_O O2 ->
+    O1' <=_O O2.
+Proof.
+  cofix COFIX. intros. inv H.
+  - apply H0.
+  - destruct a.
+    + inv H0.
+      * constructor.
+        apply (COFIX (notfinished (Out w) T1) (notfinished (Out w) T2) OO).
+        -- constructor. auto.
+        -- auto.
+      * constructor. apply (COFIX T1 T2 OO); auto.
+      * constructor. apply ObsTraceEqImpliesPrefix. apply TraceEqImpliesObsTraceEq in H1.
+        apply ObsTraceEq_sym. auto.
+    + constructor. apply (COFIX T1 T2 O2); auto. apply ObsTracePrefRemoveTau1. auto.
+Qed.
+
+Lemma ObsEqOverEq :
+  forall O1 O1' O2,
+    O1 ~= O1' ->
+    ObsTraceEq O1 O2 ->
+    ObsTraceEq O1' O2.
+Proof.
+  cofix COFIX. intros. inv H.
+  - apply H0.
+  - destruct a.
+    + inv H0.
+      * constructor.
+        apply (COFIX (notfinished (Out w) T1) (notfinished (Out w) T2) OO'). 
+        -- constructor. auto.
+        -- auto.
+      * constructor. apply (COFIX T1 T2 OO'); auto.
+      * constructor. apply ObsTraceEq_sym. apply TraceEqImpliesObsTraceEq. auto.
+    + constructor. apply (COFIX T1 T2 O2); auto. apply ObsTraceEqRemoveTau1. auto.
 Qed.
