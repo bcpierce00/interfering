@@ -3,6 +3,7 @@ Import ListNotations.
 Require Import Bool.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Trace.
+Require Import Paco.paco.
 
 Section foo.
 
@@ -119,25 +120,36 @@ Definition EagerStackIntegrity (C : Contour) (MP: MPTrace) : Prop :=
         InTrace mp MP -> ms (head MP) k = ms mp k.
 
 (* CoInductive variant *)
-CoInductive EagerStackIntegrity' (C : Contour) : MPTrace -> Prop :=
-| SI_finished : forall mp, EagerStackIntegrity' C (finished mp)
+(* RB: TODO: Indexing over the contour as well to get cleaner coinduction with
+   Paco while sorting things out. *)
+Inductive EagerStackIntegrity'_gen R :
+  Contour -> MPTrace -> Prop :=
+| SI_finished : forall C mp,
+    EagerStackIntegrity'_gen R C (finished mp)
 | SI_notfinished :
-    forall (mp: MPState) (MP : MPTrace),
+    forall (C : Contour) (mp: MPState) (MP : MPTrace),
     (forall (k: Component), integrityOf (C k) = HI -> ms mp k = ms (head MP) k) ->
-    EagerStackIntegrity' C MP ->
-    EagerStackIntegrity' C (notfinished mp MP).
+    R C MP ->
+    EagerStackIntegrity'_gen R C (notfinished mp MP).
+Hint Constructors EagerStackIntegrity'_gen : core.
+
+Definition EagerStackIntegrity' (C : Contour) (MP : MPTrace) :=
+  paco2 EagerStackIntegrity'_gen bot2 C MP.
+Hint Unfold EagerStackIntegrity' : core.
+Lemma EagerStackIntegrity'_mon : monotone2 EagerStackIntegrity'_gen. Proof. pmonauto. Qed.
+Hint Resolve EagerStackIntegrity'_mon : paco.
 
 Lemma StackIntegrityEquiv : forall (C:Contour) (MP: MPTrace),
      EagerStackIntegrity C MP -> EagerStackIntegrity' C MP.
 Proof.
-  cofix COFIX.
-  intros.
+  intros C. pcofix COFIX.
+  intros MP H; pfold.
   destruct MP.
   - constructor.
   - constructor.
     + intros. unfold EagerStackIntegrity in H.  simpl in H.
       apply H; auto. constructor. apply head_InTrace.
-    + apply COFIX.
+    + right. apply COFIX.
       unfold EagerStackIntegrity in *.  intros. simpl in H.
       erewrite <- H; auto.
       * apply H; auto.  constructor. auto.
@@ -147,16 +159,15 @@ Qed.
 Lemma StackIntegrity'Equiv : forall (C:Contour) (MP: MPTrace),
      EagerStackIntegrity' C MP -> EagerStackIntegrity C MP.
 Proof.
-  intros.
   unfold EagerStackIntegrity.
-  intros.
-  induction H1.
+  intros C MP H1 k H2 mp H3.
+  induction H3 as [| | ? ? ? IHInTrace].
   - auto.
   - auto.
-  - simpl. inversion H. subst. rewrite <- IHInTrace.
-    +  apply H4; auto.
-    +  inversion H.  auto.
-Qed. 
+  - simpl. pinversion H1. subst. rewrite <- IHInTrace.
+    +  punfold H6.
+    +  apply H6.
+Qed.
 
 (* NB: It doesn't matter whether we calculate this at a
 call instruction (as in a subtrace) or at the first
@@ -245,25 +256,25 @@ Definition EagerStackConfidentiality (C : Contour) (MM : MTrace) :=
 (* APT+SEAN: On third thought, we're not sure we buy this. Why should the variant be allowed
 to fail-stop more often than the reference trace? *)
 
-CoInductive ObsTraceEq : TraceOf Observation -> TraceOf Observation -> Prop :=
-| ObsEqTau1 : forall OO OO',
-    ObsTraceEq OO OO' ->
-    ObsTraceEq (notfinished Tau OO) OO'
-| ObsEqTau2 : forall OO OO',
-    ObsTraceEq OO OO' ->
-    ObsTraceEq OO (notfinished Tau OO')
-| ObsEqNow : forall w OO OO',
-    ObsTraceEq OO OO' ->
-    ObsTraceEq (notfinished (Out w) OO) (notfinished (Out w) OO')
+Inductive ObsTraceEq_gen R : TraceOf Observation -> TraceOf Observation -> Prop :=
+| ObsEqTau1 : forall OO OO'
+                     (HR : R OO OO' : Prop),
+    ObsTraceEq_gen R (notfinished Tau OO) OO'
+| ObsEqTau2 : forall OO OO'
+                     (HR : R OO OO' : Prop),
+    ObsTraceEq_gen R OO (notfinished Tau OO')
+| ObsEqNow : forall w OO OO'
+                     (HR : R OO OO' : Prop),
+    ObsTraceEq_gen R (notfinished (Out w) OO) (notfinished (Out w) OO')
 | ObsEqFinishedOut : forall w,
-    ObsTraceEq (finished (Out w)) (finished (Out w))
+    ObsTraceEq_gen R (finished (Out w)) (finished (Out w))
 | ObsEqFinishedTau :
-    ObsTraceEq (finished Tau) (finished Tau)
+    ObsTraceEq_gen R (finished Tau) (finished Tau)
 (* The last thing we need is a way of handling *all-tau* traces.
    There are a couple of ways of doing that, not sure what will
    play better in proofs. *)
 | ObsEqAllTau : forall OO,
-     ObsTraceEq OO OO.
+     ObsTraceEq_gen R OO OO.
 (* APT: Establishing equality between traces seems hard, and this overlaps
 the previous two cases.  Maybe try:
    ForallTrace (fun o => o = Tau) OO ->
@@ -273,39 +284,53 @@ the previous two cases.  Maybe try:
 LEO: That was the other thing I had in mind. I'll see what makes proofs easier.
 (Note that this proposal overlaps with the first two cases, as well as the last one.)
  *)
+Hint Constructors ObsTraceEq_gen : core.
+
+Definition ObsTraceEq (OO OO' : TraceOf Observation) :=
+  paco2 ObsTraceEq_gen bot2 OO OO'.
+Hint Unfold ObsTraceEq : core.
+Lemma ObsTraceEq_mon : monotone2 ObsTraceEq_gen. Proof. pmonauto. Qed.
+Hint Resolve ObsTraceEq_mon : paco.
 
 (* The second is a prefix of the first, up to Tau *)
-CoInductive ObsTracePrefix : TraceOf Observation -> TraceOf Observation -> Prop :=
-| ObsPreTau1 : forall OO OO',
-    ObsTracePrefix OO OO' ->
-    ObsTracePrefix (notfinished Tau OO) OO'
-| ObsPreTau2 : forall OO OO',
-    ObsTracePrefix OO OO' ->
-    ObsTracePrefix OO (notfinished Tau OO')
-| ObsPreNow : forall w OO OO',
-    ObsTracePrefix OO OO' ->
-    ObsTracePrefix (notfinished (Out w) OO) (notfinished (Out w) OO')
+Inductive ObsTracePrefix_gen R : TraceOf Observation -> TraceOf Observation -> Prop :=
+| ObsPreTau1 : forall OO OO'
+                      (HR : R OO OO' : Prop),
+    ObsTracePrefix_gen R (notfinished Tau OO) OO'
+| ObsPreTau2 : forall OO OO'
+                      (HR : R OO OO' : Prop),
+    ObsTracePrefix_gen R OO (notfinished Tau OO')
+| ObsPreNow : forall w OO OO'
+                      (HR : R OO OO' : Prop),
+    ObsTracePrefix_gen R (notfinished (Out w) OO) (notfinished (Out w) OO')
 | ObsPreFinishedOut1 : forall w,
-    ObsTracePrefix (finished (Out w)) (finished (Out w))
+    ObsTracePrefix_gen R (finished (Out w)) (finished (Out w))
 | ObsPreFinishedOut2 : forall w OO,
-    ObsTracePrefix (notfinished (Out w) OO) (finished (Out w))
+    ObsTracePrefix_gen R (notfinished (Out w) OO) (finished (Out w))
 | ObsPreFinishedTau : forall OO,
-    ObsTracePrefix OO (finished Tau)
+    ObsTracePrefix_gen R OO (finished Tau)
 | ObsPreAllTau : forall OO,
-     ObsTracePrefix OO OO.
+     ObsTracePrefix_gen R OO OO.
+Hint Constructors ObsTracePrefix_gen : core.
+
+Definition ObsTracePrefix (OO OO' : TraceOf Observation) :=
+  paco2 ObsTracePrefix_gen bot2 OO OO'.
+Hint Unfold ObsTracePrefix : core.
+Lemma ObsTracePrefix_mon : monotone2 ObsTracePrefix_gen. Proof. pmonauto. Qed.
+Hint Resolve ObsTracePrefix_mon : paco.
 
 Notation "OO' <=_O OO" := (ObsTracePrefix OO OO') (at level 80).
 
 Lemma ObsTracePrefix_refl : forall OO, ObsTracePrefix OO OO.
 Proof.
-  cofix CH.
-  intros [o | o OO].
+  pcofix CH.
+  intros [o | o OO]; pfold.
   - destruct o as [w |].
     + now apply ObsPreFinishedOut1.
     + now apply ObsPreFinishedTau.
   - destruct o as [w |].
-    + now apply ObsPreNow, CH.
-    + now apply ObsPreTau1, ObsPreTau2, CH.
+    + apply ObsPreNow. now auto.
+    + apply ObsPreTau1. left. pfold. apply ObsPreTau2. now auto.
 Qed.
 
 (* LEO: I didn't like the non-coinductive nature of this... 
@@ -360,7 +385,7 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
      forall mret', ~ Last M' mret' /\
                    ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M')).
 
-CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
+Inductive StrongEagerStackConfidentiality_gen (R : MachineState -> Prop) Rcoind :
   MPTrace -> MTrace -> Prop :=
 | StrongConfStep :
     (* Maybe the top one should have a not ret *)
@@ -369,17 +394,24 @@ CoInductive StrongEagerStackConfidentiality (R : MachineState -> Prop) :
       step m' = (head M', O) ->
       (forall k, ms (head MP) k <> ms mp k \/
                  (head M') k <> m' k -> ms (head MP) k = head M' k) ->
-      StrongEagerStackConfidentiality R MP M' ->
-      StrongEagerStackConfidentiality R (notfinished mp MP) (notfinished m' M')
+      Rcoind MP M' ->
+      StrongEagerStackConfidentiality_gen R Rcoind (notfinished mp MP) (notfinished m' M')
 | StrongConfEnd :
     forall mp m,
       R (ms mp) -> R m ->
-      StrongEagerStackConfidentiality R (finished mp) (finished m)
+      StrongEagerStackConfidentiality_gen R Rcoind (finished mp) (finished m)
 | StrongConfNotMStep :
     forall mp MV,
       ~ (R (ms mp)) ->
       (* mpstep mp = None ->  *)
-      StrongEagerStackConfidentiality R (finished mp) MV.
+      StrongEagerStackConfidentiality_gen R Rcoind (finished mp) MV.
+Hint Constructors StrongEagerStackConfidentiality_gen : core.
+
+Definition StrongEagerStackConfidentiality (R : MachineState -> Prop) MP M :=
+  paco2 (StrongEagerStackConfidentiality_gen R) bot2 MP M.
+Hint Unfold StrongEagerStackConfidentiality : core.
+Lemma StrongEagerStackConfidentiality_mon (R : MachineState -> Prop) : monotone2 (StrongEagerStackConfidentiality_gen R). Proof. pmonauto. Qed.
+Hint Resolve StrongEagerStackConfidentiality_mon : paco.
 
 Lemma confStepPreservesVariant :
   forall C mp m' p' OM mv mv' ON,
@@ -405,12 +437,12 @@ Lemma StrongConfImpliesObsEq_Ret :
       Last MP mpret -> R (ms mpret) ->
       ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
 Proof.
-  cofix COFIX.
-  intros C R MP MV Var Conf.
-  inversion Conf; simpl.
+  pcofix COFIX.
+  intros C R MP MV Var Conf; pfold.
+  pinversion Conf; simpl.
   - intros mpret HLast HR.
     match goal with
-    | [ |- ObsTraceEq ?T1 ?T2 ] =>
+    | [ |- ObsTraceEq_gen _ ?T1 ?T2 ] =>
       rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
     repeat match goal with
@@ -421,7 +453,7 @@ Proof.
     destruct (pstep mp) eqn:HPStepMP; inversion H.
     destruct O.
     + apply ObsEqNow.
-      eapply COFIX; eauto.
+      right. eapply COFIX; eauto.
       eapply confStepPreservesVariant; eauto.
       * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
         subst.
@@ -431,12 +463,12 @@ Proof.
         assert (head MV = m') as HN
           by (destruct H4; auto).
         rewrite <- HM.
-        rewrite <- HN.  
+        rewrite <- HN.
         apply Var.
       * inversion HLast; eauto.
     + apply ObsEqTau1.
-      apply ObsEqTau2.
-      eapply COFIX; eauto.
+      left. pfold. apply ObsEqTau2.
+      right. eapply COFIX; eauto.
       eapply confStepPreservesVariant; eauto.
       * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
         subst.
@@ -451,7 +483,7 @@ Proof.
       * inversion HLast; eauto.
   - intros mpret HLast HR.
     match goal with
-    | [ |- ObsTraceEq ?T1 ?T2 ] =>
+    | [ |- ObsTraceEq_gen _ ?T1 ?T2 ] =>
       rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
     apply ObsEqFinishedTau.
@@ -469,12 +501,12 @@ Lemma StrongConfImpliesObsEq_Fault :
       Last MP mpret -> ~ (R (ms mpret)) ->
       (ObsTraceOf MP) <=_O (ObsTraceOfM MV).
 Proof.  
-  cofix COFIX.
-  intros C R MP MV Var Conf.
-  inversion Conf; simpl.
+  pcofix COFIX.
+  intros C R MP MV Var Conf; pfold.
+  pinversion Conf; simpl.
   - intros mpret HLast HR.
     match goal with
-    | [ |- ObsTracePrefix ?T1 ?T2 ] =>
+    | [ |- ObsTracePrefix_gen _ ?T1 ?T2 ] =>
       rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
     unfold mpstep in *.
@@ -485,15 +517,15 @@ Proof.
            end.
     destruct O.
     + apply ObsPreNow.
-      eapply COFIX; eauto.
+      right. eapply COFIX; eauto.
       eapply confStepPreservesVariant; eauto.
       * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
         subst.
         eauto.
       * inversion HLast; eauto.
     + apply ObsPreTau1.
-      apply ObsPreTau2.
-      eapply COFIX; eauto.
+      left. pfold. apply ObsPreTau2.
+      right. eapply COFIX; eauto.
       eapply confStepPreservesVariant; eauto.
       * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
         subst.
@@ -504,7 +536,7 @@ Proof.
     exfalso; eauto.
   - intros mpret HLast HR.
     match goal with
-    | [ |- ObsTracePrefix ?T1 ?T2 ] =>
+    | [ |- ObsTracePrefix_gen _ ?T1 ?T2 ] =>
       rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
     destruct MV.
@@ -520,12 +552,12 @@ Lemma StrongConfImpliesObsEq_Inf :
     (forall mpret, ~ Last MP mpret) ->
     ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
 Proof.
-  cofix COFIX.
-  intros C R MP MV Var Conf.
-  inversion Conf; simpl.
+  pcofix COFIX.
+  intros C R MP MV Var Conf; pfold.
+  pinversion Conf; simpl.
   - intros HNotR.
     match goal with
-    | [ |- ObsTraceEq ?T1 ?T2 ] =>
+    | [ |- ObsTraceEq_gen _ ?T1 ?T2 ] =>
       rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
     repeat match goal with
@@ -536,7 +568,7 @@ Proof.
     destruct (pstep mp) eqn:HPStepMP; inversion H.
     destruct O.
     + apply ObsEqNow.
-      eapply COFIX; eauto.
+      right. eapply COFIX; eauto.
       eapply confStepPreservesVariant; eauto.
       * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
         subst.
@@ -551,8 +583,8 @@ Proof.
       * subst.
         intros mpret HNotLast; eapply HNotR; econstructor; eauto.
     + apply ObsEqTau1.
-      apply ObsEqTau2.
-      eapply COFIX; eauto.
+      left. pfold. apply ObsEqTau2.
+      right. eapply COFIX; eauto.
       eapply confStepPreservesVariant; eauto.
       * unfold mpstep. rewrite HStepMP. rewrite HPStepMP.
         subst.
@@ -568,14 +600,14 @@ Proof.
         intros mpret HNotLast; eapply HNotR; econstructor; eauto.        
   - intros HNotLast. 
     match goal with
-    | [ |- ObsTraceEq ?T1 ?T2 ] =>
+    | [ |- ObsTraceEq_gen _ ?T1 ?T2 ] =>
       rewrite (idTrace_eq T1); rewrite (idTrace_eq T2); simpl
     end.
     apply ObsEqFinishedTau.
   - intros HNotLast.
     exfalso.
     eapply HNotLast; econstructor.
-Qed.    
+Qed.
 
 Lemma ComponentConfTrans :
   forall (M0 M1 M2 N0 N1 N2 : MachineState),
@@ -653,7 +685,7 @@ Proof.
   intros C R MP MV Var Conf mpret HLast HR.
   generalize dependent MV.
   induction HLast; subst; eauto; intros MV Var Conf;
-  inversion Conf; subst; eauto; clear Conf; simpl in *.
+  pinversion Conf; subst; eauto; clear Conf; simpl in *.
   - exists m; split; [constructor|].
     intros k Hk.
     inversion Hk; exfalso; eauto.
@@ -677,10 +709,10 @@ Proof.
   generalize dependent MP.
   induction HLast.
   - intros MP Var Conf HNotLast.
-    inversion Conf; subst; clear Conf; eauto;
+    pinversion Conf; subst; clear Conf; eauto;
       eapply HNotLast; econstructor.
   - intros MP Var Conf HNotLast.
-    inversion Conf; subst; clear Conf; simpl in *; eauto.
+    pinversion Conf; subst; clear Conf; simpl in *; eauto.
     + eapply (IHHLast MP0); eauto using confStepPreservesVariant.
       intros mpret HLast'; eapply HNotLast; econstructor; eauto.
     + eapply HNotLast; econstructor; eauto.
@@ -784,16 +816,24 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
    find the starts of calls and then take prefixes/suffixes when we need them.
    Also we don't really need to update contours so much as just generate them
    from the state. *)
-CoInductive FindCall (cm: CallMap) : MTrace -> Contour -> MTrace -> Prop :=
+Inductive FindCall_gen (cm: CallMap) R :
+  MTrace -> Contour -> MTrace -> Prop :=
   | FindCallNow : forall C MM MM' args,
       (* Current instruction is a call *)
       isCall cm (head MM) args ->
       (* Construct the contour *)
       makeContour args (head MM) = C ->
-      FindCall cm MM C MM'
+      FindCall_gen cm R MM C MM'
   | FindCallLater: forall C MM MM' M,
-      FindCall cm MM C MM' ->
-      FindCall cm (notfinished M MM) C MM'.
+      R MM C MM' ->
+      FindCall_gen cm R (notfinished M MM) C MM'.
+Hint Constructors FindCall_gen : core.
+
+Definition FindCall (cm : CallMap) (M : MTrace) (C : Contour) (M' : MTrace) :=
+  paco3 (FindCall_gen cm) bot3 M C M'.
+Hint Unfold FindCall : core.
+Lemma FindCall_mon cm : monotone3 (FindCall_gen cm). Proof. pmonauto. Qed.
+Hint Resolve FindCall_mon : paco.
 
 (* SNA: FindCall via SplitInclusive turns out to work well with other lemmas *)               
 Inductive FindCallMP (cm: CallMap) : MPTrace -> Contour -> MPTrace -> Prop :=
@@ -964,11 +1004,11 @@ Definition WellFormedVS (M : MachineState) (vs : VarStack) : Prop :=
   (* The variant state is in the trace of its own init variant. *)
   (Forall (fun vse => InTrace (curr_variant vse) (MTraceOf (init_variant vse))) vs).
 
-CoInductive EagerStackSafetyTest (cm : CallMap) : MPTrace -> VarStack -> Prop :=
+Inductive EagerStackSafetyTest_gen (cm : CallMap) R : MPTrace -> VarStack -> Prop :=
 | EagerTestHalt :
     forall mp vs,
       WellFormedVS (ms mp) vs ->
-      EagerStackSafetyTest cm (finished mp) vs
+      EagerStackSafetyTest_gen cm R (finished mp) vs
 | EagerTestStep :
     forall mp MP vs vs' m' p' OM,
       (* Not a call or a return *)
@@ -989,9 +1029,9 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MPTrace -> VarStack -> Prop :=
       (* Step all variants and just recurse *)
       VSEs_step vs vs' ->
       head MP = (m',p') ->
-      EagerStackSafetyTest cm MP vs' ->
+      R MP vs' ->
       (* Conclude for current. *)
-      EagerStackSafetyTest cm (notfinished mp MP) vs
+      EagerStackSafetyTest_gen cm R (notfinished mp MP) vs
 | EagerTestCall :
     forall args mp MP vs vs' m' p' OM C,      
       (* Is a call *)
@@ -1016,15 +1056,15 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MPTrace -> VarStack -> Prop :=
       makeContour args (ms mp) = C ->
       (* Recurse with every variant at the new contour at the top. *)
       (forall mvar, variantOf (ms mp) mvar C ->
-                    EagerStackSafetyTest cm MP
-                                         ({| init_machine := ms mp
-                                           ; init_variant := mvar
-                                           ; curr_variant := mvar
-                                           ; contour := C
-                                           ; retP := isRet (ms mp)
-                                          |} :: vs')) ->
+                    R MP
+                      ({| init_machine := ms mp
+                          ; init_variant := mvar
+                          ; curr_variant := mvar
+                          ; contour := C
+                          ; retP := isRet (ms mp)
+                       |} :: vs')) ->
       (* Conclude for current. *)
-      EagerStackSafetyTest cm (notfinished mp MP) vs
+      EagerStackSafetyTest_gen cm R (notfinished mp MP) vs
 | EagerTestRet :
     forall mp MP vs vs' m' p' OM,          
       (* Is a return *)
@@ -1047,9 +1087,16 @@ CoInductive EagerStackSafetyTest (cm : CallMap) : MPTrace -> VarStack -> Prop :=
       VSEs_step vs vs' ->
       head MP = (m',p') ->
       (* Recurse but take of the top of the stack. *)
-      EagerStackSafetyTest cm MP (tl vs') ->
+      R MP (tl vs') ->
       (* Conclude for current. *)
-      EagerStackSafetyTest cm (notfinished mp MP) vs.
+      EagerStackSafetyTest_gen cm R (notfinished mp MP) vs.
+Hint Constructors EagerStackSafetyTest_gen : core.
+
+Definition EagerStackSafetyTest (cm : CallMap) (MP : MPTrace) (vs : VarStack) :=
+  paco2 (EagerStackSafetyTest_gen cm) bot2 MP vs.
+Hint Unfold EagerStackSafetyTest : core.
+Lemma EagerStackSafetyTest_mon cm : monotone2 (EagerStackSafetyTest_gen cm). Proof. pmonauto. Qed.
+Hint Resolve EagerStackSafetyTest_mon : paco.
 
 Definition EagerStackSafetyTest' cm C MP :=
   forall mv, variantOf (ms (head MP)) mv C ->
@@ -1070,49 +1117,54 @@ Ltac progress_integrity :=
            assert (Y = X) by (eapply FinLast_unique; eauto); subst; clear H2
          end.
 
+Lemma variantOf_id C m : variantOf m m C.
+Proof.
+  unfold variantOf. reflexivity.
+Qed.
+
 Theorem TestImpliesIntegrityToplevel :
   forall cm C MM vs,
     (exists vse, FinLast vse vs /\ contour vse = C) ->
   EagerStackSafetyTest cm MM vs -> EagerStackIntegrity' C MM.
 Proof.
-  cofix COFIX.
-  intros cm C MP vs [vse_last [HLast HC]] Safety.
-  inversion Safety; subst.
+  (* RB: TODO: This is where EagerStackIntegrity' needed to index over
+     contours. Actually, it made no difference in the end. *)
+  pcofix COFIX.
+  intros cm C MP vs vse_last HLast HC Safety; pfold.
+  pinversion Safety; subst.
   - apply SI_finished.
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H6; simpl.
       eauto using FinLast_implies_In.
-    + apply (COFIX cm (contour vse_last) MP0 vs'); auto.
-      unfold VSEs_step in *.
+    + unfold VSEs_step in *.
       destruct (H3 vse_last (FinLast_implies_In vse_last vs HLast))
         as [N' [ON [HN' HConf]]].
-      exists (upd_curr N' vse_last); split; auto.
+      right. eapply (COFIX cm (contour (upd_curr N' vse_last)) MP0 vs'); auto.
       eapply VSE_step_preserves_last; eauto.
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H5.
       eauto using FinLast_implies_In.
-    + apply (COFIX cm (contour vse_last) MP0 ((Build_VSE (ms mp) (ms mp) (ms mp) (makeContour args (ms mp)) (isRet (ms mp)))::vs')).
-      * unfold VSEs_step in *.
-        destruct (H2 vse_last)
-          as [N' [ON [HN' HConf]]]; eauto using FinLast_implies_In.
-        exists (upd_curr N' vse_last); split; auto.
-        right; eauto using VSE_step_preserves_last.
-      * apply H7.
-        unfold variantOf.
-        auto.
+    + unfold VSEs_step in *.
+      destruct (H2 vse_last)
+        as [N' [ON [HN' HConf]]]; eauto using FinLast_implies_In.
+      right. eapply (COFIX cm (contour (upd_curr N' vse_last)) MP0 ((Build_VSE (ms mp) (ms mp) (ms mp) (makeContour args (ms mp)) (isRet (ms mp)))::vs')).
+      * right; eauto using VSE_step_preserves_last.
+      * reflexivity.
+      * specialize (H7 (ms mp) (variantOf_id _ _)).
+        destruct H7 as [H7 | H7]; easy.
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H5.
       eauto using FinLast_implies_In.
-    + apply (COFIX cm (contour vse_last) MP0 (tl vs')); auto.
-      unfold VSEs_step in *.
+    + unfold VSEs_step in *.
       destruct (H2 vse_last)
         as [N' [ON [HN' HConf]]]; eauto using FinLast_implies_In.
+      right. eapply (COFIX cm (contour (upd_curr N' vse_last)) MP0 (tl vs')); auto.
       destruct vs.
       * inversion H4; subst.
         inversion HLast.
@@ -1127,13 +1179,20 @@ Proof.
         }
 Qed.
 
-CoInductive MPStepCompatible : MPTrace -> Prop :=
-| CompFin  : forall mp, MPStepCompatible (finished mp)
+Inductive MPStepCompatible_gen R : MPTrace -> Prop :=
+| CompFin  : forall mp, MPStepCompatible_gen R (finished mp)
 | CompStep :
     forall mp MP,
       (exists o, mpstep mp = Some (ms (head MP), ps (head MP), o)) ->
-      MPStepCompatible MP ->
-      MPStepCompatible (notfinished mp MP).
+      R MP ->
+      MPStepCompatible_gen R (notfinished mp MP).
+Hint Constructors MPStepCompatible_gen : core.
+
+Definition MPStepCompatible (MP : MPTrace) :=
+  paco1 MPStepCompatible_gen bot1 MP.
+Hint Unfold MPStepCompatible : core.
+Lemma MPStepCompatible_mon : monotone1 MPStepCompatible_gen. Proof. pmonauto. Qed.
+Hint Resolve MPStepCompatible_mon : paco.
 
 (*
 Lemma preserve...
@@ -1549,11 +1608,18 @@ definition but I couldn't actually make any of the proofs go through. *)
 (* Definition RealMPTrace' (MP:MPTrace) : Prop := 
   TraceEq MP (MPTraceOf (head MP)).*)
 
-CoInductive RealMPTrace' : MPState -> MPTrace -> Prop :=
-| RMP0 : forall mp, pstep mp = None -> RealMPTrace' mp (finished mp)
+CoInductive RealMPTrace'_gen R : MPState -> MPTrace -> Prop :=
+| RMP0 : forall mp, pstep mp = None -> RealMPTrace'_gen R mp (finished mp)
 | RMP1 : forall mp MP p', pstep mp = Some p' ->
-                       RealMPTrace' (fst (step (ms mp)), p') MP -> 
-                       RealMPTrace' mp (notfinished mp MP).
+                       R (fst (step (ms mp)), p') MP ->
+                       RealMPTrace'_gen R mp (notfinished mp MP).
+Hint Constructors RealMPTrace'_gen : core.
+
+Definition RealMPTrace' (mp : MPState) (MP : MPTrace) :=
+  paco2 RealMPTrace'_gen bot2 mp MP.
+Hint Unfold RealMPTrace' : core.
+Lemma RealMPTrace'_mon : monotone2 RealMPTrace'_gen. Proof. pmonauto. Qed.
+Hint Resolve RealMPTrace'_mon : paco.
 
 Lemma MPTraceOfHead: forall mp, mp = head (MPTraceOf mp).
 Proof.
@@ -1566,10 +1632,10 @@ Qed.
 Lemma RealMPTraceSame : forall MP, RealMPTrace MP -> RealMPTrace' (head MP) MP. 
 Proof.
   unfold RealMPTrace.
-  cofix COFIX.
-  intros.
-  rewrite idTrace_eq in H. simpl in H. 
-  destruct MP as [m | m MP'] eqn:?. 
+  pcofix COFIX.
+  intros MP H; pfold.
+  rewrite idTrace_eq in H. simpl in H.
+  destruct MP as [m | m MP'] eqn:?.
   - simpl in *. 
     destruct (pstep m) eqn:?. 
     + inversion H. 
@@ -1580,31 +1646,31 @@ Proof.
       econstructor; eauto.
       set (mp' := (fst (step (ms m)), p)).
       pattern mp' at 1.   (* Can't use rewrite...at with cofix! *)
-      rewrite MPTraceOfHead.  
-      apply COFIX. 
+      rewrite MPTraceOfHead.
+      right. apply COFIX.
       rewrite (MPTraceOfHead mp') at 1. auto.
-    + inversion H. 
+    + inversion H.
 Qed.
 
 (* APT: Should abandon RealMPTrace for RealMPTrace'',
 which is provably equivalent to RealMPTrace'. *)
 Definition RealMPTrace'' MP := TraceEq MP (MPTraceOf (head MP)).
 
-Ltac inv H := inversion H; subst; clear H. 
+Ltac inv H := (pinversion H || inversion H); subst; clear H.
 
 Lemma RealMPTrace'Same : forall m MP, RealMPTrace' m MP ->
                                     TraceEq MP (MPTraceOf m).
 Proof.
- cofix COFIX.
- intros.
- inv H. 
+ pcofix COFIX.
+ intros m mp H; pfold.
+ inv H.
  - rewrite idTrace_eq; simpl.
-   rewrite H0. 
-   apply TraceEqRefl.
- - rewrite idTrace_eq; simpl. 
-   rewrite H0. 
-   constructor. 
-   eapply COFIX; eauto.
+   rewrite H0.
+   constructor.
+ - rewrite idTrace_eq; simpl.
+   rewrite H0.
+   constructor.
+   right. eapply COFIX; eauto.
 Qed.
 
 Lemma RealMPTrace'Eq : forall m MP,
@@ -1613,9 +1679,9 @@ Lemma RealMPTrace'Eq : forall m MP,
       TraceEq MP MP1 ->
       RealMPTrace' m MP1. 
 Proof.
-  cofix COFIX. 
-  intros.
-  inv H. 
+  pcofix COFIX.
+  intros m MP H MP1 H0; pfold.
+  inv H.
   - destruct MP1. 
     + inv H0. constructor; auto.
     + inv H0.
@@ -1628,28 +1694,28 @@ Qed.
 Lemma RealMPTrace''Same : forall MP, RealMPTrace'' MP -> RealMPTrace' (head MP) MP. 
 Proof.
   unfold RealMPTrace''.
-  intro MP. 
-  remember (head MP) as m0. 
-  generalize dependent m0. 
-  generalize dependent MP. 
-  cofix COFIX.
-  intros.
-  rewrite idTrace_eq in H. simpl in H. 
-  destruct MP as [m | m MP'] eqn:?. 
-  - destruct (pstep m0) eqn:?. 
-    + inversion H. 
+  intro MP.
+  remember (head MP) as m0.
+  generalize dependent m0.
+  generalize dependent MP.
+  pcofix COFIX.
+  intros MP m0 Heqm0 H; pfold.
+  rewrite idTrace_eq in H. simpl in H.
+  destruct MP as [m | m MP'] eqn:?.
+  - destruct (pstep m0) eqn:?.
+    + pinversion H.
     + subst m0. constructor; auto.
-  - destruct (pstep m0) eqn:?. 
-    + inv H. 
+  - destruct (pstep m0) eqn:?.
+    + inv H.
       econstructor; eauto.
-      simpl. 
+      simpl.
       set (mp' := (fst (step (ms m)), p)).
       simpl in *. 
-      apply COFIX. 
-      * rewrite (TraceEqHead _ _ H1). 
-        apply MPTraceOfHead. 
-      * apply H1. 
-    + inversion H. 
+      right. apply COFIX.
+      * erewrite TraceEqHead.
+        apply MPTraceOfHead. auto.
+      * auto.
+    + pinversion H.
 Qed.
 
 Lemma RealMPEquiv : forall MP, RealMPTrace'' MP <-> RealMPTrace' (head MP) MP.
@@ -1663,10 +1729,10 @@ Lemma ObsTraceEq_sym :
   forall O O',
     ObsTraceEq O O' -> ObsTraceEq O' O.
 Proof.
-  cofix COFIX. 
-  intros.
-  inversion H; subst; clear H;
-    try (constructor; apply COFIX; auto). 
+  pcofix COFIX.
+  intros O O' H; pfold.
+  inv H;
+    try (constructor; (right; apply COFIX; auto) || (left; auto)).
 Qed.
 
 Axiom SplitSuffixReal :
@@ -1683,9 +1749,10 @@ Lemma SplitSuffixReal' :
 Proof.
   induction 1; intros; auto. 
   apply IHSplitInclusive.
-  simpl in H1. 
-  inversion H1; subst.
-  inversion H5; subst; clear H5; econstructor; eauto. 
+  pfold.
+  simpl in H1.
+  inv H1.
+  inv H5; econstructor; eauto.
 Qed.  
 
 Axiom RealTail :
@@ -1698,11 +1765,11 @@ Lemma RealTail' :
     RealMPTrace' mp (notfinished mp MP) ->
     RealMPTrace' (head MP) MP.  
 Proof.
-  intros.
-  inversion H; subst; clear H. 
+  intros mp MP H; pfold.
+  inv H.
   destruct MP. 
-  - simpl. inversion H3; subst; clear H3. constructor. auto.
-  - simpl. inversion H3; subst; clear H3.
+  - simpl. inv H3. constructor. auto.
+  - simpl. inv H3.
     econstructor.  eauto.
     auto.
 Qed.
@@ -1713,17 +1780,17 @@ Lemma HaltingMPTracePrefixMTrace :
 (*  APT: unnecessary hypothesis:  Last (MPTraceOf mp) mpfin -> *)
     ObsTraceOf (MPTraceOf mp) <=_O ObsTraceOfM (MTraceOf m).
 Proof.
-  cofix COFIX. 
-  intros.
+  pcofix COFIX.
+  intros mp m H; pfold.
   destruct mp. simpl in *.  subst.
-  rewrite idTrace_eq. pattern (ObsTraceOfM (MTraceOf m)) at 1.  rewrite idTrace_eq.  simpl. 
-  destruct (pstep (m,p)); simpl. 
-  - destruct (step m).  simpl. 
+  rewrite idTrace_eq. pattern (ObsTraceOfM (MTraceOf m)) at 1.  rewrite idTrace_eq.  simpl.
+  destruct (pstep (m,p)); simpl.
+  - destruct (step m).  simpl.
     destruct o. 
-    * constructor. apply COFIX. auto. 
-    * constructor. constructor. apply COFIX. auto. 
-  - destruct (step m). simpl. 
-    constructor. 
+    * constructor. right. apply COFIX. auto.
+    * constructor. left. pfold. constructor. right. apply COFIX. auto.
+  - destruct (step m). simpl.
+    constructor.
 Qed.
 
 Lemma MTraceEqInfMPTrace :
@@ -1732,24 +1799,24 @@ Lemma MTraceEqInfMPTrace :
     (forall mpfin, ~ (Last (MPTraceOf mp) mpfin)) ->
     ObsTraceEq (ObsTraceOf (MPTraceOf mp)) (ObsTraceOfM (MTraceOf m)).
 Proof.
-  cofix COFIX. 
-  intros. 
-  destruct mp. simpl in *. subst. 
-  rewrite idTrace_eq. rewrite (idTrace_eq (ObsTraceOf (MPTraceOf (m,p)))).  simpl. 
-  destruct (pstep (m,p)) eqn:?; simpl. 
-  - destruct (step m) eqn:?.  simpl. 
-    assert (Q: forall mpfin : MPState, ~ Last (MPTraceOf (m0, p0)) mpfin). 
+  pcofix COFIX.
+  intros mp m H H0; pfold.
+  destruct mp. simpl in *. subst.
+  rewrite idTrace_eq. rewrite (idTrace_eq (ObsTraceOf (MPTraceOf (m,p)))).  simpl.
+  destruct (pstep (m,p)) eqn:?; simpl.
+  - destruct (step m) eqn:?.  simpl.
+    assert (Q: forall mpfin : MPState, ~ Last (MPTraceOf (m0, p0)) mpfin).
     { intros. intro.
-      apply (H0 mpfin). 
-      rewrite (idTrace_eq (MPTraceOf (m,p))). simpl. 
-      rewrite Heqo. rewrite Heqp1.  simpl. 
+      apply (H0 mpfin).
+      rewrite (idTrace_eq (MPTraceOf (m,p))). simpl.
+      rewrite Heqo. rewrite Heqp1.  simpl.
       constructor.  auto. }
-    destruct o. 
-    + constructor. apply COFIX; auto.  
-    + constructor. constructor. apply COFIX; auto. 
-  - exfalso. eapply (H0 (m,p)). 
-    rewrite (idTrace_eq (MPTraceOf (m,p))).  simpl. 
-    rewrite Heqo. 
+    destruct o.
+    + constructor. right. apply COFIX; auto.
+    + constructor. left. pfold. constructor. right. apply COFIX; auto.
+  - exfalso. eapply (H0 (m,p)).
+    rewrite (idTrace_eq (MPTraceOf (m,p))).  simpl.
+    rewrite Heqo.
     constructor.
 Qed.
 
@@ -1768,27 +1835,33 @@ Ltac app_frobber :=
 Lemma ObsTraceEqRemoveTau1 :
   forall T T', ObsTraceEq (notfinished Tau T) T' -> ObsTraceEq T T'.
 Proof.
-  cofix COFIX.
-  intros T T' Eq.
-  inversion Eq; subst; clear Eq.
-  + auto.
+  pcofix COFIX.
+  intros T T' Eq; pfold.
+  inv Eq.
+  + (* RB: This goal is slightly more involved than it was before. *)
+    apply paco2_unfold.
+    * apply ObsTraceEq_mon.
+    * apply paco2_mon_bot with ObsTraceEq_gen; auto.
   + eapply ObsEqTau2.
-    eapply COFIX; auto.
+    right. eapply COFIX; auto.
   + eapply ObsEqTau2.
-    eapply ObsEqAllTau.
+    left. pfold. eapply ObsEqAllTau.
 Qed.
 
 Lemma ObsTraceEqRemoveTau2 :
   forall T T', ObsTraceEq T (notfinished Tau T') -> ObsTraceEq T T'.
 Proof.
-  cofix COFIX.
-  intros T T' Eq.
-  inversion Eq; subst; clear Eq.
+  pcofix COFIX.
+  intros T T' Eq; pfold.
+  inv Eq.
   + eapply ObsEqTau1.
-    eapply COFIX.
+    right. eapply COFIX.
     auto.
-  + auto. 
-  + eapply ObsEqTau1.
+  + (* RB: This goal is slightly more involved than it was before. *)
+    apply paco2_unfold.
+    * apply ObsTraceEq_mon.
+    * apply paco2_mon_bot with ObsTraceEq_gen; auto.
+  + eapply ObsEqTau1. left. pfold.
     eapply ObsEqAllTau.
 Qed.
 
@@ -1807,17 +1880,17 @@ Proof.
   intros T' t' HL.
   induction HL; intros w Tw Eq.
   - exists 0. left. simpl.
-    inversion Eq.
+    pinversion Eq.
   - destruct a'.
-    + inversion Eq; subst; clear Eq.
+    + inv Eq.
       * exists 0.
         right.
         exists T; simpl; auto.
       * exists 0.
         right.
         exists T; simpl; auto.
-    + inversion Eq; subst; clear Eq.
-      destruct (IHHL w Tw H1) as [n [HTau | [T'' HTau]]].
+    + inv Eq.
+      destruct (IHHL w Tw HR) as [n [HTau | [T'' HTau]]].
       * exists (S n).
         left.
         simpl.
@@ -1846,27 +1919,28 @@ Proof.
     generalize dependent O2';
     generalize dependent Eq.
     induction Last';
-      intros Eq O2' O2 Pref.
-    + inversion Eq; subst; simpl in *; clear Eq; app_frobber.
+      intros Eq O2' O2 Pref; pfold.
+    + pinversion Eq; subst; simpl in *; clear Eq; app_frobber.
       (* Hint constructors doesn't work for this? *)
       * apply ObsPreNow; auto.
-      * apply ObsPreTau1; apply ObsPreTau2; auto.
+      * apply ObsPreTau1. left. pfold. apply ObsPreTau2; auto.
       * destruct a.
         -- apply ObsPreNow; auto.
-        -- apply ObsPreTau1; apply ObsPreTau2; auto.
-    + inversion Eq; subst; simpl in *; clear Eq.
-      specialize (IHLast' H1 O2' O2 Pref).      
+        -- apply ObsPreTau1. left. pfold. apply ObsPreTau2; auto.
+    + pinversion Eq; subst; simpl in *; clear Eq.
+      specialize (IHLast' HR O2' O2 Pref).
       app_frobber.
       eapply ObsPreTau2.
       auto.
   (* Try by inversion. *)
   - destruct a'.
-    + destruct (EqOut_tauN O1' o1' Last' w T Eq) as [n [HTau | [T' HTau]]].
+    + destruct (EqOut_tauN O1' o1' Last' w T Eq) as [n [HTau | [T' HTau]]];
+        pfold.
       * rewrite HTau in *.
         clear HTau.
         induction n; simpl in *; subst; app_frobber.
         -- apply ObsPreNow.
-           inversion Eq. (* This makes me feel strange *)
+           pinversion Eq. (* This makes me feel strange *)
         -- apply ObsPreTau2.
            inversion Last'; subst; clear Last'.
            apply ObsTraceEqRemoveTau2 in Eq.
@@ -1876,11 +1950,14 @@ Proof.
         clear HTau.
         induction n; simpl in *; subst; app_frobber.
         -- apply ObsPreNow.
-           inversion Eq; subst; clear Eq.
+           pinversion Eq; subst; clear Eq.
+           (* RB: The following two subgoals become slightly different. *)
            ++ inversion Last'; subst; clear Last'.
-              eauto.
+              left.
+              eapply IHLast; eauto.
            ++ inversion Last'; subst; clear Last'.
-              eauto using ObsEqAllTau.
+              left.
+              eapply IHLast; eauto.
         -- inversion Last'; subst; clear Last'.
            specialize (IHn H3).
            apply ObsTraceEqRemoveTau2 in Eq.
@@ -1889,8 +1966,9 @@ Proof.
            auto.
     + apply ObsTraceEqRemoveTau1 in Eq.
       app_frobber.
-      apply ObsPreTau1.
-      eauto.
+      pfold. apply ObsPreTau1. left.
+      (* RB: Ditto here, applying IH is now a bit more explicit. *)
+      eapply IHLast; eauto.
 Qed.
 
 Lemma MPObsLast :
@@ -2149,7 +2227,7 @@ Proof.
         { destruct H2.
           - destruct H2 as [MPsuff]. destruct H2.
             apply SplitInclusiveHeadEq in H7. auto.
-          - destruct H2. destruct H7. inversion H7;auto. }
+          - destruct H2. destruct H7. pinversion H7;auto. }
         rewrite H7. auto.
 Qed.
 
