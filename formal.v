@@ -367,8 +367,13 @@ Lemma StrongConfImpliesObsEq_Inf :
 Proof.
   unfold not; pcofix COFIX.
   intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
-  (* RB: TODO: Fix tactics to apply Paco lemmas and solve last case. *)
-Admitted.
+  (* RB: TODO: Fix tactics to apply Paco lemmas and solve last case. Naive hints
+     on constructors of Paco generators do not work as well: after [pfold]ing, a
+     constructor can be applied, but before another can be applied the resulting
+     [upaco] must pick its left disjunct, that is, the corecursive [paco] (not
+     not the parametric relation on the right) and [pfold] it again. *)
+  constructor. left. pfold. constructor. seauto.
+Qed.
 
 Lemma ComponentConfTrans :
   forall (M0 M1 M2 N0 N1 N2 : MachineState),
