@@ -1,4 +1,5 @@
 Require Export Setoid.
+Require Coq.Classes.RelationClasses.
 Require Import Paco.paco.
 
 (* Attempt to perform Paco inversion first. For non-Paco definitions, this fails
@@ -47,19 +48,6 @@ CoFixpoint mapTrace {A B:Type} (f:A -> B) (T: TraceOf A) : TraceOf B :=
   | finished a => finished (f a)
   | notfinished a T' => notfinished (f a) (mapTrace f T')
   end.
-
-Inductive ForallTrace_gen {A : Type} (P : A -> Prop) R : TraceOf A -> Prop :=
-| Forall_finished : forall a,
-    P a -> ForallTrace_gen P R (finished a)
-| Forall_notfinished : forall a T',
-    P a -> R T' -> ForallTrace_gen P R (notfinished a T').
-Hint Constructors ForallTrace_gen : core.
-
-Definition ForallTrace {A} (P : A -> Prop) (T : TraceOf A) :=
-  paco1 (ForallTrace_gen P) bot1 T.
-Hint Unfold ForallTrace : core.
-Lemma ForallTrace_mon A P : monotone1 (@ForallTrace_gen A P). Proof. pmonauto. Qed.
-Hint Resolve ForallTrace_mon : paco.
 
 Inductive TraceEq_gen {A} R : TraceOf A -> TraceOf A -> Prop :=
 | EqFin : forall a, TraceEq_gen R (finished a) (finished a)
@@ -149,6 +137,34 @@ Definition OpTraceEq {A} (TO1 TO2 : option(TraceOf A)) : Prop :=
   | _,_ => False
   end.
                                 
+Lemma OpTraceEqRefl {A} : forall (T: option(TraceOf A)), OpTraceEq T T.
+Proof.
+  unfold OpTraceEq; destruct T; auto. reflexivity.
+Qed.
+
+Lemma OpTraceEqSym {A} : forall (T1 T2: option(TraceOf A)), OpTraceEq T1 T2 -> OpTraceEq T2 T1.
+Proof.
+  intros.
+  unfold OpTraceEq in * ; destruct T1, T2; auto. symmetry; auto. 
+Qed.
+
+Lemma OpTraceEqTrans {A} : forall (T1 T2 T3: option(TraceOf A)),
+    OpTraceEq T1 T2 ->
+    OpTraceEq T2 T3 ->
+    OpTraceEq T1 T3.
+Proof.
+  intros.
+  unfold OpTraceEq in * ; destruct T1, T2, T3; auto. eapply TraceEqTrans; eauto. inversion H. 
+Qed.
+
+
+Add Parametric Relation A : (option(TraceOf A)) (@OpTraceEq A)
+    reflexivity proved by (OpTraceEqRefl (A := A))
+    symmetry proved by (OpTraceEqSym (A := A))                            
+    transitivity proved by (OpTraceEqTrans (A := A))
+as OpTraceEq_rel                             
+.                                        
+
 Lemma TraceAppEq {A} : 
       forall (T1 T1' : TraceOf A) ,
         TraceEq T1 T1' ->
@@ -206,12 +222,171 @@ Proof.
     auto.
 Qed.
 
+Lemma TraceAppNone :
+  forall {A} (T : TraceOf A),
+    TraceEq T (T^None).
+Proof.
+  cofix COFIX. intros. rewrite idTrace_eq. destruct T.
+  - simpl. constructor.
+  - simpl. constructor. apply COFIX. 
+Qed.
+
+Lemma TraceAppAssoc :
+  forall A (T1 T2 : TraceOf A) TO,
+    T1 ^ Some (T2 ^ TO) ~= (T1 ^ Some T2) ^ TO.
+Proof.
+  cofix COFIX.
+  intros.
+  destruct T1.
+  - rewrite idTrace_eq.  rewrite idTrace_eq at 1. simpl.  reflexivity.
+  - rewrite idTrace_eq.  rewrite (idTrace_eq (notfinished a T1 ^ Some (T2 ^ TO))). simpl. 
+    constructor. 
+    apply COFIX. 
+Qed.
+
 (* TracePrefix T1 T2 says T2 is a prefix of T1. *)
 Definition TracePrefix {A} (T1 T2: TraceOf A): Prop :=
   exists TO,
     TraceEq T1 (T2^TO).
 
 Notation "T2 <<== T1" := (TracePrefix T1 T2) (at level 80).
+
+Lemma TracePrefix_refl :
+  forall {A} (T:TraceOf A),
+    T <<== T.
+Proof.
+  intros. exists None. apply TraceAppNone.
+Qed.
+
+Lemma TracePrefix_trans:
+  forall {A} (T1 T2 T3: TraceOf A),
+     T2 <<== T1 -> T3 <<== T2 -> T3 <<== T1.
+Proof.
+  intros.
+  destruct H as [TO P].  destruct H0 as [TO' P'].
+  rewrite P' in P.
+  destruct TO, TO'. 
+  - rewrite <- TraceAppAssoc in P. 
+    eexists; eauto. 
+  - rewrite <- TraceAppNone in P. 
+    eexists; eauto.
+  - rewrite <- TraceAppNone in P. 
+    eexists; eauto.
+  - repeat rewrite <- TraceAppNone in P. 
+    eexists. 
+    rewrite <- TraceAppNone. auto.
+Qed.
+
+
+Add Parametric Relation A : (TraceOf A) (@TracePrefix A)
+    reflexivity proved by (TracePrefix_refl (A := A))
+    transitivity proved by (TracePrefix_trans (A := A))
+as TracePrefix_rel                             
+.                                        
+
+Lemma TracePrefixEq {A}: 
+      forall (T1 T1' : TraceOf A) ,
+        TraceEq T1 T1' ->
+      forall (T2 T2' : TraceOf A) ,
+        TraceEq T2 T2' ->
+        TracePrefix T1 T2 ->
+        TracePrefix T1' T2'. 
+Proof.
+  unfold TracePrefix. 
+  intros. 
+  destruct H1 as [TO P]. 
+  exists TO.
+  rewrite <- H. rewrite <- H0. auto.
+Qed.
+
+Add Parametric Morphism A: (@TracePrefix A)
+    with signature (@TraceEq A) ==> (@TraceEq A) ==> Basics.impl as pref_mor.
+Proof.
+  exact (@TracePrefixEq A).                                                                                     Qed.                            
+                             
+
+CoInductive ForallTrace {A:Type} (P:A -> Prop) : TraceOf A -> Prop :=
+| Forall_finished : forall a, P a -> ForallTrace P (finished a)
+| Forall_notfinished : forall a T', P a -> ForallTrace P T' -> ForallTrace P (notfinished a T')
+.
+
+Lemma ForallInTrace :
+  forall {A} (f:A->Prop) T t,
+    InTrace t T ->
+    ForallTrace f T ->
+    f t.
+Proof.
+  intros. induction H; inversion H0; auto.
+Qed.
+
+Lemma ForallTraceTautology :
+  forall {A} (P:A->Prop) (T:TraceOf A),
+    (forall a, P a) -> ForallTrace P T.
+Proof.
+  cofix COFIX. intros. destruct T;constructor;auto.
+Qed.
+
+Lemma ForallTraceEq:
+  forall {A} (f:A->Prop) T1 T2,
+    T1 ~= T2 ->
+    ForallTrace f T1 ->
+    ForallTrace f T2. 
+Proof.
+  cofix COFIX.  intros. 
+  destruct H. 
+  inv H0. 
+  - constructor. auto.
+  - inv H0. constructor.  auto. eapply COFIX; eauto. 
+Qed.
+
+Add Parametric Morphism A (f:A->Prop) : (@ForallTrace A f)
+    with signature (@TraceEq A) ==> Basics.impl as forall_mor.
+Proof.
+  exact (@ForallTraceEq A f).                                                                                   Qed.                            
+
+Inductive Last {A} : TraceOf A -> A -> Prop :=
+| LastNow : forall a, Last (finished a) a
+| LastLater : forall T a a', Last T a -> Last (notfinished a' T) a
+.
+
+Lemma LastUnique :
+  forall {A} (a1 a2 : A) T,
+    Last T a1 ->
+    Last T a2 ->
+    a1 = a2.
+Proof.
+  intros. induction H; inversion H0; auto.
+Qed.
+
+Lemma LastInTrace :
+  forall A (t:A) (T:TraceOf A),
+    Last T t -> InTrace t T.
+Proof.
+  intros. induction H.
+  - constructor.
+  - constructor. auto.
+Qed.
+
+Lemma LastTraceEq :
+  forall {A} (T1 T2: TraceOf A),
+    TraceEq T1 T2 ->
+    forall a, Last T1 a ->
+    Last T2 a.
+Proof.
+  intros.
+  generalize dependent T2.
+  induction H0; intros. 
+  - inv H. constructor.
+  - inv H. constructor.  apply IHLast. auto.
+Qed.
+
+
+Add Parametric Morphism A : (@Last A)
+    with signature (@TraceEq A) ==> eq  ==> Basics.impl as last_mor.
+Proof.
+  exact (@LastTraceEq A). 
+Qed.
+
 
 (* Divide MM1 into MM2 ++ MMO such that MM2 is the longest prefix for which P holds on each element *)
 Definition TraceSpan {A} (P : A -> Prop) (T1 T2 : TraceOf A) (TO : option (TraceOf A)) : Prop :=
@@ -223,11 +398,6 @@ Definition TraceSpan {A} (P : A -> Prop) (T1 T2 : TraceOf A) (TO : option (Trace
 (* T2 is the longest prefix of T1 for which P holds on each element. *)
 Definition LongestPrefix {A} (P : A -> Prop) (T1 T2 : TraceOf A) : Prop :=
   exists TO, TraceSpan P T1 T2 TO.
-
-Inductive Last {A} : TraceOf A -> A -> Prop :=
-| LastNow : forall a, Last (finished a) a
-| LastLater : forall T a a', Last T a -> Last (notfinished a' T) a
-.
 
 Inductive SplitInclusive {A} (P:A -> Prop) : TraceOf A -> TraceOf A -> TraceOf A -> Prop :=
 | PNowFinished : forall a, P a -> SplitInclusive P (finished a) (finished a) (finished a)
@@ -292,74 +462,6 @@ Qed.
  Trace Lemmas and axioms 
 *************************)
 
-Lemma LastInTrace :
-  forall A (t:A) (T:TraceOf A),
-    Last T t -> InTrace t T.
-Proof.
-  intros. induction H.
-  - constructor.
-  - constructor. auto.
-Qed.
-
-Lemma ForallInTrace :
-  forall A (f:A->Prop) T t,
-    InTrace t T ->
-    ForallTrace f T ->
-    f t.
-Proof.
-  intros. induction H; pinversion H0; auto.
-Qed.
-
-Lemma ForallTraceTautology :
-  forall A (P:A->Prop) (T:TraceOf A),
-    (forall a, P a) -> ForallTrace P T.
-Proof.
-  intros A P. pcofix COFIX. intros T H; pfold. destruct T; constructor; auto.
-Qed.
-
-Lemma SplitInclusivePHead :
-  forall {A} P (T1 T2 T3 : TraceOf A),
-    SplitInclusive P T1 T2 T3 ->
-    P (head T3).
-Proof.
-  intros. induction H; auto.
-Qed.
-
-Lemma LastUnique :
-  forall {A} (a1 a2 : A) T,
-    Last T a1 ->
-    Last T a2 ->
-    a1 = a2.
-Proof.
-  intros. induction H; inversion H0; auto.
-Qed.
-
-Lemma TraceAppNone :
-  forall A (T : TraceOf A),
-    TraceEq T (T^None).
-Proof.
-  intro A. pcofix COFIX. intros; pfold. rewrite idTrace_eq. destruct T.
-  - simpl. constructor.
-  - simpl. constructor. right. apply COFIX.
-Qed.
-  
-Lemma TracePrefix_refl :
-  forall A (T:TraceOf A),
-    T <<== T.
-Proof.
-  intros. exists None. apply TraceAppNone.
-Qed.
-
-Lemma LastTraceEq :
-  forall {A} (a:A) T1 T2,
-    Last T1 a ->
-    TraceEq T1 T2 ->
-    Last T2 a.
-Proof.
-  intros. revert T2 H0.  induction H; intros. 
-  - inv H0. constructor.
-  - inv H0. constructor.  apply IHLast. auto.
-Qed.
 
 (*Axiom TraceAppFinished :
   forall A (a:A) (T:TraceOf A),
