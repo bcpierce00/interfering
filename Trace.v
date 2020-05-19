@@ -48,15 +48,12 @@ CoFixpoint mapTrace {A B:Type} (f:A -> B) (T: TraceOf A) : TraceOf B :=
   | notfinished a T' => notfinished (f a) (mapTrace f T')
   end.
 
-Inductive ForallTrace_gen {A : Type} (P : A -> Prop) ForallTrace : TraceOf A -> Prop :=
+Inductive ForallTrace_gen {A : Type} (P : A -> Prop) R : TraceOf A -> Prop :=
 | Forall_finished : forall a,
-    P a -> ForallTrace_gen P ForallTrace (finished a)
-| Forall_notfinished : forall a T' (R : ForallTrace T' : Prop),
-    P a -> ForallTrace_gen P ForallTrace (notfinished a T').
+    P a -> ForallTrace_gen P R (finished a)
+| Forall_notfinished : forall a T',
+    P a -> R T' -> ForallTrace_gen P R (notfinished a T').
 Hint Constructors ForallTrace_gen : core.
-
-CoInductive ForallTrace' {A : Type} (P : A -> Prop) : TraceOf A -> Prop :=
-| ForallTrace_fold : forall T, ForallTrace_gen P (ForallTrace' P) T -> ForallTrace' P T.
 
 Definition ForallTrace {A} (P : A -> Prop) (T : TraceOf A) :=
   paco1 (ForallTrace_gen P) bot1 T.
@@ -64,14 +61,11 @@ Hint Unfold ForallTrace : core.
 Lemma ForallTrace_mon A P : monotone1 (@ForallTrace_gen A P). Proof. pmonauto. Qed.
 Hint Resolve ForallTrace_mon : paco.
 
-Inductive TraceEq_gen {A} TraceEq : TraceOf A -> TraceOf A -> Prop :=
-| EqFin : forall a, TraceEq_gen TraceEq (finished a) (finished a)
-| EqCons : forall a T1 T2 (R : TraceEq T1 T2 : Prop),
-    TraceEq_gen TraceEq (notfinished a T1) (notfinished a T2).
+Inductive TraceEq_gen {A} R : TraceOf A -> TraceOf A -> Prop :=
+| EqFin : forall a, TraceEq_gen R (finished a) (finished a)
+| EqCons : forall a T1 T2,
+    R T1 T2 -> TraceEq_gen R (notfinished a T1) (notfinished a T2).
 Hint Constructors TraceEq_gen : core.
-
-CoInductive TraceEq' {A} : TraceOf A -> TraceOf A -> Prop :=
-| TraceEq_fold : forall T1 T2, TraceEq_gen TraceEq' T1 T2 -> TraceEq' T1 T2.
 
 Definition TraceEq {A} (T1 T2 : TraceOf A) := paco2 TraceEq_gen bot2 T1 T2.
 Hint Unfold TraceEq : core.
