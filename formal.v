@@ -2751,6 +2751,8 @@ But for confidentegrity, if main's memory varies, sub moves 1 to r1 and stores i
 in main's memory. Then the rollback sets main's memory back to 0. So r1 and r2 will
 not be equal, and the behavior is [0]. So confidentegrity does not hold. *)
 
+(*
+
 (* ********* Tags and tagged properties and policies ********* *)
 
 (* Type of tags and some tags of interest, with a minimalist form of blessed
@@ -2995,7 +2997,7 @@ Variable EagerTesting : Prop.
 
 End EagerTestingProperty.
 
-End foo.
+*)
 
 (*
 (* Following attempts to encode subtraces that start on transition to NOTME, but can end anywhere as long as still NOTME.
