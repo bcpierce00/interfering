@@ -6,7 +6,7 @@ Require Import Omega.
 Require Import Trace.
 Require Import Machine.
 Require Import ObsTrace.
-Require Import Paco.paco.
+(* Require Import Paco.paco. *)
 
 (* todo: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MTrace := TraceOf MachineState.
@@ -197,25 +197,26 @@ Definition EagerStackConfidentiality' (C : Contour) (mp : MPState) (justReturned
                    (ObsTraceOf MP) ~=_O (ObsTraceOfM M')).
 
 CoInductive StrongEagerStackConfidentiality(*_gen*) (R : MachineState -> Prop) (*Rcoind*) :
-  MPTrace -> MTrace -> Prop :=
+  MPTrace -> MachineState -> Prop :=
 | StrongConfStep :
     (* Maybe the top one should have a not ret *)
-    forall mp MP m' M' O,
+    forall mp MP m m' O,
       mpstep mp = Some (ms (head MP), ps (head MP), O) ->
-      step m' = (head M', O) ->
+      step m = (m', O) ->
+      ~ R (ms mp) -> ~ R m ->
       (forall k, ms (head MP) k <> ms mp k \/
-                 (head M') k <> m' k -> ms (head MP) k = head M' k) ->
-      (*Rcoind*)StrongEagerStackConfidentiality R MP M' ->
-      StrongEagerStackConfidentiality(*_gen*) R (*Rcoind*) (notfinished mp MP) (notfinished m' M')
+                 m' k <> m k -> ms (head MP) k = m' k) ->
+      (*Rcoind*)StrongEagerStackConfidentiality R MP m' ->
+      StrongEagerStackConfidentiality(*_gen*) R (*Rcoind*) (notfinished mp MP) m
 | StrongConfEnd :
     forall mp m,
       R (ms mp) -> R m ->
-      StrongEagerStackConfidentiality(*_gen*) R (*Rcoind*) (finished mp) (finished m)
+      StrongEagerStackConfidentiality(*_gen*) R (*Rcoind*) (finished mp) m
 | StrongConfNotMStep :
-    forall mp MV,
-      ~ (R (ms mp)) ->
+    forall mp m,
+      ~ (R (ms mp)) -> ~ R m ->
       (* mpstep mp = None ->  *)
-      StrongEagerStackConfidentiality(*_gen*) R (*Rcoind*) (finished mp) MV.
+      StrongEagerStackConfidentiality(*_gen*) R (*Rcoind*) (finished mp) m.
 Hint Constructors StrongEagerStackConfidentiality(*_gen*) : core.
 
 (* Definition StrongEagerStackConfidentiality (R : MachineState -> Prop) MP M := *)
@@ -246,6 +247,9 @@ Hint Resolve confStepPreservesVariant : StackSafety.
 
 Ltac frob x :=
   rewrite (idTrace_eq x); simpl.
+
+Ltac frobin x H :=
+  rewrite (idTrace_eq x) in H; simpl.
 
 Ltac extract_mpstep :=
   match goal with
@@ -290,7 +294,8 @@ Qed.
 
 Hint Resolve NotLastProgress : StackSafety.
 
-Ltac inv H := (pinversion H || inversion H); subst; clear H.
+(* Ltac inv H := (pinversion H || inversion H); subst; clear H.*)
+Ltac inv H := inversion H; subst; clear H.
 
 Ltac frobber F :=
   match goal with
@@ -353,45 +358,198 @@ Ltac conf_progress :=
                   ).
 
 Ltac seauto :=
-  try intros; try pfold;
-  eauto 10 with core paco StackSafety;
-  try solve [exfalso; eauto 10 with core paco StackSafety].
+  try intros; (* try pfold; *)
+  eauto 10 with core (* paco *) StackSafety;
+  try solve [exfalso; eauto 10 with core (* paco *)  StackSafety].
+
+
+Lemma MTraceNeverFinished : forall m m', finished m = MTraceOf m' -> False.
+Proof.
+  intros m m' H; frobin (MTraceOf m') H; simpl in *; inv H.
+Qed.
+
+Lemma MTraceNeverFinished' : forall m m', finished m ~= MTraceOf m' -> False.
+Proof.
+  intros m m' H; frobin (MTraceOf m') H; simpl in *; inv H.
+Qed.
+
+Hint Resolve MTraceNeverFinished  : StackSafety.
+Hint Resolve MTraceNeverFinished' : StackSafety.
+
 
 Lemma StrongConfImpliesObsEq_Ret :
-  forall C R MP MV,
-    variantOf (ms (head MP)) (head MV) C ->
-    StrongEagerStackConfidentiality R MP MV ->
-    forall mpret,
+  forall C R m MP,
+    variantOf (ms (head MP)) m C ->
+    StrongEagerStackConfidentiality R MP m ->
+    forall mpret MV,
       Last MP mpret -> R (ms mpret) ->
+      PrefixUpTo R (MTraceOf m) MV ->
       (ObsTraceOf MP) ~=_O (ObsTraceOfM MV).
 Proof.
   cofix COFIX.
   intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
+  - destruct H3 as [[TSuff Split] | [NotR Eq]] eqn:Pre.
+    + invert (@SplitInclusive MachineState).
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.                
+        rewrite H5.
+        apply ObsEqNow.
+        eapply COFIX with (m := m'); seauto.
+        left.
+        exists TSuff; seauto.
+        rewrite H5 in H10; simpl in *; seauto.
+    + clear Pre. frobin (MTraceOf m) Eq; simpl in *. 
+      inv Eq.
+      rewriteHyp.
+      apply ObsEqNow.
+      eapply COFIX with (m := m'); seauto.
+      rewrite H5 in *.
+      right; split; seauto.
+      inv NotR; seauto.
+      frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
+      rewrite H5 in *; simpl in *; auto.
+  - destruct H3 as [[TSuff Split] | [NotR Eq]] eqn:Pre.
+    + invert (@SplitInclusive MachineState).
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.        
+        rewrite H5.
+        apply ObsEqTau1; apply ObsEqTau2.
+        eapply COFIX with (m := m'); seauto.
+        left.
+        exists TSuff; seauto.
+        rewrite H5 in *; simpl in *; auto.
+    + clear Pre. frobin (MTraceOf m) Eq; simpl in *. 
+      inv Eq.
+      rewriteHyp.
+      apply ObsEqTau1; apply ObsEqTau2.
+      eapply COFIX with (m := m'); seauto.
+      rewrite H5 in *.
+      right; split; seauto.
+      inv NotR; seauto.
+      frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
+      rewrite H5 in *; simpl in *; auto.
+  - destruct H3 as [[TSuff Split] | [NotR Eq]] eqn:Pre.
+    + invert (@SplitInclusive MachineState).
+      * apply ObsEqFinishedTau.
+      * frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
+    + clear Pre. frobin (MTraceOf m) Eq; simpl in *. 
+      inv Eq.
+      inv NotR; seauto.
+      frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.      
 Qed.
 
 Lemma StrongConfImpliesObsEq_Fault :
-  forall C R MP MV,
-    variantOf (ms (head MP)) (head MV) C ->
-    StrongEagerStackConfidentiality R MP MV ->
-    forall mpret,
-      Last MP mpret -> ~ (R (ms mpret)) ->
+  forall C R MP m,
+    variantOf (ms (head MP)) m C ->
+    StrongEagerStackConfidentiality R MP m ->
+    forall mpret MV,
+      Last MP mpret -> ~ R (ms mpret) ->
+      PrefixUpTo R (MTraceOf m) MV ->
       (ObsTraceOf MP) <=_O (ObsTraceOfM MV).
 Proof.  
   cofix COFIX.
   intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
-Qed.  
+  - destruct H3 as [[TSuff Split] | [NotR Eq]] eqn:Pre.
+    + invert (@SplitInclusive MachineState).
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.                
+        rewrite H5.
+        apply ObsPreNow.
+        eapply COFIX with (m := m'); seauto.
+        left.
+        exists TSuff; seauto.
+        rewrite H5 in H10; simpl in *; seauto.
+    + clear Pre. frobin (MTraceOf m) Eq; simpl in *. 
+      inv Eq.
+      rewriteHyp.
+      apply ObsPreNow.
+      eapply COFIX with (m := m'); seauto.
+      rewrite H5 in *.
+      right; split; seauto.
+      inv NotR; seauto.
+      frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
+      rewrite H5 in *; simpl in *; auto.
+  - destruct H3 as [[TSuff Split] | [NotR Eq]] eqn:Pre.
+    + invert (@SplitInclusive MachineState).
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.        
+        rewrite H5.
+        apply ObsPreTau1; apply ObsPreTau2.
+        eapply COFIX with (m := m'); seauto.
+        left.
+        exists TSuff; seauto.
+        rewrite H5 in *; simpl in *; auto.
+    + clear Pre. frobin (MTraceOf m) Eq; simpl in *. 
+      inv Eq.
+      rewriteHyp.
+      apply ObsPreTau1; apply ObsPreTau2.
+      eapply COFIX with (m := m'); seauto.
+      rewrite H5 in *.
+      right; split; seauto.
+      inv NotR; seauto.
+      frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
+      rewrite H5 in *; simpl in *; auto.
+Qed.
+
 Hint Transparent not : StackSafety.
 
-Hint Unfold not : StackSafety.
 Lemma StrongConfImpliesObsEq_Inf :
-  forall C R MP MV,
-    variantOf (ms (head MP)) (head MV) C ->
-    StrongEagerStackConfidentiality R MP MV ->
+  forall C R MP m,
+    variantOf (ms (head MP)) m C ->
+    StrongEagerStackConfidentiality R MP m ->
     (forall mpret, ~ Last MP mpret) ->
+    forall MV, PrefixUpTo R (MTraceOf m) MV ->
     ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
 Proof.
   unfold not; cofix COFIX.
   intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
+  - destruct H2 as [[TSuff Split] | [NotR Eq]] eqn:Pre.
+    + invert (@SplitInclusive MachineState).
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.                
+        rewrite H4.
+        apply ObsEqNow.
+        eapply COFIX with (m := m'); seauto.
+        left.
+        exists TSuff; seauto.
+        rewrite H4 in H10; simpl in *; seauto.
+    + clear Pre. frobin (MTraceOf m) Eq; simpl in *. 
+      inv Eq.
+      rewriteHyp.
+      apply ObsEqNow.
+      eapply COFIX with (m := m'); seauto.
+      rewrite H4 in *.
+      right; split; seauto.
+      inv NotR; seauto.
+      frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
+      rewrite H4 in *; simpl in *; auto.
+  - destruct H2 as [[TSuff Split] | [NotR Eq]] eqn:Pre.
+    + invert (@SplitInclusive MachineState).
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.
+      * frobin (MTraceOf m) H0; simpl in H0; inv H0; seauto.        
+        rewrite H4.
+        apply ObsEqTau1; apply ObsEqTau2.
+        eapply COFIX with (m := m'); seauto.
+        left.
+        exists TSuff; seauto.
+        rewrite H4 in *; simpl in *; auto.
+    + clear Pre. frobin (MTraceOf m) Eq; simpl in *. 
+      inv Eq.
+      rewriteHyp.
+      apply ObsEqTau1; apply ObsEqTau2.
+      eapply COFIX with (m := m'); seauto.
+      rewrite H4 in *.
+      right; split; seauto.
+      inv NotR; seauto.
+      frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
+      rewrite H4 in *; simpl in *; auto.
   (* RB: TODO: Fix tactics to apply Paco lemmas and solve last case. Naive hints
      on constructors of Paco generators do not work as well: after [pfold]ing, a
      constructor can be applied, but before another can be applied the resulting
@@ -462,72 +620,116 @@ Proof.
       exists x; constructor; eauto.
 Qed.
  *)
-
 Lemma StrongConfImpliesIndist_Ret :
-  forall C R MP MV,
-    variantOf (ms (head MP)) (head MV) C ->
-    StrongEagerStackConfidentiality R MP MV ->
-    (forall mpret, Last MP mpret -> R (ms mpret) ->
-      (exists mret, Last MV mret /\
-                     forall k, 
-                       (ms (head MP) k <> ms mpret k \/ (head MV) k <> mret k) ->
-                       ms mpret k = mret k)).
+  forall C R MP m,
+    variantOf (ms (head MP)) m C ->
+    StrongEagerStackConfidentiality R MP m ->
+    (forall mpret MV,
+        Last MP mpret -> R (ms mpret) ->
+        PrefixUpTo R (MTraceOf m) MV ->
+        (exists mret, Last MV mret /\
+                      forall k, 
+                        (ms (head MP) k <> ms mpret k \/ (head MV) k <> mret k) ->
+                        ms mpret k = mret k)).
 Proof.
-  intros C R MP MV Var Conf mpret HLast HR.
+  intros C R MP m Var Conf mpret MV HLast HR Pre.
+  generalize dependent m.
   generalize dependent MV.
-  induction HLast; subst; eauto; intros MV Var Conf;
-  inversion Conf; subst; eauto; clear Conf; simpl in *.
-  - exists m; split; [constructor|].
-    intros k Hk.
-    inversion Hk; exfalso; eauto.
-  - exfalso; eauto.
-  - destruct (IHHLast HR M') as [mret [HLastMret HConf]];
-      eauto using confStepPreservesVariant.
-    exists mret; split.
-    + constructor; auto.
-    + intros k Hk.
-      eauto using ComponentConfTrans.
-
-(*
-  intros. generalize dependent MV.
-  induct (@Last MPState); seauto.
-  invert StrongEagerStackConfidentiality; seauto.
-  - eexists; repeat (conf_progress; seauto).
-  - edestruct (IHLast H2 MV) as [? [? ?]]; seauto.
-    eapply confStepPreservesVariant; seauto.
-    conf_progress; seauto.
-*)  
-      
+  induction HLast; subst; eauto; intros MV m Var Conf Pre;
+  inversion Conf; subst; eauto; clear Conf; simpl in *; seauto.
+  - exists m; split; seauto.
+    + destruct Pre as [[TSuff HPre] | [NotR Eq]].
+      * inv HPre; seauto.
+        -- frobin (MTraceOf m) H; simpl in *; inv H; seauto.
+        -- frobin (MTraceOf m) H; simpl in *; inv H; seauto.
+      * inv NotR; seauto.
+        frobin (MTraceOf m) H; simpl in *; inv H; seauto.
+    + destruct Pre as [[TSuff HPre] | [NotR Eq]].
+      * inv HPre; seauto.
+        -- frobin (MTraceOf m) H2; simpl in *; inv H2; seauto.
+           inv H; seauto.
+        -- frobin (MTraceOf m) H2; simpl in *; inv H2; seauto.
+      * frobin (MTraceOf m) Eq; simpl in *; inv Eq; simpl in *; destruct H; seauto.
+  - simpl in *.
+    destruct MV as [| mv MV].
+    { destruct Pre as [[TSuff HPre] | [NotR Eq]].
+      + inv HPre; seauto.
+        frobin (MTraceOf m) H; simpl in *; inv H; seauto.        
+      + inv Eq; seauto.
+    } 
+    destruct (IHHLast HR MV m') as [mret [HLastMret HConf]]; seauto.
+    + destruct Pre as [[TSuff HPre] | [NotR Eq]].
+      * inv HPre; seauto.
+        left; simpl; exists TSuff.        
+        frobin (MTraceOf m) H; simpl in *; inv H; seauto. 
+        rewrite H2 in H10; auto.
+      * right; split; seauto.
+        -- inv NotR; seauto.
+           inv H.
+           frobin (MTraceOf m) H9; simpl in *; inv H9; seauto.
+           rewrite H2 in H6; simpl in *; auto.
+        -- frobin (MTraceOf m) Eq; simpl in *; rewrite H2 in Eq; inv Eq; seauto.
+    + exists mret; split; simpl in *; [seauto |].
+      destruct Pre as [[TSuff HPre] | [NotR Eq]].
+      * inv HPre; seauto.
+        eapply SplitInclusiveHead in H10; simpl in *; subst.
+        frobin (MTraceOf m) H; simpl in *; inv H; subst.
+        rewrite H2 in H10; simpl in *.
+        rewrite H10 in *.
+        eapply ComponentConfTrans; eauto.
+      * frobin (MTraceOf m) Eq; simpl in *.
+        inv Eq.
+        rewrite H2 in H0; simpl in *.
+        frobin (MTraceOf m') H0; simpl in *; inv H0.
+        eapply ComponentConfTrans; eauto.        
 Qed.
 
 Lemma StrongConfImpliesInf_Inf : 
-  forall C R MP MV,
-    variantOf (ms (head MP)) (head MV) C ->
-    StrongEagerStackConfidentiality R MP MV ->
+  forall C R MP m,
+    variantOf (ms (head MP)) m C ->
+    StrongEagerStackConfidentiality R MP m ->
     (forall mpret, ~ Last MP mpret) ->
-    (forall mv, ~ Last MV mv).
+    (forall mv MV, PrefixUpTo R (MTraceOf m) MV -> ~ Last MV mv).
 Proof.
   unfold not.
   intros; generalize dependent MP.
-  induct (@Last MachineState); intros; 
+  generalize dependent m.
+  induct (@Last MachineState); intros;
   invert StrongEagerStackConfidentiality;
   conf_progress; seauto.
-Qed.
+  - destruct H2 as [[TSuff HPre] | [NotR Eq]].
+    + inv HPre.
+      * frobin (MTraceOf m) H0; simpl in *; inv H0.
+      * frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.        
+    + inv Eq; seauto.
+  - destruct H2 as [[TSuff HPre] | [NotR Eq]].
+    + inv HPre.
+      * frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
+        eapply (IHLast m'); seauto.
+        left. exists TSuff. 
+        rewrite H4 in H12; simpl in *; auto.
+    + inv Eq; seauto.
+      frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.        
+      eapply (IHLast m'); seauto.
+      right; split; seauto.
+      -- inv NotR; seauto.
+         frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
+         rewrite H4 in H10; simpl in *; auto.
+      -- rewrite H4 in H9; auto.
+Qed.         
 
 Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MP : MPTrace) :
-  (forall (MV : MTrace),
-    variantOf (ms (head MP)) (head MV) C ->
-    StrongEagerStackConfidentiality R MP MV) ->
+  (forall m,
+    variantOf (ms (head MP)) m C ->
+    StrongEagerStackConfidentiality R MP m) ->
   EagerStackConfidentiality C MP R.
 Proof.
   intros Conf.
   unfold EagerStackConfidentiality.
   intros mv MV HVar HPre.
-  specialize (Conf MV).
+  specialize (Conf mv HVar).
   assert (head MV = mv) as HN
       by (erewrite <- PrefixUpToHead; eauto; auto).
-  rewrite <- HN in HVar.
-  specialize (Conf HVar).
   split; [|split].
   - intros mpret HLast HR; split.
     + eapply StrongConfImpliesIndist_Ret; eauto.
@@ -1461,7 +1663,8 @@ Proof.
   - congruence.
   - inversion H; subst; auto.
 Qed.
-    
+
+(*
 Theorem TestImpliesConfidentialityNested :
   forall cm C MP vs n vscall vse,
     FinLastN n vs vscall ->
@@ -1628,6 +1831,7 @@ Proof.
         -- repeat rewriteHyp. eapply confStepPreservesVariant; eauto.
            intros k [Hk | Hk]; eapply HConf; [left | right]; eauto.
 Qed.
+*)
 
 (*
 TestImpliesIntegrityToplevel
