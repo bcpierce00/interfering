@@ -49,16 +49,16 @@ CoFixpoint mapTrace {A B:Type} (f:A -> B) (T: TraceOf A) : TraceOf B :=
   | notfinished a T' => notfinished (f a) (mapTrace f T')
   end.
 
-Inductive TraceEq_gen {A} R : TraceOf A -> TraceOf A -> Prop :=
-| EqFin : forall a, TraceEq_gen R (finished a) (finished a)
+CoInductive TraceEq(*_gen*) {A} (*R*) : TraceOf A -> TraceOf A -> Prop :=
+| EqFin : forall a, TraceEq(*_gen R*) (finished a) (finished a)
 | EqCons : forall a T1 T2,
-    R T1 T2 -> TraceEq_gen R (notfinished a T1) (notfinished a T2).
-Hint Constructors TraceEq_gen : core.
+    (*R*)TraceEq T1 T2 -> TraceEq(*_gen R*) (notfinished a T1) (notfinished a T2).
+(* Hint Constructors TraceEq_gen : core. *)
 
-Definition TraceEq {A} (T1 T2 : TraceOf A) := paco2 TraceEq_gen bot2 T1 T2.
-Hint Unfold TraceEq : core.
-Lemma TraceEq_mon A : monotone2 (@TraceEq_gen A). Proof. pmonauto. Qed.
-Hint Resolve TraceEq_mon : paco.
+(* Definition TraceEq {A} (T1 T2 : TraceOf A) := paco2 TraceEq_gen bot2 T1 T2. *)
+(* Hint Unfold TraceEq : core. *)
+(* Lemma TraceEq_mon A : monotone2 (@TraceEq_gen A). Proof. pmonauto. Qed. *)
+(* Hint Resolve TraceEq_mon : paco. *)
 
 Notation "T1 ~= T2" := (TraceEq T1 T2) (at level 80).
 
@@ -66,11 +66,11 @@ Lemma TraceEqRefl: forall {A} (T: TraceOf A),
     TraceEq T T.
 Proof.
   intro A.
-  pcofix COFIX.
-  intro T; pfold.
+  cofix COFIX.
+  intro T(*; pfold*).
   destruct T.
   - constructor.
-  - constructor. right. apply COFIX.
+  - constructor. (*right.*) apply COFIX.
 Qed.
 
 Lemma TraceEqTrans : forall {A} (T1 T2 T3: TraceOf A),
@@ -79,13 +79,13 @@ Lemma TraceEqTrans : forall {A} (T1 T2 T3: TraceOf A),
     TraceEq T1 T3. 
 Proof.
   intro A.
-  pcofix COFIX.
-  intros T1 T2 T3 H H0; pfold.
-  pinversion H; subst.
-  - pinversion H0; subst.
+  cofix COFIX.
+  intros T1 T2 T3 H H0(*; pfold*).
+  inversion H; subst.
+  - inversion H0; subst.
     constructor. 
-  - pinversion H0; subst.
-    constructor. right. eapply COFIX; eauto.
+  - inversion H0; subst.
+    constructor. (*right.*) eapply COFIX; eauto.
 Qed.
 
 Lemma TraceEqSym : forall {A} (T1 T2: TraceOf A),
@@ -93,11 +93,11 @@ Lemma TraceEqSym : forall {A} (T1 T2: TraceOf A),
     TraceEq T2 T1.
 Proof.
   intro A.
-  pcofix COFIX.
-  intros T1 T2 H; pfold.
-  pinversion H; subst.
+  cofix COFIX.
+  intros T1 T2 H(*; pfold*).
+  inversion H; subst.
   - constructor.
-  - constructor. right. apply COFIX; auto.
+  - constructor. (*right.*) apply COFIX; auto.
 Qed.
 
 Add Parametric Relation A : (TraceOf A) (@TraceEq A)
@@ -109,7 +109,7 @@ as TraceEq_rel
 
 Lemma TraceEqHead : forall {A} (T1 T2: TraceOf A), TraceEq T1 T2 -> head T1 = head T2. 
 Proof.
-  intros A T1 T2 H. pdestruct H; auto.
+  intros A T1 T2 H. destruct H; auto.
 Qed.
 
 Add Parametric Morphism A: (@head A)
@@ -172,21 +172,22 @@ Lemma TraceAppEq {A} :
         OpTraceEq TO2 TO2' ->
         TraceEq (T1 ^ TO2) (T1' ^ TO2'). 
 Proof.
-  pcofix COFIX.
-  intros T1 T1' H TO2 TO2' H1; pfold.
+  cofix COFIX.
+  intros T1 T1' H TO2 TO2' H1(*; pfold*).
   inv H.
   - rewrite idTrace_eq. rewrite (idTrace_eq (finished a ^ TO2)). simpl.
     destruct TO2, TO2'; simpl in H1.
     + inv H1.
-      * constructor; auto.
-      * constructor. left.
+      * constructor; auto. apply TraceEqRefl.
+      * constructor. (*left.
         pfold. right.
-        apply upaco2_mon_bot with TraceEq_gen; auto.
+        apply upaco2_mon_bot with TraceEq_gen; auto.*)
+        constructor. assumption.
     + inversion H1.
     + inversion H1.
     + constructor.
   - rewrite idTrace_eq. rewrite (idTrace_eq (notfinished a T0 ^ TO2)). simpl.
-    constructor. right. apply COFIX; auto.
+    constructor. (*right.*) apply COFIX; auto.
 Qed.
 
 Add Parametric Morphism A: (@TraceApp A)
@@ -226,23 +227,23 @@ Lemma TraceAppNone :
   forall {A} (T : TraceOf A),
     TraceEq T (T^None).
 Proof.
-  intro A. pcofix COFIX. intros; pfold. rewrite idTrace_eq. destruct T.
+  intro A. cofix COFIX. intros(*; pfold*). rewrite idTrace_eq. destruct T.
   - simpl. constructor.
-  - simpl. constructor. right. apply COFIX.
+  - simpl. constructor. (*right.*) apply COFIX.
 Qed.
 
 Lemma TraceAppAssoc :
   forall A (T1 T2 : TraceOf A) TO,
     T1 ^ Some (T2 ^ TO) ~= (T1 ^ Some T2) ^ TO.
 Proof.
-  intro A. pcofix COFIX.
-  intros; pfold.
+  intro A. cofix COFIX.
+  intros(*; pfold*).
   destruct T1.
   - rewrite idTrace_eq.  rewrite idTrace_eq at 1. simpl.
-    constructor. left. apply paco2_mon_bot with TraceEq_gen; [| auto]. apply TraceEqRefl.
+    constructor. (*left. apply paco2_mon_bot with TraceEq_gen; [| auto].*) apply TraceEqRefl.
   - rewrite idTrace_eq.  rewrite (idTrace_eq (notfinished a T1 ^ Some (T2 ^ TO))). simpl.
     constructor.
-    right. apply COFIX.
+    (*right.*) apply COFIX.
 Qed.
 
 (* TracePrefix T1 T2 says T2 is a prefix of T1. *)
@@ -305,18 +306,18 @@ Add Parametric Morphism A: (@TracePrefix A)
 Proof.
   exact (@TracePrefixEq A).                                                                                     Qed.                            
                              
-Inductive ForallTrace_gen {A : Type} (P : A -> Prop) R : TraceOf A -> Prop :=
+CoInductive ForallTrace(*_gen*) {A : Type} (P : A -> Prop) (*R*) : TraceOf A -> Prop :=
 | Forall_finished : forall a,
-    P a -> ForallTrace_gen P R (finished a)
+    P a -> ForallTrace(*_gen*) P (*R*) (finished a)
 | Forall_notfinished : forall a T',
-    P a -> R T' -> ForallTrace_gen P R (notfinished a T').
-Hint Constructors ForallTrace_gen : core.
+    P a -> (*R*)ForallTrace P T' -> ForallTrace(*_gen*) P (*R*) (notfinished a T').
+(* Hint Constructors ForallTrace_gen : core. *)
 
-Definition ForallTrace {A} (P : A -> Prop) (T : TraceOf A) :=
-  paco1 (ForallTrace_gen P) bot1 T.
-Hint Unfold ForallTrace : core.
-Lemma ForallTrace_mon A P : monotone1 (@ForallTrace_gen A P). Proof. pmonauto. Qed.
-Hint Resolve ForallTrace_mon : paco.
+(* Definition ForallTrace {A} (P : A -> Prop) (T : TraceOf A) := *)
+(*   paco1 (ForallTrace_gen P) bot1 T. *)
+(* Hint Unfold ForallTrace : core. *)
+(* Lemma ForallTrace_mon A P : monotone1 (@ForallTrace_gen A P). Proof. pmonauto. Qed. *)
+(* Hint Resolve ForallTrace_mon : paco. *)
 
 Lemma ForallInTrace :
   forall {A} (f:A->Prop) T t,
@@ -324,14 +325,14 @@ Lemma ForallInTrace :
     ForallTrace f T ->
     f t.
 Proof.
-  intros. induction H; pinversion H0; auto.
+  intros. induction H; inversion H0; auto.
 Qed.
 
 Lemma ForallTraceTautology :
   forall {A} (P:A->Prop) (T:TraceOf A),
     (forall a, P a) -> ForallTrace P T.
 Proof.
-  intros A P. pcofix COFIX. intros; pfold. destruct T;constructor;auto.
+  intros A P. cofix COFIX. intros(*; pfold*). destruct T;constructor;auto.
 Qed.
 
 Lemma ForallTraceEq:
@@ -340,11 +341,11 @@ Lemma ForallTraceEq:
     ForallTrace f T1 ->
     ForallTrace f T2. 
 Proof.
-  intros A f. pcofix COFIX. intros T1 T2 H H0; pfold.
-  pdestruct H.
+  intros A f. cofix COFIX. intros T1 T2 H H0(*; pfold*).
+  destruct H.
   inv H0.
   - constructor. auto.
-  - inv H0. constructor. auto. right. eapply COFIX; eauto.
+  - inv H0. constructor. auto. (*right.*) eapply COFIX; eauto.
 Qed.
 
 Add Parametric Morphism A (f:A->Prop) : (@ForallTrace A f)
@@ -463,7 +464,7 @@ Lemma PrefixUpToHead {A} (p : A -> Prop) (T Tpre : TraceOf A) :
 Proof.
   intros [[Tsuff Hpre] | [? Eq]].
   - eapply SplitInclusiveHead; eauto.
-  - pinversion Eq; auto.
+  - inversion Eq; auto.
 Qed.
 
 (************************

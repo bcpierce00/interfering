@@ -38,37 +38,37 @@ Create HintDb StackSafety.
 (* CoInductive variant *)
 (* RB: TODO: Indexing over the contour as well to get cleaner coinduction with
    Paco while sorting things out. *)
-Inductive EagerStackIntegrity'_gen R :
+CoInductive EagerStackIntegrity'(*_gen R*) :
   Contour -> MPTrace -> Prop :=
 | SI_finished : forall C mp,
-    EagerStackIntegrity'_gen R C (finished mp)
+    EagerStackIntegrity'(*_gen R*) C (finished mp)
 | SI_notfinished :
     forall (C : Contour) (mp: MPState) (MP : MPTrace),
     (forall (k: Component), integrityOf (C k) = HI -> ms mp k = ms (head MP) k) ->
-    R C MP ->
-    EagerStackIntegrity'_gen R C (notfinished mp MP).
-Hint Constructors EagerStackIntegrity'_gen : core.
+    (*R*)EagerStackIntegrity' C MP ->
+    EagerStackIntegrity'(*_gen R*) C (notfinished mp MP).
+Hint Constructors EagerStackIntegrity'(*_gen*) : core.
 
-Definition EagerStackIntegrity' (C : Contour) (MP : MPTrace) :=
-  paco2 EagerStackIntegrity'_gen bot2 C MP.
-Hint Unfold EagerStackIntegrity' : core.
-Lemma EagerStackIntegrity'_mon : monotone2 EagerStackIntegrity'_gen. Proof. pmonauto. Qed.
-Hint Resolve EagerStackIntegrity'_mon : paco.
+(* Definition EagerStackIntegrity' (C : Contour) (MP : MPTrace) := *)
+(*   paco2 EagerStackIntegrity'_gen bot2 C MP. *)
+(* Hint Unfold EagerStackIntegrity' : core. *)
+(* Lemma EagerStackIntegrity'_mon : monotone2 EagerStackIntegrity'_gen. Proof. pmonauto. Qed. *)
+(* Hint Resolve EagerStackIntegrity'_mon : paco. *)
 
 (* RB: TODO: See if these work as well as the old version. *)
-Hint Constructors EagerStackIntegrity'_gen : StackSafety.
+Hint Constructors EagerStackIntegrity'(*_gen*) : StackSafety.
 
 Lemma StackIntegrityEquiv : forall (C:Contour) (MP: MPTrace),
      EagerStackIntegrity C MP -> EagerStackIntegrity' C MP.
 Proof.
-  intros C. pcofix COFIX.
-  intros MP H; pfold.
+  intros C. cofix COFIX.
+  intros MP H(*; pfold*).
   destruct MP.
   - constructor.
   - constructor.
     + intros. unfold EagerStackIntegrity in H.  simpl in H.
       apply H; auto. constructor. apply head_InTrace.
-    + right. apply COFIX.
+    + (*right.*) apply COFIX.
       unfold EagerStackIntegrity in *.  intros. simpl in H.
       erewrite <- H; auto.
       * apply H; auto.  constructor. auto.
@@ -83,8 +83,9 @@ Proof.
   induction H3 as [| | ? ? ? IHInTrace].
   - auto.
   - auto.
-  - simpl. pinversion H1. subst. rewrite <- IHInTrace.
-    +  punfold H6.
+  - simpl. inversion H1. subst. rewrite <- IHInTrace.
+    +  apply H5; auto.
+       (* punfold H6. *)
     +  apply H6.
 Qed.
 
@@ -123,9 +124,9 @@ CoFixpoint ObsTraceOf (MP: MPTrace) : ObsTrace :=
     notfinished O (ObsTraceOf MP')
   end.
 
-Hint Constructors ObsTraceEq_gen : StackSafety.
+Hint Constructors ObsTraceEq(*_gen*) : StackSafety.
 
-Hint Constructors ObsTracePrefix_gen : StackSafety.
+Hint Constructors ObsTracePrefix(*_gen*) : StackSafety.
 
 
 (* The entire trace MP represents a callee, that terminates when (and if)
@@ -195,7 +196,7 @@ Definition EagerStackConfidentiality' (C : Contour) (mp : MPState) (justReturned
      forall mret', ~ Last M' mret' /\
                    (ObsTraceOf MP) ~=_O (ObsTraceOfM M')).
 
-Inductive StrongEagerStackConfidentiality_gen (R : MachineState -> Prop) Rcoind :
+CoInductive StrongEagerStackConfidentiality(*_gen*) (R : MachineState -> Prop) (*Rcoind*) :
   MPTrace -> MTrace -> Prop :=
 | StrongConfStep :
     (* Maybe the top one should have a not ret *)
@@ -204,26 +205,26 @@ Inductive StrongEagerStackConfidentiality_gen (R : MachineState -> Prop) Rcoind 
       step m' = (head M', O) ->
       (forall k, ms (head MP) k <> ms mp k \/
                  (head M') k <> m' k -> ms (head MP) k = head M' k) ->
-      Rcoind MP M' ->
-      StrongEagerStackConfidentiality_gen R Rcoind (notfinished mp MP) (notfinished m' M')
+      (*Rcoind*)StrongEagerStackConfidentiality R MP M' ->
+      StrongEagerStackConfidentiality(*_gen*) R (*Rcoind*) (notfinished mp MP) (notfinished m' M')
 | StrongConfEnd :
     forall mp m,
       R (ms mp) -> R m ->
-      StrongEagerStackConfidentiality_gen R Rcoind (finished mp) (finished m)
+      StrongEagerStackConfidentiality(*_gen*) R (*Rcoind*) (finished mp) (finished m)
 | StrongConfNotMStep :
     forall mp MV,
       ~ (R (ms mp)) ->
       (* mpstep mp = None ->  *)
-      StrongEagerStackConfidentiality_gen R Rcoind (finished mp) MV.
-Hint Constructors StrongEagerStackConfidentiality_gen : core.
+      StrongEagerStackConfidentiality(*_gen*) R (*Rcoind*) (finished mp) MV.
+Hint Constructors StrongEagerStackConfidentiality(*_gen*) : core.
 
-Definition StrongEagerStackConfidentiality (R : MachineState -> Prop) MP M :=
-  paco2 (StrongEagerStackConfidentiality_gen R) bot2 MP M.
-Hint Unfold StrongEagerStackConfidentiality : core.
-Lemma StrongEagerStackConfidentiality_mon (R : MachineState -> Prop) : monotone2 (StrongEagerStackConfidentiality_gen R). Proof. pmonauto. Qed.
-Hint Resolve StrongEagerStackConfidentiality_mon : paco.
+(* Definition StrongEagerStackConfidentiality (R : MachineState -> Prop) MP M := *)
+(*   paco2 (StrongEagerStackConfidentiality_gen R) bot2 MP M. *)
+(* Hint Unfold StrongEagerStackConfidentiality : core. *)
+(* Lemma StrongEagerStackConfidentiality_mon (R : MachineState -> Prop) : monotone2 (StrongEagerStackConfidentiality_gen R). Proof. pmonauto. Qed. *)
+(* Hint Resolve StrongEagerStackConfidentiality_mon : paco. *)
 
-Hint Constructors StrongEagerStackConfidentiality_gen : StackSafety.
+Hint Constructors StrongEagerStackConfidentiality(*_gen*) : StackSafety.
 
 Lemma confStepPreservesVariant :
   forall C mp m' p' OM mv mv' ON,
@@ -364,7 +365,7 @@ Lemma StrongConfImpliesObsEq_Ret :
       Last MP mpret -> R (ms mpret) ->
       (ObsTraceOf MP) ~=_O (ObsTraceOfM MV).
 Proof.
-  pcofix COFIX.
+  cofix COFIX.
   intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
 Qed.
 
@@ -376,7 +377,7 @@ Lemma StrongConfImpliesObsEq_Fault :
       Last MP mpret -> ~ (R (ms mpret)) ->
       (ObsTraceOf MP) <=_O (ObsTraceOfM MV).
 Proof.  
-  pcofix COFIX.
+  cofix COFIX.
   intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
 Qed.  
 Hint Transparent not : StackSafety.
@@ -389,14 +390,14 @@ Lemma StrongConfImpliesObsEq_Inf :
     (forall mpret, ~ Last MP mpret) ->
     ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM MV).
 Proof.
-  unfold not; pcofix COFIX.
+  unfold not; cofix COFIX.
   intros; invert StrongEagerStackConfidentiality; conf_progress; seauto.
   (* RB: TODO: Fix tactics to apply Paco lemmas and solve last case. Naive hints
      on constructors of Paco generators do not work as well: after [pfold]ing, a
      constructor can be applied, but before another can be applied the resulting
      [upaco] must pick its left disjunct, that is, the corecursive [paco] (not
      not the parametric relation on the right) and [pfold] it again. *)
-  constructor. left. pfold. constructor. seauto.
+  (* constructor. left. pfold. constructor. seauto. *)
 Qed.
 
 Lemma ComponentConfTrans :
@@ -475,7 +476,7 @@ Proof.
   intros C R MP MV Var Conf mpret HLast HR.
   generalize dependent MV.
   induction HLast; subst; eauto; intros MV Var Conf;
-  pinversion Conf; subst; eauto; clear Conf; simpl in *.
+  inversion Conf; subst; eauto; clear Conf; simpl in *.
   - exists m; split; [constructor|].
     intros k Hk.
     inversion Hk; exfalso; eauto.
@@ -611,24 +612,24 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
    find the starts of calls and then take prefixes/suffixes when we need them.
    Also we don't really need to update contours so much as just generate them
    from the state. *)
-Inductive FindCall_gen (cm: CallMap) R :
+CoInductive FindCall(*_gen*) (cm: CallMap) (*R*) :
   MTrace -> Contour -> MTrace -> Prop :=
   | FindCallNow : forall C MM MM' args,
       (* Current instruction is a call *)
       isCall cm (head MM) args ->
       (* Construct the contour *)
       makeContour args (head MM) = C ->
-      FindCall_gen cm R MM C MM'
+      FindCall(*_gen*) cm (*R*) MM C MM'
   | FindCallLater: forall C MM MM' M,
-      R MM C MM' ->
-      FindCall_gen cm R (notfinished M MM) C MM'.
-Hint Constructors FindCall_gen : core.
+      (*R*)FindCall cm MM C MM' ->
+      FindCall(*_gen*) cm (*R*) (notfinished M MM) C MM'.
+Hint Constructors FindCall(*_gen*) : core.
 
-Definition FindCall (cm : CallMap) (M : MTrace) (C : Contour) (M' : MTrace) :=
-  paco3 (FindCall_gen cm) bot3 M C M'.
-Hint Unfold FindCall : core.
-Lemma FindCall_mon cm : monotone3 (FindCall_gen cm). Proof. pmonauto. Qed.
-Hint Resolve FindCall_mon : paco.
+(* Definition FindCall (cm : CallMap) (M : MTrace) (C : Contour) (M' : MTrace) := *)
+(*   paco3 (FindCall_gen cm) bot3 M C M'. *)
+(* Hint Unfold FindCall : core. *)
+(* Lemma FindCall_mon cm : monotone3 (FindCall_gen cm). Proof. pmonauto. Qed. *)
+(* Hint Resolve FindCall_mon : paco. *)
 
 (* SNA: FindCall via SplitInclusive turns out to work well with other lemmas *)               
 Inductive FindCallMP (cm: CallMap) : MPTrace -> Contour -> MPTrace -> Prop :=
@@ -898,19 +899,19 @@ Definition WellFormedVS (M : MachineState) (vs : VarStack) : Prop :=
 Hint Unfold WellFormedVS : StackSafety.
 
 (* Indexed Stack Safety Test to signify when a return should finish a trace. *)
-Inductive EagerStackSafetyTest_gen (cm : CallMap) R
+Inductive EagerStackSafetyTest(*_gen*) (cm : CallMap) (*R*)
   : nat -> MPTrace -> VarStack -> Prop :=
 | EagerTestFinFault :
     forall depth mp vs,
       WellFormedVS (ms mp) vs ->
       mpstep mp = None ->
-      EagerStackSafetyTest_gen cm R depth (finished mp) vs
+      EagerStackSafetyTest(*_gen*) cm (*R*) depth (finished mp) vs
 | EagerTestFinRet :
     forall depth mp vse vs,
       WellFormedVS (ms mp) (vse :: vs) ->
       length (vse :: vs) = depth ->
       retP vse (ms mp) ->
-      EagerStackSafetyTest_gen cm R depth (finished mp) vs
+      EagerStackSafetyTest(*_gen*) cm (*R*) depth (finished mp) vs
 | EagerTestStep :
     forall depth mp MP vs vs' m' p' OM,
       (* Not a call or a return *)
@@ -931,9 +932,9 @@ Inductive EagerStackSafetyTest_gen (cm : CallMap) R
       (* Step all variants and just recurse *)
       VSEs_step vs = vs' ->
       head MP = (m',p') ->
-      R depth MP vs' ->
+      (*R*)EagerStackSafetyTest cm depth MP vs' ->
       (* Conclude for current. *)
-      EagerStackSafetyTest_gen cm R depth (notfinished mp MP) vs
+      EagerStackSafetyTest(*_gen*) cm (*R*) depth (notfinished mp MP) vs
 | EagerTestCall :
     forall depth args mp MP vs vs' m' p' OM C,      
       (* Is a call *)
@@ -960,7 +961,7 @@ Inductive EagerStackSafetyTest_gen (cm : CallMap) R
       makeContour args (ms mp) = C ->
       (* Recurse with every variant at the new contour at the top. *)
       (forall mvar, variantOf (ms (head MP)) mvar C ->
-                    R depth MP
+                    (*R*)EagerStackSafetyTest cm depth MP
                       ({| init_machine := ms mp
                           ; init_variant := mvar
                           ; curr_variant := mvar
@@ -968,7 +969,7 @@ Inductive EagerStackSafetyTest_gen (cm : CallMap) R
                           ; retP := isRet (ms mp)
                        |} :: vs')) ->
       (* Conclude for current. *)
-      EagerStackSafetyTest_gen cm R depth (notfinished mp MP) vs
+      EagerStackSafetyTest(*_gen*) cm (*R*) depth (notfinished mp MP) vs
 | EagerTestRet :
     forall depth mp MP vs vs' m' p' OM,          
       (* Is a return *)
@@ -991,17 +992,17 @@ Inductive EagerStackSafetyTest_gen (cm : CallMap) R
       VSEs_step vs = vs' ->
       head MP = (m',p') ->
       (* Recurse but take of the top of the stack. *)
-      R depth MP (tl vs') ->
+      (*R*)EagerStackSafetyTest cm depth MP (tl vs') ->
       (* Conclude for current. *)
-      EagerStackSafetyTest_gen cm R depth (notfinished mp MP) vs.
-Hint Constructors EagerStackSafetyTest_gen : core.
+      EagerStackSafetyTest(*_gen*) cm (*R*) depth (notfinished mp MP) vs.
+Hint Constructors EagerStackSafetyTest(*_gen*) : core.
 
-Definition EagerStackSafetyTest
-           (cm : CallMap) (depth : nat) (MP : MPTrace) (vs : VarStack) :=
-  paco3 (EagerStackSafetyTest_gen cm) bot3 depth MP vs.
-Hint Unfold EagerStackSafetyTest : core.
-Lemma EagerStackSafetyTest_mon cm : monotone3 (EagerStackSafetyTest_gen cm). Proof. pmonauto. Qed.
-Hint Resolve EagerStackSafetyTest_mon : paco.
+(* Definition EagerStackSafetyTest *)
+(*            (cm : CallMap) (depth : nat) (MP : MPTrace) (vs : VarStack) := *)
+(*   paco3 (EagerStackSafetyTest_gen cm) bot3 depth MP vs. *)
+(* Hint Unfold EagerStackSafetyTest : core. *)
+(* Lemma EagerStackSafetyTest_mon cm : monotone3 (EagerStackSafetyTest_gen cm). Proof. pmonauto. Qed. *)
+(* Hint Resolve EagerStackSafetyTest_mon : paco. *)
 
 Definition EagerStackSafetyTest' cm C MP :=
   forall mv, variantOf (ms (head MP)) mv C ->
@@ -1034,24 +1035,24 @@ Ltac int_progress' :=
 
 Ltac int_progress := repeat progress int_progress'.
 
-Inductive MStepCompatible_gen R : MTrace -> Prop :=
+CoInductive MStepCompatible(*_gen R*) : MTrace -> Prop :=
 | MCompStep :
     forall m M o,
       step m = (head M, o) ->
-      R M ->
-      MStepCompatible_gen R (notfinished m M).
-Hint Constructors MStepCompatible_gen : core.
+      (*R*) MStepCompatible M ->
+      MStepCompatible(*_gen R*) (notfinished m M).
+Hint Constructors MStepCompatible(*_gen*) : core.
 
-Definition MStepCompatible (M : MTrace) :=
-  paco1 MStepCompatible_gen bot1 M.
-Hint Unfold EagerStackSafetyTest : core.
-Lemma MStepCompatible_mon : monotone1 MStepCompatible_gen. Proof. pmonauto. Qed.
-Hint Resolve MStepCompatible_mon : paco.
+(* Definition MStepCompatible (M : MTrace) := *)
+(*   paco1 MStepCompatible_gen bot1 M. *)
+(* Hint Unfold EagerStackSafetyTest : core. *)
+(* Lemma MStepCompatible_mon : monotone1 MStepCompatible_gen. Proof. pmonauto. Qed. *)
+(* Hint Resolve MStepCompatible_mon : paco. *)
 
 Lemma MTraceOf_Compatible : forall m, MStepCompatible (MTraceOf m).
 Proof.
-  pcofix COFIX.
-  intros m; pfold; frobber MTraceOf.
+  cofix COFIX.
+  intros m; (*pfold;*) frobber MTraceOf.
   destruct (step m) as [m' o] eqn:Step.
   eapply MCompStep; eauto.
 Qed.    
@@ -1062,13 +1063,13 @@ Lemma InMTrace_Compatible : forall m M, InTrace m M ->
                       InTrace m' M.
 Proof.
   intros m M H; induction H; intros Comp m'' o'' MStep.
-  - pinversion Comp.
+  - inversion Comp.
   - apply In_later.
-    pinversion Comp; subst; eauto.
-    rewrite H1 in MStep. inv MStep. pinversion H2; subst; auto.
+    inversion Comp; subst; eauto.
+    rewrite H1 in MStep. inv MStep. inversion H2; subst; auto.
     destruct H2; simpl; constructor.
   - apply In_later. eapply IHInTrace; eauto.
-    pinversion Comp; eauto.
+    inversion Comp; eauto.
 Qed.
 
 Corollary InMTrace_step : forall m m0, InTrace m (MTraceOf m0) ->
@@ -1078,24 +1079,24 @@ Proof.
   intros; eapply InMTrace_Compatible; eauto using MTraceOf_Compatible.
 Qed.
 
-Inductive MPStepCompatible_gen (R : MachineState -> Prop) Rcoind : MPTrace -> Prop :=
+CoInductive MPStepCompatible(*_gen*) (R : MachineState -> Prop) (*Rcoind*) : MPTrace -> Prop :=
 | CompError :
-    forall mp, mpstep mp = None -> MPStepCompatible_gen R Rcoind (finished mp)
+    forall mp, mpstep mp = None -> MPStepCompatible(*_gen*) R (*Rcoind*) (finished mp)
 | CompRet :
-    forall mp, R (ms mp) -> MPStepCompatible_gen R Rcoind (finished mp)
+    forall mp, R (ms mp) -> MPStepCompatible(*_gen*) R (*Rcoind*) (finished mp)
 | CompStep :
     forall mp MP,
       (exists o, mpstep mp = Some (ms (head MP), ps (head MP), o)) ->
       ~ (R (ms mp)) ->
-      Rcoind MP ->
-      MPStepCompatible_gen R Rcoind (notfinished mp MP).
-Hint Constructors MPStepCompatible_gen : core.
+      (*Rcoind*)MPStepCompatible R MP ->
+      MPStepCompatible(*_gen*) R (*Rcoind*) (notfinished mp MP).
+Hint Constructors MPStepCompatible(*_gen*) : core.
 
-Definition MPStepCompatible (R : MachineState -> Prop) (MP : MPTrace) :=
-  paco1 (MPStepCompatible_gen R) bot1 MP.
-Hint Unfold MPStepCompatible : core.
-Lemma MPStepCompatible_mon R : monotone1 (MPStepCompatible_gen R). Proof. pmonauto. Qed.
-Hint Resolve MPStepCompatible_mon : paco.
+(* Definition MPStepCompatible (R : MachineState -> Prop) (MP : MPTrace) := *)
+(*   paco1 (MPStepCompatible_gen R) bot1 MP. *)
+(* Hint Unfold MPStepCompatible : core. *)
+(* Lemma MPStepCompatible_mon R : monotone1 (MPStepCompatible_gen R). Proof. pmonauto. Qed. *)
+(* Hint Resolve MPStepCompatible_mon : paco. *)
 
 Lemma variantOf_id C m : variantOf m m C.
 Proof.
@@ -1110,8 +1111,8 @@ Theorem TestImpliesIntegrityNested :
          MPStepCompatible (retP vse) MP ->
   EagerStackSafetyTest cm n MP vs -> EagerStackIntegrity' C MP.
 Proof.
-  pcofix COFIX.
-  intros cm C MP vs n vscall vse Last Hvse HC HNotR Safety; pfold.
+  cofix COFIX.
+  intros cm C MP vs n vscall vse Last Hvse HC HNotR Safety(*; pfold*).
   inv Safety.
   - apply SI_finished.
   - apply SI_finished.
@@ -1120,24 +1121,24 @@ Proof.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H6; simpl.
       eapply H4; eauto using FinLastNHead_implies_In.
-    + right.
+    + (*right.*)
       eapply (COFIX cm (contour vse) MP0 (VSEs_step vs) n (VSEs_step vscall) (VSE_step vse)); eauto.
       * eapply VSE_step_preserves_LastN; eauto.
       * destruct vscall; inversion Hvse; subst; simpl; auto.
       * unfold VSE_step; simpl; auto.
         destruct (step (curr_variant vse)); simpl; auto.
-      * unfold not; intros; pfold; eauto.
-        pinversion HNotR; subst; auto.
+      * unfold not; intros; (*pfold;*) eauto.
+        inversion HNotR; subst; auto.
         unfold VSE_step; simpl; destruct (step (curr_variant vse)); auto.
-        simpl.
-        eapply paco1_unfold with (x0 := MP0); eauto with paco.
+        (* simpl. *)
+        (* eapply paco1_unfold with (x0 := MP0); eauto with paco. *)
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H6; simpl.
       eauto using FinLastNHead_implies_In.
     + remember (Build_VSE (ms mp) (ms (head MP0)) (ms (head MP0)) (makeContour args (ms mp)) (isRet (ms mp))) as vse_call.
-      right.
+      (*right.*)
       apply (COFIX cm (contour vse) MP0 (vse_call::(VSEs_step vs)) n (VSEs_step vscall) (VSE_step vse)); eauto.
       * eapply FinLastLater.
         eapply VSE_step_preserves_LastN; eauto.
@@ -1147,18 +1148,19 @@ Proof.
       * unfold not; intros; eauto.
         unfold VSE_step.
         destruct (step (curr_variant vse)); auto.
-        pinversion HNotR; subst; auto.
-      * pfold. rewriteHyp.
+        inversion HNotR; subst; auto.
+      * (*pfold.*) rewriteHyp.
         specialize (H8 (ms (head MP0)) (variantOf_id _ _)).
-        destruct H8 as [H8 | H8]; [| easy].
-        (* RB: TODO: Revisit similar cases to try to simplify like so: *)
-        punfold H8.
+        (* destruct H8 as [H8 | H8]; [| easy]. *)
+        (* (* RB: TODO: Revisit similar cases to try to simplify like so: *) *)
+        (* punfold H8. *)
+        assumption.
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H5.
       eauto using FinLastNHead_implies_In.
-    + right.
+    + (*right.*)
       apply (COFIX cm (contour vse) MP0 (tl (VSEs_step vs)) n (VSEs_step vscall) (VSE_step vse)); auto.
       * destruct vs; simpl in *.
         -- inversion Last; subst; simpl in *; try solve [constructor]; eauto.
@@ -1167,13 +1169,13 @@ Proof.
               destruct H as [vseC [vsrest [Eq [Hret Hd]]]].
               exfalso.
               inversion Eq; subst.
-              pinversion HNotR; subst; auto.
+              inversion HNotR; subst; auto.
            ++ eapply VSE_step_preserves_LastN; eauto.
       * destruct vscall; inversion Hvse; subst; eauto.
       * unfold VSE_step; simpl; auto.
         destruct (step (curr_variant vse)); simpl; auto.
       * unfold not; intros; eauto.
-        pinversion HNotR; subst; auto.
+        inversion HNotR; subst; auto.
         unfold VSE_step; destruct (step (curr_variant vse)); simpl; auto.
 Qed.
 
@@ -1221,7 +1223,7 @@ Proof.
   eapply TestImpliesIntegrityNested with (n:=1) (vscall := [vse]); eauto.
   - eapply FinLast_FinLastN1; eauto.
   - simpl; auto.
-  - pfold.
+  - (*pfold.*)
     invert EagerStackSafetyTest.
     + constructor; auto.
     + apply CompRet; auto.
@@ -1230,17 +1232,17 @@ Proof.
       * congruence.
     + destruct H2 as [Var [[vse' [Last' Ret]] [InM InV]]] eqn:wf.
       assert (vse = vse') by (eapply FinLast_unique; eauto).
-      pinversion Comp; subst; eauto.
+      inversion Comp; subst; eauto.
       constructor; eauto; rewrite Ret; auto.
     + destruct H2 as [Var [[vse' [Last' Ret]] [InM InV]]] eqn:wf.
       assert (vse = vse') by (eapply FinLast_unique; eauto).
       subst.
-      pinversion Comp; subst; eauto.
+      inversion Comp; subst; eauto.
       constructor; eauto; rewrite Ret; auto.
     + destruct H1 as [Var [[vse' [Last' Ret]] [InM InV]]] eqn:wf.
       assert (vse = vse') by (eapply FinLast_unique; eauto).
       subst.
-      pinversion Comp; subst; eauto.
+      inversion Comp; subst; eauto.
       constructor; eauto; rewrite Ret; auto.
 Qed.
 
@@ -1471,20 +1473,20 @@ Theorem TestImpliesConfidentialityNested :
     variantOf (ms (head MP)) (curr_variant vse) C ->
     StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf (curr_variant vse)).
 Proof.
-  pcofix COFIX.
-  intros cm C MP vs n vscall vse LastN hCall HC Comp [HVar [[vselast [HLast RFalse]] [InMP InVar]]] Safety Var;
-    pfold.
+  cofix COFIX.
+  intros cm C MP vs n vscall vse LastN hCall HC Comp [HVar [[vselast [HLast RFalse]] [InMP InVar]]] Safety Var(*;
+    pfold*).
   destruct MP.
   - apply StrongConfNotMStep.
     intros Contra. inversion Contra.
   - destruct (step (curr_variant vse)) as [mv' o'] eqn:StepV.
-    pinversion Comp; subst; clear Comp.
+    inversion Comp; subst; clear Comp.
     match goal with
     | [H : exists _, _ |- _] => destruct H as [o MPStep]
     end.
     frobber MTraceOf.
     extract_mpstep.
-    pinversion Safety; subst; clear Safety.
+    inversion Safety; subst; clear Safety.
     + destruct (H7 vse) as [mv'' [ov [VStep VConf]]];
         eauto using FinLastNHead_implies_In.
       rewrite VStep in StepV.
@@ -1502,7 +1504,7 @@ Proof.
         assert (HMV' : curr_variant vse' = mv')
           by (subst; unfold VSE_step; simpl; rewriteHyp; simpl; auto).
         rewrite <- HMV'.
-        right.
+        (* right. *)
         apply (COFIX cm (contour vse) MP (VSEs_step vs) n (VSEs_step vscall) vse');
           eauto.
         -- eapply VSE_step_preserves_LastN; eauto.
@@ -1512,9 +1514,9 @@ Proof.
         -- rewriteHyp; unfold VSE_step; rewriteHyp; simpl; auto.
         -- (* Safe step preserves wellformed *)
            eapply VSE_step_preserves_WellFormed; eauto.
-        -- (* RB: This (easy) goal is no longer discharged by eauto. *)
-           destruct H13 as [H13 | H13]; [| easy].
-           punfold H13.
+        (* -- (* RB: This (easy) goal is no longer discharged by eauto. *) *)
+        (*    destruct H13 as [H13 | H13]; [| easy]. *)
+        (*    punfold H13. *)
         -- repeat rewriteHyp; eapply confStepPreservesVariant; eauto.
            intros k [Hk | Hk]; eapply HConf; [left | right]; eauto.
     + destruct (H7 vse) as [mv'' [ov [VStep VConf]]];
@@ -1536,7 +1538,7 @@ Proof.
           by (subst; unfold VSE_step; simpl; rewriteHyp; simpl; auto).
         rewrite <- HMV'.
         remember (Build_VSE (ms m) (ms (head MP)) (ms (head MP)) (makeContour args (ms m)) (isRet (ms m))) as vse_call.
-        right.
+        (* right. *)
         apply (COFIX cm (contour vse) MP (vse_call :: (VSEs_step vs)) n (VSEs_step vscall) vse'); eauto.
         -- constructor; eapply VSE_step_preserves_LastN; eauto.
         -- unfold VSEs_step; simpl.
@@ -1559,8 +1561,9 @@ Proof.
         -- (* RB: This (easy) goal is no longer discharged by eauto. *)
            rewrite Heqvse_call.
            specialize (H14 _ (variantOf_id _ _)).
-           destruct H14 as [H14 | H14]; [| easy].
-           punfold H14.
+           (* destruct H14 as [H14 | H14]; [| easy]. *)
+           (* punfold H14. *)
+           assumption.
         -- repeat rewriteHyp; eapply confStepPreservesVariant; eauto.
            intros k [Hk | Hk]; eapply HConf; [left | right]; eauto.
     + destruct (H6 vse) as [mv'' [ov [VStep VConf]]];
@@ -1588,7 +1591,7 @@ Proof.
           by (subst; unfold VSE_step; simpl; rewriteHyp; simpl; auto).
         rewrite <- HMV'.
 
-        right.
+        (* right. *)
         apply (COFIX cm (contour vse) MP (VSEs_step vs) n (VSEs_step vscall) vse'); eauto.
         -- eapply FinLastN_depth.
            eapply VSE_step_preserves_LastN; unfold VSEs_step; simpl; eauto.
@@ -1619,9 +1622,9 @@ Proof.
               --- inversion H1. 
              ** inversion HInM'; eauto.
              ** inversion HInV'; eauto.
-        -- (* RB: Another goal no longer solved by auto. *)
-           destruct H12 as [H12 | H12]; [| easy].
-           punfold H12.
+        (* -- (* RB: Another goal no longer solved by auto. *) *)
+        (*    destruct H12 as [H12 | H12]; [| easy]. *)
+        (*    punfold H12. *)
         -- repeat rewriteHyp. eapply confStepPreservesVariant; eauto.
            intros k [Hk | Hk]; eapply HConf; [left | right]; eauto.
 Qed.
@@ -2135,18 +2138,18 @@ definition but I couldn't actually make any of the proofs go through. *)
 (* Definition RealMPTrace' (MP:MPTrace) : Prop := 
   TraceEq MP (MPTraceOf (head MP)).*)
 
-CoInductive RealMPTrace'_gen R : MPState -> MPTrace -> Prop :=
-| RMP0 : forall mp, pstep mp = None -> RealMPTrace'_gen R mp (finished mp)
+CoInductive RealMPTrace'(*_gen R*) : MPState -> MPTrace -> Prop :=
+| RMP0 : forall mp, pstep mp = None -> RealMPTrace'(*_gen R*) mp (finished mp)
 | RMP1 : forall mp MP p', pstep mp = Some p' ->
-                       R (fst (step (ms mp)), p') MP ->
-                       RealMPTrace'_gen R mp (notfinished mp MP).
-Hint Constructors RealMPTrace'_gen : core.
+                       (*R*)RealMPTrace' (fst (step (ms mp)), p') MP ->
+                       RealMPTrace'(*_gen R*) mp (notfinished mp MP).
+Hint Constructors RealMPTrace'(*_gen*) : core.
 
-Definition RealMPTrace' (mp : MPState) (MP : MPTrace) :=
-  paco2 RealMPTrace'_gen bot2 mp MP.
-Hint Unfold RealMPTrace' : core.
-Lemma RealMPTrace'_mon : monotone2 RealMPTrace'_gen. Proof. pmonauto. Qed.
-Hint Resolve RealMPTrace'_mon : paco.
+(* Definition RealMPTrace' (mp : MPState) (MP : MPTrace) := *)
+(*   paco2 RealMPTrace'_gen bot2 mp MP. *)
+(* Hint Unfold RealMPTrace' : core. *)
+(* Lemma RealMPTrace'_mon : monotone2 RealMPTrace'_gen. Proof. pmonauto. Qed. *)
+(* Hint Resolve RealMPTrace'_mon : paco. *)
 
 Lemma MPTraceOfHead: forall mp, mp = head (MPTraceOf mp).
 Proof.
@@ -2161,8 +2164,8 @@ Definition RealMPTrace'' MP := TraceEq MP (MPTraceOf (head MP)).
 Lemma RealMPTrace'Same : forall m MP, RealMPTrace' m MP ->
                                     TraceEq MP (MPTraceOf m).
 Proof.
- pcofix COFIX.
- intros m mp H; pfold.
+ cofix COFIX.
+ intros m mp H(*; pfold*).
  inv H.
  - rewrite idTrace_eq; simpl.
    rewrite H0.
@@ -2170,7 +2173,7 @@ Proof.
  - rewrite idTrace_eq; simpl.
    rewrite H0.
    constructor.
-   right. eapply COFIX; eauto.
+   (*right.*) eapply COFIX; eauto.
 Qed.
 
 Lemma RealMPTrace'Eq : forall m MP,
@@ -2179,8 +2182,8 @@ Lemma RealMPTrace'Eq : forall m MP,
       TraceEq MP MP1 ->
       RealMPTrace' m MP1. 
 Proof.
-  pcofix COFIX.
-  intros m MP H MP1 H0; pfold.
+  cofix COFIX.
+  intros m MP H MP1 H0(*; pfold*).
   inv H.
   - destruct MP1. 
     + inv H0. constructor; auto.
@@ -2198,12 +2201,12 @@ Proof.
   remember (head MP) as m0.
   generalize dependent m0.
   generalize dependent MP.
-  pcofix COFIX.
-  intros MP m0 Heqm0 H; pfold.
+  cofix COFIX.
+  intros MP m0 Heqm0 H(*; pfold*).
   rewrite idTrace_eq in H. simpl in H.
   destruct MP as [m | m MP'] eqn:?.
   - destruct (pstep m0) eqn:?.
-    + pinversion H.
+    + inversion H.
     + subst m0. constructor; auto.
   - destruct (pstep m0) eqn:?.
     + inv H.
@@ -2211,11 +2214,11 @@ Proof.
       simpl.
       set (mp' := (fst (step (ms m)), p)).
       simpl in *. 
-      right. apply COFIX.
+      (*right.*) apply COFIX.
       * erewrite TraceEqHead.
         apply MPTraceOfHead. auto.
       * auto.
-    + pinversion H.
+    + inversion H.
 Qed.
 
 Lemma RealMPEquiv : forall MP, RealMPTrace'' MP <-> RealMPTrace' (head MP) MP.
@@ -2233,7 +2236,7 @@ Lemma SplitSuffixReal' :
 Proof.
   induction 1; intros; auto. 
   apply IHSplitInclusive.
-  pfold.
+  (* pfold. *)
   simpl in H1.
   inv H1.
   inv H5; econstructor; eauto.
@@ -2244,7 +2247,7 @@ Lemma RealTail' :
     RealMPTrace' mp (notfinished mp MP) ->
     RealMPTrace' (head MP) MP.  
 Proof.
-  intros mp MP H; pfold.
+  intros mp MP H(*; pfold*).
   inv H.
   destruct MP. 
   - simpl. inv H3. constructor. auto.
@@ -2258,15 +2261,15 @@ Lemma MPTracePrefixMTrace :
      ms mp = m -> 
      ObsTraceOf (MPTraceOf mp) <=_O ObsTraceOfM (MTraceOf m).
 Proof.
-  pcofix COFIX.
-  intros mp m H; pfold.
+  cofix COFIX.
+  intros mp m H(*; pfold*).
   destruct mp. simpl in *.  subst.
   rewrite idTrace_eq. pattern (ObsTraceOfM (MTraceOf m)) at 1.  rewrite idTrace_eq.  simpl.
   destruct (pstep (m,p)); simpl.
   - destruct (step m).  simpl.
     destruct o. 
-    * constructor. right. apply COFIX. auto.
-    * constructor. left. pfold. constructor. right. apply COFIX. auto.
+    * constructor. (*right.*) apply COFIX. auto.
+    * constructor. (*left. pfold.*) constructor. (*right.*) apply COFIX. auto.
   - destruct (step m). simpl.
     constructor.
 Qed.
@@ -2277,8 +2280,8 @@ Lemma MTraceEqInfMPTrace :
     (forall mpfin, ~ (Last (MPTraceOf mp) mpfin)) ->
     ObsTraceEq (ObsTraceOf (MPTraceOf mp)) (ObsTraceOfM (MTraceOf m)).
 Proof.
-  pcofix COFIX.
-  intros mp m H H0; pfold.
+  cofix COFIX.
+  intros mp m H H0(*; pfold*).
   destruct mp. simpl in *. subst.
   rewrite idTrace_eq. rewrite (idTrace_eq (ObsTraceOf (MPTraceOf (m,p)))).  simpl.
   destruct (pstep (m,p)) eqn:?; simpl.
@@ -2290,8 +2293,8 @@ Proof.
       rewrite Heqo. rewrite Heqp1.  simpl.
       constructor.  auto. }
     destruct o.
-    + constructor. right. apply COFIX; auto.
-    + constructor. left. pfold. constructor. right. apply COFIX; auto.
+    + constructor. (*right.*) apply COFIX; auto.
+    + constructor. (*left. pfold.*) constructor. (*right.*) apply COFIX; auto.
   - exfalso. eapply (H0 (m,p)).
     rewrite (idTrace_eq (MPTraceOf (m,p))).  simpl.
     rewrite Heqo.
@@ -2332,14 +2335,14 @@ Lemma ObsTraceOfTraceEq :
     MP ~= MP' ->
     (ObsTraceOf MP) ~= (ObsTraceOf MP').
 Proof.
-  pcofix COFIX. intros MP MP' H; pfold. inv H.
+  cofix COFIX. intros MP MP' H(*; pfold*). inv H.
   - rewrite (idTrace_eq (ObsTraceOf (finished a))).
     unfold ObsTraceOf. simpl. constructor.
   - rewrite (idTrace_eq (ObsTraceOf (notfinished a T1))).
     rewrite (idTrace_eq (ObsTraceOf (notfinished a T2))).
     destruct a. unfold ObsTraceOf. simpl.
     destruct (step m) eqn:?.
-    constructor. right. apply COFIX. auto.
+    constructor. (*right.*) apply COFIX. auto.
 Qed.
 
 
@@ -2711,7 +2714,7 @@ Proof.
         { destruct H2.
           - destruct H2 as [MPsuff]. destruct H2.
             apply SplitInclusiveHeadEq in H7. auto.
-          - destruct H2. destruct H7. pinversion H7;auto. }
+          - destruct H2. destruct H7. inversion H7;auto. }
         rewrite H7. auto.
 Qed.
 
