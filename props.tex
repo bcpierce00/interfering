@@ -1,0 +1,318 @@
+\documentclass{article}
+
+\usepackage{geometry}
+\usepackage{amssymb,amsmath}
+
+\begin{document}
+
+  \section{Preliminaries}
+
+    Values are words:
+    \[w \in \mathcal{W}\]
+
+    Components are words (addresses) and registers, including special registers:
+    \[r \in \mathcal{R}\]
+    \[k \in \mathcal{K} ::= \mathcal{W} | \mathcal{R} | \mathtt{PC} | \mathtt{SP}\]
+
+    A machine state maps components to values:
+    \[m \in \mathcal{M} ::= \mathcal{K} \rightarrow \mathcal{W}\]
+
+    Our properties are defined in terms of observations, which may be silent or a word of data:
+    \[o \in \mathit{Obs} ::= \tau | w \in \mathcal{W}\]
+    
+    Execution is by a step function \(\cdot \xrightarrow{\cdot} \cdot : \mathcal{M} \rightarrow
+    \mathit{Obs} \times \mathcal{M}\). For every machine state \(m\) there is exactly one \(o\) and \(m'\)
+    such that \(m \xrightarrow{o} m'\).
+
+    Meanwhile a policy tracks a mix of static and dynamic enforcement. A policy consists of
+    a set of policy states, \(p \in \mathcal{P}\), a policy initializer
+    \(pinit : \mathcal{M} \rightharpoonup \mathcal{P}\), and a policy-parameterized step relation
+    \(\cdot, \cdot \xrightarrow{\cdot}_P \cdot, \cdot : \mathcal{M} \times \mathcal{P} \rightharpoonup
+    \mathit{Obs} \times \mathcal{M} \times \mathcal{P}\) such that if \(m,p \xrightarrow{o}_P m',p'\),
+    then \(m \xrightarrow{o} m'\). The initializer is a partial function from machine states to policy
+    states, reflecting that a policy may apply static constraints on the initial state. The parameterized
+    step relation is likewise partial to allow for fail-stop behavior.
+
+  \paragraph{Machine, Policy, and Observation Traces}
+
+    A machine trace \(M\) is a sequence of machine states \(m_0 m_1 m_2 \dots\) such that each
+    pair of adjacent states are related by \(\longrightarrow\) with some observation. An
+    {\it mptrace} is similarly a sequence of machine state-policy state pairs,
+    \((m_0,\mathit{pinit}(m_0))(m_1,p_1) \dots\) such that adjacent pairs of pairs are related
+    by \(\longrightarrow_P\). Steps being deterministic, we can relate an initial state to its trace
+    via \(\cdot \hookrightarrow \cdot : \mathcal{M} \rightarrow \mathit{trace}\ \mathcal{M}\):
+
+    \[\frac{m_0 \xrightarrow{o} m_1 \hspace{.5cm} m_1 \hookrightarrow M}
+           {m_0 \hookrightarrow m_0 M}\]
+
+    Since the step function is total, if \(m \hookrightarrow M\), then \(M\) must be infinite.
+    We will also wish to take a prefix of the trace from an initial state up to when some condition
+    holds. Let \(f\) be a predicate on machine states. Then we define \(m \hookrightarrow M | f\)
+    (read ``\(M\) is the prefix from \(m\) until \(f\)'') by:
+
+    \begin{minipage}[b]{.45\textwidth}
+      \[\frac{m_0 \xrightarrow{o} m_1 \hspace{.5cm} \neg f\ m_1 \hspace{.5cm} m_1 \hookrightarrow M | f }
+             {m_0 \hookrightarrow m_0 M | f}\]
+    \end{minipage}
+    \begin{minipage}[b]{.45\textwidth}
+      \[\frac{m_0 \xrightarrow{o} m_1 \hspace{.5cm} f\ m_1}
+             {m_0 \hookrightarrow m_0 m_1}\]
+    \end{minipage}
+    \vspace{\belowdisplayskip}
+
+    We similarly define \(\hookrightarrow_P\), writing \(m_0,\mathit{pinit}(m_0) \longrightarrow \bot\) when
+    there is no \(m_1,p_1\) such that \(m_0,\mathit{pinit}(m_0) \xrightarrow{o} m_1,p_1\) for any \(o\).
+    
+    \begin{minipage}[b]{.45\textwidth}
+      \[\frac{m_0,p_0 \xrightarrow{o} m_1,p_1 \hspace{.5cm} m_1,p_1 \hookrightarrow_P MP}
+             {m_0,p_0 \hookrightarrow_P m_0,p_0 MP}\]
+    \end{minipage}
+    \begin{minipage}[b]{.45\textwidth}
+      \[\frac{m_0,p_0 \longrightarrow \bot}
+             {m_0,p_0 \hookrightarrow_P m_0,p_0}\]
+    \end{minipage}
+    \vspace{\belowdisplayskip}
+
+    With a policy we may see \(m,p \hookrightarrow MP\) where \(MP\) is finite due to a policy
+    failure. We will identify the set of infinite traces as \(\top\), so \(MP \in \top\) will
+    indicate an infinite trace and \(MP \not \in \top\) a finite one.
+    We define a similar notion of taking the prefix until a condition:
+
+    \begin{minipage}[b]{.45\textwidth}
+      \[\frac{m_0,p_0 \xrightarrow{o} m_1,p_1 \hspace{.5cm} \neg f\ m_1 \hspace{.5cm} m_1,p_1
+                \hookrightarrow_P M | f }
+             {m_0,p_0 \hookrightarrow_P m_0,p_0 M | f}\]
+    \end{minipage}
+    \begin{minipage}[b]{.45\textwidth}
+      \[\frac{m_0,p_0 \xrightarrow{o} m_1,p_1 \hspace{.5cm} f\ m_1}
+             {m_0,p_0 \hookrightarrow_P (m_0,p_0) (m_1,p_1)}\]
+    \end{minipage}
+    \vspace{\belowdisplayskip}
+
+    An observation trace \(O\) is the trace of observations from a machine or {\it mptrace},
+    as defined by \(\mathit{ObsOf}\):
+    
+    \begin{minipage}[b]{.45\textwidth}
+      \[\frac{M = mM' \hspace{.5cm} m \xrightarrow{o} m' \hspace{.5cm} \mathit{ObsOf}(M') = O}
+             {\mathit{ObsOf}(M) = oO}\]
+    \end{minipage}
+    \begin{minipage}[b]{.45\textwidth}
+      \[\frac{M = m}
+             {\mathit{ObsOf}(M) = \tau}\]
+    \end{minipage}
+    \vspace{\belowdisplayskip}
+
+    \begin{minipage}[b]{.45\textwidth}
+      \[\frac{MP = (m,p)MP' \hspace{.5cm} m,p \xrightarrow{o} m',p' \hspace{.5cm} \mathit{ObsOf}(MP') = O}
+             {\mathit{ObsOf}(MP) = oO}\]
+    \end{minipage}
+    \begin{minipage}[b]{.45\textwidth}
+      \[\frac{MP = m,p}
+             {\mathit{ObsOf}(M) = \tau}\]
+    \end{minipage}
+    \vspace{\belowdisplayskip}
+
+    We abbreviate the observation trace of the execution trace from a state as:
+    \[m \rightsquigarrow O \triangleq m \hookrightarrow M \land \mathit{ObsOf}(M) = O\]
+    \[m,p \rightsquigarrow O \triangleq m,p \hookrightarrow_P MP \land \mathit{ObsOf}(MP) = O\]
+
+    An observational prefix \(O_1 \lesssim O_2\) means that \(O_1\) is a prefix of \(O_2\) up to the deletion
+    of \(\tau\) observations:
+
+    \[O_1 \sim O_2 \triangleq
+      \begin{cases}
+        O_1' \sim O_2 & \text{if } O_1 = \tau O_1' \\
+        O_1 \sim O_2' & \text{if } O_2 = \tau O_2' \\
+        O_1' \sim O_2' & \text{if } O_1 = w O_1' \text{ and } O_2 = w O_2' \\
+        \text{True} & \text{if for all } o \text{ in } O_1, o = \tau \\
+      \end{cases}\]
+
+    Observational equivalence is defined as a symmetric prefix:
+    \[O_1 \simeq O_2 \triangleq O_1 \lesssim O_2 \land O_2 \lesssim O_1\]
+ 
+  \section{Observable Stack Safety}
+
+    {\it Observable stack safety} is a property of a transition system \(\longrightarrow_p\),
+    which is decomposed into three subproperties:
+    {\it observable stack integrity}, {\it observable stack confidentiality}, and
+    {\it observable safe initialization}. 
+
+  %  We unify these properties with a structure
+  %  called a {\it contour} that maps components to levels of confidentiality and integrity.
+  %  Specifically, we have confidentiality labels \(\mathit{labelC} ::= \{\mathtt{HC}, \mathtt{LC}\}\)
+  %  and integrity labels \(\mathit{labelI} ::= \{\mathtt{HI}, \mathtt{LI}\}\), and a
+  %  type \(\mathit{contour}\)
+
+    \paragraph{Observable Safe Initialization}
+
+      In the initial state of a program, nothing has yet been allocated on the stack, and
+      there is no guarantee of the initial value of memory in the stack. So there is no
+      need to protect a caller's stack data, but reading uninitialized data is unsafe.
+
+      Let \(C : \mathcal{K} \rightarrow \{\mathtt{HC},\mathtt{LC}\}\) map all addresses
+      to \(\mathtt{HC}\) (high confidentiality) and all registers to \(\mathtt{LC}\)
+      (low confidentiality). In the style of non-interference, a pair of states \(m\)
+      and \(m'\) are variants with regard to \(C\), \(m \approx_C m'\), if:
+      \[\forall k . C(k) = \mathtt{LC} \rightarrow m(k) = m'(k)\]
+      
+      A system enjoys {\it observable safe initialization} if for any initial states \(m_0\)
+      and \(m_0'\) such that \(m_0 \approx_C m_0'\):
+
+      \begin{itemize}
+        \item Let \(m_0,\mathit{pinit}(m_0) \rightsquigarrow O\) and \(m_0' \rightsquigarrow O'\)
+        \item If \(m_0,\mathit{pinit}(m_0) \hookrightarrow_P MP \in \top\) then \(O \simeq O'\)
+        \item Otherwise \(O \lesssim O'\)
+      \end{itemize}
+
+    \paragraph{Call States, Returns, and Contours}
+
+      Our remaining properties concern the behavior of function calls and require a dynamic treatment
+      of confidentiality and integrity. We generalize \(C\) above to a {\it contour} mapping each component
+      to a label:
+
+      \[\mathit{label} ::= \{\mathtt{HC},\mathtt{LC}\} \times \{\mathtt{HI},\mathtt{LI}\}\]
+
+      \[C \in \mathcal{C} ::= \mathcal{K} \rightarrow \mathit{label}\]
+
+      [TODO: be more explicit about what the call map does]
+      A state \(m_c\) is a {\it call state} if [call map says it is], and a state \(m_p\) is
+      considered to have returned to \(m_c\) if [etc.] From a call state with \(n\) arguments to
+      its call, we can construct a contour that should apply inside the call:
+      \[Cof(m)(k) =
+      \begin{cases}
+        (\mathtt{HC},\mathtt{HI}) & \text{if } k \in \mathcal{W}
+                                    \text{ and } k \leq m(\mathtt{SP}) - n \\
+        (\mathtt{HC},\mathtt{LI}) & \text{if } k \in \mathcal{W}
+                                    \text{ and } k \leq m(\mathtt{SP}) \\
+        (\mathtt{LC},\mathtt{LI}) & \text{else} \\
+      \end{cases}\]
+
+      Above the stack pointer, memory is high integrity in an extension of safe initialization;
+      from the perspective of the callee, that memory is not initialized. Below the old stack
+      pointer, memory is high integrity and high confidentiality. Registers and the callee's
+      frame are low integrity and low confidentiality. These categories inform our integrity
+      and confidentiality properties.
+
+    \paragraph{Observable Integrity}
+
+      Observable integrity is concerned with the writes a call makes to high integrity components,
+      and the effects those writes have on the observable behavior of its caller
+      {\it after its return}. Given a contour, a call state, and a returned state, we define
+      a ``rollback'' function \(\mathit{roll}_I : \mathcal{C} \times \mathcal{M} \times \mathcal{M}
+      \rightarrow \mathcal{M}\). The rollback creates a state that matches the call
+      state on those components that are high integrity in \(C\), and matches the return state
+      on low integrity components:
+
+      \[\mathit{roll}_I(C,m_c,m_r)(k) =
+      \begin{cases}
+        m_c(k) & C(k) = (\mathtt{HI},\_) \\
+        m_r(k) & C(k) = (\mathtt{LI},\_) \\
+      \end{cases}\]
+
+      Intuitively, the result of a rollback is an idealized state that reflects changes to accessible
+      components, but ignores the callee's interference with the caller's data. Then the observable
+      behavior of the resulting trace is the standard to which we expect any real trace to conform.
+
+      A system enjoys observable integrity if for any initial state \(m_0\), call state \(m_c\),
+      policy state \(p_c\), and contour \(C = Cof(m_c)\) such that \(m_0,\mathit{pinit}(m_0)
+      \hookrightarrow \dots (m_c,p_c) \dots\):
+
+      \begin{itemize}
+        \item If \((m_c,p_c) \hookrightarrow \dots (m_r,p_r) | \mathit{returned}\ m_c\ m_r\):
+          \begin{itemize}
+            \item Let \(m_r' = \mathit{roll}_I(C,m_c,m_r)\), \((m_r,p_r) \rightsquigarrow O\), and
+              \(m_r' \rightsquigarrow O'\)
+            \item If \(m_r,p_r \hookrightarrow MP \in \top\) then \(O \simeq O'\)
+            \item Otherwise \(O \lesssim O'\)
+          \end{itemize}
+      \end{itemize}
+
+    \paragraph{Eager Integrity}
+ 
+      An eager enforcement mechanism implements a stronger property, which we term {\it eager integrity}.
+      Eager integrity simplifies observable integrity by requiring that high integrity data of \(m_r\) be
+      identical to that of \(m_c\). Formally, a systemctl enjoys eager integrity if for any initial state
+      \(m_0\), call state \(m_c\), policy state \(p_c\), and contour \(C = Cof(m_c)\) such that
+      \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots (m_c,p_c) \dots (m_r,p_r) \dots\), where \(\mathit{returned}\ m_c\ m_r\):
+
+      \[\forall k . C(k) = \mathtt{HI} \rightarrow m_c(k) = m_r(k)\]
+
+      This implies lazy integrity, as the rollback function will produce \(m_r' = m_r\).
+ 
+    \paragraph{Observable Confidentiality}
+
+      Observable confidentiality is concerned with whether high confidentiality data influences
+      observable behavior during and after a call. We define variants given the generalized notion
+      of contours:
+      \[m \approx_C m' \triangleq \forall k . C(k) = \mathtt{LC} \rightarrow m(k) = m'(k)\]
+
+      Data that is high confidentiality within a callee due either to being in its caller's frame
+      will become low confidentiality if the callee returns. We face a subtle distinction: 
+      a callee treats the contents of its caller's frame as secrets, and they should not influence
+      its behavior. Nor should the callee be able to influence behavior after its return based
+      on the caller's secrets, for instance by copying them to registers that will later be output.
+      But the caller itself may still adjust its behavior based on its own secrets. So our property
+      relies on another rollback function to preserve changes made by the caller but remove other
+      differences between variant states.
+
+      In this case, a confidentiality rollback takes a contour and four states: two call states
+      that will be variants, and two return states. It is not symmetric, regarding \(m_c\) and \(m_r\)
+      as the ``real'' call and return, \(m_c'\) as a variant and \(m_r'\) as a return that follows it.
+
+      \[\mathit{roll}_C(C,m_c,m_c',m_r,m_r')(k) =
+        \begin{cases}
+          m_c(k) & \text{if } C(k) = \mathtt{HC} \text{ and } m_c(k) = m_r(k) \text{ and } m_c'(k) = m_r'(k) \\
+          m_r'(k) & \text{else} \\
+        \end{cases}\]
+
+      A system enjoys observable confidentiality if for any initial state \(m_0\), call states \(m_c\)
+      and \(m_c'\), policy state \(p_c\), and contour \(C = Cof(m_c)\) such that \(m_0,\mathit{pinit}(m_0)
+      \hookrightarrow \dots (m_c,p_c) \dots\) and \(m_c \approx_C m_c'\):
+
+      \begin{itemize}
+        \item If \((m_c,p_c) \hookrightarrow MP (m_r,p_r) | \mathit{returned}\ m_c\ m_r\)
+          \begin{itemize}
+            \item Then there is some \(m_r'\) where
+              \(m_c' \hookrightarrow M m_r' | \mathit{returned}\ m_c'\ m_r'\)
+            \item Let \(m_r'' = \mathit{roll}_C(C,m_c,m_r,m_c',m_r')\),
+              \((m_r,p_r) \rightsquigarrow O\), and \(m_r'' \rightsquigarrow O'\)
+            \item If \(m_r,p_r \hookrightarrow_P MP \in \top\) then \(O \simeq \mathit{ObsOf}(M) +\!\!\!+ O'\)
+            \item Otherwise \(O \lesssim \mathit{ObsOf}(M) +\!\!\!+ O'\)
+          \end{itemize}
+        \item Else, let \(m_c,p_c \rightsquigarrow O\) and \(m_c' \rightsquigarrow O'\)
+          \begin{itemize}
+            \item If \(m_c,p_c \hookrightarrow_P MP \in \top\) then \(O \simeq O'\)
+            \item Otherwise \(O \lesssim O'\)
+          \end{itemize}
+      \end{itemize}
+
+    \paragraph{Eager Confidentiality}
+
+      Once again an eager policy enforces a stronger property that only concerns the behavior of
+      the original trace and its variant within each call. A system enjoys {\it eager stack
+      confidentiality} if, for any initial state \(m_0\), call states \(m_c\) and \(m_c'\),
+      policy state \(p_c\), and contour \(C = Cof(m_c)\) such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow
+      \dots (m_c,p_c) \dots\) and \(m_c \approx_C m_c'\):
+
+      \begin{itemize}
+        \item If \((m_c,p_c) \hookrightarrow_P MP (m_r,p_r) | \mathit{returned}\ m_c\ m_r\)
+          \begin{itemize}
+            \item Then there is some \(m_r'\) where
+              \(m_c' \hookrightarrow M m_r' | \mathit{returned}\ m_c'\ m_r'\)
+            \item \(\mathit{ObsOf}(MP) \simeq \mathit{ObsOf}(M)\)
+            \item And for all \(k\), if \(m_c(k) \not = m_r(k)\) or \(m_c'(k) \not = m_r'(k)\),
+              \(m_r(k) = m_r'(k)\)
+          \end{itemize}
+        \item Else, let \(m_c,p_c \rightsquigarrow O\) and \(m_c' \rightsquigarrow O'\)
+          \begin{itemize}
+            \item If \(m_c,p_c \hookrightarrow_P MP \in \top\) then \(O \simeq O'\)
+            \item Otherwise \(O \lesssim O'\)
+          \end{itemize}
+      \end{itemize}
+
+      Eager confidentiality implies observable confidentiality, because if \(m_r\) and \(m_r'\) agree
+      on all \(k\) that changed during the call, then an \(m_r'' = \mathit{roll}_C(C,m_c,m_r,m_c',m_r')\)
+      will be identical to \(m_r\), and future observations will be the same up to a potential policy
+      stop.
+ 
+\end{document}
