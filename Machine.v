@@ -14,6 +14,8 @@ Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
 Parameter wplus : Word -> nat -> Word.
 Parameter wminus : Word -> nat -> Word.
 
+Parameter wplus_neq : forall w n, n > 0 -> w <> wplus w n.
+
 Definition Addr : Type := Word.
 
 Parameter Register : Type.
@@ -38,10 +40,10 @@ Inductive Observation : Type :=
 (* A Machine State can step to a new Machine State plus an Observation. *)
 Parameter step : MachineState -> MachineState * Observation.
 
-Definition CallMap := Value -> nat -> Prop.
+Definition CallMap := Value -> option nat.
 
 Definition isCall (cm: CallMap) (m: MachineState) (args: nat) : Prop :=
-   cm (m (Reg PC)) args.
+   cm (m (Reg PC)) = Some args.
 
 Definition isRet (mc m: MachineState) : Prop :=
   m (Reg PC) = wplus (mc (Reg PC)) 4 /\ m (Reg SP) = mc (Reg SP).
