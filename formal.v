@@ -834,9 +834,21 @@ Hint Constructors FindCall(*_gen*) : core.
 (* Hint Resolve FindCall_mon : paco. *)
 
 (* SNA: FindCall via SplitInclusive turns out to work well with other lemmas *)               
-Inductive FindCallMP (cm: CallMap) : MPTrace -> Contour -> MPTrace -> Prop :=
-| NextCall : forall C MP MPpre MPsuff args,
+Inductive FindCallMP' (cm: CallMap) : MPTrace -> Contour -> MPTrace -> Prop :=
+| NextCall' : forall C MP MPpre MPsuff args,
     SplitInclusive (fun mp => isCall cm (ms mp) args) MP MPpre MPsuff ->
+    makeContour args (ms (head MPsuff)) = C ->
+    FindCallMP' cm MP C MPsuff
+| LaterCall' : forall C C' mp MP MP' MPsuff MPcall,
+    FindCallMP' cm MP C MPsuff ->
+    MPsuff = notfinished mp MP' ->
+    FindCallMP' cm MP' C' MPcall ->
+    FindCallMP' cm MP C' MPcall.
+
+Inductive FindCallMP (cm : CallMap) : MPTrace -> Contour -> MPTrace -> Prop :=
+| NextCall : forall C MP MPpre MPsuff args,
+    SplitInclusive (fun mp => exists args, isCall cm (ms mp) args) MP MPpre MPsuff ->
+    isCall cm (ms (head MPsuff)) args ->
     makeContour args (ms (head MPsuff)) = C ->
     FindCallMP cm MP C MPsuff
 | LaterCall : forall C C' mp MP MP' MPsuff MPcall,
@@ -845,6 +857,7 @@ Inductive FindCallMP (cm: CallMap) : MPTrace -> Contour -> MPTrace -> Prop :=
     FindCallMP cm MP' C' MPcall ->
     FindCallMP cm MP C' MPcall.
 
+(* TODO: Prove these two equivalent? *)
 (* TODO: Write find call MP coinductively, prove equiv? *)
 
 (*
@@ -1274,9 +1287,10 @@ Hint Constructors EagerStackSafetyTest(*_gen*) : core.
 (* Lemma EagerStackSafetyTest_mon cm : monotone3 (EagerStackSafetyTest_gen cm). Proof. pmonauto. Qed. *)
 (* Hint Resolve EagerStackSafetyTest_mon : paco. *)
 
-Definition EagerStackSafetyTest' cm C MP :=
-  forall mv, variantOf (ms (head MP)) mv C ->
-             EagerStackSafetyTest cm 1 MP [Build_VSE (ms (head MP)) mv mv C (fun _ => False)].
+Definition EagerStackSafetyTest' cm MP :=
+  forall mv,
+    variantOf (ms (head MP)) mv (makeContour 0 (ms (head MP))) ->
+    EagerStackSafetyTest cm 1 MP [Build_VSE (ms (head MP)) mv mv (makeContour 0 (ms (head MP))) (fun _ => False)].
 
 Hint Unfold EagerStackSafetyTest' : StackSafety.
 
@@ -1576,7 +1590,8 @@ Qed.
 
 Ltac dest_wf :=
   match goal with
-  | [H : WellFormedVS _ _ |- _ ] => destruct H as [Varwf [[vsewf [Lastwf Retwf]] [InM InV]]] eqn:wf
+  | [H : WellFormedVS _ _ |- _ ] =>
+    destruct H as [Varwf [[vsewf [Lastwf Retwf]] [InM [InV [HRetwf HPubwf]]]]] eqn:wf
   end.
 
 
@@ -2280,46 +2295,309 @@ Proof.
 Qed.
 *)
 
-Lemma SplitPreservesSafety :
-  forall cm MP args MPpre MPsuff n vs,
-  SplitInclusive (fun mp => isCall cm (ms mp) args) MP MPpre MPsuff ->
-  EagerStackSafetyTest cm n MP vs ->
-  exists vs', EagerStackSafetyTest cm n MPsuff vs'.
+Fixpoint fixN {A} (f : A -> A) n (x : A) :=
+  match n with
+  | O => x
+  | S n' => fixN f n' (f x)
+  end.
+
+Definition VSEs_fix := fixN VSEs_step.
+Definition VSE_fix := fixN VSE_step.
+Definition tl_fix {A} := fixN (@tl A).
+
+Lemma fixN_nilr : forall A n (f : list A -> list A),
+    f [] = [] ->
+    fixN f n [] = [].
+Proof.
+  intros A n f H ; induction n; simpl; try rewriteHyp; eauto.
+Qed.    
+
+Lemma VSEs_fix_consr : forall n v vs, VSEs_fix n (v::vs) = VSE_fix n v :: VSEs_fix n vs.
+  intros n; induction n; simpl; eauto.
+Qed.    
+
+(*
+Lemma VSE_fix_commute :
+  forall n vs, 
+  VSEs_fix n vs = map (VSE_fix n) vs.
 Proof.
   intros.
-  generalize dependent vs.
-  induction H; intros.
-  - invert EagerStackSafetyTest.
-    + dest_wf; seauto.
-    + exists (vse :: vs0).
-      eapply EagerTestFinRet; eauto.
-  - eauto.
-  - invert EagerStackSafetyTest.
-    + (* Step. Easy. *)
-      destruct (IHSplitInclusive (VSEs_step vs)) as [vs' Hvs']; auto.
-      exists vs'.
-      auto.
-    + (* Call. *)
-(*      remember (Build_VSE (ms a) (ms a) (ms a)
-      destruct (IHSplitInclusive (VSEs_step vs)) as [vs' Hvs']; auto.      
+  induction vs.
+  - simpl; apply fixN_nilr.
+    unfold VSE_step; simpl; auto.
+  - destruct n; simpl in *.
+    + unfold VSEs_fix, VSE_fix; simpl; f_equal; auto.
+    + unfold VSEs_fix, VSE_fix; simpl; auto.
+      
+Qed.
  *)
-Admitted.
 
-Lemma FindCallPreservesSafety :
-  forall cm n MP vs C MPsuff,
-    EagerStackSafetyTest cm n MP vs ->
-    FindCallMP cm MP C MPsuff ->
-    exists vs' vse,
-      EagerStackSafetyTest cm n MPsuff vs' /\
-      hd_error vs' = Some vse /\
-      contour vse = C /\
-      (forall mp, retP vse (ms mp) = isRet (ms (head MPsuff)) (ms mp)).
-Proof.         
+Inductive TLen {A}: TraceOf A -> nat -> Prop :=
+| TLen_end  : forall a, TLen (finished a) 0
+| TLen_step : forall n a T, TLen T n -> TLen (notfinished a T) (S n).
+
+Inductive RetsContained : MPTrace -> list (MachineState -> Prop) -> nat -> Prop :=
+| FinRetC : forall rs x,
+    RetsContained (finished x) rs 0 (* In the last one its not added *)
+| NFinRet :
+    forall (r : MachineState -> Prop) (rs rs' : list (MachineState -> Prop)) x n T, 
+    rs = r :: rs' ->
+    r (ms x) ->
+    (forall (r' : MachineState -> Prop), In r' rs' -> ~ r' (ms x)) ->
+    RetsContained T rs' n ->
+    RetsContained (notfinished x T) rs (S n)
+| NFinNRet : forall (rs : list (MachineState -> Prop)) x n T, 
+    (forall r, In r rs -> ~ r (ms x)) ->
+    RetsContained T rs n ->
+    RetsContained (notfinished x T) rs n.
+
+Ltac vse_reasoning :=
+  match goal with
+  | |- context [retP (VSE_step ?V)] =>
+    unfold VSE_step; destruct (step (curr_variant V)); simpl; auto
+  | [H : In ?X (VSEs_step ?VS) |- _ ] =>
+        unfold VSEs_step in *;
+          apply in_map_iff in H;
+          let x := fresh "x" in
+          let Feq := fresh "Feq" in
+          let HIn := fresh "HIn" in
+          destruct H as [x [Feq HIn]];
+            let Eq := fresh "EQ" in
+            assert (Eq: retP X = retP x)
+              by (rewrite <- Feq; unfold VSE_step; destruct (step (curr_variant x)); simpl; auto)                   ;
+            rewrite Eq
+      end.
+
+(*
+Lemma RetsContained_VSEs_step :
+  forall T vs n,
+    RetsContained T vs n -> RetsContained T n.
+Proof.  
+  intros; induction H; unfold VSEs_step in *; simpl in *.
+  - eapply FinRetC. 
+  - eapply (NFinRet (VSEs_step vs) (VSE_step v) (VSEs_step vs')); eauto.
+    + rewrite H; simpl; auto.
+    + vse_reasoning. 
+    + intros.
+      vse_reasoning.
+      eapply H1; eauto.
+  - eapply (NFinNRet (VSEs_step vs)); eauto.
+    intros; vse_reasoning.
+    eapply H; eauto.
+Qed.
+ *)
+
+(*
+
+Lemma RetsContained_VSEs_step_inv :
+  forall T vs n,
+    RetsContained T (VSEs_step vs) n -> RetsContained T vs n.
+Proof.  
   intros.
-  induction H0.
-  - eapply SplitPreservesSafety in H0.
-    destruct H0.
-Admitted.
+  remember (VSEs_step vs) as VS.
+  unfold VSEs_step in *.
+  assert (Hyp: forall v, In v VS -> exists v', VSE_step v' = v /\ In v' vs).
+  { intros.
+    rewrite HeqVS in H0.
+    eapply in_map_iff in H0.
+    auto.
+  }
+  clear HeqVS.
+  induction H; unfold VSEs_step in *; intros; simpl in *.
+  - eapply FinRetC. 
+  - eapply NFinRet; eauto.
+    eapply NFinRet; eauto.
+    
+    eapply RetsContained_VSEs_step in Eq.
+    eapply (NFinRet vs v vs'); eauto.
+    eapply (NFinRet (VSEs_step vs) (VSE_step v) (VSEs_step vs')); eauto.
+    + rewrite H; simpl; auto.
+    + vse_reasoning. 
+    + intros.
+      vse_reasoning.
+      eapply H1; eauto.
+  - eapply (NFinNRet (VSEs_step vs)); eauto.
+    intros; vse_reasoning.
+    eapply H; eauto.
+Qed.
+*)
+
+Lemma tl_fixNStep :
+  forall n vs, tl (fixN VSEs_step n vs) = fixN VSEs_step n (tl vs).
+Proof.
+  intros n vs; induction vs.
+  - simpl.
+    assert (fixN VSEs_step n [] = [])
+      by (apply fixN_nilr; unfold VSEs_step; auto).
+    rewrite H; simpl; auto.
+  - rewrite (VSEs_fix_consr); simpl.
+    auto.
+Qed.
+
+Lemma map_ret_VSE :
+  forall vs, map retP vs = map retP (VSEs_step vs).
+Proof.
+  intros vs; induction vs; simpl; eauto.
+  f_equal.
+  - unfold VSE_step. destruct (step (curr_variant a)); auto.
+  - auto.
+Qed.
+
+Lemma map_ret_VSE' :
+  forall vs r rs,
+    map retP vs = r :: rs ->
+    map retP (tl (VSEs_step vs)) = rs.
+Proof.  
+  intros vs; induction vs; intros; inv H; simpl in *; auto.
+  rewrite <- map_ret_VSE.
+  auto.
+Qed.
+
+Lemma SplitPreservesSafety :
+  forall cm MP MPpre MPsuff,
+    SplitInclusive (fun mp => exists args, isCall cm (ms mp) args) MP MPpre MPsuff ->
+    forall steps rets n vs,
+      TLen MPpre steps ->
+      RetsContained MPpre (map retP vs) rets ->
+      EagerStackSafetyTest cm n MP vs ->
+      EagerStackSafetyTest cm n MPsuff (fixN (@tl _) rets (fixN VSEs_step steps vs)).
+Proof.
+  intros cm MP MPpre MPsuff Split;
+    induction Split; intros steps rets n vs Len Rets Safety.
+  - inv Len; inversion Safety; subst; simpl in *.
+    + inv Rets; simpl.
+      eapply EagerTestFinFault; eauto.
+    + inv Rets.
+      eapply EagerTestFinRet; eauto.
+  - inv Len; inv Rets; eauto.
+  - inv Len; inv Safety.
+    + inv Rets; simpl.
+      * exfalso.
+        assert (HIn: In r (map retP vs)) by (rewriteHyp; left; auto).
+        eapply in_map_iff in HIn.
+        destruct HIn as [x [HR HIn]].
+        rewrite <- HR in H10; eapply H4; eauto.
+      * eapply IHSplit; eauto.
+        rewrite <- map_ret_VSE.
+        auto.
+    + exfalso.
+      eapply H.
+      exists args; auto.
+    + inv Rets.
+      * simpl.
+        rewrite tl_fixNStep; simpl.
+        eapply IHSplit; eauto.
+        rewrite (map_ret_VSE' vs r rs'); eauto.
+      * exfalso.
+        destruct H2 as [vse [vsrest [Eq [Ret [Len NotR]]]]].
+        subst.
+        eapply H9.
+        -- left; auto.
+        -- auto.
+    + exfalso; eapply H; eauto.
+Qed.
+
+Lemma SplitInclusive_TLen :
+  forall {A} (P : A -> Prop)  T Tpre Tsuff, 
+  SplitInclusive P T Tpre Tsuff ->
+  exists n, TLen Tpre n.
+Proof.
+  intros A P T Tpre Tsuff Split; induction Split.
+  - exists 0; constructor.
+  - exists 0; constructor.
+  - destruct IHSplit as [n Hn].
+    exists (S n); constructor; auto.
+Qed.
+
+Lemma SplitInclusive_Rets :
+  forall cm MP MPpre MPsuff, 
+    SplitInclusive (fun mp => exists args, isCall cm (ms mp) args) MP MPpre MPsuff ->
+    forall n vs, EagerStackSafetyTest cm n MP vs ->
+    exists rets, RetsContained MPpre (map retP vs) rets.
+Proof.
+  intros cm MP MPpre MPsuff Split; induction Split; intros n vs Safety.
+  - exists 0; eapply FinRetC.
+  - exists 0; eapply FinRetC.
+  - inv Safety.
+    + eapply IHSplit in H12.
+      destruct H12 as [rets HRets].
+      exists rets.
+      rewrite <- map_ret_VSE in HRets.
+      eapply NFinNRet; eauto.
+      intros.
+      eapply in_map_iff in H0.
+      destruct H0 as [x [R I]].
+      rewrite <- R.
+      eapply H3; auto.
+    + exfalso; eapply H; eauto.
+    + eapply IHSplit in H12.
+      destruct H12 as [rets HRets].
+      exists (S rets).
+      destruct vs.
+      * destruct H2 as [? [? [Contra ?]]]; inv Contra.
+      * apply (NFinRet (retP (VSE_step v)) (map retP (v :: vs)) (map retP vs)); eauto.
+        -- simpl.
+           f_equal.
+           ++ unfold VSE_step; destruct (step (curr_variant v)); simpl; auto.
+        -- destruct H2 as [vse [vsrest [Eq [Ret ?]]]].
+           inv Eq.
+           auto.
+           unfold VSE_step.
+           destruct (step (curr_variant vse)); simpl; auto.
+        -- destruct H2 as [vse [vsrest [Eq [Ret [Len NotR]]]]].
+           intros.
+           apply in_map_iff in H0.
+           destruct H0 as [x [R I]].
+           rewrite <- R.
+           eapply NotR.
+           inv Eq.
+           simpl in I.
+           auto.
+        -- erewrite map_ret_VSE' in HRets; eauto.
+           simpl.
+           f_equal.
+    + exfalso; eapply H; eauto.
+Qed.
+
+Lemma FindCallMP_Call :
+  forall cm MP C MPsuff,
+  FindCallMP cm MP C MPsuff ->
+  exists args, isCall cm (ms (head MPsuff)) args.
+Proof.
+  intros cm MP C MPsuff H; induction H.
+  - exists args; auto.
+  - auto.
+Qed.
+    
+Lemma FindCallPreservesSafety :
+  forall cm MP C MPsuff,
+    FindCallMP cm MP C MPsuff ->
+    forall n vs,
+      EagerStackSafetyTest cm n MP vs ->
+      exists vs', WellFormedVS (ms (head MPsuff)) vs' /\
+      EagerStackSafetyTest cm n MPsuff vs'.
+Proof.
+  intros cm MP C MPsuff Find; induction Find; intros n vs Safety.  
+  - assert (Hyp: exists steps, TLen MPpre steps).
+    { eapply SplitInclusive_TLen; eauto. }
+    destruct Hyp as [steps Hsteps].
+    assert (Hyp: exists rets, RetsContained MPpre (map retP vs) rets). 
+    { eapply SplitInclusive_Rets; eauto. }
+    destruct Hyp as [rets HRets].
+    eapply SplitPreservesSafety in H; eauto.
+    exists (fixN (tl (A:=VSE)) rets (fixN VSEs_step steps vs)).
+    split; eauto.
+    inv H; eauto.
+  - eapply IHFind1 in Safety; clear IHFind1.
+    destruct Safety as [vs' [WF Safety]].
+    subst.
+    destruct (FindCallMP_Call _ _ _ _ Find1) as [args HCall].
+    inv Safety.
+    + exfalso; eapply H1; eauto.
+    + eapply IHFind2 in H13; eauto using variantOf_id.
+    + exfalso; eapply H2; eauto.
+    + eapply IHFind2 in H13; eauto using variantOf_id.
+Qed.
 
 Lemma FinLastN_lt :
   forall {A} n (L l : list A), FinLastN n L l -> n <= length L.
@@ -2513,13 +2791,54 @@ Proof.
       inv H10; subst; eauto.
 Qed.
 
+Lemma MPStepCompatible_Prefix :
+  forall R MP cm n vs R' MPpre,
+  MPStepCompatible R MP ->
+  EagerStackSafetyTest cm n MP vs ->
+  PrefixUpTo (fun mp => R' (ms mp)) MP MPpre ->
+  (exists vse vs', vs = vse :: vs' /\  retP vse = R') ->
+  MPStepCompatible R' MPpre.
+Proof.  
+  cofix COFIX.
+  intros R MP cm n vs R' MPpre Comp Safety Pre HR'.
+  inv Comp.
+  - destruct Pre as [[TSuff HSuff] | [NoR Eq]].
+    + inv HSuff.
+      eapply CompError; auto.
+    + inv Eq.
+      eapply CompError; auto.
+  - destruct Pre as [[TSuff HSuff] | [NoR Eq]].
+    + inv HSuff.
+      eapply CompRet; auto.
+    + inv Eq.
+      inv Safety.
+      * eapply CompError; auto.
+      * destruct HR' as [vse' [vs' [HHead HRet]]].
+        eapply CompRet; eauto.
+        rewrite <- HRet.
+        inv HHead; auto.
+  - destruct Pre as [[TSuff HSuff] | [NoR Eq]].
+    + inv HSuff.
+      * eapply CompRet; auto.
+      * eapply CompStep; eauto.
+        -- destruct H as [o MPStep].
+           extract_mpstep.
+           exists o.
+           rewrite MPStep.
+           do 4 f_equal;
+           eapply PrefixUpToHead; left; eexists; eauto.
+        -- inv Safety.
+           ++ eapply COFIX; eauto.
+              ** left; eexists; eauto.
+              ** admit.
+           ++ eapply COFIX; eauto.
+Admitted.
+
 (*
 Theorem TestImpliesSafetyCall :
   forall cm C MP,
     MPStepCompatible (fun _ => False) MP ->
-    (forall mvar,
-      variantOf (ms (head MP)) mvar C ->
-      EagerStackSafetyTest cm 1 MP [Build_VSE (ms (head MP)) mvar mvar C (fun _ => False)]) ->
+    EagerStackSafetyTest' cm C MP ->
     forall C' MP' MPpre',
     FindCallMP cm MP C' MP' ->
     PrefixUpTo (fun mp => isRet (ms (head MP')) (ms mp)) MP' MPpre' ->
@@ -2528,13 +2847,30 @@ Theorem TestImpliesSafetyCall :
 Proof.
   intros.
   remember H1 as FindCall; clear HeqFindCall.
-  eapply FindCallPreservesSafety in H1; eauto.
+  split.
+  - admit.
+  - eapply StrongConfImpliesConf.
+    intros.
+    eapply (FindCallPreservesSafety m) in H1; eauto.
+    + destruct H1 as [vs' [vse [Safety [HD EqVSE]]]].
+      assert (H': m = curr_variant vse) by (subst; auto).
+      rewrite H'.
+      eapply (TestImpliesConfidentialityNested cm); eauto.
+      * constructor. reflexivity.
+      * admit.
+      * admit.
+      * destruct H2 as [[TSuff HSuff] | [Eq NoR]].
+        -- 
+
+        eapply Safety.
+        eapply FindCallPreservesSafety in H1; eauto.
   destruct H1 as [vs' [vse [Safety [Hvse [HC HR]]]]].
   2:{
     eapply H0.
+    unfold EagerStackSafetyTest' in *.
     eapply variantOf_id.
   }
-  destruct H2 as [[TSuff HSuff] | [Eq NoR]].
+
   - destruct vs'; [now inv Hvse | ].
     eapply SplitInclusive_Safety in Safety; eauto using FinLastNow.
     + split.
