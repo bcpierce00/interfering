@@ -46,6 +46,15 @@ Definition isCall (cm: CallMap) (m: MachineState) (args: nat) : Prop :=
 Definition isRet (mc m: MachineState) : Prop :=
   m (Reg PC) = wplus (mc (Reg PC)) 4 /\ m (Reg SP) = mc (Reg SP).
 
+Definition isRet_dec mc m : {isRet mc m} + {~ isRet mc m}.
+Proof.
+  unfold isRet.
+  destruct (WordEqDec (m (Reg PC)) (wplus (mc (Reg PC)) 4));
+    destruct (WordEqDec (m (Reg SP)) (mc (Reg SP)));
+    try solve [left; auto];
+    right; intros [? ?]; auto.
+Qed.
+
 Parameter PolicyState : Type.
 Parameter pstep : MachineState * PolicyState -> option PolicyState.
 (* TODO: Does this ever fail? *)
