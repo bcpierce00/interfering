@@ -1389,12 +1389,29 @@ Proof.
   unfold variantOf. reflexivity.
 Qed.
 
+(* TODO: Move to Trace *)
+CoInductive ForallButLast {A : Type} (P : A -> Prop) : TraceOf A -> Prop :=
+| ForallBL_finished : forall a : A, ForallButLast P (finished a)
+| ForallBL_notfinished : forall (a : A) (T' : TraceOf A),
+                         P a -> ForallButLast P T' -> ForallButLast P (notfinished a T').
+
+Lemma ForallTraceImpl :
+  forall A (P Q : A -> Prop) T,
+  ForallTrace P T ->
+  (forall a, P a -> Q a) ->
+  ForallTrace Q T.
+Proof.
+  cofix COFIX.
+  intros.
+  inv H; constructor; eauto.
+Qed.
+    
 Theorem TestImpliesIntegrityNested :
   forall cm C MP vs n vscall vse,
          FinLastN n vs vscall ->
          hd_error vscall = Some vse ->
          contour vse = C ->
-         ForallTrace (fun mp => ~ retP vse (ms mp)) MP ->
+         ForallButLast (fun mp => ~ retP vse (ms mp)) MP ->
   EagerStackSafetyTest cm n MP vs -> EagerStackIntegrity' C MP.
 Proof.
   cofix COFIX.
@@ -1416,7 +1433,7 @@ Proof.
       * unfold not; intros; (*pfold;*) eauto.
         inversion HNotR; subst; auto.
         unfold VSE_step; simpl; destruct (step (curr_variant vse)); auto.
-        (* simpl. *)
+  (* simpl. *)
         (* eapply paco1_unfold with (x0 := MP0); eauto with paco. *)
   - apply SI_notfinished; progress_integrity.
     + intros k Hk.
@@ -1868,7 +1885,7 @@ Theorem TestImpliesConfidentialityNested :
     FinLastN n vs vscall ->
     hd_error vscall = Some vse ->
     contour vse = C ->
-    ForallTrace (fun mp => ~ retP vse (ms mp)) MP ->
+    ForallButLast (fun mp => ~ retP vse (ms mp)) MP ->
     WellFormedVS (ms (head MP)) vs ->
     EagerStackSafetyTest cm n MP vs ->
     variantOf (ms (head MP)) (curr_variant vse) C ->
@@ -2957,147 +2974,6 @@ Proof.
     + constructor; simpl; auto.
 Qed.
 
-(*
-Lemma MPStepCompatible_Prefix :
-  forall MP cm n vs R' MPpre,
-  EagerStackSafetyTest cm n MP vs ->
-  PrefixUpTo (fun mp => R' (ms mp)) MP MPpre ->
-  (exists vse vs', vs = vse :: vs' /\  retP vse = R') ->
-  MPStepCompatible R' MPpre.
-Proof.  
-  cofix COFIX.
-  intros MP cm n vs R' MPpre Safety Pre HR'.
-  inv Safety.
-  - destruct Pre as [[TSuff HSuff] | [NoR Eq]].
-    + inv HSuff.
-      eapply CompError; auto.
-    + inv Eq.
-      eapply CompError; auto.
-  - destruct Pre as [[TSuff HSuff] | [NoR Eq]].
-    + inv HSuff.
-      eapply CompRet; auto.
-    + inv Eq.
-      destruct HR' as [vse' [vs' [HHead HRet]]].
-      eapply CompRet; eauto.
-      rewrite <- HRet.
-      inv HHead; auto.
-  - destruct Pre as [[TSuff HSuff] | [NoR Eq]].
-    + inv HSuff.
-      * eapply CompRet; auto.
-      * extract_mpstep.
-        eapply CompStep; eauto.
-        -- exists OM; auto.
-           rewrite H1.
-           do 4 f_equal.
-           ++ replace m' with (ms (head MP0)).
-              ** f_equal.
-                 eapply PrefixUpToHead; left; eexists; eauto.
-              ** rewrite H6; auto.
-           ++ replace p' with (ps (head MP0)).
-              ** f_equal.
-                 eapply PrefixUpToHead; left; eexists; eauto.
-              ** rewrite H6; auto.
-        -- eapply COFIX; eauto.
-           ++ left; eexists; eauto.
-           ++ destruct HR' as [vse [vs' [Eq HR]]].
-              exists (VSE_step vse).
-              exists (VSEs_step vs').
-              split; auto.
-              ** rewrite Eq.
-                 simpl; auto.
-              ** vse_reasoning.
-    + inv NoR.
-      inv Eq.
-      extract_mpstep.
-      eapply CompStep with (R := R').
-      * exists OM; auto.
-        rewrite H1.
-        do 4 f_equal.
-        ++ replace m' with (ms (head MP0)).
-           ** f_equal.
-              eapply PrefixUpToHead.
-              right. split; eauto.
-              eapply H11.
-           ** rewrite H6; auto.
-        ++ replace p' with (ps (head MP0)).
-           ** f_equal.
-              eapply PrefixUpToHead. right; split; eauto.
-              eapply H11.
-           ** rewrite H6; auto.
-      * auto.
-      * eapply COFIX; eauto.
-        -- right; split; auto.
-        -- destruct HR' as [vse [vs' [Eq HR]]].
-           exists (VSE_step vse).
-           exists (VSEs_step vs').
-           split; auto.
-           ** rewrite Eq.
-              simpl; auto.
-           ** vse_reasoning.
-  - destruct Pre as [[TSuff HSuff] | [NoR Eq]].
-    + inv HSuff.
-      * eapply CompRet; auto.
-      * extract_mpstep.
-        eapply CompStep; eauto.
-        -- exists OM; auto.
-           rewrite H1.
-           do 4 f_equal.
-           ++ replace m' with (ms (head MP0)).
-              ** f_equal.
-                 eapply PrefixUpToHead; left; eexists; eauto.
-              ** rewrite H6; auto.
-           ++ replace p' with (ps (head MP0)).
-              ** f_equal.
-                 eapply PrefixUpToHead; left; eexists; eauto.
-              ** rewrite H6; auto.
-        -- remember (Build_VSE (ms mp) (ms (head MP0)) (ms (head MP0)) (makeContour args (ms mp)) (isRet (ms mp))) as vsec.
-           eapply COFIX with (vs := vsec :: VSEs_step vs);
-             subst; eauto using variantOf_id.
-           ++ left; eexists; eauto.
-           ++ destruct HR' as [vse [vs' [Eq HR]]].
-              exists (VSE_step vse).
-              exists (VSEs_step vs').
-              split; auto.
-              ** rewrite Eq.
-                 simpl; auto.
-              ** vse_reasoning.
-    + inv NoR.
-      inv Eq.
-      extract_mpstep.
-      eapply CompStep with (R := R').
-      * exists OM; auto.
-        rewrite H1.
-        do 4 f_equal.
-        ++ replace m' with (ms (head MP0)).
-           ** f_equal.
-              eapply PrefixUpToHead.
-              right. split; eauto.
-              eapply H11.
-           ** rewrite H6; auto.
-        ++ replace p' with (ps (head MP0)).
-           ** f_equal.
-              eapply PrefixUpToHead. right; split; eauto.
-              eapply H11.
-           ** rewrite H6; auto.
-      * auto.
-      * eapply COFIX; eauto.
-        -- right; split; auto.
-        -- destruct HR' as [vse [vs' [Eq HR]]].
-           exists (VSE_step vse).
-           exists (VSEs_step vs').
-           split; auto.
-           ** rewrite Eq.
-              simpl; auto.
-           ** vse_reasoning.
-- 
-      
-      ++ eapply COFIX; eauto.
-              ** left; eexists; eauto.
-              ** admit.
-           ++ eapply COFIX; eauto.
-Admitted.
-
-
 Lemma PrefixUpTo_FirstStep :
   forall m MP MPpre, 
   PrefixUpTo (fun mp => isRet (ms m) (ms mp)) 
@@ -3134,6 +3010,39 @@ Proof.
   auto.
 Qed.
 
+Lemma SplitInclusive_Forall :
+  forall A (R : A -> Prop) T Tpre Tsuff,
+    SplitInclusive R T Tpre Tsuff ->
+    ForallButLast (fun a => ~ R a) Tpre.
+Proof.
+  intros A R T Tpre Tsuff Split.
+  induction Split; constructor; eauto.
+Qed.
+
+Lemma ForallTrace_ForallButLast :
+  forall A (R : A -> Prop) T T',
+    T ~= T' ->
+    ForallTrace R T ->
+    ForallButLast R T'.
+Proof.
+  cofix COFIX.
+  intros A R T T' Eq H.
+  inv Eq; inv H.
+  - constructor.
+  - constructor; eauto.
+Qed.
+    
+Lemma PrefixUpTo_Forall :
+  forall A (R : A -> Prop) T TPre,
+  PrefixUpTo R T TPre ->
+  ForallButLast (fun a => ~ R a) TPre.
+Proof.
+  intros A R T Tpre Pre.
+  destruct Pre as [[TSuff HSuff] | [NoR Eq]].
+  - eapply SplitInclusive_Forall; eauto.
+  - eapply ForallTrace_ForallButLast; eauto.
+Qed.
+    
 Theorem TestImpliesSafetyCall :
   forall cm n MP vs,
     EagerStackSafetyTest cm n MP vs ->
@@ -3221,280 +3130,303 @@ Proof.
         -- constructor; simpl; auto.
         -- simpl; eauto.
         -- subst; simpl; auto.
-        -- eapply MPStepCompatible_Prefix in H14; subst; simpl; eauto using variantOf_id.
-
-           eapply PrefixUpTo_Safety with (vse := vse) (vs := VSEs_step vs') in H14;
-          subst; eauto using variantOf_id.
-
-        eapply TestImpliesIntegrityNested; eauto.        
-        
-        2:{constructor.
-
-        
-  - inv Eq; auto.
-
-        eapply StrongConfNotMStep.
-      
-      unfold EagerStackConfidentiality; intros; simpl; auto.
-
-      split.
-  - eapply StackIntegrity'Equiv.
-    eapply TestImpliesIntegrityNested; eauto.
-  split.
-  remember H1 as FindCall; clear HeqFindCall.
-  split.
-  - admit.
-  - eapply StrongConfImpliesConf.
-    intros.
-    eapply (FindCallPreservesSafety m) in H1; eauto.
-    + destruct H1 as [vs' [vse [Safety [HD EqVSE]]]].
-      assert (H': m = curr_variant vse) by (subst; auto).
-      rewrite H'.
-      eapply (TestImpliesConfidentialityNested cm); eauto.
-      * constructor. reflexivity.
-      * admit.
-      * admit.
-      * destruct H2 as [[TSuff HSuff] | [Eq NoR]].
-        -- 
-
-        eapply Safety.
-        eapply FindCallPreservesSafety in H1; eauto.
-  destruct H1 as [vs' [vse [Safety [Hvse [HC HR]]]]].
-  2:{
-    eapply H0.
-    unfold EagerStackSafetyTest' in *.
-    eapply variantOf_id.
-  }
-
-  - destruct vs'; [now inv Hvse | ].
-    eapply SplitInclusive_Safety in Safety; eauto using FinLastNow.
-    + split.
-      * eapply StackIntegrity'Equiv.
-        eapply TestImpliesIntegrityNested; eauto.
-        -- constructor; auto.
-        -- admit.
-      * eapply StrongConfImpliesConf.
-        intros.
-        assert (EqH: head MP' = head MPpre').
-        { eapply PrefixUpToHead. left; eexists; eauto. } 
-        rewrite <- EqH.
-        eapply TestImpliesConfidentialityNested; eauto.
-        2: {
-      intros.
-      simpl.
-      inv Hvse.
-      rewrite HR.
-      simpl; auto.
-    } 
-      rewrite 
-      split.
-  - eapply StackIntegrity'Equiv.
-    eapply TestImpliesIntegrityNested; eauto.
-    + constructor. eauto.
-    + admit.
-    + 
-      * eapply SplitInclusive_Safety; eauto.
-        -- destruct vs'.
-           ++ inversion Hvse.
-           ++ eapply FinLastNow. constructor.
-              eapply SplitInclusive
-      exists vse; split; auto.
-      constructor.
-    + 
-      split.
-  - 
-    eapply TestImpliesIntegrityNested.
-    + admit.
-    + exists (Build_VSE (ms (head MP)) (ms (head MP)) (ms (head MP)) C (fun _ => False)).
-      split; subst; eauto.
-      * left; auto.
-      * 
-      split.generalize dependent MPpre'.
-  induction H1; intros MPpre' Pre.
-  - split.
-    
-    split.
-  - apply 
- *)
-
-
-(*
-      Lemma SplitPreservesSafety :
-  forall cm MP args MPpre mpcall MPsuff n vs C,
-  SplitInclusive (fun mp => isCall cm (ms mp) args) MP MPpre (notfinished mpcall MPsuff) ->
-  EagerStackSafetyTest cm n MP vs ->
-  EagerStackSafetyTest cm n MPsuff vs
-Proof.
-  intros.
-  generalize dependent vs.
-  generalize dependent n.
-  generalize dependent C.
-  generalize dependent mv.
-  generalize dependent vse.
-  remember (notfinished mpcall MPsuff) as MPC.
-  induction H; intros.
-  - invert EagerStackSafetyTest.
-    + congruence.
-      (*
-      destruct H5 as [Var [[vse [Last Ret]] [InM InV]]].
-      constructor; auto.
-      repeat split.
-      *  constructor; auto.
-      * exists vse; split; eauto.
-        constructor; auto.
-      * constructor; seauto.
-        simpl. frob (MTraceOf (ms a)); constructor.
-      * constructor; auto.
-        simpl. frob (MTraceOf mv); constructor.
-       *)
-    + congruence.
-      (*
-    + (* isRet/Call constraint*)
-      exfalso; eapply call_ret_indep; eauto. *)
-  - invert EagerStackSafetyTest.
-    + inv HeqMPC.
-      exfalso; eapply H6; eauto.
-    + assert (args0 = args).
-      { (* Restrictions on call. *) admit. }
-      subst.
-      inv HeqMPC.
+        -- eapply PrefixUpTo_Forall; subst; simpl; eauto.
+    + extract_mpstep.
+      eapply StrongConfImpliesConf.
+      rewrite H8 in H14.
+      intros mv Var; simpl in *.
       destruct (step mv) as [mv' OV] eqn:StepV.
-      eapply EagerTestCall; eauto.
-      * intros vse [In | In] Contra.
-        -- subst; simpl in *.
-           (* More isRet constraints *)
-           admit.
-        -- eapply H7; eauto.
-      * eapply well_formed_extend; eauto.
-        -- simpl. frob (MTraceOf (ms a)); constructor.
-        -- simpl. frob (MTraceOf mv); constructor.
-      * intros vse [In | In].
-        -- subst; simpl.
-           exists mv'. exists OV.
-           split; auto.
-        -- eapply H10; auto.
-      * intros vse [In | In].
+      destruct (H10 mv mv' OV); eauto; subst.
+      eapply StrongConfStep; eauto.
+      * erewrite <- PrefixUpToHead; eauto.
+        unfold MPState. rewrite H8. eauto.
+      * unfold isRet.
+        intros [Contra ?].
+        eapply wplus_neq in Contra; eauto.
+        omega.
+      * unfold isRet.
+        intros [Contra ?].
+        unfold variantOf in Var.
+        rewrite <- Var in Contra; eauto.
+        eapply wplus_neq in Contra; eauto.
+        omega.
+      * erewrite <- PrefixUpToHead; eauto.
+        unfold MPState. rewrite H8. simpl; eauto.
+        intros k Hk.
+        eapply H0.
+        destruct Hk.
+        -- left. intros Eq; symmetry in Eq; eauto.
+        -- right. intros Eq; symmetry in Eq; eauto.
+      * remember (Build_VSE (ms m) mv' mv' (makeContour args (ms m)) (isRet (ms m))) as vse.
+        replace mv' with (curr_variant vse); [ | subst; auto].
+
+        assert (V: variantOf m' mv' (makeContour args (ms m))).
+        {
+          eapply confStepPreservesVariant; eauto.
+          intros k Hk.
+          eapply H0.
+          destruct Hk.
+          -- left. intros Eq; symmetry in Eq; eauto.
+          -- right. intros Eq; symmetry in Eq; eauto.
+        } 
+        
+        assert (Safety: EagerStackSafetyTest cm (S (length (VSEs_step vs'))) MPpre (vse :: VSEs_step vs')).
+        { eapply PrefixUpTo_Safety; subst; simpl in*; eauto. }
+
+        eapply TestImpliesConfidentialityNested; eauto.
+        -- constructor; simpl; auto.
+        -- simpl; eauto.
+        -- eapply PrefixUpTo_Forall; subst; simpl; eauto.
+        -- (* Well-formedness *)
+           assert (wf: WellFormedVS m' (VSEs_step vs')).
+           { eapply VSE_step_preserves_WellFormed in H4; eauto. }
+           destruct wf as [Varwf [[vsewf [Lastwf Retwf]] [InM [InV [HRetwf HPubwf]]]]].
+
+           repeat split.
+           ++ constructor; eauto.
+              ** subst; simpl. unfold MPState.
+                 erewrite <-PrefixUpToHead; eauto.
+                 rewrite H8. simpl. eauto.
+              ** eapply Forall_forall.
+                 intros.
+                 eapply Forall_forall in Varwf.
+                 unfold MPState.
+                 erewrite <- PrefixUpToHead; eauto.
+                 rewrite H8.
+                 simpl.
+                 eapply Varwf; eauto.
+                 eauto.
+           ++ exists vsewf.
+              split; auto.
+              constructor; auto.
+           ++ erewrite <- PrefixUpToHead; eauto.
+              unfold MPState. rewrite H8. simpl.
+              constructor; subst; simpl; eauto.
+              frob (MTraceOf (ms m)).
+              rewrite MStep. simpl.
+              apply In_later.
+              frob (MTraceOf m').
+              apply In_now.
+           ++ subst; simpl; auto. 
+              constructor; subst; simpl; eauto.
+              frob (MTraceOf mv').
+              apply In_now.
+           ++ constructor; subst; simpl; eauto.
+           ++ constructor; subst; simpl; eauto.              
+        -- subst; simpl; eauto.
+           erewrite <- PrefixUpToHead; eauto.
+           unfold MPState. rewrite H8. simpl.
+           auto.
         -- subst; simpl; auto.
-        -- eapply H11; auto.
-      * reflexivity.
-      * intros.
-        eapply H21.
-        -- constructor; auto.
-        --
+  - exfalso; eapply H2; eauto.
+  - apply PrefixUpTo_FirstStep in Pre.
+    assert (Hyp: args0 = args) by (eapply isCall_inj; eauto); subst.
+    destruct Pre as [MPpre [Eq Pre]].
+    subst; simpl in *.
+    auto.
+    split.
+    + eapply StackIntegrity'Equiv.
+      apply SI_notfinished; auto.
+      * unfold EagerIntegrityTest in H6.
+        intros k Hk.
+        unfold EagerIntegrityTest in *.
+        apply PrefixUpToHead in Pre.
+        rewrite <- Pre.
+        unfold MPState. (* lol *)
+        rewrite H8; simpl.
+        eapply H11; eauto.
+      * remember (Build_VSE (ms m) (ms (head MP')) (ms (head MP')) (makeContour args (ms m)) (isRet (ms m))) as vse.
+
+        assert (Safety: EagerStackSafetyTest cm (S (length (tl (VSEs_step vs')))) MPpre (vse :: tl (VSEs_step vs'))).
+        { eapply PrefixUpTo_Safety; subst; simpl in*; eauto using variantOf_id. }
+
+        eapply TestImpliesIntegrityNested; eauto.
+        -- constructor; simpl; auto.
+        -- simpl; eauto.
+        -- subst; simpl; auto.
+        -- eapply PrefixUpTo_Forall; subst; simpl; eauto.
+    + extract_mpstep.
+      eapply StrongConfImpliesConf.
+      rewrite H8 in H15.
+      intros mv Var; simpl in *.
+      destruct (step mv) as [mv' OV] eqn:StepV.
+      destruct (H10 mv mv' OV); eauto; subst.
+      eapply StrongConfStep; eauto.
+      * erewrite <- PrefixUpToHead; eauto.
+        unfold MPState. rewrite H8. eauto.
+      * unfold isRet.
+        intros [Contra ?].
+        eapply wplus_neq in Contra; eauto.
+        omega.
+      * unfold isRet.
+        intros [Contra ?].
+        unfold variantOf in Var.
+        rewrite <- Var in Contra; eauto.
+        eapply wplus_neq in Contra; eauto.
+        omega.
+      * erewrite <- PrefixUpToHead; eauto.
+        unfold MPState. rewrite H8. simpl; eauto.
+        intros k Hk.
+        eapply H0.
+        destruct Hk.
+        -- left. intros Eq; symmetry in Eq; eauto.
+        -- right. intros Eq; symmetry in Eq; eauto.
+      * remember (Build_VSE (ms m) mv' mv' (makeContour args (ms m)) (isRet (ms m))) as vse.
+        replace mv' with (curr_variant vse); [ | subst; auto].
+
+        assert (V: variantOf m' mv' (makeContour args (ms m))).
+        {
+          eapply confStepPreservesVariant; eauto.
+          intros k Hk.
+          eapply H0.
+          destruct Hk.
+          -- left. intros Eq; symmetry in Eq; eauto.
+          -- right. intros Eq; symmetry in Eq; eauto.
+        } 
+        
+        assert (Safety: EagerStackSafetyTest cm (S (length (tl (VSEs_step vs')))) MPpre (vse :: (tl (VSEs_step vs')))).
+        { eapply PrefixUpTo_Safety; subst; simpl in*; eauto. }
+
+        eapply TestImpliesConfidentialityNested; eauto.
+        -- constructor; simpl; auto.
+        -- simpl; eauto.
+        -- eapply PrefixUpTo_Forall; subst; simpl; eauto.
+        -- (* Well-formedness *)
+           assert (wf: WellFormedVS m' (VSEs_step vs')).
+           { eapply VSE_step_preserves_WellFormed in H4; eauto. }
+           destruct wf as [Varwf [[vsewf [Lastwf Retwf]] [InM [InV [HRetwf HPubwf]]]]].
+
+           repeat split.
+           ++ constructor; eauto.
+              ** subst; simpl. unfold MPState.
+                 erewrite <-PrefixUpToHead; eauto.
+                 rewrite H8. simpl. eauto.
+              ** eapply Forall_forall.
+                 intros.
+                 inv Varwf.
+                 { rewrite <- H9 in H. simpl in *. inv H. }
+                 eapply Forall_forall in H12.
+                 unfold MPState.
+                 erewrite <- PrefixUpToHead; eauto.
+                 rewrite H8.
+                 simpl.
+                 eapply H12; eauto.
+                 rewrite <- H7 in H.
+                 simpl in *. eauto.
+           ++ exists vsewf.
+              split; auto.
+              constructor; auto.
+              inv Lastwf.
+              ** exfalso.
+                 unfold VSEs_step in H9.
+                 destruct vs'; simpl in *; inv H9.
+                 destruct vs'; simpl in *; inv H12.
+                 destruct H2 as [vse' [vsrest' [Eq' [Ret' [Len' NotR']]]]].
+                 inv Eq'.
+                 unfold VSE_step, upd_curr in Retwf.
+                 destruct (step (curr_variant vse')); simpl in *.
+                 rewrite Retwf in Ret'.
+                 inv Ret'.
+              ** simpl; auto.
+           ++ erewrite <- PrefixUpToHead; eauto.
+              unfold MPState. rewrite H8. simpl.
+              constructor; subst; simpl; eauto.
+              ** frob (MTraceOf (ms m)).
+                 rewrite MStep. simpl.
+                 apply In_later.
+                 frob (MTraceOf m').
+                 apply In_now.
+              ** inv InM; simpl; auto.
+           ++ subst; simpl; auto. 
+              constructor; subst; simpl; eauto.
+              ** frob (MTraceOf mv').
+                 apply In_now.
+              ** inv InV; simpl; auto.
+           ++ constructor; subst; simpl; eauto.
+              inv HRetwf; simpl; eauto.
+           ++ constructor; subst; simpl; eauto.              
+              inv HPubwf; simpl; eauto.
+        -- subst; simpl; eauto.
+           erewrite <- PrefixUpToHead; eauto.
+           unfold MPState. rewrite H8. simpl.
+           auto.
+        -- subst; simpl; auto.
 Qed.
-*)
 
+Definition EagerStackSafetyTest'' cm m :=
+  let initC := makeContour 0 m in
+  let p := initPolicyState m cm in
+  let MP := MPTraceOf (m,p) in
+  forall mv, variantOf m mv initC ->
+             let initvse := {| init_machine := m
+                             ; init_variant := mv 
+                             ; curr_variant := mv
+                             ; contour := initC
+                             ; retP := fun _ => False
+                            |} in
+             EagerStackSafetyTest cm 1 MP [initvse].
 
-
-(*
-Lemma MTraceOf_eq M : MTraceOf M = notfinished M (MTraceOf (fst (step M))).
-Admitted.
-
-Lemma mpstep_step_some mp m p OM :
-  mpstep mp = Some (m, p, OM) -> step (ms mp) = (m, OM).
-Proof.
-  unfold mpstep.
-  destruct (step (ms mp)) as [m' OM'].
-  destruct (pstep mp) as [mp' |];
-    intros H;
-    now inversion H.
+Lemma False_Forall :
+  forall {A} (T : TraceOf A), ForallButLast (fun _ => ~ False) T.
+Proof.  
+  cofix COFIX.
+  intros.
+  destruct T; constructor; eauto.
 Qed.
+    
 
-Lemma In_singleton {A : Type} (x : A) : In x [x].
-Proof.
-  left. reflexivity.
-Qed.
-
-Lemma InTrace_MTraceOf m : InTrace m (MTraceOf m).
-Proof.
-  rewrite MTraceOf_eq. now apply In_now.
-Qed.
-
-Definition StrongEagerStackConfidentiality' (MP : MPTrace) (m : MachineState) :=
-  StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf m).
-
-Goal
-  forall (cm : CallMap) (MP : MPTrace) (C : Contour),
-    EagerStackSafetyTest' cm C MP ->
-  forall (m : MachineState),
-    variantOf (ms (head MP)) m C ->
-    (* StrongEagerStackConfidentiality' MP m. *)
-    StrongEagerStackConfidentiality (fun _ => False) MP (MTraceOf m).
-Proof.
-  cofix CH.
-  intros cm MP C Htest n Hvariant.
-  specialize (Htest n Hvariant).
-  inversion Htest
-    as [ mp' vs' Hwf
-       | mp MP' ? vs' m' p' OM Hcall Hret Hstep Hwf Hconf Hint Hvssteps Hhead Htest'
-       | |];
-    subst; clear Htest;
-    (* Give a name to the variant so as to keep the context clean and readable. *)
-    try match goal with
-    | H : WellFormedVS _ [?VSE] |- _ => remember VSE as vse eqn:Hvse
-    end.
-  - now apply StrongConfNotMStep.
-  - rewrite MTraceOf_eq.
-    specialize (Hconf _ (In_singleton vse)) as [n' [OM' [Hstep' Hconf]]].
-    specialize (Hret _ (In_singleton vse)).
-    specialize (Hint _ (In_singleton vse)).
-    rewrite Hvse in Hstep'. simpl in Hstep'.
-    destruct Hconf as [HOM Hvary]; subst OM'. (* EagerConfidentialityTest *)
-    rewrite Hstep'. simpl.
-    apply StrongConfStep with OM.
-    + rewrite Hstep.
-      now setoid_rewrite Hhead.
-    + now rewrite Hstep'.
-    + (* Proof tree repeats below. *)
-      setoid_rewrite Hhead. simpl.
-      intros k Hvary'.
-      specialize (Hvary k).
-      apply Hvary.
-      destruct Hvary' as [Hvary' | Hvary'].
-      * left. now auto.
-      * rewrite Hvse. simpl.
-        right. now auto.
-    + apply CH with cm C.
-      * intros n_ Hvariant_.
-        destruct MP' as [mp' | mp' MP'].
-        -- apply EagerTestHalt.
-           split; [| split; [| split]].
-           ++ constructor; [| now constructor].
-              simpl. now apply Hvariant_.
-           ++ match goal with
-              | |- exists _, FinLast _ [?VSE] /\ _ => exists VSE
-              end.
-              split.
-              ** now constructor.
-              ** reflexivity.
-           ++ constructor; [| now constructor].
-              simpl. now apply InTrace_MTraceOf.
-           ++ constructor; [| now constructor].
-              simpl. now apply InTrace_MTraceOf.
+Theorem StackSafetyTestImpliesStackSafety :
+  forall cm m,
+  EagerStackSafetyTest'' cm m ->
+  EagerStackSafety' cm m.
+Proof.  
+  intros cm m Safety.
+  unfold EagerStackSafetyTest'' in *.
+  unfold EagerStackSafety' in *.
+  unfold EagerStackSafety.
+  split; [|split].
+  - eapply StackIntegrity'Equiv.
+    eapply TestImpliesIntegrityNested; simpl; eauto using variantOf_id.
+    + constructor; auto.
+    + simpl; eauto.
+    + simpl; eauto.
+    + simpl; eauto.
+      eapply False_Forall.
+  - eapply StrongConfImpliesConf.
+    intros mv Var.
+    remember (Build_VSE m mv mv (makeContour 0 m) (fun _ => False)) as vse.
+    replace mv with (curr_variant vse); [|subst; auto].
+    eapply TestImpliesConfidentialityNested with (vs := [vse]); subst; simpl in *; eauto.
+    + constructor; eauto.
+    + simpl; eauto.
+    + eapply False_Forall.
+    + repeat split.
+      * constructor; subst; simpl in *.
+        -- destruct (pstep (m, initPolicyState m cm)); simpl in *; auto.
+        -- constructor.
+      * eexists; split; eauto.
+        -- constructor.
+        -- simpl; auto.
+      * constructor; subst; simpl in *.
+        -- destruct (pstep (m, initPolicyState m cm)); simpl in *; auto;
+           frob (MTraceOf m); apply In_now.
+        -- constructor.
+      * constructor; subst; simpl in *.
+        -- frob (MTraceOf mv); apply In_now.
+        -- constructor.
+      * constructor.
+        -- right. intros; auto.
+        -- constructor.
+      * constructor.
         -- simpl.
-           inversion Hvssteps as [| v1 vse' l1 l2 Hvsstep HForall2 Heq Hcons];
-             subst v1 l1.
-           inversion HForall2; subst l2 vs'; clear Hvssteps HForall2.
-           rewrite Hvse in Hvsstep.
-           inversion Hvsstep as [m1 m2 m3 n'_ C1 R [OM' Hstep'_]];
-             subst m1 m2 m3 C1 R vse'.
-           rewrite Hstep' in Hstep'_.
-           inversion Hstep'_; subst n'_ OM'; clear Hstep'_ Hvsstep.
-           simpl in Hhead; subst mp'.
-           destruct mp as [m p]. simpl in *.
-
-           (* Print EagerStackSafetyTest. *)
-
-      * eapply confStepPreservesVariant;
-          [ setoid_rewrite Hhead; now apply Hstep
-          | now rewrite Hstep'
-          |
-          | now apply Hvariant].
-        -- (* Same subproof as above. *)
-           admit.
-  -
-*)
-
+           unfold makeContour, publicRegisters.
+           intros; auto.
+        -- constructor.
+    + simpl; eapply Safety.
+      destruct (pstep (m, initPolicyState m cm)); simpl in *; auto.
+  - intros. eapply TestImpliesSafetyCall; eauto using variantOf_id.
+Qed.
+        
 (* ********* SNA Beware : Lazy Properties ********* *)
 
 (* Since eager property protects everything that is HI,
