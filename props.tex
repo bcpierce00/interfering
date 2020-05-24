@@ -129,13 +129,31 @@
 
     Observational equivalence is defined as a symmetric prefix:
     \[O_1 \simeq O_2 \triangleq O_1 \lesssim O_2 \land O_2 \lesssim O_1\]
+
+    \paragraph{Calling Conventions}
+
+      A subroutine call with \(n\) arguments follows the following convention:
+
+      \begin{itemize}
+        \item The stack pointer is increased by \(n+1\)
+        \item A {\tt Jal} occurs
+        \item The return address is stored at \(\mathtt{SP} - (n+1)\)
+      \end{itemize}
+
+      The final state of a call sequence state is a {\it call state}. We relate a call sequence \(M\) with
+      \(n\) arguments to its final state \(m\) with \(\mathit{isCall}\ M\ m\ n \subset \mathit{trace}\ \mathcal{M}
+      \times \mathcal{M} \times \mathbb{N}\).
+
+      A state is considered to have returned after a call if the stack pointer is the same as before the call
+      and the program counter is incremented. So:
+      \[\mathit{returned}\ m\ m' \triangleq \exists M,n . \mathit{isCall\ M\ m\ n} \land
+        m'(\mathtt{SP}) = m(\mathtt{SP}) - (n+1) \land m(\mathtt{PC}) = m'(\mathtt{PC}) + 1\]
  
   \section{Observable Stack Safety}
 
     {\it Observable stack safety} is a property of a transition system \(\longrightarrow_p\),
-    which is decomposed into three subproperties:
-    {\it observable stack integrity}, {\it observable stack confidentiality}, and
-    {\it observable safe initialization}. 
+    which is decomposed into three subproperties: {\it observable stack integrity},
+    {\it observable stack confidentiality}, and {\it observable safe initialization}. 
 
   %  We unify these properties with a structure
   %  called a {\it contour} that maps components to levels of confidentiality and integrity.
@@ -164,7 +182,7 @@
         \item Otherwise \(O \lesssim O'\)
       \end{itemize}
 
-    \paragraph{Call States, Returns, and Contours}
+    \paragraph{Contours}
 
       Our remaining properties concern the behavior of function calls and require a dynamic treatment
       of confidentiality and integrity. We generalize \(C\) above to a {\it contour} mapping each component
@@ -174,10 +192,8 @@
 
       \[C \in \mathcal{C} ::= \mathcal{K} \rightarrow \mathit{label}\]
 
-      [TODO: be more explicit about what the call map does]
-      A state \(m_c\) is a {\it call state} if [call map says it is], and a state \(m_p\) is
-      considered to have returned to \(m_c\) if [etc.] From a call state with \(n\) arguments to
-      its call, we can construct a contour that should apply inside the call:
+      When \(m\) is a call state such that \(\mathit{isCall}\ M\ m\ n\) for some \(M\) and \(n\),
+      we can construct a contour based on the size of \(m\)'s stack frame, as follows:
       \[Cof(m)(k) =
       \begin{cases}
         (\mathtt{HC},\mathtt{HI}) & \text{if } k \in \mathcal{W}
@@ -188,8 +204,9 @@
       \end{cases}\]
 
       Above the stack pointer, memory is high integrity in an extension of safe initialization;
-      from the perspective of the callee, that memory is not initialized. Below the old stack
-      pointer, memory is high integrity and high confidentiality. Registers and the callee's
+      from the perspective of the callee, that memory is not initialized. At and below the old stack
+      pointer, memory is high integrity and high confidentiality -- this includes the return address,
+      protecting control flow, as well as the caller's data. Registers and the callee's
       frame are low integrity and low confidentiality. These categories inform our integrity
       and confidentiality properties.
 
@@ -213,13 +230,14 @@
       components, but ignores the callee's interference with the caller's data. Then the observable
       behavior of the resulting trace is the standard to which we expect any real trace to conform.
 
-      A system enjoys observable integrity if for any initial state \(m_0\), call state \(m_c\),
-      policy state \(p_c\), and contour \(C = Cof(m_c)\) such that \(m_0,\mathit{pinit}(m_0)
-      \hookrightarrow \dots (m_c,p_c) \dots\):
+      A system enjoys observable integrity if for any initial state \(m_0\) and call state \(m_c\)
+      such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots MP_c (m_c,p_c) \dots\)
+      and \(\mathit{isCall}\ MP_c\ m_c\ n\):
 
       \begin{itemize}
         \item If \((m_c,p_c) \hookrightarrow \dots (m_r,p_r) | \mathit{returned}\ m_c\ m_r\):
           \begin{itemize}
+            \item Let \(C = \mathit{Cof(m_c,n)}\)
             \item Let \(m_r' = \mathit{roll}_I(C,m_c,m_r)\), \((m_r,p_r) \rightsquigarrow O\), and
               \(m_r' \rightsquigarrow O'\)
             \item If \(m_r,p_r \hookrightarrow MP \in \top\) then \(O \simeq O'\)
@@ -231,9 +249,9 @@
  
       An eager enforcement mechanism implements a stronger property, which we term {\it eager integrity}.
       Eager integrity simplifies observable integrity by requiring that high integrity data of \(m_r\) be
-      identical to that of \(m_c\). Formally, a systemctl enjoys eager integrity if for any initial state
-      \(m_0\), call state \(m_c\), policy state \(p_c\), and contour \(C = Cof(m_c)\) such that
-      \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots (m_c,p_c) \dots (m_r,p_r) | \mathit{returned}\ m_c\ m_r\):
+      identical to that of \(m_c\). Formally, a system enjoys eager integrity if for any initial state
+      \(m_0\) and call state \(m_c\) such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots MP_c (m_c,p_c)
+      \dots (m_r,p_r) | \mathit{returned}\ m_c\ m_r\) and \(\mathit{isCall}\ MP_c (m_c,p_c)\):
 
       \[\forall k . C(k) = \mathtt{HI} \rightarrow m_c(k) = m_r(k)\]
 
@@ -265,11 +283,14 @@
           m_r'(k) & \text{else} \\
         \end{cases}\]
 
-      A system enjoys observable confidentiality if for any initial state \(m_0\), call states \(m_c\)
-      and \(m_c'\), policy state \(p_c\), and contour \(C = Cof(m_c)\) such that \(m_0,\mathit{pinit}(m_0)
-      \hookrightarrow \dots (m_c,p_c) \dots\) and \(m_c \approx_C m_c'\):
+      A system enjoys observable confidentiality if for any initial state \(m_0\) and call state \(m_c\)
+      such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots MP_c (m_c,p_c) \dots\) and
+      \(\mathit{isCall}\ MP_c\ m_c\ n\):
+      and \(m_c'\), 
 
       \begin{itemize}
+        \item Let \(C = \mathit{Cof}(m_c,n)\)
+        \item For all \(m_c'\) such that \(m_c \approx_C m_c'\):
         \item If \((m_c,p_c) \hookrightarrow MP (m_r,p_r) | \mathit{returned}\ m_c\ m_r\)
           \begin{itemize}
             \item Then there is some \(m_r'\) where
@@ -290,11 +311,13 @@
 
       Once again an eager policy enforces a stronger property that only concerns the behavior of
       the original trace and its variant within each call. A system enjoys {\it eager stack
-      confidentiality} if, for any initial state \(m_0\), call states \(m_c\) and \(m_c'\),
-      policy state \(p_c\), and contour \(C = Cof(m_c)\) such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow
-      \dots (m_c,p_c) \dots\) and \(m_c \approx_C m_c'\):
+      confidentiality} if, for any initial state \(m_0\) and call state \(m_c\) such that
+      \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots MP_c (m_c,p_c) \dots\) and
+      \(\mathit{isCall}\ MP_c\ m_c\ n\):
 
       \begin{itemize}
+        \item Let \(C = \mathit{Cof}(m_c)\)
+        \item For all \(m_c'\) such that \(m_c \approx_C m_c'\):
         \item If \((m_c,p_c) \hookrightarrow_P MP (m_r,p_r) | \mathit{returned}\ m_c\ m_r\)
           \begin{itemize}
             \item Then there is some \(m_r'\) where
