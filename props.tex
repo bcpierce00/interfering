@@ -7,8 +7,8 @@
 
   \section{Preliminaries}
 
-    Values are words:
-    \[w \in \mathcal{W}\]
+    Values and addresses are words:
+    \[a,w \in \mathcal{W}\]
 
     Components are words (addresses) and registers, including special registers:
     \[r \in \mathcal{R}\]
@@ -20,16 +20,17 @@
     Our properties are defined in terms of observations, which may be silent or a word of data:
     \[o \in \mathit{Obs} ::= \tau | w \in \mathcal{W}\]
     
-    Execution is by a step function \(\cdot \xrightarrow{\cdot} \cdot : \mathcal{M} \rightarrow
-    \mathit{Obs} \times \mathcal{M}\). For every machine state \(m\) there is exactly one \(o\) and \(m'\)
-    such that \(m \xrightarrow{o} m'\).
+    Execution is by a step function \(m \xrightarrow{o} m' : m \in \mathcal{M} \rightarrow
+    o \in \mathit{Obs} \times m' \in \mathcal{M}\).
 
-    Meanwhile a policy tracks a mix of static and dynamic enforcement. A policy consists of
+    A policy tracks a mix of static and dynamic enforcement. A policy consists of
     a set of policy states, \(p \in \mathcal{P}\), a policy initializer
-    \(pinit : \mathcal{M} \rightharpoonup \mathcal{P}\), and a policy-parameterized step relation
-    \(\cdot, \cdot \xrightarrow{\cdot}_P \cdot, \cdot : \mathcal{M} \times \mathcal{P} \rightharpoonup
-    \mathit{Obs} \times \mathcal{M} \times \mathcal{P}\) such that if \(m,p \xrightarrow{o}_P m',p'\),
-    then \(m \xrightarrow{o} m'\). The initializer is a partial function from machine states to policy
+    \(pinit : \mathcal{M} \rightharpoonup \mathcal{P}\), and a policy-parameterized step function:
+    \[m, p \xrightarrow{o}_P m', p' : m \in \mathcal{M} \times p \in \mathcal{P} \rightharpoonup
+    o \in \mathit{Obs} \times m' \in \mathcal{M} \times p' \in \mathcal{P}\]
+
+    Axiomatically, if \(m,p \xrightarrow{o}_P m',p'\), then \(m \xrightarrow{o} m'\).
+    The initializer is a partial function from machine states to policy
     states, reflecting that a policy may apply static constraints on the initial state. The parameterized
     step relation is likewise partial to allow for fail-stop behavior.
 
@@ -130,25 +131,31 @@
     Observational equivalence is defined as a symmetric prefix:
     \[O_1 \simeq O_2 \triangleq O_1 \lesssim O_2 \land O_2 \lesssim O_1\]
 
-    \paragraph{Calling Conventions}
+  \paragraph{Calling Conventions and Contours}
 
       A subroutine call with \(n\) arguments follows the following convention:
 
       \begin{itemize}
         \item The stack pointer is increased by \(n+1\)
         \item A {\tt Jal} occurs
-        \item The return address is stored at \(\mathtt{SP} - (n+1)\)
+        \item The return address is stored at \(\mathtt{SP} - 1\)
       \end{itemize}
 
-      The final state of a call sequence state is a {\it call state}. We relate a call sequence \(M\) with
-      \(n\) arguments to its final state \(m\) with \(\mathit{isCall}\ M\ m\ n \subset \mathit{trace}\ \mathcal{M}
-      \times \mathcal{M} \times \mathbb{N}\).
+      The final state of a call sequence is a {\it call state}. If \(M\) is a call sequence with
+      we map it to its call state, number of arguments, and the PC and SP values of its eventual
+      return by the function \(\mathit{call} : \mathit{trace}\ \mathcal{M} \rightharpoonup \mathcal{M}
+      \times \mathbb{N} \times \mathcal{W} \times \mathcal{W}\). We can also track a call sequence in the
+      policy state, defining \(\mathit{call}_P : \mathcal{M} \times \mathcal{P} \rightharpoonup \mathbb{N}
+      \times \mathcal{W} \times \mathcal{W}\) such that:
+
+      \[\frac{m_0,\mathit{pinit}(m_0) \hookrightarrow_P \dots m,p \dots \hspace{.5cm}
+              m_0 \hookrightarrow \dots M \dots \hspace{.5cm} \mathit{call}(M) = m, n, a_{pc}, a_{sp}}
+             {\mathit{call}_P(m,p) = n, a_{pc}, a_{sp}}\]
 
       A state is considered to have returned after a call if the stack pointer is the same as before the call
-      and the program counter is incremented. So:
-      \[\mathit{returned}\ m\ m' \triangleq \exists M,n . \mathit{isCall\ M\ m\ n} \land
-        m'(\mathtt{SP}) = m(\mathtt{SP}) - (n+1) \land m(\mathtt{PC}) = m'(\mathtt{PC}) + 1\]
- 
+      (\(a_{sp}\)) and the program counter is the next address after (\(a_{pc}\)):
+      \[\mathit{returned}\ m\ a_{pc}\ a_{sp} \triangleq m'(\mathtt{SP}) = a_{sp} \land m(\mathtt{PC}) = a_{pc}\]
+
   \section{Observable Stack Safety}
 
     {\it Observable stack safety} is a property of a transition system \(\longrightarrow_p\),
@@ -192,23 +199,25 @@
 
       \[C \in \mathcal{C} ::= \mathcal{K} \rightarrow \mathit{label}\]
 
-      When \(m\) is a call state such that \(\mathit{isCall}\ M\ m\ n\) for some \(M\) and \(n\),
+      When \(m,p\) is a call state \(\mathit{call}_P(m,p) = n,\_,\_\) for some \(n\),
       we can construct a contour based on the size of \(m\)'s stack frame, as follows:
-      \[Cof(m)(k) =
+      \[Cof(m,n)(k) =
       \begin{cases}
         (\mathtt{HC},\mathtt{HI}) & \text{if } k \in \mathcal{W}
                                     \text{ and } k \leq m(\mathtt{SP}) - n \\
         (\mathtt{HC},\mathtt{LI}) & \text{if } k \in \mathcal{W}
-                                    \text{ and } k \leq m(\mathtt{SP}) \\
+                                    \text{ and } k \geq m(\mathtt{SP}) \\
+        (\mathtt{LC},\mathtt{HI}) & \text{if } k \in \mathcal{W}
+                                    \text{ and } k = m(\mathtt{SP}) - 1 \\
         (\mathtt{LC},\mathtt{LI}) & \text{else} \\
       \end{cases}\]
 
       Above the stack pointer, memory is high integrity in an extension of safe initialization;
-      from the perspective of the callee, that memory is not initialized. At and below the old stack
-      pointer, memory is high integrity and high confidentiality -- this includes the return address,
-      protecting control flow, as well as the caller's data. Registers and the callee's
-      frame are low integrity and low confidentiality. These categories inform our integrity
-      and confidentiality properties.
+      from the perspective of the callee, that memory is not initialized. Below the old stack
+      pointer, memory is high integrity and high confidentiality. The top of the callee's frame
+      is its return address, which it must be able to read in order to return but which is
+      high integrity [does this make sense?] Registers and the callee's frame are low integrity
+      and low confidentiality. These categories inform our integrity and confidentiality properties.
 
     \paragraph{Observable Integrity}
 
@@ -230,14 +239,14 @@
       components, but ignores the callee's interference with the caller's data. Then the observable
       behavior of the resulting trace is the standard to which we expect any real trace to conform.
 
-      A system enjoys observable integrity if for any initial state \(m_0\) and call state \(m_c\)
-      such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots MP_c (m_c,p_c) \dots\)
-      and \(\mathit{isCall}\ MP_c\ m_c\ n\):
+      A system enjoys observable integrity if for any initial state \(m_0\), call state \(m_c\),
+      and policy state \(p_c\) such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots (m_c,p_c) \dots\)
+      and \(\mathit{call}_P(m_c,p_c) = n,a_{pc},a_{sp}\):
 
       \begin{itemize}
-        \item If \((m_c,p_c) \hookrightarrow \dots (m_r,p_r) | \mathit{returned}\ m_c\ m_r\):
+        \item If \((m_c,p_c) \hookrightarrow \dots (m_r,p_r) | \mathit{returned}\ m_r\ a_{pc}\ a_{sp}\):
           \begin{itemize}
-            \item Let \(C = \mathit{Cof(m_c,n)}\)
+            \item Let \(C = \mathit{Cof}(m_c,n)\)
             \item Let \(m_r' = \mathit{roll}_I(C,m_c,m_r)\), \((m_r,p_r) \rightsquigarrow O\), and
               \(m_r' \rightsquigarrow O'\)
             \item If \(m_r,p_r \hookrightarrow MP \in \top\) then \(O \simeq O'\)
@@ -250,8 +259,9 @@
       An eager enforcement mechanism implements a stronger property, which we term {\it eager integrity}.
       Eager integrity simplifies observable integrity by requiring that high integrity data of \(m_r\) be
       identical to that of \(m_c\). Formally, a system enjoys eager integrity if for any initial state
-      \(m_0\) and call state \(m_c\) such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots MP_c (m_c,p_c)
-      \dots (m_r,p_r) | \mathit{returned}\ m_c\ m_r\) and \(\mathit{isCall}\ MP_c (m_c,p_c)\):
+      \(m_0\), call state \(m_c\), and policy state \(p_c\) such that \(\mathit{call}(m_c,p_c) =
+      n, a_{pc}, a_{sp}\), and some \(m_r\) and \(p_r\) such that
+      \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots (m_c,p_c) \dots (m_r,p_r) | \mathit{returned}\ m_r\ a_{pc}\ a_{sp}\):
 
       \[\forall k . C(k) = \mathtt{HI} \rightarrow m_c(k) = m_r(k)\]
 
@@ -283,18 +293,17 @@
           m_r'(k) & \text{else} \\
         \end{cases}\]
 
-      A system enjoys observable confidentiality if for any initial state \(m_0\) and call state \(m_c\)
-      such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots MP_c (m_c,p_c) \dots\) and
-      \(\mathit{isCall}\ MP_c\ m_c\ n\):
-      and \(m_c'\), 
+      A system enjoys observable confidentiality if for any initial state \(m_0\), call state \(m_c\),
+      and policy state \(p_c\) such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots (m_c,p_c) \dots\) and
+      \(\mathit{call}(m_c,p_c) = n, a_{pc}, a_{sp}\):
 
       \begin{itemize}
         \item Let \(C = \mathit{Cof}(m_c,n)\)
         \item For all \(m_c'\) such that \(m_c \approx_C m_c'\):
-        \item If \((m_c,p_c) \hookrightarrow MP (m_r,p_r) | \mathit{returned}\ m_c\ m_r\)
+        \item If \((m_c,p_c) \hookrightarrow MP (m_r,p_r) | \mathit{returned}\ m_r\ a_{pc}\ a_{sp}\)
           \begin{itemize}
             \item Then there is some \(m_r'\) where
-              \(m_c' \hookrightarrow M m_r' | \mathit{returned}\ m_c'\ m_r'\)
+              \(m_c' \hookrightarrow M m_r' | \mathit{returned}\ m_r'\ a_{pc}\ a_{sp}\)
             \item Let \(m_r'' = \mathit{roll}_C(C,m_c,m_r,m_c',m_r')\),
               \((m_r,p_r) \rightsquigarrow O\), and \(m_r'' \rightsquigarrow O'\)
             \item If \(m_r,p_r \hookrightarrow_P MP \in \top\) then \(O \simeq \mathit{ObsOf}(M) +\!\!\!+ O'\)
@@ -312,13 +321,13 @@
       Once again an eager policy enforces a stronger property that only concerns the behavior of
       the original trace and its variant within each call. A system enjoys {\it eager stack
       confidentiality} if, for any initial state \(m_0\) and call state \(m_c\) such that
-      \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots MP_c (m_c,p_c) \dots\) and
-      \(\mathit{isCall}\ MP_c\ m_c\ n\):
+      \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots (m_c,p_c) \dots\) and
+      \(\mathit{call}(m_c,p_c) = n, a_{pc}, a_{sp}\):
 
       \begin{itemize}
-        \item Let \(C = \mathit{Cof}(m_c)\)
+        \item Let \(C = \mathit{Cof}(m_c,n)\)
         \item For all \(m_c'\) such that \(m_c \approx_C m_c'\):
-        \item If \((m_c,p_c) \hookrightarrow_P MP (m_r,p_r) | \mathit{returned}\ m_c\ m_r\)
+        \item If \((m_c,p_c) \hookrightarrow_P MP (m_r,p_r) | \mathit{returned}\ m_r\ a_{pc}\ a_{sp}\)
           \begin{itemize}
             \item Then there is some \(m_r'\) where
               \(m_c' \hookrightarrow M m_r' | \mathit{returned}\ m_c'\ m_r'\)
