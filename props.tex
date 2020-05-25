@@ -1,7 +1,9 @@
-\documentclass{article}
+\documentclass[conference]{IEEEtran}
 
 \usepackage{geometry}
 \usepackage{amssymb,amsmath}
+
+\newcommand{\MP}{\mathit{MP}}
 
 \begin{document}
 
@@ -26,8 +28,10 @@
     A policy tracks a mix of static and dynamic enforcement. A policy consists of
     a set of policy states, \(p \in \mathcal{P}\), a policy initializer
     \(pinit : \mathcal{M} \rightharpoonup \mathcal{P}\), and a policy-parameterized step function:
-    \[m, p \xrightarrow{o}_P m', p' : m \in \mathcal{M} \times p \in \mathcal{P} \rightharpoonup
-    o \in \mathit{Obs} \times m' \in \mathcal{M} \times p' \in \mathcal{P}\]
+    \[\begin{split}
+      m, p \xrightarrow{o}_P m', p' : m \in \mathcal{M} \times p \in \mathcal{P} & \rightharpoonup \\
+      o \in \mathit{Obs} \times m' \in \mathcal{M} \times p' \in \mathcal{P} &
+    \end{split}\]
 
     Axiomatically, if \(m,p \xrightarrow{o}_P m',p'\), then \(m \xrightarrow{o} m'\).
     The initializer is a partial function from machine states to policy
@@ -41,7 +45,7 @@
     {\it mptrace} is similarly a sequence of machine state-policy state pairs,
     \((m_0,\mathit{pinit}(m_0))(m_1,p_1) \dots\) such that adjacent pairs of pairs are related
     by \(\longrightarrow_P\). Steps being deterministic, we can relate an initial state to its trace
-    via \(\cdot \hookrightarrow \cdot : \mathcal{M} \rightarrow \mathit{trace}\ \mathcal{M}\):
+    via \(m \hookrightarrow M : m \in \mathcal{M} \rightarrow M \in \mathit{trace}\ \mathcal{M}\):
 
     \[\frac{m_0 \xrightarrow{o} m_1 \hspace{.5cm} m_1 \hookrightarrow M}
            {m_0 \hookrightarrow m_0 M}\]
@@ -49,86 +53,51 @@
     Since the step function is total, if \(m \hookrightarrow M\), then \(M\) must be infinite.
     We will also wish to take a prefix of the trace from an initial state up to when some condition
     holds. Let \(f\) be a predicate on machine states. Then we define \(m \hookrightarrow M | f\)
-    (read ``\(M\) is the prefix from \(m\) until \(f\)'') by:
-
-    \begin{minipage}[b]{.45\textwidth}
-      \[\frac{m_0 \xrightarrow{o} m_1 \hspace{.5cm} \neg f\ m_1 \hspace{.5cm} m_1 \hookrightarrow M | f }
-             {m_0 \hookrightarrow m_0 M | f}\]
-    \end{minipage}
-    \begin{minipage}[b]{.45\textwidth}
-      \[\frac{m_0 \xrightarrow{o} m_1 \hspace{.5cm} f\ m_1}
-             {m_0 \hookrightarrow m_0 m_1}\]
-    \end{minipage}
-    \vspace{\belowdisplayskip}
+    (read ``\(M\) is the prefix from \(m\) until \(f\)'') where \(f\) may bind states in \(M\):
+    \[\frac{m_0 \xrightarrow{o} m_1 \hspace{.5cm} \neg f\ m_1 \hspace{.5cm} m_1 \hookrightarrow M | f }
+           {m_0 \hookrightarrow m_0 M | f}\]
+    \[\frac{m_0 \xrightarrow{o} m_1 \hspace{.5cm} f\ m_1}
+           {m_0 \hookrightarrow m_0 m_1}\]
 
     We similarly define \(\hookrightarrow_P\), writing \(m_0,\mathit{pinit}(m_0) \longrightarrow \bot\) when
     there is no \(m_1,p_1\) such that \(m_0,\mathit{pinit}(m_0) \xrightarrow{o} m_1,p_1\) for any \(o\).
-    
-    \begin{minipage}[b]{.45\textwidth}
-      \[\frac{m_0,p_0 \xrightarrow{o} m_1,p_1 \hspace{.5cm} m_1,p_1 \hookrightarrow_P MP}
-             {m_0,p_0 \hookrightarrow_P m_0,p_0 MP}\]
-    \end{minipage}
-    \begin{minipage}[b]{.45\textwidth}
-      \[\frac{m_0,p_0 \longrightarrow \bot}
-             {m_0,p_0 \hookrightarrow_P m_0,p_0}\]
-    \end{minipage}
-    \vspace{\belowdisplayskip}
+    \[\frac{m_0,p_0 \xrightarrow{o} m_1,p_1 \hspace{.5cm} m_1,p_1 \hookrightarrow_P \MP}
+           {m_0,p_0 \hookrightarrow_P m_0,p_0 \MP}\]
+    \[\frac{m_0,p_0 \longrightarrow \bot}
+           {m_0,p_0 \hookrightarrow_P m_0,p_0}\]
 
-    With a policy we may see \(m,p \hookrightarrow MP\) where \(MP\) is finite due to a policy
-    failure. We will identify the set of infinite traces as \(\top\), so \(MP \in \top\) will
-    indicate an infinite trace and \(MP \not \in \top\) a finite one.
+    With a policy we may see \(m,p \hookrightarrow \MP\) where \(\MP\) is finite due to a policy
+    failure. We will identify the set of infinite traces as \(\top\), so \(\MP \in \top\) will
+    indicate an infinite trace and \(\MP \not \in \top\) a finite one.
     We define a similar notion of taking the prefix until a condition:
 
-    \begin{minipage}[b]{.45\textwidth}
-      \[\frac{m_0,p_0 \xrightarrow{o} m_1,p_1 \hspace{.5cm} \neg f\ m_1 \hspace{.5cm} m_1,p_1
-                \hookrightarrow_P M | f }
-             {m_0,p_0 \hookrightarrow_P m_0,p_0 M | f}\]
-    \end{minipage}
-    \begin{minipage}[b]{.45\textwidth}
-      \[\frac{m_0,p_0 \xrightarrow{o} m_1,p_1 \hspace{.5cm} f\ m_1}
-             {m_0,p_0 \hookrightarrow_P (m_0,p_0) (m_1,p_1)}\]
-    \end{minipage}
-    \vspace{\belowdisplayskip}
+    \[\frac{m_0,p_0 \xrightarrow{o} m_1,p_1 \hspace{.5cm} \neg f\ m_1 \hspace{.5cm} m_1,p_1
+              \hookrightarrow_P M | f }
+           {m_0,p_0 \hookrightarrow_P m_0,p_0 M | f}\]
+    \[\frac{m_0,p_0 \xrightarrow{o} m_1,p_1 \hspace{.5cm} f\ m_1}
+           {m_0,p_0 \hookrightarrow_P (m_0,p_0) (m_1,p_1)}\]
 
     An observation trace \(O\) is the trace of observations from a machine or {\it mptrace},
-    as defined by \(\mathit{ObsOf}\):
-    
-    \begin{minipage}[b]{.45\textwidth}
-      \[\frac{M = mM' \hspace{.5cm} m \xrightarrow{o} m' \hspace{.5cm} \mathit{ObsOf}(M') = O}
-             {\mathit{ObsOf}(M) = oO}\]
-    \end{minipage}
-    \begin{minipage}[b]{.45\textwidth}
-      \[\frac{M = m}
-             {\mathit{ObsOf}(M) = \tau}\]
-    \end{minipage}
-    \vspace{\belowdisplayskip}
-
-    \begin{minipage}[b]{.45\textwidth}
-      \[\frac{MP = (m,p)MP' \hspace{.5cm} m,p \xrightarrow{o} m',p' \hspace{.5cm} \mathit{ObsOf}(MP') = O}
-             {\mathit{ObsOf}(MP) = oO}\]
-    \end{minipage}
-    \begin{minipage}[b]{.45\textwidth}
-      \[\frac{MP = m,p}
-             {\mathit{ObsOf}(M) = \tau}\]
-    \end{minipage}
-    \vspace{\belowdisplayskip}
-
-    We abbreviate the observation trace of the execution trace from a state as:
-    \[m \rightsquigarrow O \triangleq m \hookrightarrow M \land \mathit{ObsOf}(M) = O\]
-    \[m,p \rightsquigarrow O \triangleq m,p \hookrightarrow_P MP \land \mathit{ObsOf}(MP) = O\]
+    as defined by \(\mathit{Obs}\):
+    \[\frac{M = mM' \hspace{.5cm} m \xrightarrow{o} m'}
+           {\mathit{Obs}(M) = o\mathit{Obs}(M')}\]
+    \[\frac{M = m}
+           {\mathit{Obs}(M) = \tau}\]
+    \[\frac{\MP = (m,p)\MP' \hspace{.5cm} m,p \xrightarrow{o} m',p'}
+           {\mathit{Obs}(\MP) = o \mathit{Obs}(\MP')}\]
+    \[\frac{\MP = m,p}
+           {\mathit{Obs}(M) = \tau}\]
 
     An observational prefix \(O_1 \lesssim O_2\) means that \(O_1\) is a prefix of \(O_2\) up to the deletion
     of \(\tau\) observations:
-
-    \[O_1 \sim O_2 \triangleq
-      \begin{cases}
-        O_1' \sim O_2 & \text{if } O_1 = \tau O_1' \\
-        O_1 \sim O_2' & \text{if } O_2 = \tau O_2' \\
-        O_1' \sim O_2' & \text{if } O_1 = w O_1' \text{ and } O_2 = w O_2' \\
-        \text{True} & \text{if for all } o \text{ in } O_1, o = \tau \\
-      \end{cases}\]
-
-    Observational equivalence is defined as a symmetric prefix:
+    \[\begin{split}
+      O_1 & \sim O_2 \triangleq \forall o . o \in O_1 \Rightarrow o = \tau \lor \\
+      & \exists O_1' . O_1 = \tau O_1' \land O_1' \sim O_2 \lor \\
+      & \exists O_2' .  O_2 = \tau O_2' \land O_1 \sim O_2' \lor \\
+      & \exists O_1' O_2' . O_1 = w O_1' \land O_2 = w O_2' \land O_1' \sim O_2' \\
+    \end{split}\]
+    
+    Observational equivalence is defined as traces prefixing each other:
     \[O_1 \simeq O_2 \triangleq O_1 \lesssim O_2 \land O_2 \lesssim O_1\]
 
   \paragraph{Calling Conventions and Contours}
@@ -148,13 +117,15 @@
       policy state, defining \(\mathit{call}_P : \mathcal{M} \times \mathcal{P} \rightharpoonup \mathbb{N}
       \times \mathcal{W} \times \mathcal{W}\) such that:
 
-      \[\frac{m_0,\mathit{pinit}(m_0) \hookrightarrow_P \dots m,p \dots \hspace{.5cm}
-              m_0 \hookrightarrow \dots M \dots \hspace{.5cm} \mathit{call}(M) = m, n, a_{pc}, a_{sp}}
+      \[\frac{\begin{split}
+        m_0,\mathit{pinit}(m_0) & \hookrightarrow_P \dots m,p \dots \\ % \hspace{.5cm}
+        m_0 & \hookrightarrow \dots M \dots \\
+        \mathit{call}(M) & = m, n, a_{pc}, a_{sp}\end{split}}
              {\mathit{call}_P(m,p) = n, a_{pc}, a_{sp}}\]
 
       A state is considered to have returned after a call if the stack pointer is the same as before the call
       (\(a_{sp}\)) and the program counter is the next address after (\(a_{pc}\)):
-      \[\mathit{returned}\ m\ a_{pc}\ a_{sp} \triangleq m'(\mathtt{SP}) = a_{sp} \land m(\mathtt{PC}) = a_{pc}\]
+      \[\mathit{ret}\ m\ a_{pc}\ a_{sp} \triangleq m(\mathtt{SP}) = a_{sp} \land m(\mathtt{PC}) = a_{pc}\]
 
   \section{Observable Stack Safety}
 
@@ -184,9 +155,9 @@
       and \(m_0'\) such that \(m_0 \approx_C m_0'\):
 
       \begin{itemize}
-        \item Let \(m_0,\mathit{pinit}(m_0) \rightsquigarrow O\) and \(m_0' \rightsquigarrow O'\)
-        \item If \(m_0,\mathit{pinit}(m_0) \hookrightarrow_P MP \in \top\) then \(O \simeq O'\)
-        \item Otherwise \(O \lesssim O'\)
+        \item Let \(m_0,\mathit{pinit}(m_0) \hookrightarrow \MP\) and \(m_0' \hookrightarrow M'\)
+        \item If \(\MP \in \top\) then \(\mathit{Obs}(\MP) \simeq \mathit{Obs}(M')\)
+        \item Otherwise \(\mathit{Obs}(\MP) \lesssim \mathit{Obs}(M')\)
       \end{itemize}
 
     \paragraph{Contours}
@@ -201,14 +172,11 @@
 
       When \(m,p\) is a call state \(\mathit{call}_P(m,p) = n,\_,\_\) for some \(n\),
       we can construct a contour based on the size of \(m\)'s stack frame, as follows:
-      \[Cof(m,n)(k) =
+      \[\mathit{Cof}(m,n)(k) =
       \begin{cases}
-        (\mathtt{HC},\mathtt{HI}) & \text{if } k \in \mathcal{W}
-                                    \text{ and } k \leq m(\mathtt{SP}) - n \\
-        (\mathtt{HC},\mathtt{LI}) & \text{if } k \in \mathcal{W}
-                                    \text{ and } k \geq m(\mathtt{SP}) \\
-        (\mathtt{LC},\mathtt{HI}) & \text{if } k \in \mathcal{W}
-                                    \text{ and } k = m(\mathtt{SP}) - 1 \\
+        (\mathtt{HC},\mathtt{HI}) & \text{if } k \leq m(\mathtt{SP}) - n \\
+        (\mathtt{HC},\mathtt{LI}) & \text{if } k \geq m(\mathtt{SP}) \\
+        (\mathtt{LC},\mathtt{HI}) & \text{if } k = m(\mathtt{SP}) - 1 \\
         (\mathtt{LC},\mathtt{LI}) & \text{else} \\
       \end{cases}\]
 
@@ -239,20 +207,20 @@
       components, but ignores the callee's interference with the caller's data. Then the observable
       behavior of the resulting trace is the standard to which we expect any real trace to conform.
 
-      A system enjoys observable integrity if for any initial state \(m_0\), call state \(m_c\),
-      and policy state \(p_c\) such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots (m_c,p_c) \dots\)
-      and \(\mathit{call}_P(m_c,p_c) = n,a_{pc},a_{sp}\):
+      A system enjoys observable integrity as follows:
 
-      \begin{itemize}
-        \item If \((m_c,p_c) \hookrightarrow \dots (m_r,p_r) | \mathit{returned}\ m_r\ a_{pc}\ a_{sp}\):
+      For any initial state \(m_0\), call state \(m_c\), and policy state \(p_c\) such that
+      \((m_0,\mathit{pinit}(m_0)) \hookrightarrow ... (m_c,p_c) ...\)
+      and \(\mathit{call}_P(m_c,p_c) = n,a_{pc},a_{sp}\), if 
+      \((m_c,p_c) \hookrightarrow ... (m_r,p_r) | \mathit{ret}\ m_r\ a_{pc}\ a_{sp}\):
+
           \begin{itemize}
             \item Let \(C = \mathit{Cof}(m_c,n)\)
-            \item Let \(m_r' = \mathit{roll}_I(C,m_c,m_r)\), \((m_r,p_r) \rightsquigarrow O\), and
-              \(m_r' \rightsquigarrow O'\)
-            \item If \(m_r,p_r \hookrightarrow MP \in \top\) then \(O \simeq O'\)
-            \item Otherwise \(O \lesssim O'\)
+            \item Let \(m_r' = \mathit{roll}_I(C,m_c,m_r)\), \((m_r,p_r) \hookrightarrow \MP\), and
+              \(m_r' \hookrightarrow M'\)
+            \item If \(m_r,p_r \hookrightarrow \MP \in \top\) then \(\mathit{Obs}(\MP) \simeq \mathit{Obs}(M')\)
+            \item Otherwise \(\mathit{Obs}(\MP) \lesssim \mathit{Obs}(M')\)
           \end{itemize}
-      \end{itemize}
 
     \paragraph{Eager Integrity}
  
@@ -261,7 +229,7 @@
       identical to that of \(m_c\). Formally, a system enjoys eager integrity if for any initial state
       \(m_0\), call state \(m_c\), and policy state \(p_c\) such that \(\mathit{call}(m_c,p_c) =
       n, a_{pc}, a_{sp}\), and some \(m_r\) and \(p_r\) such that
-      \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots (m_c,p_c) \dots (m_r,p_r) | \mathit{returned}\ m_r\ a_{pc}\ a_{sp}\):
+      \(m_0,\mathit{pinit}(m_0) \hookrightarrow ... (m_c,p_c) ... (m_r,p_r) | \mathit{ret}\ m_r\ a_{pc}\ a_{sp}\):
 
       \[\forall k . C(k) = \mathtt{HI} \rightarrow m_c(k) = m_r(k)\]
 
@@ -286,33 +254,39 @@
       In this case, a confidentiality rollback takes a contour and four states: two call states
       that will be variants, and two return states. It is not symmetric, regarding \(m_c\) and \(m_r\)
       as the ``real'' call and return, \(m_c'\) as a variant and \(m_r'\) as a return that follows it.
-
-      \[\mathit{roll}_C(C,m_c,m_c',m_r,m_r')(k) =
-        \begin{cases}
-          m_c(k) & \text{if } C(k) = \mathtt{HC} \text{ and } m_c(k) = m_r(k) \text{ and } m_c'(k) = m_r'(k) \\
+      \[\begin{split}
+        & \mathit{roll}_C(C,m_c,m_c',m_r,m_r')(k) = \\
+        & \begin{cases}
+          m_c(k) & \text{if } C(k) = \mathtt{HC} \text{ and } \\
+                  & m_c(k) = m_r(k) \text{ and } m_c'(k) = m_r'(k) \\
           m_r'(k) & \text{else} \\
-        \end{cases}\]
+        \end{cases}
+      \end{split}\]
 
-      A system enjoys observable confidentiality if for any initial state \(m_0\), call state \(m_c\),
-      and policy state \(p_c\) such that \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots (m_c,p_c) \dots\) and
+      A system enjoys observable confidentiality as follows:
+
+      For any initial state \(m_0\), call state \(m_c\), and policy state \(p_c\) such that
+      \(m_0,\mathit{pinit}(m_0) \hookrightarrow ... (m_c,p_c) ...\) and
       \(\mathit{call}(m_c,p_c) = n, a_{pc}, a_{sp}\):
 
       \begin{itemize}
         \item Let \(C = \mathit{Cof}(m_c,n)\)
         \item For all \(m_c'\) such that \(m_c \approx_C m_c'\):
-        \item If \((m_c,p_c) \hookrightarrow MP (m_r,p_r) | \mathit{returned}\ m_r\ a_{pc}\ a_{sp}\)
+        \item If \((m_c,p_c) \hookrightarrow \MP_1 (m_r,p_r) | \mathit{ret}\ m_r\ a_{pc}\ a_{sp}\)
           \begin{itemize}
             \item Then there is some \(m_r'\) where
-              \(m_c' \hookrightarrow M m_r' | \mathit{returned}\ m_r'\ a_{pc}\ a_{sp}\)
+              \(m_c' \hookrightarrow M_1' m_r' | \mathit{ret}\ m_r'\ a_{pc}\ a_{sp}\)
             \item Let \(m_r'' = \mathit{roll}_C(C,m_c,m_r,m_c',m_r')\),
-              \((m_r,p_r) \rightsquigarrow O\), and \(m_r'' \rightsquigarrow O'\)
-            \item If \(m_r,p_r \hookrightarrow_P MP \in \top\) then \(O \simeq \mathit{ObsOf}(M) +\!\!\!+ O'\)
-            \item Otherwise \(O \lesssim \mathit{ObsOf}(M) +\!\!\!+ O'\)
+              \((m_r,p_r) \hookrightarrow \MP_2\), and \(m_r'' \hookrightarrow M_2'\)
+            \item If \(\MP \in \top\) then \(\mathit{Obs}(\MP_1) \cdot \mathit{Obs}(\MP_2) \simeq
+              \mathit{Obs}(M_1') \cdot \mathit{Obs}(M_2')\)
+            \item Otherwise \(\mathit{Obs}(\MP_1) \cdot \mathit{Obs}(\MP_2) \lesssim
+              \mathit{Obs}(M_1') \cdot \mathit{Obs}(M_2')\)
           \end{itemize}
-        \item Else, let \(m_c,p_c \rightsquigarrow O\) and \(m_c' \rightsquigarrow O'\)
+        \item Else, for \(\MP\) and \(M'\) such that \(m_c,p_c \hookrightarrow \MP\) and \(m_c' \hookrightarrow M'\):
           \begin{itemize}
-            \item If \(m_c,p_c \hookrightarrow_P MP \in \top\) then \(O \simeq O'\)
-            \item Otherwise \(O \lesssim O'\)
+            \item If \(\MP \in \top\) then \(\mathit{Obs}(\MP) \simeq \mathit{Obs}(M')\)
+            \item Otherwise \(\mathit{Obs}(\MP) \lesssim \mathit{Obs}(M')\)
           \end{itemize}
       \end{itemize}
 
@@ -321,24 +295,24 @@
       Once again an eager policy enforces a stronger property that only concerns the behavior of
       the original trace and its variant within each call. A system enjoys {\it eager stack
       confidentiality} if, for any initial state \(m_0\) and call state \(m_c\) such that
-      \(m_0,\mathit{pinit}(m_0) \hookrightarrow \dots (m_c,p_c) \dots\) and
+      \(m_0,\mathit{pinit}(m_0) \hookrightarrow ... (m_c,p_c) ...\) and
       \(\mathit{call}(m_c,p_c) = n, a_{pc}, a_{sp}\):
 
       \begin{itemize}
         \item Let \(C = \mathit{Cof}(m_c,n)\)
         \item For all \(m_c'\) such that \(m_c \approx_C m_c'\):
-        \item If \((m_c,p_c) \hookrightarrow_P MP (m_r,p_r) | \mathit{returned}\ m_r\ a_{pc}\ a_{sp}\)
+        \item If \((m_c,p_c) \hookrightarrow_P \MP (m_r,p_r) | \mathit{ret}\ m_r\ a_{pc}\ a_{sp}\)
           \begin{itemize}
             \item Then there is some \(m_r'\) where
-              \(m_c' \hookrightarrow M m_r' | \mathit{returned}\ m_c'\ m_r'\)
-            \item \(\mathit{ObsOf}(MP) \simeq \mathit{ObsOf}(M)\)
+              \(m_c' \hookrightarrow M m_r' | \mathit{ret}\ m_c'\ m_r'\)
+            \item \(\mathit{Obs}(\MP) \simeq \mathit{Obs}(M)\)
             \item And for all \(k\), if \(m_c(k) \not = m_r(k)\) or \(m_c'(k) \not = m_r'(k)\),
               \(m_r(k) = m_r'(k)\)
           \end{itemize}
-        \item Else, let \(m_c,p_c \rightsquigarrow O\) and \(m_c' \rightsquigarrow O'\)
+        \item Else, for \(\MP\) and \(M'\) such that \(m_c,p_c \hookrightarrow \MP\) and \(m_c' \hookrightarrow M'\)
           \begin{itemize}
-            \item If \(m_c,p_c \hookrightarrow_P MP \in \top\) then \(O \simeq O'\)
-            \item Otherwise \(O \lesssim O'\)
+            \item If \(\MP \in \top\) then \(\mathit{Obs}(\MP) \simeq \mathit{Obs}(M')\)
+            \item Otherwise \(\mathit{Obs}(\MP) \lesssim \mathit{Obs}(M')\)
           \end{itemize}
       \end{itemize}
 
