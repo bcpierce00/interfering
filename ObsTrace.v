@@ -28,10 +28,12 @@ CoInductive ObsTraceEq(*_gen R*) : TraceOf Observation -> TraceOf Observation ->
 | ObsEqNow : forall w OO OO'
                      (HR : (*R*)ObsTraceEq OO OO' : Prop),
     ObsTraceEq(*_gen R*) (notfinished (Out w) OO) (notfinished (Out w) OO')
+(*
 | ObsEqFinishedOut : forall w,
     ObsTraceEq(*_gen R*) (finished (Out w)) (finished (Out w))
 | ObsEqFinishedTau :
     ObsTraceEq(*_gen R*) (finished Tau) (finished Tau)
+ *)
 (* The last thing we need is a way of handling *all-tau* traces.
    There are a couple of ways of doing that, not sure what will
    play better in proofs. *)
@@ -158,8 +160,6 @@ Proof.
       intros Eq1 O2' O2 Eq2(*;
       pfold*).
     + inversion Eq1; subst; simpl in *; clear Eq1; app_frobber.
-      * apply ObsEqNow; auto.
-      * apply ObsEqTau1. (*left. pfold.*) apply ObsEqTau2; auto.
       * destruct a.
         -- apply ObsEqNow; auto.
         -- apply ObsEqTau1. (*left. pfold.*) apply ObsEqTau2; auto.
@@ -260,8 +260,6 @@ Proof.
       intros Eq O2' O2 Pref(*; pfold*).
     + inversion Eq; subst; simpl in *; clear Eq; app_frobber.
       (* Hint constructors doesn't work for this? *)
-      * apply ObsPreNow; auto.
-      * apply ObsPreTau1. (*left. pfold.*) apply ObsPreTau2; auto.
       * destruct a.
         -- apply ObsPreNow; auto.
         -- apply ObsPreTau1. (*left. pfold.*) apply ObsPreTau2; auto.
