@@ -1,11 +1,11 @@
 Require Export Setoid.
 Require Coq.Classes.RelationClasses.
-Require Import Paco.paco.
+(*Require Import Paco.paco.*)
 
 (* Attempt to perform Paco inversion first. For non-Paco definitions, this fails
    and falls back on regular inversion. The order of this operation is
    important. *)
-Ltac inv H := (pinversion H || inversion H); subst; clear H.
+Ltac inv H := (*(pinversion H ||*) inversion H(*)*); subst; clear H.
 
 CoInductive TraceOf (A : Type) : Type :=
 | finished : A -> TraceOf A
@@ -466,6 +466,9 @@ Proof.
   - eapply SplitInclusiveHead; eauto.
   - inversion Eq; auto.
 Qed.
+
+Definition infinite {A} (T : TraceOf A) : Prop :=
+  forall a, ~ Last T a.
 
 (************************
  Trace Lemmas and axioms 

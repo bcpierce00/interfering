@@ -8,21 +8,6 @@ Require Import Machine.
 Require Import ObsTrace.
 (* Require Import Paco.paco. *)
 
-(* todo: Rename MPState to State and MPTrace to Trace, mp -> t *)
-Definition MTrace := TraceOf MachineState.
-
-CoFixpoint MTraceOf (M : MachineState) : MTrace :=
-  notfinished M (MTraceOf (fst (step M))).
-
-Definition MPTrace := TraceOf MPState.
-
-CoFixpoint MPTraceOf (mp : MPState) : MPTrace :=
-  match pstep mp with
-  | None => finished mp
-  | Some p' => notfinished mp (MPTraceOf (fst (step (ms mp)), p'))
-  end.
-
-
 (****************************)
 (***** Eager Integrity ******)
 (****************************)
@@ -178,6 +163,10 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
 
 Hint Unfold EagerStackConfidentiality : StackSafety.
 
+Definition ObsEqUpToHalt (MP : MPTrace) (M : MTrace) : Prop :=
+  ObsTraceOf MP <=_O ObsTraceOfM M /\
+  (infinite MP -> ObsTraceOf MP ~=_O ObsTraceOfM M).
+
 Definition EagerStackConfidentiality' (C : Contour) (mp : MPState) (justReturned : MachineState -> Prop) :=
   forall m' MP M',
     variantOf (ms mp) m' C ->
@@ -189,12 +178,8 @@ Definition EagerStackConfidentiality' (C : Contour) (mp : MPState) (justReturned
                        (ms (head MP) k <> ms mpret k \/ (head M') k <> mret' k) ->
                        ms mpret k = mret' k) /\
                    (ObsTraceOf MP) ~=_O (ObsTraceOfM M')) /\
-    (forall mpret, Last MP mpret -> (* mpstep mpret = None -> *)
-                   ~ justReturned (ms mpret) ->
-                   (ObsTraceOf MP) <=_O (ObsTraceOfM M')) /\
-    ((forall mpret, ~ Last MP mpret) ->
-     forall mret', ~ Last M' mret' /\
-                   (ObsTraceOf MP) ~=_O (ObsTraceOfM M')).
+    ((forall mpret, Last MP mpret -> ~ justReturned (ms mpret)) ->
+                   ObsEqUpToHalt MP M').
 
 CoInductive StrongEagerStackConfidentiality(*_gen*) (R : MachineState -> Prop) (*Rcoind*) :
   MPTrace -> MachineState -> Prop :=
@@ -869,8 +854,6 @@ CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
        StackSafety cm MM C.
  *)
 
-(* SNA: Changed this so that it can include the return, which helps with my proofs
-   and doesn't seem to break anyone else's. *)
 Definition EagerStackSafety (cm : CallMap) : MPTrace -> Contour -> Prop :=
   fun (MP : MPTrace) (C : Contour) =>
     (EagerStackIntegrity C MP) /\
@@ -3353,18 +3336,19 @@ Proof.
         -- subst; simpl; auto.
 Qed.
 
-Definition EagerStackSafetyTest'' cm m :=
-  let initC := makeContour 0 m in
-  let p := initPolicyState m cm in
-  let MP := MPTraceOf (m,p) in
-  forall mv, variantOf m mv initC ->
-             let initvse := {| init_machine := m
-                             ; init_variant := mv 
-                             ; curr_variant := mv
-                             ; contour := initC
-                             ; retP := fun _ => False
-                            |} in
-             EagerStackSafetyTest cm 1 MP [initvse].
+Definition EagerStackSafetyTest'' cm :=
+  forall m,
+    let initC := makeContour 0 m in
+    let p := initPolicyState m cm in
+    let MP := MPTraceOf (m,p) in
+    forall mv, variantOf m mv initC ->
+               let initvse := {| init_machine := m
+                                 ; init_variant := mv 
+                                 ; curr_variant := mv
+                                 ; contour := initC
+                                 ; retP := fun _ => False
+                              |} in
+               EagerStackSafetyTest cm 1 MP [initvse].
 
 Lemma False_Forall :
   forall {A} (T : TraceOf A), ForallButLast (fun _ => ~ False) T.
@@ -3377,7 +3361,7 @@ Qed.
 
 Theorem StackSafetyTestImpliesStackSafety :
   forall cm m,
-  EagerStackSafetyTest'' cm m ->
+  EagerStackSafetyTest'' cm ->
   EagerStackSafety' cm m.
 Proof.  
   intros cm m Safety.
@@ -3461,8 +3445,7 @@ Definition ObservableIntegrity' (C:Contour) (mp:MPState) (justReturned:MachineSt
   forall MPpre MPsuff,
     SplitInclusive (fun mp => justReturned (ms mp)) (MPTraceOf mp) MPpre MPsuff ->
     let M' := MTraceOf (RollbackInt C (ms mp) (ms (head MPsuff))) in
-    (exists mpfin, Last MPsuff mpfin) -> ObsTraceOf MPsuff <=_O (ObsTraceOfM M') /\
-    ((forall mpfin, ~ Last MPsuff mpfin) -> (ObsTraceEq (ObsTraceOf MPsuff) (ObsTraceOfM M'))).
+    ObsEqUpToHalt MPsuff M'.
 
 (* A confidentiality rollback aims to undo a variation, so it restores the values of the
    original, unvaried state. But if the varied values were overwritten after they were varied,
@@ -3546,12 +3529,8 @@ Definition ObservableConfidentiality' (C : Contour) (mp:MPState) (justReturned :
             let O' := (ObsTraceOfM M'pre) ^ Some (ObsTraceOfM M'roll) in
             ((exists mpfin, Last MPsuff mpfin) -> O <=_O O') /\
             ((forall mpfin, ~ Last MPsuff mpfin) -> ObsTraceEq O O'))) /\
-    (forall mpfin, Last MPpre mpfin ->
-                   ~ justReturned (ms mpfin) ->
-                   ObsTraceOf MPpre <=_O ObsTraceOfM M'pre) /\
-    ((forall mpfin, ~ Last MPpre mpfin) ->
-     forall m'fin, ~ Last M'pre m'fin /\
-                   ObsTraceEq (ObsTraceOf MPpre) (ObsTraceOfM M'pre)).
+    ((forall mpfin, Last MPpre mpfin -> ~ justReturned (ms mpfin)) ->
+     ObsEqUpToHalt MPpre M'pre).
 
 Definition LazyStackSafety (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentiality (makeContour 0 (ms (head MP))) MP None (fun _ => False) /\
@@ -3637,11 +3616,6 @@ Hint Constructors RealMPTrace'(*_gen*) : core.
 (* Lemma RealMPTrace'_mon : monotone2 RealMPTrace'_gen. Proof. pmonauto. Qed. *)
 (* Hint Resolve RealMPTrace'_mon : paco. *)
 
-Lemma MPTraceOfHead: forall mp, mp = head (MPTraceOf mp).
-Proof.
-  intros. destruct mp.  simpl. 
-  destruct (pstep (m,p)); auto.
-Qed.
 
 Definition RealMPTrace'' MP := TraceEq MP (MPTraceOf (head MP)).
 
@@ -3928,8 +3902,10 @@ Proof.
     apply (ObsEqOverEq (ObsTraceOf (MPTraceOf mp')) (ObsTraceOf MPsuff)).
     + apply ObsTraceOfTraceEq. symmetry. auto.
     + apply MTraceEqInfMPTrace; auto. unfold not. intros. 
-      specialize H4 with mpfin. apply TraceEqSym in H2.
-      apply (LastTraceEq (MPTraceOf mp') MPsuff) in H5; auto.
+      apply TraceEqSym in H2.
+      apply (LastTraceEq (MPTraceOf mp') MPsuff) in H4.
+      * unfold infinite in H3; apply H3 in H4; auto.
+      * apply H2; auto.
 Qed.
 
 Lemma EagerImpliesLazyConf :
@@ -4043,7 +4019,7 @@ Lemma EagerImpliesLazyConf' :
     EagerStackConfidentiality' C mp justReturned ->
     ObservableConfidentiality' C mp justReturned.
 Proof.
-  unfold EagerStackConfidentiality'. unfold ObservableConfidentiality'. intros. split;try split.
+  unfold EagerStackConfidentiality'. unfold ObservableConfidentiality'. intros. split.
 
   - (* this is case 1 *)
     intros. destruct H1.
@@ -4067,7 +4043,7 @@ Proof.
           * destruct H as [mret']. destruct H. destruct H2. destruct H8.
             apply TraceEqSym in H8.
             eapply LastTraceEq in H; eauto.
-            destruct H5. apply MTraceOfInf in H. contradiction. }
+            apply MTraceOfInf in H. contradiction. }
 
     destruct HM'sEx as [M'suff HM'sEx]. destruct HM'sEx as [HM'sEx Hsplit'].
     destruct H;auto.
@@ -4134,7 +4110,7 @@ Proof.
            unfold not. intros. specialize H10 with mpfin.
            apply (LastTraceEq (MPTraceOf (head MPsuff)) MPsuff) in H11; auto.
            apply TraceEqSym. apply HRealsuff.
-  - (* Case 2: MPcall stops short *)
+  - (* Case 2: No return *)
     intros. specialize H with m' MPpre M'pre. destruct H; auto.
     + destruct H1.
       * left. destruct H as [MPsuff]. exists MPsuff. destruct H. auto.
@@ -4142,16 +4118,6 @@ Proof.
     + destruct H2.
       * left. destruct H as [Msuff]. exists Msuff. destruct H. auto.
       * right. destruct H. destruct H2. split;auto.
-    + destruct H5. specialize H5 with mpfin. apply H5; auto.
-  - (* Case 3: MPcall diverges *)
-      intros. specialize H with m' MPpre M'pre. destruct H; auto.
-      + destruct H1.
-        * left. destruct H as [Msuff]. destruct H. eauto.
-        * right. destruct H. destruct H1. split; auto.
-      + destruct H2.
-        * left. destruct H as [Msuff]. exists Msuff. destruct H. auto.
-        * right. destruct H. destruct H2. split;auto.
-      + destruct H4. apply H5; auto.
 Qed.
 
 Theorem EagerSafetyImpliesLazy':

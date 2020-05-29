@@ -1,3 +1,5 @@
+Require Import Trace.
+
 (* Primitive Abstraction. *)
 
 Parameter Word : Type. 
@@ -62,6 +64,7 @@ Parameter pstep : MachineState * PolicyState -> option PolicyState.
 (* TODO: Does this ever fail? *)
 Parameter initPolicyState : MachineState -> CallMap -> PolicyState.
 
+(* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.
 Definition ms (mp : MPState) := fst mp.
 Definition ps (mp : MPState) := snd mp.
@@ -89,3 +92,25 @@ Definition Contour := Component -> Label.
 
 Definition integrityOf (l : Label) : ILabel := snd l.
 Definition confidentialityOf (l : Label) : CLabel := fst l.
+
+(********* Steps and Traces ***********)
+
+Definition MTrace := TraceOf MachineState.
+
+CoFixpoint MTraceOf (M : MachineState) : MTrace :=
+  notfinished M (MTraceOf (fst (step M))).
+
+Definition MPTrace := TraceOf MPState.
+
+CoFixpoint MPTraceOf (mp : MPState) : MPTrace :=
+  match pstep mp with
+  | None => finished mp
+  | Some p' => notfinished mp (MPTraceOf (fst (step (ms mp)), p'))
+  end.
+
+(********** Machine Lemmas ************)
+Lemma MPTraceOfHead: forall mp, mp = head (MPTraceOf mp).
+Proof.
+  intros. destruct mp.  simpl. 
+  destruct (pstep (m,p)); auto.
+Qed.

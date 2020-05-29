@@ -1,6 +1,6 @@
 Require Import Trace.
 Require Import Machine.
-Require Import Paco.paco.
+(*Require Import Paco.paco.*)
 
 Definition ObsTrace := TraceOf Observation.
 
