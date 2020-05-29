@@ -77,16 +77,17 @@
     created by \(\stepstoobs{}_P\):
 
     \[\frac{\forall \pol_1 . \pol_0 \not \longrightarrow \pol_1}
-           {(\mach_0,\pol_0) \hookrightarrow (\mach_0,\pol_0)}\]
+           {\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}}\]
     \[\frac{\mach_0 \stepstoobs{\obs} \mach_1 \hspace{.5cm} \pol_0 \longrightarrow \pol_1 \hspace{.5cm}
-              (\mach_1,\pol_1) \hookrightarrow \machT}
-           {(\mach_0,\pol_0) \hookrightarrow_P (\mach_0,\pol_0,\obs) \machT}\]
+              \mpstate{\mach_1}{\pol_1} \hookrightarrow \machT}
+           {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT}\]
     
-    \[\frac{\mach_0,\pol_0 \xrightarrow{\obs} \mach_1,\pol_1 \hspace{.5cm} \neg f\ \mach_1 \hspace{.5cm}
-              \mach_1,\pol_1 \hookrightarrow_P \machT | f }
-           {\mach_0,\pol_0 \hookrightarrow_P \mach_0,\pol_0 \machT | f}\]
-    \[\frac{\mach_0,\pol_0 \xrightarrow{\obs} \mach_1,\pol_1 \hspace{.5cm} f\ \mach_1}
-           {\mach_0,\pol_0 \hookrightarrow_P (\mach_0,\pol_0) (\mach_1,\pol_1)}\]
+    \[\frac{\mpstate{\mach_0}{\pol_0} \xrightarrow{\obs} \mpstate{\mach_1}{\pol_1} \hspace{.5cm}
+            \neg f\ \mach_1 \hspace{.5cm} \mpstate{\mach_1}{\pol_1} \hookrightarrow_P \machT | f }
+           {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT | f}\]
+    \[\frac{\mpstate{\mach_0}{\pol_0} \xrightarrow{\obs} \mpstate{\mach_1}{\pol_1} \hspace{.5cm} f\ \mach_1}
+           {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs}
+            \mpostate{\mach_1}{\pol_1}{\tau} | f}\]
 
     \COQ{this operation steps until it reaches a state on which \(f\) holds,
     and is infinite if it doesn't. It doesn't compute the observation of the step after the final,
@@ -113,7 +114,7 @@
     \[\frac{\obsT_2 = \tau \obsT_2' \hspace{.5cm} \obsT_1 \lesssim \obsT_2'}
            {\obsT_1 \lesssim \obsT_2}\]
 
-    \[\frac{\obsT_1 = w \obsT_1' \hspace{.5cm} \obsT_2 = w \obsT_2'}
+    \[\frac{\obsT_1 = w \obsT_1' \hspace{.5cm} \obsT_2 = w \obsT_2' \hspace{.5cm} \obsT_1' \lesssim \obsT_2'}
            {\obsT_1 \lesssim \obsT_2}\]
     \leo{Doesn't this case miss the recursive $\obsT_1 \lesssim \obsT_2$ condition?}
            
@@ -136,10 +137,8 @@
     \[\frac{\isinf(\MPT) \hspace{.5cm} \mathit{Obs}(\MPT) \simeq \mathit{Obs}(\machT)}
            {\MPT \sim_P \machT}\]
 
-    [Todo: update coq to use this.]
     \leo{Oh, I like this version. Should make things cleaner in the top part of my proofs
       while leaving the hard low-level invariants unaffected.}
-
     
   \section{Observable and Eager Stack Safety}
 
@@ -289,9 +288,9 @@
       A system enjoys observable integrity with regard to \(\callmap\) as follows:
 
       For any initial state \(\mach_0\), call state \(\mach_c\), and policy state \(\pol_c\) such that
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)} \hookrightarrow ... \mpstate{\mach_c}{\pol_c,\_} ...\)
+      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)} \hookrightarrow ... \mpostate{\mach_c}{\pol_c}{\_} ...\)
       and \(\callmap(\mach_c) = n\), if \(\mpstate{\mach_c}{\pol_c} \hookrightarrow ...
-        \mpstate{\mach_r}{\pol_r,\_} | \ret{\mach_c}\):
+        \mpostate{\mach_r}{\pol_r}{\_} | \ret{\mach_c}\):
 
           \begin{itemize}
             \item Let \(\contour = \mathit{Cof}(\mach_c,n)\)
@@ -360,13 +359,13 @@
       A system enjoys observable confidentiality with respect to \(\callmap\) as follows:
 
       For any initial state \(\mach_0\), call state \(\mach_c\), and policy state \(\pol_c\) such that
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)} \hookrightarrow ... (\mach_c,\pol_c,\_) ...\) and
+      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)} \hookrightarrow ... \mpostate{\mach_c}{\pol_c}{\_} ...\) and
       \(\callmap(\mach_c) = n\):
 
       \begin{itemize}
         \item Let \(\contour = \mathit{Cof}(\mach_c,n)\)
         \item For all \(\mach_c'\) such that \(\mach_c \approx_C \mach_c'\):
-        \item If \(\mpstate{\mach_c}{p_c} \hookrightarrow \MPT_1 (\mach_r,p_r,\_) | \ret{\mach_c}\)
+        \item If \(\mpstate{\mach_c}{p_c} \hookrightarrow \MPT_1 \mpostate{\mach_r}{\pol_r}{\_} | \ret{\mach_c}\)
           \begin{itemize}
             \item Then there is some \(\mach_r'\) where
 
@@ -374,7 +373,7 @@
             \item Let \(\mach_r'' = \mathit{roll}_C(\contour,\mach_c,\mach_r,\mach_c',\mach_r')\),
 
               \(\mpstate{\mach_r}{p_r} \hookrightarrow \MPT_2\), and \(\mach_r'' \hookrightarrow \machT_2'\)
-            \item \(\MPT_1 \cdot \MPT_2 \sim_P \MPT_1' \cdot \MPT_2'\)
+            \item \(\MPT_1 \cdot \MPT_2 \sim_P \machT_1' \cdot \machT_2'\)
           \end{itemize}
         \item Else, for \(\MPT\) and \(\machT'\) such that \(\mpstate{\mach_c}{\pol_c} \hookrightarrow \MPT\)
           and \(\mach_c' \hookrightarrow \machT'\), \(\MPT \sim_P \machT'\)
