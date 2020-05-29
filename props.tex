@@ -26,10 +26,14 @@
     Execution is by\leo{is by?} a step function \(\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow
     \OBSS \times \MACHS\).
 
-    A policy is a general model of an enforcement mechanism, consisting of
-    a set of policy states, \(\pol \in \POLS\), a policy initializer
-    \(\pinit : \MACHS \rightharpoonup \POLS\), and a policy step function \(\pol \stepstopol \pol' :
-    \POLS \rightharpoonup \POLS\). The initializer and step function are both partial functions,
+    \paragraph*{Policy}
+    
+    A policy is a general model of an enforcement mechanism,
+    consisting of a set of policy states, \(\pol \in \POLS\) and a
+    policy step function \((\mach, \pol) \stepstopol \pol' : \MACHS
+    \times \POLS \rightharpoonup \POLS\).
+
+    The initializer and step function are both partial functions,
     the former to reflect static guarantees (some initial states may not be valid at all) and
     the latter to reflect dynamic fail-stop behavior. We then define machine-policy pairs and
     a step function on them:
@@ -37,7 +41,7 @@
     \[\MPS = \MACHS \times \POLS\]
     \[\stepstoobs{}_P \subseteq \MPS \times \MPS\]
 
-    \[\frac{\mach_1 \stepstoobs{\obs} \mach_2 \hspace{.5cm} \pol_1 \stepstopol \pol_2}
+    \[\frac{\mach_1 \stepstoobs{\obs} \mach_2 \hspace{.5cm} (\mach_1, \pol_1) \stepstopol \pol_2}
            {\mpstate{\mach_1}{\pol_1} \stepstoobs{\obs}_P \mpstate{\mach_2}{\pol_2}}\]
 
   \paragraph{Traces}
@@ -95,6 +99,7 @@
     We project the machine states from either machine trace with \(\pi_m\) and the observations with \(\pi_o\).
     An observational prefix \(\obsT_1 \lesssim \obsT_2\) means that the trace \(\obsT_1\) of observations is
     a prefix of \(\obsT_2\) up to the deletion of \(\tau\) observations:
+    \leo{Point out this is coinductive}
 
     \[\frac{}
            {\obsT \lesssim \obsT}\]
@@ -125,21 +130,24 @@
     We define policy-sensitive observational equivalence, which relates a machine trace and
     an {\it mptrace} whose observable behavior match it, up to a possible halt due to policy failure.
 
-    \[\frac{\isinf(\MPT) \hspace{.5cm} \mathit{Obs}(\MPT) \lesssim \mathit{Obs}(\machT)}
+    \[\frac{\neg \isinf(\MPT) \hspace{.5cm} \mathit{Obs}(\MPT) \lesssim \mathit{Obs}(\machT)}
            {\MPT \sim_P \machT}\]
     
-    \[\frac{\neg \isinf(\MPT) \hspace{.5cm} \mathit{Obs}(\MPT) \simeq \mathit{Obs}(\machT)}
+    \[\frac{\isinf(\MPT) \hspace{.5cm} \mathit{Obs}(\MPT) \simeq \mathit{Obs}(\machT)}
            {\MPT \sim_P \machT}\]
 
     [Todo: update coq to use this.]
     \leo{Oh, I like this version. Should make things cleaner in the top part of my proofs
       while leaving the hard low-level invariants unaffected.}
+
     
-  \paragraph{Call Maps and Returns}
+  \section{Observable and Eager Stack Safety}
+
+    \paragraph*{Call Maps and Returns}
 
     A {\it call map} identifies machine states that represent a call, abstracting away the explicit
     calling convention. Formally it maps some machine states to a number of arguments:
-    \[\callmap \in \CALLMAPS = \mach \rightharpoonup \mathbb{N}\]
+    \[\callmap \in \CALLMAPS = \MACHS \rightharpoonup \mathbb{N}\]
 
     As it pertains to a typical calling convention, for purposes of understanding the properties,
     a call map may be considered to identify the state just before the \(\JAL\), in which space for
@@ -150,12 +158,14 @@
     \(\JAL\) with the stack restored. Formally this is a relation between the states:
     
     \[\begin{split}
-      \ret{\mach_c}\ \mach_r \triangleq & \mach_r(\PCname) = \mach_c(\PCname)+1 \land \\
+      \ret{\mach_c}\ \mach_r \triangleq & \mach_r(\PCname) = \next(\mach_c(\PCname)) \land \\
                                         & \mach_r(\SP) = \mach_c(\SP)
     \end{split}\]
 
-  \section{Observable and Eager Stack Safety}
-
+    \leo{TODO: Initial state depends on call map}
+    
+    \paragraph*{Stack safety}
+  
     A stack safety property is a property of a transition system, a policy, and a callmap
     that is decomposed into an integrity property, a confidentiality property, and a safe
     initialization property. We will present eager and observational variants of stack safety.
@@ -313,16 +323,19 @@
           and \(\mach_c' \hookrightarrow \machT'\), \(\MPT \sim_P \machT'\)
       \end{itemize}
 
+      \leo{Think more about whether we vary mc or step mc}
+      
     \paragraph{Observable Confidentiality}
 
       Observable confidentiality is concerned with whether high confidentiality data influences
       observable both behavior during and after a call. We define variants given the generalized notion
       of contours:
       \[\mach \approx_\contour \mach' \triangleq \forall \component .
-        \contour(\component) = \LOWSEC \rightarrow \mach(\component) = \mach'(\component)\]
+      \contour(\component) = \LOWSEC \rightarrow \mach(\component) = \mach'(\component)\]
+      \leo{Move earlier}
 
       Data that is high confidentiality within a callee due either to being in its caller's frame
-      will become low confidentiality if the callee returns. We face a subtle distinction: 
+      will become low confidentiality if the callee returns.\leo{??} We face a subtle distinction: 
       a callee treats the contents of its caller's frame as secrets, and they should not influence
       its behavior. Nor should the callee be able to influence behavior after its return based
       on the caller's secrets, for instance by copying them to registers that will later be output.
@@ -342,6 +355,7 @@
           \mach_r'(\component) & \text{else} \\
         \end{cases}
       \end{split}\]
+      \leo{Maybe this should be called unscramble}
 
       A system enjoys observable confidentiality with respect to \(\callmap\) as follows:
 
@@ -365,6 +379,9 @@
         \item Else, for \(\MPT\) and \(\machT'\) such that \(\mpstate{\mach_c}{\pol_c} \hookrightarrow \MPT\)
           and \(\mach_c' \hookrightarrow \machT'\), \(\MPT \sim_P \machT'\)
       \end{itemize}
+
+      \leo{Need to fix append. Maybe call it join. It should remove the last
+        state of left arg}
 
 
 \end{document}
