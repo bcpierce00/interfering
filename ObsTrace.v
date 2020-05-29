@@ -223,8 +223,9 @@ CoInductive ObsTracePrefix(*_gen R*) : TraceOf Observation -> TraceOf Observatio
 | ObsPreNow : forall w OO OO'
                       (HR : (*R*)ObsTracePrefix OO OO' : Prop),
     ObsTracePrefix(*_gen R*) (notfinished (Out w) OO) (notfinished (Out w) OO')
-| ObsPreFinishedOut1 : forall w,
+(*| ObsPreFinishedOut1 : forall w,
     ObsTracePrefix(*_gen R*) (finished (Out w)) (finished (Out w))
+*)
 | ObsPreFinishedOut2 : forall w OO,
     ObsTracePrefix(*_gen R*) (notfinished (Out w) OO) (finished (Out w))
 | ObsPreFinishedTau : forall OO,
@@ -312,9 +313,7 @@ Lemma ObsTracePrefix_refl : forall OO, ObsTracePrefix OO OO.
 Proof.
   cofix CH.
   intros [o | o OO](*; pfold*).
-  - destruct o as [w |].
-    + now apply ObsPreFinishedOut1.
-    + now apply ObsPreFinishedTau.
+  - constructor. 
   - destruct o as [w |].
     + apply ObsPreNow. now auto.
     + apply ObsPreTau1. (*left. pfold.*) apply ObsPreTau2. now auto.
