@@ -416,6 +416,12 @@ Inductive SplitInclusive {A} (P:A -> Prop) : TraceOf A -> TraceOf A -> TraceOf A
     SplitInclusive P T Tpre Tsuff ->
     SplitInclusive P (notfinished a T) (notfinished a Tpre) Tsuff.
 
+CoFixpoint JoinInclusive {A} (T1 T2 : TraceOf A) : TraceOf A :=
+  match T1 with
+  | finished a => T2
+  | notfinished a T1' => notfinished a (JoinInclusive T1' T2)
+  end.
+
 Lemma SplitInclusiveHeadEq :
   forall {A} (P:A->Prop) T1 T2 T3,
     SplitInclusive P T1 T2 T3 ->

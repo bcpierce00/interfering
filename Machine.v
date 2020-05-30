@@ -108,6 +108,21 @@ CoFixpoint MPTraceOf (mp : MPState) : MPTrace :=
   | Some p' => notfinished mp (MPTraceOf (fst (step (ms mp)), p'))
   end.
 
+Definition MTrace' := TraceOf (MachineState * Observation).
+
+CoFixpoint RunOf (m : MachineState) : MTrace' :=
+  notfinished (m,snd (step m)) (RunOf (fst (step m))).
+
+Definition MPTrace' := TraceOf (MachineState * PolicyState * Observation).
+
+CoFixpoint MPRunOf (mp : MPState) : MPTrace' :=
+  match pstep mp with
+  | None =>
+    finished (mp,Tau)
+  | Some p' =>
+    notfinished (mp,snd (step (ms mp))) (MPRunOf (fst (step (ms mp)), p'))
+  end.
+
 (********** Machine Lemmas ************)
 Lemma MPTraceOfHead: forall mp, mp = head (MPTraceOf mp).
 Proof.
