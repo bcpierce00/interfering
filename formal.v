@@ -3520,15 +3520,13 @@ Definition ObservableConfidentiality' (C : Contour) (mp:MPState) (justReturned :
     variantOf (ms mp) m' C ->
     LazyReturnMP justReturned (MPTraceOf mp) MPpre MPsuffO ->
     LazyReturnM justReturned (MTraceOf m') M'pre M'suffO ->
-    let O := (ObsTraceOf MPpre)^(option_map ObsTraceOf MPsuffO) in
     (forall MPsuff,
         MPsuffO = Some MPsuff ->
         (exists M'suff M'roll,
             M'suffO = Some M'suff /\
             M'roll = MTraceOf (RollbackConf (ms mp) (ms (head MPsuff)) m' (head M'suff)) /\
             let O' := (ObsTraceOfM M'pre) ^ Some (ObsTraceOfM M'roll) in
-            ((exists mpfin, Last MPsuff mpfin) -> O <=_O O') /\
-            ((forall mpfin, ~ Last MPsuff mpfin) -> ObsTraceEq O O'))) /\
+            ObsEqUpToHalt (JoinInclusive MPpre MPsuff) (JoinInclusive M'pre M'roll)) /\
     ((forall mpfin, Last MPpre mpfin -> ~ justReturned (ms mpfin)) ->
      ObsEqUpToHalt MPpre M'pre).
 
