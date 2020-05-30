@@ -28,10 +28,12 @@ CoInductive ObsTraceEq(*_gen R*) : TraceOf Observation -> TraceOf Observation ->
 | ObsEqNow : forall w OO OO'
                      (HR : (*R*)ObsTraceEq OO OO' : Prop),
     ObsTraceEq(*_gen R*) (notfinished (Out w) OO) (notfinished (Out w) OO')
+(*
 | ObsEqFinishedOut : forall w,
     ObsTraceEq(*_gen R*) (finished (Out w)) (finished (Out w))
 | ObsEqFinishedTau :
     ObsTraceEq(*_gen R*) (finished Tau) (finished Tau)
+ *)
 (* The last thing we need is a way of handling *all-tau* traces.
    There are a couple of ways of doing that, not sure what will
    play better in proofs. *)
@@ -158,8 +160,6 @@ Proof.
       intros Eq1 O2' O2 Eq2(*;
       pfold*).
     + inversion Eq1; subst; simpl in *; clear Eq1; app_frobber.
-      * apply ObsEqNow; auto.
-      * apply ObsEqTau1. (*left. pfold.*) apply ObsEqTau2; auto.
       * destruct a.
         -- apply ObsEqNow; auto.
         -- apply ObsEqTau1. (*left. pfold.*) apply ObsEqTau2; auto.
@@ -223,8 +223,9 @@ CoInductive ObsTracePrefix(*_gen R*) : TraceOf Observation -> TraceOf Observatio
 | ObsPreNow : forall w OO OO'
                       (HR : (*R*)ObsTracePrefix OO OO' : Prop),
     ObsTracePrefix(*_gen R*) (notfinished (Out w) OO) (notfinished (Out w) OO')
-| ObsPreFinishedOut1 : forall w,
+(*| ObsPreFinishedOut1 : forall w,
     ObsTracePrefix(*_gen R*) (finished (Out w)) (finished (Out w))
+*)
 | ObsPreFinishedOut2 : forall w OO,
     ObsTracePrefix(*_gen R*) (notfinished (Out w) OO) (finished (Out w))
 | ObsPreFinishedTau : forall OO,
@@ -241,7 +242,7 @@ Hint Constructors ObsTracePrefix(*_gen*) : core.
 
 Notation "OO' <=_O OO" := (ObsTracePrefix OO OO') (at level 80).
 
-Definition ObsTracePrefApp' :
+Lemma ObsTracePrefApp' :
   forall O1 O1' O2 O2' o1 o1',
     Last O1 o1 -> Last O1' o1' -> 
     ObsTraceEq O1 O1' ->
@@ -259,8 +260,6 @@ Proof.
       intros Eq O2' O2 Pref(*; pfold*).
     + inversion Eq; subst; simpl in *; clear Eq; app_frobber.
       (* Hint constructors doesn't work for this? *)
-      * apply ObsPreNow; auto.
-      * apply ObsPreTau1. (*left. pfold.*) apply ObsPreTau2; auto.
       * destruct a.
         -- apply ObsPreNow; auto.
         -- apply ObsPreTau1. (*left. pfold.*) apply ObsPreTau2; auto.
@@ -312,12 +311,94 @@ Lemma ObsTracePrefix_refl : forall OO, ObsTracePrefix OO OO.
 Proof.
   cofix CH.
   intros [o | o OO](*; pfold*).
-  - destruct o as [w |].
-    + now apply ObsPreFinishedOut1.
-    + now apply ObsPreFinishedTau.
+  - constructor. 
   - destruct o as [w |].
     + apply ObsPreNow. now auto.
     + apply ObsPreTau1. (*left. pfold.*) apply ObsPreTau2. now auto.
+Qed.
+
+Lemma ObsTracePrefRemoveTau1 :
+  forall T T', (notfinished Tau T) <=_O T' -> T <=_O T'.
+Proof.
+  cofix COFIX.
+  intros T T' Pref(*; pfold*).
+  inv Pref.
+  + constructor. (*right.*) apply COFIX. auto.
+  + (* RB: Some base cases like this need a little more work than before. *)
+    (* apply paco2_unfold. *)
+    (* * auto with paco. *)
+    (* * eapply paco2_mon_bot; eauto with paco. *)
+    assumption.
+  + constructor. (*left.
+    eapply paco2_mon_bot with ObsTracePrefix_gen; [| auto].*)
+    apply ObsTracePrefix_refl.
+Qed.
+
+Lemma ObsTracePrefRemoveTau2 :
+  forall T T', T <=_O (notfinished Tau T') -> T <=_O T'.
+Proof.
+  cofix COFIX.
+  intros T T' Pref.
+  inv Pref.
+  + assumption.
+  + constructor. apply COFIX. auto.
+  + constructor. 
+  + constructor. 
+    apply ObsTracePrefix_refl.
+Qed.
+
+Lemma ObsTracePrefFinished: forall OO, OO <=_O finished Tau -> OO ~=_O finished Tau.
+Proof.
+  cofix COFIX. 
+  intros. 
+  inv H.
+  - constructor. apply COFIX; auto.
+  - constructor. 
+  - constructor. 
+Qed.
+
+(** Alternative definition of ObsTraceEq. *)
+
+Definition ObsTraceEq' OO OO' : Prop :=  ObsTracePrefix OO OO' /\ ObsTracePrefix OO' OO. 
+
+Lemma OTE'E: forall T T', ObsTraceEq' T T' -> ObsTraceEq T T'. 
+Proof.
+  cofix COFIX.
+  intros T T' [H1 H2].
+  inv H1; inv H2; try apply ObsEqAllTau.  
+  - apply ObsTracePrefRemoveTau1 in HR.  apply ObsTracePrefRemoveTau1 in HR0.  
+    constructor. constructor. apply COFIX; split; auto.
+  - constructor.  apply COFIX; split;  auto. 
+  - constructor. apply COFIX; split; auto.
+  - apply ObsTracePrefRemoveTau2 in HR. apply ObsTracePrefRemoveTau2 in HR0. 
+    constructor. constructor. apply COFIX; split; auto.
+  - constructor.
+    apply ObsTracePrefFinished in HR. apply ObsTraceEq_sym. auto.
+  - constructor. apply COFIX; split; auto. 
+  - constructor. 
+    apply ObsTracePrefFinished in HR. auto.
+Qed.
+
+Lemma OTEE'1 : forall T T', ObsTraceEq T T' -> ObsTracePrefix T T'. 
+Proof.
+  cofix COFIX. 
+  intros. 
+  inv H; constructor; eauto.  
+Qed.
+
+Lemma OTEE'2 : forall T T', ObsTraceEq T T' -> ObsTracePrefix T' T. 
+Proof.
+  cofix COFIX. 
+  intros. 
+  inv H; constructor; eauto.  
+Qed.
+
+Lemma OTEE': forall T T', ObsTraceEq T T' -> ObsTraceEq' T T'. 
+Proof.
+  intros.
+  split.
+  apply OTEE'1; auto. 
+  apply OTEE'2;  auto. 
 Qed.
 
 
@@ -345,23 +426,7 @@ Proof.
   inv H; constructor; (*right;*) apply COFIX; auto.
 Qed.
 
-Lemma ObsTracePrefRemoveTau1 :
-  forall T T', (notfinished Tau T) <=_O T' -> T <=_O T'.
-Proof.
-  cofix COFIX.
-  intros T T' Pref(*; pfold*).
-  inv Pref.
-  + constructor. (*right.*) apply COFIX. auto.
-  + (* RB: Some base cases like this need a little more work than before. *)
-    (* apply paco2_unfold. *)
-    (* * auto with paco. *)
-    (* * eapply paco2_mon_bot; eauto with paco. *)
-    assumption.
-  + constructor. (*left.
-    eapply paco2_mon_bot with ObsTracePrefix_gen; [| auto].*)
-    apply ObsTracePrefix_refl.
-Qed.
-
+    
 Lemma ObsPrefOverEq :
   forall O1 O1' O2,
     O1 ~= O1' ->

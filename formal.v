@@ -417,7 +417,7 @@ Proof.
       rewrite H5 in *; simpl in *; auto.
   - destruct H3 as [[TSuff Split] | [NotR Eq]] eqn:Pre.
     + invert (@SplitInclusive MachineState).
-      * apply ObsEqFinishedTau.
+      * constructor. 
       * frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
       * frobin (MTraceOf m) H0; simpl in *; inv H0; seauto.
     + clear Pre. frobin (MTraceOf m) Eq; simpl in *. 
