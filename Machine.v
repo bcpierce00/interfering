@@ -76,7 +76,6 @@ Definition mpstep (mp : MPState) :=
   | None => None
   end.
 
-
 (* Confidentiality and Integrity Labels *)
 Inductive CLabel :=
 | HC
@@ -124,6 +123,23 @@ CoFixpoint MPRunOf (mp : MPState) : MPTrace' :=
   end.
 
 (********** Machine Lemmas ************)
+Lemma MTraceOfInf :
+  forall m,
+    infinite (MTraceOf m).
+Proof.  
+  intros m m' H.
+  remember (MTraceOf m) as M.
+  generalize dependent m.
+  induction H; intros m HeqM.
+  - rewrite (idTrace_eq (MTraceOf m)) in HeqM.
+    simpl in *.
+    inversion HeqM.
+  - rewrite (idTrace_eq (MTraceOf m)) in HeqM.
+    simpl in *.
+    inversion HeqM; subst; clear HeqM.
+    eapply IHLast; eauto.
+Qed.
+
 Lemma MPTraceOfHead: forall mp, mp = head (MPTraceOf mp).
 Proof.
   intros. destruct mp.  simpl. 

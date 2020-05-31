@@ -91,24 +91,6 @@ Definition variantOf (M N : MachineState) (C : Contour) :=
 
 Hint Unfold variantOf : StackSafety.
 
-CoFixpoint ObsTraceOfM (M: MTrace) : ObsTrace :=
-  match M with
-  | finished m =>
-    finished Tau
-  | notfinished m M' =>
-    let (m', O) := step m in
-    notfinished O (ObsTraceOfM M')
-  end.
-
-CoFixpoint ObsTraceOf (MP: MPTrace) : ObsTrace := 
-  match MP with
-  | finished mp =>
-    finished Tau
-  | notfinished mp MP' =>
-    let (m', O) := step (ms mp) in
-    notfinished O (ObsTraceOf MP')
-  end.
-
 Hint Constructors ObsTraceEq(*_gen*) : StackSafety.
 
 Hint Constructors ObsTracePrefix(*_gen*) : StackSafety.
@@ -163,23 +145,22 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
 
 Hint Unfold EagerStackConfidentiality : StackSafety.
 
-Definition ObsEqUpToHalt (MP : MPTrace) (M : MTrace) : Prop :=
-  ObsTraceOf MP <=_O ObsTraceOfM M /\
-  (infinite MP -> ObsTraceOf MP ~=_O ObsTraceOfM M).
+Definition ObsEqUpToHalt (MPO : MPTrace') (MO : MTrace') : Prop :=
+  ObsOfMP MPO <=_O ObsOfM MO /\
+  (infinite MPO -> ObsOfMP MPO ~=_O ObsOfM MO).
 
 Definition EagerStackConfidentiality' (C : Contour) (mp : MPState) (justReturned : MachineState -> Prop) :=
-  forall m' MP M',
+  forall m',
     variantOf (ms mp) m' C ->
-    PrefixUpTo (fun mp => justReturned (ms mp)) (MPTraceOf mp) MP ->
-    PrefixUpTo justReturned (MTraceOf m') M' ->
-    (forall mpret, Last MP mpret -> justReturned (ms mpret) ->
-                   (exists mret', Last M' mret' /\
-                                  forall k, 
-                       (ms (head MP) k <> ms mpret k \/ (head M') k <> mret' k) ->
-                       ms mpret k = mret' k) /\
-                   (ObsTraceOf MP) ~=_O (ObsTraceOfM M')) /\
-    ((forall mpret, Last MP mpret -> ~ justReturned (ms mpret)) ->
-                   ObsEqUpToHalt MP M').
+    (forall mpret MPO,
+        SplitInclusive (fun '(m,_,_) => justReturned m) (MPRunOf mp) MPO (MPRunOf mpret) ->
+        exists m'ret MO', SplitInclusive (fun '(m,_) => justReturned m) (RunOf m') MO' (RunOf m'ret) /\
+                           (ObsOfMP MPO) ~=_O (ObsOfM MO') /\
+                           forall k, 
+                             (ms mp k <> ms mpret k \/ m' k <> m'ret k) ->
+                             ms mpret k = m'ret k) /\
+    ((forall mpret, InTrace mpret (MPTraceOf mp) -> ~ justReturned (ms mpret)) ->
+     ObsEqUpToHalt (MPRunOf mp) (RunOf m')).
 
 CoInductive StrongEagerStackConfidentiality(*_gen*) (R : MachineState -> Prop) (*Rcoind*) :
   MPTrace -> MachineState -> Prop :=
@@ -3444,8 +3425,8 @@ Definition ObservableIntegrity (C:Contour) (MP:MPTrace) (MPsuffO:option MPTrace)
 Definition ObservableIntegrity' (C:Contour) (mp:MPState) (justReturned:MachineState -> Prop) : Prop :=
   forall MPpre MPsuff,
     SplitInclusive (fun mp => justReturned (ms mp)) (MPTraceOf mp) MPpre MPsuff ->
-    let M' := MTraceOf (RollbackInt C (ms mp) (ms (head MPsuff))) in
-    ObsEqUpToHalt MPsuff M'.
+    let m' := RollbackInt C (ms mp) (ms (head MPsuff)) in
+    ObsEqUpToHalt (MPRunOf (head MPsuff)) (RunOf m').
 
 (* A confidentiality rollback aims to undo a variation, so it restores the values of the
    original, unvaried state. But if the varied values were overwritten after they were varied,
@@ -3516,19 +3497,15 @@ Definition ObservableConfidentiality (C : Contour) (MP:MPTrace) (MPsuffO:option 
                    ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M')).
 
 Definition ObservableConfidentiality' (C : Contour) (mp:MPState) (justReturned : MachineState -> Prop) : Prop :=
-  forall m' MPpre MPsuffO M'pre M'suffO,
+  forall m',
     variantOf (ms mp) m' C ->
-    LazyReturnMP justReturned (MPTraceOf mp) MPpre MPsuffO ->
-    LazyReturnM justReturned (MTraceOf m') M'pre M'suffO ->
-    (forall MPsuff,
-        MPsuffO = Some MPsuff ->
-        (exists M'suff M'roll,
-            M'suffO = Some M'suff /\
-            M'roll = MTraceOf (RollbackConf (ms mp) (ms (head MPsuff)) m' (head M'suff)) /\
-            let O' := (ObsTraceOfM M'pre) ^ Some (ObsTraceOfM M'roll) in
-            ObsEqUpToHalt (JoinInclusive MPpre MPsuff) (JoinInclusive M'pre M'roll)) /\
-    ((forall mpfin, Last MPpre mpfin -> ~ justReturned (ms mpfin)) ->
-     ObsEqUpToHalt MPpre M'pre).
+    (forall mpret MP,
+        SplitInclusive (fun '(m,_,_) => justReturned m) (MPRunOf mp) MP (MPRunOf mpret) ->
+        exists m'ret M', SplitInclusive (fun '(m,_) => justReturned m) (RunOf m') M' (RunOf m'ret) /\
+                         let m'roll := RollbackConf (ms mp) (ms mpret) m' m'ret in
+                         ObsEqUpToHalt (MP ^^ MPRunOf mpret) (M' ^^ RunOf m'roll)) /\
+    ((forall mpret, InTrace mpret (MPTraceOf mp) -> ~ justReturned (ms mpret)) ->
+     ObsEqUpToHalt (MPRunOf mp) (RunOf m')).
 
 Definition LazyStackSafety (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentiality (makeContour 0 (ms (head MP))) MP None (fun _ => False) /\
@@ -3803,24 +3780,6 @@ Proof.
     constructor. (*right.*) apply COFIX. auto.
 Qed.
 
-
-Lemma MTraceOfInf :
-  forall m m',
-    ~ Last (MTraceOf m) m'.
-Proof.  
-  intros m m' H.
-  remember (MTraceOf m) as M.
-  generalize dependent m.
-  induction H; intros m HeqM.
-  - rewrite (idTrace_eq (MTraceOf m)) in HeqM.
-    simpl in *.
-    inversion HeqM.
-  - rewrite (idTrace_eq (MTraceOf m)) in HeqM.
-    simpl in *.
-    inversion HeqM; subst; clear HeqM.
-    eapply IHLast; eauto.
-Qed.
-
 Lemma FindCallReal :
   forall C MP C' MPcall,
     RealMPTrace'' MP ->
@@ -3893,7 +3852,12 @@ Proof.
     apply (SplitSuffixReal' (fun mp => justReturned (ms mp)) (MPTraceOf mp) MPpre MPsuff); auto.
     apply RealMPEquiv. unfold RealMPTrace''. rewrite <- (MPTraceOfHead mp). apply TraceEqRefl. }
   split.
-  - apply (ObsPrefOverEq (ObsTraceOf (MPTraceOf mp')) (ObsTraceOf MPsuff)).
+  - apply MPRunPrefRun; auto.
+  - apply RunEqInfMPRun; auto.
+Qed.
+
+(*
+    apply (ObsPrefOverEq (ObsTraceOf (MPTraceOf mp')) (ObsTraceOf MPsuff)).
     + apply ObsTraceOfTraceEq. apply TraceEqSym. apply H2.
     + apply (MPTracePrefixMTrace mp' (ms (head MPsuff)) (* mpfin*)). auto.
   - intros. auto.
@@ -3904,7 +3868,7 @@ Proof.
       apply (LastTraceEq (MPTraceOf mp') MPsuff) in H4.
       * unfold infinite in H3; apply H3 in H4; auto.
       * apply H2; auto.
-Qed.
+Qed. *)
 
 Lemma EagerImpliesLazyConf :
   forall C MPcall MPpre MPsuffO justReturned,
@@ -4020,102 +3984,77 @@ Proof.
   unfold EagerStackConfidentiality'. unfold ObservableConfidentiality'. intros. split.
 
   - (* this is case 1 *)
-    intros. destruct H1.
-    2: { destruct H1. destruct H4. rewrite H3 in H5. discriminate. }
-    destruct H1 as [MPsuffAgain]. destruct H1 as [H1 HSplit].
-    assert (MPsuffAgain = MPsuff). { rewrite H1 in H3; inversion H3; auto. }
-    specialize H with m' MPpre M'pre.
-    (* so assert right off the bat that M' returns *)
-    
-    assert (HM'sEx : exists M'suff, M'suffO = Some M'suff /\
-                                    SplitInclusive justReturned (MTraceOf m') M'pre M'suff).
-    { destruct H2.
-      - auto.
-      - destruct H; auto.
-        + left. exists MPsuffAgain. auto.
-        + right. destruct H2. destruct H2. split; auto.
-        + specialize H with (head MPsuff).
-          destruct H.
-          * apply SplitInclusiveIsInclusive in HSplit. rewrite H4 in HSplit. auto.
-          * apply SplitInclusiveProp in HSplit. rewrite H4 in HSplit. auto.
-          * destruct H as [mret']. destruct H. destruct H2. destruct H8.
-            apply TraceEqSym in H8.
-            eapply LastTraceEq in H; eauto.
-            apply MTraceOfInf in H. contradiction. }
-
-    destruct HM'sEx as [M'suff HM'sEx]. destruct HM'sEx as [HM'sEx Hsplit'].
-    destruct H;auto.
-    + left. exists MPsuffAgain. auto.
-    + left. exists M'suff. auto.
-    + specialize H with (head MPsuff).
-      * rewrite H4 in HSplit.
-        assert (HSplit2 := HSplit). assert (HSplit3 := HSplit).
-        apply (SplitInclusiveIsInclusive (fun mp => justReturned (ms mp))) in HSplit2.
-        apply SplitInclusiveProp in HSplit. rewrite H1 in H3.
-        destruct H; auto.
-        assert (mp = head MPpre).
-        { rewrite (MPTraceOfHead mp).
-          apply (SplitInclusiveHead (fun mp => justReturned (ms mp)) (MPTraceOf mp) MPpre MPsuff). auto. }
-        pose (M'roll := MTraceOf (RollbackConf (ms mp) (ms (head MPsuff)) m' (head M'suff))).
-        exists M'suff. exists M'roll. destruct H as [mret'].
-        assert (HHeadsEq: ms (head MPsuff) = head M'roll).
-        { unfold M'roll. simpl. extensionality k.
-          destruct H as [Hmret Hksame]. assert (mret' = head M'suff).
-          { apply SplitInclusiveIsInclusive in Hsplit'.
-            apply (LastUnique mret' (head M'suff) M'pre); auto. }
-          assert (head M'pre = m').
-          { apply SplitInclusiveHead in Hsplit'. rewrite <- Hsplit'. simpl. auto. }
-          specialize Hksame with k. rewrite H in Hksame. unfold RollbackConf.
-          destruct (weq (ms mp k) (ms (head MPsuff) k)) eqn:Unchanged; simpl.
-          - destruct (weq (m' k) ((head M'suff) k)) eqn:Unchanged'; simpl.
-            + destruct (weq (ms mp k) (m' k)) eqn:Unvaried; simpl.
-              * apply weq_implies_eq in Unchanged.
-                apply weq_implies_eq in Unchanged'.
-                apply weq_implies_eq in Unvaried.
-                rewrite <- Unchanged.
-                rewrite Unvaried. auto.
-              * apply weq_implies_eq in Unchanged. apply eq_sym. auto.
-            + apply not_weq_implies_neq in Unchanged'.
-              apply Hksame. right. rewrite H8. auto.
+    intros. specialize H with m'. destruct H; auto.
+    specialize H with mpret MP. destruct H as [m'ret]; auto.
+    destruct H as [M']. exists m'ret. exists M'.
+    destruct H. split; auto. destruct H3 as [HTracesEq HSame].
+    pose (m'roll := (RollbackConf (ms mp) (ms mpret) m' m'ret)).
+    replace (RollbackConf (ms mp) (ms mpret) m' m'ret) with m'roll; auto.
+    assert (HRetsEq: ms mpret = m'roll).
+    { unfold m'roll. simpl. extensionality k. specialize HSame with k.
+      unfold RollbackConf.
+      destruct (weq (ms mp k) (ms mpret k)) eqn:Unchanged; simpl.
+      - destruct (weq (m' k) (m'ret k)) eqn:Unchanged'; simpl.
+        + destruct (weq (ms mp k) (m' k)) eqn:Unvaried; simpl.
+          * apply weq_implies_eq in Unchanged.
+            apply weq_implies_eq in Unchanged'.
+            apply weq_implies_eq in Unvaried.
+            rewrite <- Unchanged.
+            rewrite Unvaried. auto.
+          * apply weq_implies_eq in Unchanged. apply eq_sym. auto.
+        + apply not_weq_implies_neq in Unchanged'.
+          apply HSame. right. auto.
           - apply not_weq_implies_neq in Unchanged.
-            apply Hksame. rewrite <- H7. left. auto. }
-        assert (HRealsuff : RealMPTrace'' MPsuff).
-        { apply RealMPEquiv.
-          apply (SplitSuffixReal' (fun mp => justReturned (ms mp)) (MPTraceOf mp) MPpre MPsuff); auto.
-          apply RealMPEquiv. unfold RealMPTrace''. rewrite <- MPTraceOfHead. apply TraceEqRefl. }
-        split; auto. split; auto.
-        assert (Last (ObsTraceOf MPpre) Tau).
-        { apply (MPObsLast MPpre (head MPsuff)). auto. }
-        assert (Last (ObsTraceOfM M'pre) Tau).
-        { apply (MObsLast M'pre (head M'suff)). apply SplitInclusiveIsInclusive in Hsplit'. auto. }
-        rewrite H1. rewrite H4. split.
-        -- intro Hfin. destruct Hfin as [mpfin Hfin].          
-           apply (MPTracePrefixMTrace (head MPsuff) (head M'roll) (* mpfin *)) in HHeadsEq.
-           eapply ObsTracePrefApp'; eauto.
-           { apply ObsTraceEq_sym. auto. }
-           { apply (ObsPrefOverEq (ObsTraceOf (MPTraceOf (head MPsuff)))
-                                   (ObsTraceOf MPsuff)
-                                   (ObsTraceOfM (MTraceOf (head M'roll)))).
-             - apply ObsTraceOfTraceEq. apply TraceEqSym. apply HRealsuff.
-             - auto. }
-        -- intros. apply (MTraceEqInfMPTrace (head MPsuff) (head M'roll)) in HHeadsEq.
-           { eapply ObsTraceEqApp; eauto.
-              apply (ObsEqOverEq (ObsTraceOf (MPTraceOf (head MPsuff)))
-                                 (ObsTraceOf MPsuff)
-                                 (ObsTraceOfM (MTraceOf (head M'roll)))).
-             - apply ObsTraceOfTraceEq. apply TraceEqSym. apply HRealsuff.
-             - auto. }
-           unfold not. intros. specialize H10 with mpfin.
-           apply (LastTraceEq (MPTraceOf (head MPsuff)) MPsuff) in H11; auto.
-           apply TraceEqSym. apply HRealsuff.
+            apply HSame. left. auto. }
+    rewrite <- HRetsEq.
+    assert (HMPfin:exists o, Last MP (mpret,o)). (* In either case we want to know each call trace is finite. *)
+    { destruct (pstep mpret) as [p |] eqn:E.
+      - exists (snd (step (ms mpret))).
+        assert (HmpretHead:head (MPRunOf mpret) = (mpret, snd (step (ms mpret)))).
+        { simpl; rewrite E; auto. }
+        rewrite <- HmpretHead.
+        apply SplitInclusiveIsInclusive with
+            (P := fun '(m,_,_) => justReturned m)
+            (T1 := MPRunOf mp); auto.
+      - exists Tau.
+        assert (HmpretHead:head (MPRunOf mpret) = (mpret, Tau)).
+        { simpl; rewrite E; auto. }
+        rewrite <- HmpretHead.
+        apply SplitInclusiveIsInclusive with
+                (P := fun '(m,_,_) => justReturned m)
+                (T1 := MPRunOf mp); auto. }
+    assert (Ho:exists o, Last (ObsOfM M') o).
+    { unfold ObsOfMP. exists (snd (step m'ret)).
+      apply (MapLast snd M' (m'ret, snd (step m'ret))).
+      assert (Hm'retHead:head (RunOf m'ret) = (m'ret, snd (step (m'ret)))); auto.
+      rewrite <- Hm'retHead.
+      apply SplitInclusiveIsInclusive with
+          (P := fun '(m,_) => justReturned m)
+          (T1 := RunOf m'); auto. }
+    split.
+    + (* pref case *)
+      apply (ObsPrefOverEq (ObsOfMP MP ^^ ObsOfMP (MPRunOf mpret))).
+      * apply TraceEqSym. apply ObsOfMPJoin.
+      * assert (ObsOfM M' ^^ ObsOfM (RunOf (ms mpret)) ~= ObsOfM (M' ^^ RunOf (ms mpret))).
+        { apply TraceEqSym. apply ObsOfMJoin. }
+        apply (ObsPrefOverEq2 (ObsOfMP MP ^^ (ObsOfMP (MPRunOf mpret)))) in H3; auto.
+        destruct HMPfin as [o1].
+        destruct Ho as [o1'].
+        apply (MapLast snd MP (mpret,o1)) in H4.
+        eapply ObsPrefJoin; eauto.
+        -- apply MPRunPrefRun; auto. (* Need a run-based version of the MPTrace - MTrace connection. *)
+    + (* eq case *)
+      intros. apply (ObsEqOverEq (ObsOfMP MP ^^ ObsOfMP (MPRunOf mpret))).
+      * apply TraceEqSym. apply ObsOfMPJoin.
+      * apply ObsTraceEq_sym. apply (ObsEqOverEq (ObsOfM M' ^^ ObsOfM (RunOf (ms mpret)))).
+        -- apply TraceEqSym. apply ObsOfMJoin.
+        -- destruct HMPfin as [o1]. destruct Ho as [o1'].
+           apply ObsTraceEq_sym. eapply ObsEqJoin; eauto.
+           ++ apply (MapLast snd MP (mpret,o1)) in H4. eauto.
+           ++ apply RunEqInfMPRun; auto.
+           apply InfJoin with (T1 := MP) (a := (mpret,o1)); auto.
   - (* Case 2: No return *)
-    intros. specialize H with m' MPpre M'pre. destruct H; auto.
-    + destruct H1.
-      * left. destruct H as [MPsuff]. exists MPsuff. destruct H. auto.
-      * right. destruct H. destruct H1. split;auto.
-    + destruct H2.
-      * left. destruct H as [Msuff]. exists Msuff. destruct H. auto.
-      * right. destruct H. destruct H2. split;auto.
+    intros. specialize H with m'. destruct H; auto.
 Qed.
 
 Theorem EagerSafetyImpliesLazy':

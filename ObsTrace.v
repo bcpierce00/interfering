@@ -16,6 +16,26 @@ Ltac app_frobber :=
            rewrite (idTrace_eq (notfinished O T ^ OT)) in H; simpl in H
          end.
 
+Ltac join_frobber :=
+  repeat match goal with
+         | |- context[(finished ?T) ^^ ?OT] =>
+           rewrite (idTrace_eq (finished T ^^ OT)); simpl
+         | |- context[(notfinished ?O ?T) ^^ ?OT] =>
+           rewrite (idTrace_eq (notfinished O T ^^ OT)); simpl
+         | [H: context[(finished ?T) ^^ ?OT] |- _ ] =>
+           rewrite (idTrace_eq (finished T ^^ OT)) in H; simpl in H
+         | [H: context[(notfinished ?O ?T) ^^ ?OT] |- _ ] =>
+           rewrite (idTrace_eq (notfinished O T ^^ OT)) in H; simpl in H
+         end.
+
+Ltac maptrace_frobber :=
+  repeat match goal with
+         | |- context[mapTrace ?f (finished ?t)] =>
+           rewrite (idTrace_eq (mapTrace f (finished t))); unfold mapTrace; simpl
+         | |- context[mapTrace ?f (notfinished ?t ?T)] =>
+           rewrite (idTrace_eq (mapTrace f (notfinished t T))); unfold mapTrace; simpl
+         end.
+
 (********************** ObsTrace Equivalence *************************)
 
 CoInductive ObsTraceEq(*_gen R*) : TraceOf Observation -> TraceOf Observation -> Prop :=
@@ -37,7 +57,7 @@ CoInductive ObsTraceEq(*_gen R*) : TraceOf Observation -> TraceOf Observation ->
 (* The last thing we need is a way of handling *all-tau* traces.
    There are a couple of ways of doing that, not sure what will
    play better in proofs. *)
-| ObsEqAllTau : forall OO,
+| ObsEqAllSame : forall OO,
      ObsTraceEq(*_gen R*) OO OO.
 (* APT: Establishing equality between traces seems hard, and this overlaps
 the previous two cases.  Maybe try:
@@ -83,7 +103,7 @@ Proof.
   + eapply ObsEqTau2.
     (*right.*) eapply COFIX; auto.
   + eapply ObsEqTau2.
-    (*left. pfold.*) eapply ObsEqAllTau.
+    (*left. pfold.*) eapply ObsEqAllSame.
 Qed.
 
 Lemma ObsTraceEqRemoveTau2 :
@@ -101,7 +121,7 @@ Proof.
     (* * apply paco2_mon_bot with ObsTraceEq_gen; auto. *)
     assumption.
   + eapply ObsEqTau1. (*left. pfold.*)
-    eapply ObsEqAllTau.
+    eapply ObsEqAllSame.
 Qed.
 
 Fixpoint tauN (n : nat) (T : ObsTrace) : ObsTrace := 
@@ -230,7 +250,7 @@ CoInductive ObsTracePrefix(*_gen R*) : TraceOf Observation -> TraceOf Observatio
     ObsTracePrefix(*_gen R*) (notfinished (Out w) OO) (finished (Out w))
 | ObsPreFinishedTau : forall OO,
     ObsTracePrefix(*_gen R*) OO (finished Tau)
-| ObsPreAllTau : forall OO,
+| ObsPreAllSame : forall OO,
      ObsTracePrefix(*_gen R*) OO OO.
 Hint Constructors ObsTracePrefix(*_gen*) : core.
 
@@ -365,7 +385,7 @@ Lemma OTE'E: forall T T', ObsTraceEq' T T' -> ObsTraceEq T T'.
 Proof.
   cofix COFIX.
   intros T T' [H1 H2].
-  inv H1; inv H2; try apply ObsEqAllTau.  
+  inv H1; inv H2; try apply ObsEqAllSame.  
   - apply ObsTracePrefRemoveTau1 in HR.  apply ObsTracePrefRemoveTau1 in HR0.  
     constructor. constructor. apply COFIX; split; auto.
   - constructor.  apply COFIX; split;  auto. 
@@ -453,6 +473,27 @@ Proof.
     + constructor. (*right.*) apply (COFIX T1 T2 O2); auto. apply ObsTracePrefRemoveTau1. auto.
 Qed.
 
+Lemma ObsPrefOverEq2 :
+  forall O1 O2 O2',
+    O2 ~= O2' ->
+    O1 <=_O O2 ->
+    O1 <=_O O2'.
+Proof.
+  cofix COFIX. intros O1 O2 O2' H H0. inv H.
+  - assumption.
+  - destruct a.
+    + inv H0.
+      * constructor.
+        apply (COFIX OO' (notfinished (Out w) T1) (notfinished (Out w) T2)).
+        -- constructor. auto.
+        -- auto.
+      * constructor. apply (COFIX OO' T1 T2); auto.
+      * constructor.
+      * constructor.
+      * constructor. apply ObsTraceEqImpliesPrefix. apply TraceEqImpliesObsTraceEq. auto.
+    + constructor. apply (COFIX O1 T1 T2); auto. apply ObsTracePrefRemoveTau2. auto.
+Qed.
+
 Lemma ObsEqOverEq :
   forall O1 O1' O2,
     O1 ~= O1' ->
@@ -476,4 +517,201 @@ Proof.
         (* apply paco2_mon_bot with ObsTraceEq_gen; [| auto]. *)
         apply ObsTraceEq_sym. apply TraceEqImpliesObsTraceEq. auto.
     + constructor. (*right.*) apply (COFIX T1 T2 O2); auto. apply ObsTraceEqRemoveTau1. auto.
+Qed.
+
+(***** Taking ObsTraces from traces and runs *****)
+
+CoFixpoint ObsTraceOfM (M: MTrace) : ObsTrace :=
+  match M with
+  | finished m =>
+    finished Tau
+  | notfinished m M' =>
+    let (m', O) := step m in
+    notfinished O (ObsTraceOfM M')
+  end.
+
+CoFixpoint ObsTraceOf (MP: MPTrace) : ObsTrace := 
+  match MP with
+  | finished mp =>
+    finished Tau
+  | notfinished mp MP' =>
+    let (m', O) := step (ms mp) in
+    notfinished O (ObsTraceOf MP')
+  end.
+
+Definition ObsOfMP (MPO : MPTrace') : TraceOf Observation :=
+  mapTrace snd MPO.
+
+Definition ObsOfM (MO : MTrace') : TraceOf Observation :=
+  mapTrace snd MO.
+
+(***** Lemmas about JoinInclusive on ObsTraces *****)
+
+Definition ObsOfMPJoin :
+  forall MPO MPO',
+    ObsOfMP (MPO ^^ MPO') ~= (ObsOfMP MPO ^^ ObsOfMP MPO').
+Proof.
+  unfold ObsOfMP. apply MapOverJoin.
+Qed.
+
+Definition ObsOfMJoin :
+  forall MO MO',
+    ObsOfM (MO ^^ MO') ~= (ObsOfM MO ^^ ObsOfM MO').
+Proof.
+  unfold ObsOfM. apply MapOverJoin.
+Qed.
+
+Lemma ObsEqJoin :
+  forall O1 O1' O2 O2' o1 o1',
+    Last O1 o1 ->
+    Last O1' o1' ->
+    O1 ~=_O O1' ->
+    O2 ~=_O O2' ->
+    (O1 ^^ O2) ~=_O (O1' ^^ O2').
+Proof.
+    intros O1 O1' O2 O2' o1 o1' H;
+    revert O1' O2 O2' o1'.
+  induction H as [o1|]; intros O1' O2 O2' o1' Last' Eq1 Eq2.
+  - generalize dependent O2;
+    generalize dependent O2';
+    generalize dependent Eq1.
+    induction Last';
+      intros Eq1 O2' O2 Eq2(*;
+      pfold*).
+    + inversion Eq1; subst; simpl in *; clear Eq1; join_frobber.
+      destruct O2; destruct O2'; auto.
+    + inversion Eq1; subst; simpl in *; clear Eq1.
+      specialize (IHLast' HR O2' O2 Eq2).
+      join_frobber.
+      eapply ObsEqTau2.
+      auto.
+  - destruct a'.
+    + destruct (EqOut_tauN O1' o1' Last' w T Eq1) as [n [HTau | [T' HTau]]].
+      * rewrite HTau in *.
+        clear HTau.
+        induction n; simpl in *; subst; join_frobber.
+        -- inversion Eq1.
+        -- apply ObsEqTau2.
+           inversion Last'; subst; clear Last'.
+           apply ObsTraceEqRemoveTau2 in Eq1.
+           specialize (IHn H3 Eq1).
+           auto.
+      * rewrite HTau in *.
+        clear HTau.
+        induction n; simpl in *; subst; join_frobber.
+        -- apply ObsEqNow.
+           inversion Eq1; subst; clear Eq1.
+           ++ inversion Last'; subst; clear Last'.
+              eapply IHLast; eauto.
+           ++ inversion Last'; subst; clear Last'.
+              eapply IHLast; eauto.
+        -- inversion Last'; subst; clear Last'.
+           specialize (IHn H3).
+           apply ObsTraceEqRemoveTau2 in Eq1.
+           specialize (IHn Eq1).
+           apply ObsEqTau2.
+           auto.
+    + apply ObsTraceEqRemoveTau1 in Eq1.
+      join_frobber. apply ObsEqTau1.
+      eapply IHLast; eauto.
+Qed.
+
+
+Lemma ObsPrefJoin :
+  forall O1 O1' O2 O2' o1 o1',
+    Last O1 o1 ->
+    Last O1' o1' ->
+    O1 ~=_O O1' ->
+    O2 <=_O O2' ->
+    (O1 ^^ O2) <=_O (O1' ^^ O2').
+Proof.
+    intros O1 O1' O2 O2' o1 o1' H;
+    revert O1' O2 O2' o1'.
+  induction H as [o1|]; intros O1' O2 O2' o1' Last' Eq Pref.
+  - generalize dependent O2;
+    generalize dependent O2';
+    generalize dependent Eq.
+    induction Last';
+      intros Eq O2' O2 Pref.
+    + inversion Eq; subst; simpl in *; clear Eq; join_frobber.
+      destruct O2; destruct O2'; auto.
+    + inversion Eq; subst; simpl in *; clear Eq.
+      specialize (IHLast' HR O2' O2 Pref).
+      join_frobber.
+      eapply ObsPreTau1.
+      auto.
+  - destruct a'.
+    + destruct (EqOut_tauN O1' o1' Last' w T Eq) as [n [HTau | [T' HTau]]].
+      * rewrite HTau in *.
+        clear HTau.
+        induction n; simpl in *; subst; join_frobber.
+        -- inversion Eq.
+        -- apply ObsPreTau1.
+           inversion Last'; subst; clear Last'.
+           apply ObsTraceEqRemoveTau2 in Eq.
+           specialize (IHn H3 Eq).
+           auto.
+      * rewrite HTau in *.
+        clear HTau.
+        induction n; simpl in *; subst; join_frobber.
+        -- apply ObsPreNow.
+           inversion Eq; subst; clear Eq.
+           ++ inversion Last'; subst; clear Last'.
+              eapply IHLast; eauto.
+           ++ inversion Last'; subst; clear Last'.
+              eapply IHLast; eauto.
+        -- inversion Last'; subst; clear Last'.
+           specialize (IHn H3).
+           apply ObsTraceEqRemoveTau2 in Eq.
+           specialize (IHn Eq).
+           apply ObsPreTau1.
+           auto.
+    + apply ObsTraceEqRemoveTau1 in Eq.
+      join_frobber. apply ObsPreTau2.
+      eapply IHLast; eauto.
+Qed.
+
+Lemma MPRunPrefRun :
+  forall mp m,
+     ms mp = m -> 
+     ObsOfMP (MPRunOf mp) <=_O ObsOfM (RunOf m).
+Proof.
+  cofix COFIX.
+  intros mp m H(*; pfold*).
+  destruct mp. simpl in *.  subst.
+  rewrite idTrace_eq. pattern (ObsOfM (RunOf m)) at 1.  rewrite idTrace_eq.  simpl.
+  destruct (pstep (m,p)); simpl.
+  - destruct (step m).  simpl.
+    destruct o. 
+    * constructor. (*right.*) apply COFIX. auto.
+    * constructor. (*left. pfold.*) constructor. (*right.*) apply COFIX. auto.
+  - destruct (step m). simpl.
+    constructor.
+Qed.
+
+Lemma RunEqInfMPRun :
+  forall mp m,
+    ms mp = m ->
+    infinite (MPRunOf mp) ->
+    (ObsOfMP (MPRunOf mp)) ~=_O (ObsOfM (RunOf m)).
+Proof.
+  cofix COFIX.
+  intros mp m H H0(*; pfold*).
+  destruct mp. simpl in *. subst.
+  rewrite idTrace_eq. rewrite (idTrace_eq (ObsOfMP (MPRunOf (m,p)))).  simpl.
+  destruct (pstep (m,p)) eqn:?; simpl.
+  - destruct (step m) eqn:?.  simpl.
+    assert (Q: infinite (MPRunOf (m0, p0))).
+    { intro. intro. unfold infinite in H0.
+      apply (H0 a).
+      rewrite (idTrace_eq (MPRunOf (m,p))). simpl.
+      rewrite Heqo. rewrite Heqp1.  simpl.
+      constructor.  auto. }
+    destruct o.
+    + constructor. (*right.*) apply COFIX; auto.
+    + constructor. (*left. pfold.*) constructor. (*right.*) apply COFIX; auto.
+  - exfalso. unfold infinite in H0. eapply (H0 (m,p,Tau)).
+    rewrite (idTrace_eq (MPRunOf (m,p))).  simpl.
+    rewrite Heqo.
+    constructor.
 Qed.

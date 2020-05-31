@@ -422,6 +422,8 @@ CoFixpoint JoinInclusive {A} (T1 T2 : TraceOf A) : TraceOf A :=
   | notfinished a T1' => notfinished a (JoinInclusive T1' T2)
   end.
 
+Notation "T1 ^^ T2" := (JoinInclusive T1 T2) (at level 80).
+
 Lemma SplitInclusiveHeadEq :
   forall {A} (P:A->Prop) T1 T2 T3,
     SplitInclusive P T1 T2 T3 ->
@@ -475,6 +477,73 @@ Qed.
 
 Definition infinite {A} (T : TraceOf A) : Prop :=
   forall a, ~ Last T a.
+
+Ltac join_frobber :=
+  repeat match goal with
+         | |- context[(finished ?T) ^^ ?OT] =>
+           rewrite (idTrace_eq (finished T ^^ OT)); simpl
+         | |- context[(notfinished ?O ?T) ^^ ?OT] =>
+           rewrite (idTrace_eq (notfinished O T ^^ OT)); simpl
+         | [H: context[(finished ?T) ^^ ?OT] |- _ ] =>
+           rewrite (idTrace_eq (finished T ^^ OT)) in H; simpl in H
+         | [H: context[(notfinished ?O ?T) ^^ ?OT] |- _ ] =>
+           rewrite (idTrace_eq (notfinished O T ^^ OT)) in H; simpl in H
+         end.
+
+Ltac maptrace_frobber :=
+  repeat match goal with
+         | |- context[mapTrace ?f (finished ?t)] =>
+           rewrite (idTrace_eq (mapTrace f (finished t))); unfold mapTrace; simpl
+         | |- context[mapTrace ?f (notfinished ?t ?T)] =>
+           rewrite (idTrace_eq (mapTrace f (notfinished t T))); unfold mapTrace; simpl
+         end.
+
+Lemma MapOverJoin {A B} (f : A -> B) :
+  forall T T',
+    mapTrace f (T ^^ T') ~= (mapTrace f T ^^ mapTrace f T').
+Proof.
+  cofix COFIX. intros.
+  destruct T eqn:E.
+  - destruct T'; join_frobber.
+    + maptrace_frobber. fold (mapTrace f (finished a)).
+      maptrace_frobber. join_frobber. constructor.
+    + maptrace_frobber. fold (mapTrace f (notfinished a0 T')).
+      join_frobber. maptrace_frobber. constructor. fold (mapTrace f T').
+      apply TraceEqRefl.
+  - replace (mapTrace f (notfinished a t ^^ T')) with
+        (notfinished (f a) (mapTrace f (t ^^ T'))).
+    + replace (mapTrace f (notfinished a t) ^^ mapTrace f T') with
+          (notfinished (f a) (mapTrace f t ^^ mapTrace f T')).
+      * constructor. apply COFIX. Guarded.
+      * maptrace_frobber. join_frobber. constructor.
+    + join_frobber. maptrace_frobber. constructor.
+Qed.
+
+Lemma MapLast {A B} (f : A -> B) :
+  forall T a,
+    Last T a ->
+    Last (mapTrace f T) (f a).
+Proof.
+  intros. induction H.
+  - maptrace_frobber. constructor.
+  - maptrace_frobber. fold (mapTrace f T).
+    constructor. auto.
+Qed.
+
+Lemma InfJoin {A} :
+  forall (T1 T2:TraceOf A) a,
+    Last T1 a ->
+    infinite (T1^^T2) ->
+    infinite T2.
+Proof.
+  intros. intro. intro.
+  induction H; intros.
+  - inv H1.
+    + join_frobber. apply (H0 a0). constructor.
+    + join_frobber. apply (H0 a0). constructor. auto.
+  - join_frobber. apply IHLast. intro. intro.
+    apply (H0 a1). constructor. auto.
+Qed.
 
 (************************
  Trace Lemmas and axioms 
