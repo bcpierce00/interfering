@@ -715,3 +715,67 @@ Proof.
     rewrite Heqo.
     constructor.
 Qed.
+
+(* Observe that ObsTraceEq and ObsTracePrefix are not transitive. *)
+
+Module ObsTraceRelsNotTrans.
+
+Section foo.
+Hypothesis ws: exists (w1 w2: Word), w1 <> w2. 
+
+CoFixpoint alltau : ObsTrace := notfinished Tau alltau.
+
+Lemma alltau1 : forall w, finished (Out w) <=_O alltau.
+cofix COFIX.
+intros.
+  rewrite (idTrace_eq alltau).  simpl. 
+  constructor. apply COFIX.
+Qed.
+
+Lemma alltau2 : forall w, alltau <=_O finished(Out w). 
+cofix COFIX. 
+intros.
+  rewrite (idTrace_eq alltau).  simpl. 
+  constructor. apply COFIX.
+Qed.
+
+Lemma ObsTracePrefix_not_transitive: exists T1 T2 T3,
+    T1 <=_O T2 /\ T2 <=_O T3 /\ ~ (T1 <=_O T3). 
+Proof.
+  destruct ws as [w1 [w2 NEQ]].
+  exists (finished (Out w1)).
+  exists alltau.
+  exists (finished (Out w2)).
+  split.
+  apply alltau1. 
+  split.
+  apply alltau2.
+  intro.
+  inv H. 
+  apply NEQ; auto.
+Qed.
+
+Lemma ObsTraceEq_not_transitive: exists T1 T2 T3,
+    T1 ~=_O T2 /\ T2 ~=_O T3 /\ ~ (T1 ~=_O T3). 
+Proof.
+  destruct ws as [w1 [w2 NEQ]].
+  exists (finished (Out w1)).
+  exists alltau.
+  exists (finished (Out w2)).
+  split.
+  apply OTE'E. unfold ObsTraceEq'. split.
+  apply alltau2. 
+  apply alltau1.
+  split.
+  apply OTE'E. unfold ObsTraceEq'. split.
+  apply alltau1.
+  apply alltau2.
+  intro.
+  inv H. 
+  apply NEQ; auto.
+Qed.
+
+End foo.
+
+End ObsTraceRelsNotTrans.
+

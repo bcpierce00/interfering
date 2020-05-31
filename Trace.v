@@ -514,7 +514,7 @@ Proof.
         (notfinished (f a) (mapTrace f (t ^^ T'))).
     + replace (mapTrace f (notfinished a t) ^^ mapTrace f T') with
           (notfinished (f a) (mapTrace f t ^^ mapTrace f T')).
-      * constructor. apply COFIX. Guarded.
+      * constructor. apply COFIX. 
       * maptrace_frobber. join_frobber. constructor.
     + join_frobber. maptrace_frobber. constructor.
 Qed.
