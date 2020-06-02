@@ -46,32 +46,35 @@
 
   \paragraph{Traces}
 
-    A trace is a potentially infinite, nonempty sequence. We define the append operation \(T \cdot T'\)
-    where \(T'\) may be a trace or empty (\(\varepsilon\)):
-    \[T_1 \cdot T_2 \triangleq
-      \begin{cases}
-        T_1 & \text{if } T_2 = \varepsilon \\
-        t T_2 & \text{if } T_1 = t \\
-        t T_1' \cdot T_2 & \text{if } T_1 = t T_1' \\
-      \end{cases}\]
+    A trace is a potentially infinite, nonempty sequence. We define a few operations on traces generically.
+    The {\it split} operation \(\mathit{split}(f,T)\) takes a trace \(T\) and a predicate on elements \(f\) and
+    separates \(T\) into a prefix and suffix at the first element on which \(f\) holds:
+    \[\frac{f\ t}
+           {\mathit{split}(f,tT) = t, tT}\]
+    \[\frac{\neg f\ t \hspace{.5cm} \mathit{split}(f,T) = T_1,T_2}
+           {\mathit{split}(f,tT) = tT_1,T_2}\]
 
-    We identify infinite traces with \(\isinf(T)\). We define a ``trace-of'' operator \(\hookrightarrow\)
-    that coinductively relates a machine state with the trace of machine states paired with observations
-    produced by repeated application of step:
+    The {\it join} operation \(T_1 \cdot T_2\) takes two traces and links them by replacing the last element
+    of the first (if it has one) with the first of the second:
+    \[\frac{}
+           {T_1t \cdot T_2 = T_1 T_2}\]
+
+    Note that both operations are defined coinductively. We identify infinite traces with \(\isinf(T)\).
+    We define a ``trace-of'' operator \(\hookrightarrow\) that coinductively relates a machine state with the
+    trace of machine states paired with observations produced by repeated application of step:
 
     \[\frac{\mach_0 \stepstoobs{\obs} \mach_1 \hspace{.5cm} \mach_1 \hookrightarrow \machT}
            {\mach_0 \hookrightarrow (\mach_0,\obs) \machT}\]
 
     Since the step function is total, if \(\mach \hookrightarrow \machT\), then \(\machT\) must be infinite.
-    We will also wish to take a prefix of the trace from an initial state up through 
-    the first state where some condition holds. Let \(f\) be a predicate on machine states.
-    Then we define \(\mach \hookrightarrow \machT | f\) (read ``\(\machT\) is the prefix from
-    \(\mach\) until \(f\)''):
-    \[\frac{\mach_0 \stepstoobs{\obs} \mach_1 \hspace{.5cm} \neg f\ \mach_1 \hspace{.5cm} \mach_1
-              \hookrightarrow \machT | f}
-           {\mach_0 \hookrightarrow (\mach_0,\obs) \machT | f}\]
-    \[\frac{f\ m}
-           {m \hookrightarrow (m,\tau)}\]
+    We will also wish to take a prefix of the trace from an initial state up through the first state where
+    some condition holds, using {\it split}. Let \(f\) be a predicate on machine states. Then we define
+    \(\mach \hookrightarrow \machT | f\) (read ``\(\machT'\) is the prefix of \(\machT\) up to \(f\)''):
+    \[\frac{\mach \hookrightarrow \machT \hspace{.5cm} \mathit{split}(f,\machT) = \machT_1,\machT_2}
+           {\mach \hookrightarrow \machT_1 | f}\]
+
+    %\[\frac{\mach \hookrightarrow \machT \hspace{.5cm} \mathit{split}(f,\machT) = \machT_1,\machT_2}
+    %       {\mach \hookrightarrow f | \machT_2}\]
 
     We define \(\hookrightarrow_P\) to relate a machine-policy pair to the trace of MP pairs and observations
     created by \(\stepstoobs{}_P\):
@@ -81,26 +84,14 @@
     \[\frac{\mach_0 \stepstoobs{\obs} \mach_1 \hspace{.5cm} \pol_0 \longrightarrow \pol_1 \hspace{.5cm}
               \mpstate{\mach_1}{\pol_1} \hookrightarrow \machT}
            {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT}\]
+    \[\frac{\mpstatename \hookrightarrow \MPT \hspace{.5cm} \mathit{split}(f,\MPT) = \MPT_1,\MPT_2}
+           {\mpstatename \hookrightarrow \MPT_1 | f}\]
+    %\[\frac{\mpstatename \hookrightarrow \MPT \hspace{.5cm} \mathit{split}(f,\MPT) = \MPT_1,\MPT_2}
+    %       {\mpstatename \hookrightarrow f | \MPT_2}\]
     
-    \[\frac{\mpstate{\mach_0}{\pol_0} \xrightarrow{\obs} \mpstate{\mach_1}{\pol_1} \hspace{.5cm}
-            \neg f\ \mach_1 \hspace{.5cm} \mpstate{\mach_1}{\pol_1} \hookrightarrow_P \machT | f }
-           {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT | f}\]
-    \[\frac{\mpstate{\mach_0}{\pol_0} \xrightarrow{\obs} \mpstate{\mach_1}{\pol_1} \hspace{.5cm} f\ \mach_1}
-           {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs}
-            \mpostate{\mach_1}{\pol_1}{\tau} | f}\]
-
-    \COQ{this operation steps until it reaches a state on which \(f\) holds,
-    and is infinite if it doesn't. It doesn't compute the observation of the step after the final,
-    which coq would. So coq may need a ``step until'' relation rather than ``prefix up to''.
-    Still thinking about this.}\leo{So this is strictly weaker than the one we have in Coq, right?
-      So its only the Eager implies Lazy direction that might need tweaking, but not the Test implies Eager one?}
-    \leo{Also, it steps until it reaches an f-state or if the policy raises a fault}
-
-
     We project the machine states from either machine trace with \(\pi_m\) and the observations with \(\pi_o\).
     An observational prefix \(\obsT_1 \lesssim \obsT_2\) means that the trace \(\obsT_1\) of observations is
-    a prefix of \(\obsT_2\) up to the deletion of \(\tau\) observations:
-    \leo{Point out this is coinductive}
+    a prefix of \(\obsT_2\) up to the deletion of \(\tau\) observations (once again, coinductively):
 
     \[\frac{}
            {\obsT \lesssim \obsT}\]
@@ -116,17 +107,9 @@
 
     \[\frac{\obsT_1 = w \obsT_1' \hspace{.5cm} \obsT_2 = w \obsT_2' \hspace{.5cm} \obsT_1' \lesssim \obsT_2'}
            {\obsT_1 \lesssim \obsT_2}\]
-    \leo{Doesn't this case miss the recursive $\obsT_1 \lesssim \obsT_2$ condition?}
-           
-    \COQ{This is the same as the coq version minus a redundant case.}
     
     Equivalence of observation traces is defined as traces prefixing each other:
     \[O_1 \simeq O_2 \triangleq O_1 \lesssim O_2 \land O_2 \lesssim O_1\]
-    
-    \COQ{this should be equivalent to the coq version, and we should adopt it.}
-    \leo{We had this, but it was much harder to work with for my proofs. We should still
-      prove them equivalent if we want to present it this way (which is probably cleaner for
-      presentation purposes)}
 
     We define policy-sensitive observational equivalence, which relates a machine trace and
     an {\it mptrace} whose observable behavior match it, up to a possible halt due to policy failure.
@@ -136,10 +119,7 @@
     
     \[\frac{\isinf(\MPT) \hspace{.5cm} \mathit{Obs}(\MPT) \simeq \mathit{Obs}(\machT)}
            {\MPT \sim_P \machT}\]
-
-    \leo{Oh, I like this version. Should make things cleaner in the top part of my proofs
-      while leaving the hard low-level invariants unaffected.}
-    
+  
   \section{Observable and Eager Stack Safety}
 
     \paragraph*{Call Maps and Returns}
@@ -166,38 +146,36 @@
     \paragraph*{Stack safety}
   
     A stack safety property is a property of a transition system, a policy, and a callmap
-    that is decomposed into an integrity property, a confidentiality property, and a safe
-    initialization property. We will present eager and observational variants of stack safety.
+    that is decomposed into an integrity property and a confidentiality property.
+    We will present eager and observational variants of stack safety.
 
     {\it Eager stack integrity} states that if a function call returns, the caller's stack data
     will be identical to what it was before the call. This implies the weaker {\it observable
     stack integrity}, which states that any changes to the caller's frame will produce the same
     observable behavior.
 
-    {\it Eager stack confidentiality} states that data outside a callee's stack frame is secret,
-    and does not interfere with its observable behavior or with the machine state at return. Its
-    weaker variant {\it observable stack safety} lifts the latter restriction and states that
-    the callee may not leak these secrets directly or by changing the behavior of its caller.
-
-    Finally, {\it safe initialization} deals with the top level outside of a function call, in
-    which uninitiaized data should not interfere with any observable behavior.
-
-    \COQ{safe initialization is implemented differently in each property, since
-     it's really just confidentiality. But because there's no return it's functionally the same.}
+    \sna{Attempt 2...}
+    {\it Observable stack confidentiality} states that data outside a callee's stack frame are secret,
+    and may not interfere with the observable behavior of the program. That is, the callee's behavior must
+    be identical regardless of the configuration of memory outside its frame, and it must not change the
+    program state based on that memory in a way that causes future changes in behavior.
+    {\it Eager stack confidentiality} additionally states that changes the callee makes to the program state
+    must be identical regardless of the configuration of memory.
 
     Our top level properties are {\it eager stack safety} and {\it observable stack safety}:
     \[\begin{split}
       & \textit{observable stack safety} \triangleq \\
       & \textit{observable stack integrity} \land \\
-      & \textit{observable stack confidentiality} \land \\
-      & \textit{safe initialization}
+      & \textit{observable stack confidentiality} \\
     \end{split}\]
     \[\begin{split}
       & \textit{eager stack safety} \triangleq \\
       & \textit{eager stack integrity} \land \\
-      & \textit{eager stack confidentiality} \land \\
-      & \textit{safe initialization}
+      & \textit{eager stack confidentiality} \\
     \end{split}\]
+
+    We will separately introduce confidentiality at the top level, to illustrate it simply before
+    moving into calls. Integrity at the top level is vacuous because there is nothing to protect.
 
   %  We unify these properties with a structure
   %  called a {\it contour} that maps components to levels of confidentiality and integrity.
@@ -205,15 +183,18 @@
   %  and integrity labels \(\mathit{labelI} ::= \{\HIGHINT, \LOWINT\}\), and a
   %  type \(\mathit{contour}\)
 
-    \paragraph{Safe Initialization}
+    \paragraph{Top-level Confidentiality}
 
     \leo{Do we really need safe initialization? Couldn't we just use the definitions of
       integrity and confidentiality for the toplevel, pointing out that since it never
       returns only confidentiality is interesting? Or would we miss something?}
-    
+    \sna{Changed to make it confidentiality, but still introducing contours after. Maybe
+         contours should be before?}
+
       In the initial state of a program, nothing has yet been allocated on the stack, and
       there is no guarantee of the initial value of memory in the stack. So there is no
-      need to protect a caller's stack data, but reading uninitialized data is unsafe.
+      need to protect a caller's stack data, but data above the stack frame
+      (all of memory) are out of scope and uninitialized, and therefore unsafe to read.
 
       Let \(\contour : \COMPONENTS \rightarrow \{\HIGHSEC,\LOWSEC\}\) map all addresses
       to \(\HIGHSEC\) (high confidentiality) and all registers to \(\LOWSEC\)
@@ -221,7 +202,7 @@
       and \(\mach'\) are variants with regard to \(\contour\), \(\mach \approx_\contour \mach'\), if:
       \[\forall \component . \contour(\component) = \LOWSEC \rightarrow \mach(\component) = \mach'(\component)\]
       
-      A system enjoys {\it safe initialization} if for any initial states \(\mach_0\)
+      A system enjoys confidentiality in this case if for any initial states \(\mach_0\)
       and \(\mach_0'\) such that \(\mach_0 \approx_\contour \mach_0'\):
 
       \begin{itemize}
@@ -248,11 +229,10 @@
         (\LOWSEC,\LOWINT) & \text{else} \\
       \end{cases}\]
 
-      Above the stack pointer, memory is high integrity in an extension of safe initialization;
-      from the perspective of the callee, that memory is not initialized. Below the old stack
-      pointer, memory is high integrity and high confidentiality. Registers and the callee's frame
-      are low integrity and low confidentiality. These categories inform our integrity and
-      confidentiality properties.
+      Above the stack pointer, memory is high integrity; from the perspective of the callee, that
+      memory is not initialized. Below the old stack pointer, memory is high integrity and high
+      confidentiality. Registers and the callee's frame are low integrity and low confidentiality.
+      These categories inform our integrity and confidentiality properties.
 
     \paragraph{Eager Integrity}
 
