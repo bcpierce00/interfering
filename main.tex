@@ -183,11 +183,13 @@ Turn this into a positive security property: integrity + confidentiality.
     stack integrity}, which states that any changes to the caller's frame will produce the same
     observable behavior.
 
-    {\it Eager stack confidentiality} states that data outside a callee's stack frame is secret,
-    and does not interfere with its observable behavior or with the machine state at return. Its
-    weaker variant {\it observable stack safety} lifts the latter restriction and states that
-    the callee may not leak these secrets directly or by changing the behavior of its caller.
-
+    Confidentiality is in the style of noninterference, defined on a per-call basis. For each call,
+    the caller's data and the uninitialized stack do not interfere with observable behavior until return.
+    In {\it eager stack confidentiality} this means that when a function is called, the memory outside of
+    its stack frame could be scrambled without changing its observable behavior or the changes it makes
+    to the program state. This implies the weaker {\it observable stack confidentialty} in which
+    inaccessible memory could be scrambled at each call and restored on return without changing the
+    observable behavior of the remaining program.
 
 Challenges?
 Shifting notion of who the attacker is throughout execution.
@@ -284,19 +286,24 @@ machines states, usually denoted $\machT$, and with sequences of
 triples of (machine states, policy states, and observations), usually
 denoted $\MPT$.
 
-\leo{I tried the ? notation for the potentially empty trace, which reveals that
-  we're slightly informal in the second case. Expand?}
-We define the append operation \(T \cdot T?\), where \(T?\) may be a trace or empty (\(\varepsilon\)):
-\[T \cdot T? \triangleq
-  \begin{cases}
-    T & \text{if } T? = \varepsilon \\
-    t T? & \text{if } T = t \\
-    t T' \cdot T? & \text{if } T = t T' \\
-  \end{cases}\]
+We define a few operations on traces generically.
+The {\it split} operation \(\mathit{split}(f,T)\) takes a trace \(T\) and a predicate on elements \(f\) and
+separates \(T\) into a prefix and suffix at the first element on which \(f\) holds:
+  \[\frac{f\ t}
+         {\mathit{split}(f,tT) = t, tT}\]
+  \[\frac{\neg f\ t \hspace{.5cm} \mathit{split}(f,T) = T_1,T_2}
+         {\mathit{split}(f,tT) = tT_1,T_2}\]
+
+The {\it join} operation \(T_1 \cdot T_2\) takes two traces and links them by replacing the last element
+of the first (if it has one) with the first of the second:
+  \[\frac{}
+         {T_1t \cdot T_2 = T_1 T_2}\]
 
 We define the ``trace-of'' operator \(\hookrightarrow\) that coinductively
 relates a machine state with the trace of machine states paired with
 observations produced by repeated application of step:
+\[\machT \in \mathit{MOTrace} = \mathit{Trace}\ (\MACHS \times \OBSS)\]
+\[\hookrightarrow : \machT \rightarrow \mathit{MOTrace}\]
 %
 \[\frac{\mach_0 \stepstoobs{\obs} \mach_1 \hspace{.5cm} \mach_1 \hookrightarrow \machT}
        {\mach_0 \hookrightarrow (\mach_0,\obs) \machT}\]
@@ -304,37 +311,31 @@ observations produced by repeated application of step:
 Since the step function is total, if \(\mach \hookrightarrow \machT\),
 then \(\machT\) must be infinite.
 
-We will also wish to take a prefix of the trace from an initial state
-up through the first state where some condition holds. Let \(f\) be
-such a predicate on machine states.  Then we define \(\mach
-\hookrightarrow \machT | f\) (read ``\(\machT\) is the prefix from
-\(\mach\) until \(f\)''):\leo{Abrupt. Explain in words?}
-    \[\frac{\mach_0 \stepstoobs{\obs} \mach_1 \hspace{.5cm} \neg f\ \mach_1 \hspace{.5cm} \mach_1
-              \hookrightarrow \machT | f}
-           {\mach_0 \hookrightarrow (\mach_0,\obs) \machT | f}\]
-    \[\frac{f\ m}
-           {m \hookrightarrow (m,\tau)}\]
-
+\sna{This is a bit off, because \(f\) is a predicate on machine states, not the pairs (and later triples).
+     Will think about what the best way is to present this.}
+We will also wish to take a prefix of the trace from an initial state up through the first state where
+some condition holds, using {\it split}. Let \(f\) be a predicate on machine states. Then we define
+\(\mach \hookrightarrow \machT | f\) (read ``\(\machT'\) is the prefix of \(\machT\) up to \(f\)''):
+  \[\frac{\mach \hookrightarrow \machT \hspace{.5cm} \mathit{split}(f,\machT) = \machT_1,\machT_2}
+         {\mach \hookrightarrow \machT_1 | f}\]
 
 Similarly, we define \(\hookrightarrow_P\) to relate a machine-policy
 state pair to the trace of triples of machine states, policy states,
 and observations induced by by \(\stepstoobs{}_P\):
 %
 \leo{I think this would read better as not exists. Thoughts?}
-\[\frac{\forall \pol_1 . \pol_0 \not \longrightarrow \pol_1}
-       {\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}}\]
-\[\frac{\mach_0 \stepstoobs{\obs} \mach_1 \hspace{.5cm} \pol_0 \longrightarrow \pol_1 \hspace{.5cm}
-  \mpstate{\mach_1}{\pol_1} \hookrightarrow \machT}
-       {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT}\]
+\sna{Looks good.}
+  \[\MPT \in \mathit{MPOTrace} = \mathit{Trace}\ (\MACHS \times \POLS \times \OBSS)\]
+  \[\hookrightarrow_P : \MACHS \times \POLS \rightarrow \mathit{MPOTrace}\]
+  \[\frac{\neg \exists \pol_1 . \pol_0 \rightharpoonup \pol_1}
+         {\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}}\]
+  \[\frac{\mach_0 \stepstoobs{\obs} \mach_1 \hspace{.5cm} \pol_0 \rightharpoonup \pol_1 \hspace{.5cm}
+            \mpstate{\mach_1}{\pol_1} \hookrightarrow \machT}
+         {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT}\]
 
 We also lift the prefix-up-to relation to such traces.
-\[\frac{\mpstate{\mach_0}{\pol_0} \xrightarrow{\obs} \mpstate{\mach_1}{\pol_1} \hspace{.5cm}
-  \neg f\ \mach_1 \hspace{.5cm} \mpstate{\mach_1}{\pol_1} \hookrightarrow_P \machT | f }
-       {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT | f}\]
-
-\[\frac{\mpstate{\mach_0}{\pol_0} \xrightarrow{\obs} \mpstate{\mach_1}{\pol_1} \hspace{.5cm} f\ \mach_1}
-       {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs}
-         \mpostate{\mach_1}{\pol_1}{\tau} | f}\]
+  \[\frac{\mpstatename \hookrightarrow \MPT \hspace{.5cm} \mathit{split}(f,\MPT) = \MPT_1,\MPT_2}
+         {\mpstatename \hookrightarrow \MPT_1 | f}\]
 
 Finally, we will use \(\pi_m\) to project the trace of machine states
 out of a trace, \(\pi_p\) to project the trace of policy states, and
@@ -383,18 +384,17 @@ We then define equivalence of observation traces as traces prefixing each other:
 %      presentation purposes)}
 
 Let the predicate \(\isinf(T)\) hold when the trace $T$ is infinite.
-We then define {\em policy-sensitive observational equivalence}: a
-machine-policy-observation\leo{Call these MPO traces?} is equivalent
-to a machine-observation trace, if the MPO trace is infinite and the
-observations of MPO and M coincide, or if the MPO trace is finite
-(e.g. due to a policy fault) and its observations are a prefix of
-those of M.
+We then define {\em policy-sensitive observational equivalence}: an
+{\it MPOTrace} \(\MPT\) is equivalent to an {\it MOTrace} trace \(\machT\) if \(\MPT\)
+is infinite and the observations of \(\MPT\) and \(\machT\) coincide, or if the \(\MPT\)
+is finite (due to a policy fault) and its observations are a prefix of those of M.
 
-\leo{Why $\mathit{Obs}$ and not $\pi_o$ defined earlier?}
-\[\frac{\neg \isinf(\MPT) \hspace{.5cm} \mathit{Obs}(\MPT) \lesssim \mathit{Obs}(\machT)}
+% Fixed by Sean
+%\leo{Why $\mathit{Obs}$ and not $\pi_o$ defined earlier?}
+\[\frac{\neg \isinf(\MPT) \hspace{.5cm} \pi_o(\MPT) \lesssim \pi_o(\machT)}
            {\MPT \sim_P \machT}\]
     
-\[\frac{\isinf(\MPT) \hspace{.5cm} \mathit{Obs}(\MPT) \simeq \mathit{Obs}(\machT)}
+\[\frac{\isinf(\MPT) \hspace{.5cm} \pi_o(\MPT) \simeq \pi_o(\machT)}
            {\MPT \sim_P \machT}\]
     
 \section{Stack Safety, Formally}
