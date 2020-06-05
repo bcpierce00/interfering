@@ -532,6 +532,13 @@ in \(\mathit{Cof}(\mach_c,n)\) is \(\HIGHINT\).
 
 \definition{Stack Confidentiality}
 
+Confidentiality is in the style of non-interference, comparing the behavior of
+a program with an arbitrary variant that preserves low confidentiality data but
+may have any configuration of high confidentiality data. We define two machine
+states as variants given a contour if they agree on low confidentiality data:
+  \[\mach \approx_\contour \mach' \triangleq \forall \component .
+    \contour(\component) = \LOWSEC \rightarrow \mach(\component) = \mach'(\component)\]
+
 A system enjoys eager stack confidentiality with respect to a callmap
 \(\callmap\) if, for any initial state \(\mpstatename =
 \mpstate{\mach_0}{\mathit{pinit}(\mach_0,cm)}\), for each call state
@@ -561,101 +568,117 @@ trace from the variant. Then if \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P
 \bcp{Illustrate the definition by using it to discuss a range of ``stack
   unsafety'' examples from the literature. }
 
+
+\sna{Trying to get at why ROP is potentially a problem in non-returning calls
+     with an example.}
+  \paragraph{Non-stack Resources}
+
+    Stack integrity carries an implicit assumption that memory that has
+    become inaccessible should remain so until the correct return state, and
+    therefore that a call that never returns fulfills the requirements of
+    the property. The caller's integrity is not violated until it is able
+    to execute again and finds that its state has changed.
+
+    This assumption might be broken in any number of extended models, such as
+    the addition of heap memory or global variables. Suppose a function \(f\)
+    has some private state associated with it, with a static guarantee that
+    only its instructions access that state. A return oriented programming
+    attack from a caller could modify the private state using the caller's own
+    instructions, and even without returning, if the callee calls \(f\) the
+    modifications will be visible.
+
+    A safety property for such an extended model would extend the contour to
+    determine when the security labels of different classes of components
+    change, and integrity would mean that when a component is low
+    confidentiality, it must have the same value as the last time it was low
+    integrity. Stack integrity is a special case in which a component only
+    moves from high to low integrity on a return.
+
 \section{Lazy Stack Safety}
 
-    \paragraph{Observable Integrity}
+    \definition{Observable Integrity}
 
-      Observable integrity is concerned with the changes a callee makes to high integrity components,
-      and the effects those writes have on the observable behavior of its caller
-      {\it after its return}. Given a contour, a call state, and a returned state, we define
-      a ``rollback'' function \(\mathit{roll}_I : \CONTOURS \times \MACHS \times \MACHS
-      \rightarrow \MACHS\). The rollback creates a state that matches the call
-      state on those components that are high integrity in its contour, and matches the return state
-      on low integrity components:
+      Observable integrity weakens eager integrity by allowing a returned state
+      to differ from its call state at high integrity components, provided the
+      observable behavior of the induced trace from the return matches that of
+      an idealized state whose high integrity components do match the call
+      state.
 
-      \[\mathit{roll}_I(\contour,\mach_c,\mach_r)(\component) =
+      Given a contour, a call state, and a returned state, we define a
+      ``rollback'' function \(\mathit{roll} : \CONTOURS \times \MACHS \times
+      \MACHS \rightarrow \MACHS\). The rollback returns a state that matches
+      the call state on those components that are high integrity in its
+      contour, and matches the return state on low integrity components:
+      \[\mathit{roll}(\contour,\mach_c,\mach_r)(\component) =
       \begin{cases}
         \mach_c(\component) & \contour(\component) = (\HIGHINT,\_) \\
         \mach_r(\component) & \contour(\component) = (\LOWINT,\_) \\
       \end{cases}\]
 
-      Intuitively, the result of a rollback is an idealized state that reflects changes to accessible
-      components, but ignores the callee's interference with the caller's data. Then the observable
-      behavior of the resulting trace is the standard to which we expect any real trace to conform.
+      Intuitively, the result of a rollback is an idealized state that
+      reflects changes to accessible components, but ignores the callee's
+      interference with the caller's data. Then the observable behavior of the
+      resulting trace is the standard to which we expect the real trace to
+      conform.
 
-      A system enjoys observable integrity with regard to \(\callmap\) as follows:
-
-      For any initial state \(\mach_0\), call state \(\mach_c\), and policy state \(\pol_c\) such that
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)} \hookrightarrow ... \mpostate{\mach_c}{\pol_c}{\_} ...\)
-      and \(\callmap(\mach_c) = n\), if \(\mpstate{\mach_c}{\pol_c} \hookrightarrow ...
-        \mpostate{\mach_r}{\pol_r}{\_} | \ret{\mach_c}\):
-
-          \begin{itemize}
-            \item Let \(\contour = \mathit{Cof}(\mach_c,n)\)
-            \item Let \(\mach_r' = \mathit{roll}_I(\contour,\mach_c,\mach_r)\), \(\mpstate{\mach_r}{\pol_r}
-              \hookrightarrow \MPT\), and \(\mach_r' \hookrightarrow \machT'\)
-            \item \(\MPT \sim_P \machT'\)
-          \end{itemize}
-    
-
+      A system enjoys observable integrity with regard to \(\callmap\) if
+      for any initial state \(\mach_0\) and each call state \(\mpstatename =
+      \mpstate{\mach_c}{\pol_c}\) in the trace induced by
+      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\) where \(\callmap(\mach_c)
+      = n\), if there is a return state \(\mpstatename \hookrightarrow \MPT
+      \mpostate{\mach_r}{\pol_r}{\_} | \ret{\mach_c}\), the following holds.
+      Let \(\contour = \mathit{Cof}(\mach_c,n)\) describe the security levels
+      of the call and \(\mach_r' = \mathit{roll}(\contour,\mach_c,\mach_r)\).
+      The induced traces \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT\)
+      and \(\mach_r' \hookrightarrow \machT'\) must be equivalent up to
+      possible policy failure: \(\MPT \sim_P \machT'\).
       
-    \paragraph{Observable Confidentiality}
+    \definition{Observable Confidentiality}
 
-      Observable confidentiality is concerned with whether high confidentiality data influences
-      observable both behavior during and after a call. We define variants given the generalized notion
-      of contours:
-      \[\mach \approx_\contour \mach' \triangleq \forall \component .
-      \contour(\component) = \LOWSEC \rightarrow \mach(\component) = \mach'(\component)\]
-      \leo{Move earlier}
+      Observable confidentiality is concerned with whether high confidentiality
+      data influences observable both behavior during and after a call. As with
+      eager confidentiality, we will compare the behavior of the trace induced
+      by a state to another induced by its variant. But if the original returns,
+      before continuing, we must reset the variant to conform with the original
+      state.
 
-      Data that is high confidentiality within a callee due either to being in its caller's frame
-      will become low confidentiality if the callee returns.\leo{??} We face a subtle distinction: 
-      a callee treats the contents of its caller's frame as secrets, and they should not influence
-      its behavior. Nor should the callee be able to influence behavior after its return based
-      on the caller's secrets, for instance by copying them to registers that will later be output.
-      But the caller itself may still adjust its behavior based on its own secrets. So our property
-      relies on another rollback function to preserve changes made by the caller but remove other
-      differences between variant states.
-
-      In this case, a confidentiality rollback takes a contour and four states: two call states
-      that will be variants, and two return states. It is not symmetric, regarding \(\mach_c\) and \(\mach_r\)
-      as the ``real'' call and return, \(\mach_c'\) as a variant and \(\mach_r'\) as a return that follows it.
-      \[\begin{split}
-        & \mathit{roll}_C(\contour,\mach_c,\mach_c',\mach_r,\mach_r')(\component) = \\
-        & \begin{cases}
-          \mach_c(\component) & \text{if } C(\component) = \HIGHSEC \text{ and } \\
+      The \(\mathit{restore}\) function takes a contour and four states: the
+      original call state, a variant call state, and corresponding return
+      states, and returns another state. The resulting state restores those
+      components that are high confidentiality to match the original call,
+      unless they were changed during execution:
+      \[\mathit{restore}(\contour,\mach_c,\mach_c',\mach_r,\mach_r')(\component) =
+        \begin{cases}
+          \mach_c(\component) & \text{if } \contour(\component) = (\HIGHSEC,\_) \text{ and } \\
                   & \mach_c(\component) = \mach_r(\component) \text{ and }
                     \mach_c'(\component) = \mach_r'(\component) \\
           \mach_r'(\component) & \text{else} \\
-        \end{cases}
-      \end{split}\]
-      \leo{Maybe this should be called unscramble}
+        \end{cases}\]
 
-      A system enjoys observable confidentiality with respect to \(\callmap\) as follows:
+      A system enjoys observable confidentiality with respect to \(\callmap\)
+      if for any initial mpstate \(\mpstatename =
+      \mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), each call state
+      \(\mpostate{\mach_c}{\pol_c}{\_}\) in the induced trace from
+      \(\mpstatename\) where \(\callmap(\mach_c) = n\), and each variant
+      \(\mach_c'\) where \(\mach_c \approx_\contour \mach_c'\) and
+      \(\contour = \mathit{Cof}(\mach_c, n)\), one of two cases holds on the
+      induced traces from \(\mach_c\) and \(\mach_c'\).
 
-      For any initial state \(\mach_0\), call state \(\mach_c\), and policy state \(\pol_c\) such that
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)} \hookrightarrow ... \mpostate{\mach_c}{\pol_c}{\_} ...\) and
-      \(\callmap(\mach_c) = n\):
+      If \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P \MPT_1 | \ret{\mach_c}\)
+      with \(\MPT_1\) the trace within the callee ending with the machine state
+      \(\mach_r\) and policy state \(\pol_r\), the first state to return to the
+      caller, then the trace from the variant until return 
+      \(\mach_c' \hookrightarrow \machT_1 | \ret{\mach_c}\) ends with a return
+      state \(\mach_r'\). Let \(\mach_r'' = \mathit{restore}(\contour,\mach_c,
+      \mach_c',\mach_r,\mach_r')\), and let the induced traces from the
+      returned states be \(\mpstate{\mach_r}{\pol_r} \hookrightarrow_P \MPT_2\)
+      and \(\mach_r'' \hookrightarrow \machT_2\). With the callee and caller
+      traces joined, the traces are observationally equivalent up to policy
+      failures: \(\MPT_1 \cdot \MPT_2 \sim_P \machT_1 \cdot \machT_2\).
 
-      \begin{itemize}
-        \item Let \(\contour = \mathit{Cof}(\mach_c,n)\)
-        \item For all \(\mach_c'\) such that \(\mach_c \approx_C \mach_c'\):
-        \item If \(\mpstate{\mach_c}{p_c} \hookrightarrow \MPT_1 \mpostate{\mach_r}{\pol_r}{\_} | \ret{\mach_c}\)
-          \begin{itemize}
-            \item Then there is some \(\mach_r'\) where
-
-              \(\mach_c' \hookrightarrow \machT_1' (\mach_r',\_) | \ret{\mach_c'}\)
-            \item Let \(\mach_r'' = \mathit{roll}_C(\contour,\mach_c,\mach_r,\mach_c',\mach_r')\),
-
-              \(\mpstate{\mach_r}{p_r} \hookrightarrow \MPT_2\), and \(\mach_r'' \hookrightarrow \machT_2'\)
-            \item \(\MPT_1 \cdot \MPT_2 \sim_P \machT_1' \cdot \machT_2'\)
-          \end{itemize}
-        \item Else, for \(\MPT\) and \(\machT'\) such that \(\mpstate{\mach_c}{\pol_c} \hookrightarrow \MPT\)
-          and \(\mach_c' \hookrightarrow \machT'\), \(\MPT \sim_P \machT'\)
-      \end{itemize}
-
-      \leo{Need to fix append. Maybe call it join. It should remove the last
-        state of left arg}
+      The case in which the induced trace does not return is the same as in the
+      eager property: the variant trace also does not return, and the induced
+      traces are observationally equivalent up to policy failure.
 
 \section{Future Work}
 
