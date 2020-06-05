@@ -340,12 +340,12 @@ observations produced by repeated application of step:
 Since the step function is total, if \(\mach \hookrightarrow \machT\),
 then \(\machT\) must be infinite.
 
-\sna{This is a bit off, because \(f\) is a predicate on machine states, not the pairs (and later triples).
-     Will think about what the best way is to present this.}
+\sna{Lambdas in the split are a bit busy, not sure anything will look better.}
 We will also wish to take a prefix of the trace from an initial state up through the first state where
 some condition holds, using {\it split}. Let \(f\) be a predicate on machine states. Then we define
 \(\mach \hookrightarrow \machT | f\) (read ``\(\machT'\) is the prefix of \(\machT\) up to \(f\)''):
-  \[\frac{\mach \hookrightarrow \machT \hspace{.5cm} \mathit{split}(f,\machT) = \machT_1,\machT_2}
+  \[\frac{\mach \hookrightarrow \machT \hspace{.5cm} \mathit{split}(\lambda (\mach',\obs).f(\mach'),\machT)
+            = \machT_1,\machT_2}
          {\mach \hookrightarrow \machT_1 | f}\]
 
 Similarly, we define \(\hookrightarrow_P\) to relate a machine-policy
@@ -363,7 +363,8 @@ and observations induced by by \(\stepstoobs{}_P\):
          {\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT}\]
 
 We also lift the prefix-up-to relation to such traces.
-  \[\frac{\mpstatename \hookrightarrow \MPT \hspace{.5cm} \mathit{split}(f,\MPT) = \MPT_1,\MPT_2}
+  \[\frac{\mpstatename \hookrightarrow \MPT \hspace{.5cm}
+            \mathit{split}(\lambda \mpostate{\mach}{\pol}{\obs}.f(\mach),\MPT) = \MPT_1,\MPT_2}
          {\mpstatename \hookrightarrow \MPT_1 | f}\]
 
 Finally, we will use \(\pi_m\) to project the trace of machine states
@@ -490,19 +491,30 @@ a map from components to labels:
 \[\contour \in \CONTOURS ::= \COMPONENTS \rightarrow \mathit{label}\]
 
 \leo{What about instructions? Shouldn't they be LC/HI?}
+\sna{We should consider whether applying stack safety to them is right, as
+     opposed to a stronger property. Code could change instructions as long as
+     they're restored before a callee returns. Shenanigans like with ROP would
+     be expected.}
 When \(\mpstate{\mach}{\pol}\) is a call state \(\callmap(\mach) = n\)
 for some \(n\), we can construct a contour based on the bounds of the
-callee's stack frame, as follows:
-\leo{Should the first two cases have a $k \not \in \REGS$?}
+callee's stack frame. Let \(\base \in \WORDS\) be the base of the stack,
+and memory below \(\base\) set aside for code.
+% Fixed. \leo{Should the first two cases have a $k \not \in \REGS$?}
 \[\mathit{Cof}(\mach,n)(\component) =
 \begin{cases}
-  (\HIGHSEC,\HIGHINT) & \text{if } \component \leq \mach(\SP) - n \\
-  (\HIGHSEC,\LOWINT) & \text{if } \component \geq \mach(\SP) \\
+  (\LOWSEC,\HIGHINT) & \text{if } \component \not \in \REGS
+                       \text{ and } \component < \base \\
+  (\HIGHSEC,\HIGHINT) & \text{if } \component \not \in \REGS
+                        \text{ and } \base \leq \component \leq \mach(\SP) - n \\
+  (\HIGHSEC,\LOWINT) & \text{if } \component \not \in \REGS
+                       \text{ and } \component \geq \mach(\SP) \\
   (\LOWSEC,\LOWINT) & \text{else} \\
 \end{cases}\]
+The code section below the stack base is low confidentiality and high
+integrity, as code should be readable but modifiable.
 %
-The private state of the callee is the entire area of the memory below
-the stack pointer, with the exception of the $n$ locations
+The private state of the callee is the entire area of the memory from stack
+base to stack pointer, with the exception of the $n$ locations
 corresponding to the arguments of a call. These components are tagged
 high confidentiality and high integrity: the callee should be able to
 neither read, nor write them.
@@ -516,7 +528,7 @@ Registers and the frame of arguments to the callee are free for the
 callee to use, and are therefore tagged with low integrity and low
 confidentiality. 
 
-\leo{Shouldn't this be a definition instead of a paragraph?}
+%\leo{Shouldn't this be a definition instead of a paragraph?}
 %\paragraph{Integrity}
 
 \definition{Stack Integrity}
