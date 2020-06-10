@@ -42,7 +42,13 @@ Inductive Observation : Type :=
 (* A Machine State can step to a new Machine State plus an Observation. *)
 Parameter step : MachineState -> MachineState * Observation.
 
+Parameter FunID : Type.
+
 Definition CallMap := Value -> option nat.
+
+Definition RetMap := Value -> Prop.
+
+Definition OwnerMap := Value -> FunID -> Prop.
 
 Definition isCall (cm: CallMap) (m: MachineState) (args: nat) : Prop :=
    cm (m (Reg PC)) = Some args.

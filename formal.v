@@ -799,17 +799,6 @@ Hint Constructors FindCall(*_gen*) : core.
 (* Lemma FindCall_mon cm : monotone3 (FindCall_gen cm). Proof. pmonauto. Qed. *)
 (* Hint Resolve FindCall_mon : paco. *)
 
-(* SNA: FindCall via SplitInclusive turns out to work well with other lemmas *)               
-Inductive FindCallMP' (cm: CallMap) : MPTrace -> Contour -> MPTrace -> Prop :=
-| NextCall' : forall C MP MPpre MPsuff args,
-    SplitInclusive (fun mp => isCall cm (ms mp) args) MP MPpre MPsuff ->
-    makeContour args (ms (head MPsuff)) = C ->
-    FindCallMP' cm MP C MPsuff
-| LaterCall' : forall C C' mp MP MP' MPsuff MPcall,
-    FindCallMP' cm MP C MPsuff ->
-    MPsuff = notfinished mp MP' ->
-    FindCallMP' cm MP' C' MPcall ->
-    FindCallMP' cm MP C' MPcall.
 
 Inductive FindCallMP (cm : CallMap) : MPTrace -> Contour -> MPTrace -> Prop :=
 | NextCall : forall C MP MPpre MPsuff args,
@@ -4142,6 +4131,26 @@ the behavior is [1] for both the ideal and actual traces.
 But for confidentegrity, if main's memory varies, sub moves 1 to r1 and stores it
 in main's memory. Then the rollback sets main's memory back to 0. So r1 and r2 will
 not be equal, and the behavior is [0]. So confidentegrity does not hold. *)
+
+(* ********* Well Bracketed Control Flow ******** *)
+
+Definition ControlSeparation (cm:CallMap) (rm:RetMap) (om:OwnerMap) : Prop :=
+  forall m m1 p1 m2 p2 o n,
+    InTrace (m1,p1) (MPTraceOf (m,initPolicyState m cm)) ->
+    step m1 = (m2,o) ->
+    pstep (m1,p1) = Some p2 ->
+    om (m1 (Reg PC)) <> om (m2 (Reg PC)) ->
+    cm (m1 (Reg PC)) = Some n.
+
+(* TODO: make this handle nesting right *)
+Definition Bracketing (cm:CallMap) (rm:RetMap) : Prop :=
+  forall m C mc pc MP mr pr,
+    FindCallMP cm (MPTraceOf (m,initPolicyState m cm)) C (MPTraceOf (mc,pc)) ->
+    SplitInclusive (fun mp => rm ((ms mp) (Reg PC))) (MPTraceOf (mc,pc)) MP (MPTraceOf (mr,pr)) ->
+    isRet mc mr.
+
+Definition WellBracketedControlFlow (cm:CallMap) (rm:RetMap) (om:OwnerMap) : Prop :=
+  ControlSeparation cm rm om /\ Bracketing cm rm.
 
 (*
 
