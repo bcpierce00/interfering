@@ -221,18 +221,19 @@ lacking from the literature, with the notion only being defined
 negatively: through examples of stack unsafety. Two classical examples
 of stack unsafety appear in Figure~\ref{fig:stackunsafety}.
 \leo{Goal: on the left, a bad read; on the right, a bad write.}
+\leo{Do we also need an example of ROP/control flow for the new part?}
 
 A common undertone in such examples is the intention to protect
 callers from callees: a callee should be not be able to access or
 overwrite a caller's private data. In this paper we turn this
-intuition into a formal security property, with an integrity and
-a confidentiality component.
-
-Informally, {\em stack integrity} guarantees that if a function call
-returns, the caller's stack data will be identical to what it was
-before the call. {\em Stack confidentiality} ensures that a callee's
+intuition into a formal security property, with a confidentiality and
+an integrity component.
+%
+Informally, {\em stack confidentiality} ensures that a callee's
 observable behavior is not affected by memory outside its stack frame
-(e.g. a caller's private data or uninitialized memory).
+(e.g. a caller's private data or uninitialized memory).  {\em Stack
+  integrity} guarantees that if a function call returns, the caller's
+stack data will be identical to what it was before the call.
 
 While integrity and confidentiality are relatively standard security
 properties, this setting provides an interesting additional challenge:
@@ -243,10 +244,22 @@ this paper we address this challenge by varying the observation power
 of the attacker at call points, and demonstrate that our policy is
 implementable by pre-existing monitoring mechanisms.
 
+\leo{This will probably need to be fixed depending on what we end up
+  doing}
+%
+A second common concern is to protect the call structure itself: a
+callee should not be allowed to jump to the middle of an arbitrary
+block of code either directly (via a jump instruction) or indirectly
+(by corrupting stack data and returning). In this work we enforce
+well-bracketed control flow by ensuring that code transitions are
+valid based on a statically-known call graph of the
+program. \leo{e.g. provided by the compiler?}
+
 We begin by giving some background in Section~\ref{sec:prelim}.
 Our contributions are:
 \begin{itemize}
-\item A formal property capturing the informal understanding of what ``stack safety'' is.
+\item A formal property capturing the local state encaptulation
+  notion of stack safety.
 \item Evidence that this property is strong enough to capture the folk
 intuition: we show that the stack
   unsafe examples from the literature also fail our property.
@@ -259,6 +272,8 @@ intuition: we show that the stack
   framework.
 \item A lazy version of the property that allows for more efficient/dynamic enforcement.
   Maybe testing.
+\item An extension to this formal property that enforces well-bracketed
+  control flow and an accompanying policy.
 \end{itemize}
 Finally, in Section~\ref{sec:relwork} we discuss related work and
 sketch directions for future work in Section~\ref{sec:future}.
