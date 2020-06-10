@@ -710,6 +710,64 @@ trace from the variant. Then if \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P
       eager property: the variant trace also does not return, and the induced
       traces are observationally equivalent up to policy failure.
 
+\section{Well Bracketed Control Flow}
+
+  Our integrity and confidentiality properties concern themselves with data,
+  and may hold on a wide range of programs that violate expected control flow.
+  But some forms of security rely on protected control flow. In a classic
+  example, a system call that launches a missile might be gated behind code
+  that checks a password. A piece of malicious code might jump into the middle
+  of the sequence and execute the system call without the appropriate password,
+  and still obey integrity if the malicious code never returns to its caller.
+  Even with basic control flow protections, a return oriented programming
+  attack could overwrite the return address to produce the same effect.
+
+  Well bracketed control flow prevents this style of attack by guaranteeing
+  that every jump between functions is either a call or a return, and each
+  return jumps to the instruction after a corresponding call.
+
+  \paragraph*{Separating Code}
+
+    We extend our model with an explicit notion of functions and their code.
+    Each function has an identifier, and the partial function \(\mathit{own}\)
+    maps an address to the function in which it is an instruction.
+    %
+    \[\funid \in \FUNIDS\]
+    %
+    \[\own:\WORDS \rightharpoonup \FUNIDS\]
+
+  \paragraph*{Return Maps}
+  
+    A {\em return map} is analogous to a call map, abstracting the recognition
+    of a state representing the end of a return sequence. In this case
+    \(\retmap \in \RETMAPS\) is a predicate on machine states.
+
+  \definition{Control Separation}
+
+    A system enjoys {\em control separation} with regard to an ownership
+    function \(\own\), a call map \(\callmap\), and a return map \(\retmap\)
+    if for any initial state \(\mach_0\) and any adjacent pair of states
+    \(\mach_1\) and \(\mach_2\) in the induced trace from
+    \(\mpstate{\mach_0}{\pinit(\callmap,\retmap,\mach_0)}\), if \(\own(\mach_1)
+    \not = \own(\mach_2)\), then either \(\callmap(\mach_1) = n\) for some
+    \(n\), or \(\retmap(\mach_1)\).
+
+  \definition{Bracketing}
+  
+    A system enjoys {\em bracketing} with regard to a call map \(\callmap\) and
+    a return map \(\retmap\) if for any initial state \(\mach_0\) and any
+    call state and policy state \(\mach_c\) and \(\pol_c\) in the induced trace
+    from \(\mpstate{\mach_0}{\pinit(\callmap,\retmap,\mach_0)}\), if
+    \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P \MPT \mpostate{\mach'}
+    {\pol'}{\obs'} | \retmap\) and \(\mpstate{\mach'}{\pol'} \stepstoobs{\obs'}
+    \mpstate{\mach_r}{\pol_r}\), then \(\ret{\mach_c,\mach_r}\).
+
+  \definition{Well-bracketed Control Flow}
+
+    A system that enjoys control separation and bracketing with regard to some
+    call map, return map, and ownership function enjoys {\em well-bracketed
+    control flow} with respect to the three.
+
 \section{Related Work}
 \label{sec:relwork}
 
