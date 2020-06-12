@@ -466,190 +466,210 @@ In this section we will describe stack safety as a formal
 property.
 \leo{Should call maps and returns go here or in preliminaries?}
 
-\paragraph*{Call Maps and Returns}
+\paragraph*{Program Structure}
 
-A {\it call map} $\callmap$ identifies machine states that represent a
-call, abstracting away from the calling convention of any concrete
-machine. Formally $\callmap$ is a partial map from machine states to a
-natural number, the number of arguments of that call.
-%
-\[\callmap \in \CALLMAPS = \MACHS \rightharpoonup \mathbb{N}\]
+  Our properties and policies are parameterized by several types of annotations
+  describing features of a program. A {\em code map} identifies some addresses
+  as code and assigns each to a function. A {\em call map} identifies addresses
+  that complete a call sequence, abstracting away from any concrete calling
+  convention. Likewise a {\em return map} identifies addresses that complete a
+  return sequence. An {\em entry map} identifies valid entry points to a
+  function.
 
-For concreteness, in a typical calling convention, a call map may be
-considered to identify the state just before the \(\JAL\), in which
-space for arguments is already allocated, but the mechanism is more
-general.
+  Formally a code map is a partial function from addresses to a function
+  identifier drawn from the set \(\FUNIDS\).
+  %
+  \[\codemap \in \CODEMAPS = \WORDS \rightharpoonup \FUNIDS\]
 
-A state on which a call map is defined is referred to as a {\it call
-  state}, and we consider the call to have returned the first time
-control returns to the instruction following the \(\JAL\) with the
-stack restored. Formally this is a relation between the states:
+  A call map is a partial function from addresses to a natural number,
+  the number of arguments of the call.
+  %
+  \[\callmap \in \CALLMAPS = \WORDS \rightharpoonup \mathbb{N}\]
 
-\[\begin{split}
-\ret{\mach_c}\ \mach_r \triangleq & \mach_r(\PCname) = \nextPC(\mach_c(\PCname)) \land \\
-& \mach_r(\SP) = \mach_c(\SP)
-\end{split}\]
+  For concreteness, in a typical calling convention, a call map may be
+  considered to identify the state just before the \(\JAL\), in which
+  space for arguments is already allocated, but the mechanism is more
+  general. A state in which a call map is defined on the program counter is
+  referred to as a {\it call state}.
+  
+  A return map is simply a predicate on addresses and may be considered to
+  identify the final jump of the return sequence. An entry map is likewise a
+  predicate on addresses.
+  %
+  \[\retmap \in \RETMAPS \subseteq \WORDS\]
+  \[\entmap \in \ENTMAPS \subseteq \WORDS\]
+
+\paragraph*{State Returns}
+
+  We separately identify, for any call state, what is means for a state to
+  have correctly returned from a call. We consider the call to have returned
+  the first time control returns to the instruction following the \(\JAL\) with
+  the stack restored. Formally this is a relation between the states:
+    
+  \[\begin{split}
+    \ret{\mach_c}\ \mach_r \triangleq & \mach_r(\PCname) =
+    \nextPC(\mach_c(\PCname)) \land \\
+    & \mach_r(\SP) = \mach_c(\SP)
+  \end{split}\]
 
 \leo{How do we initialize the first policy state based on a call map? It's not
   part of the policy. Do we parameterize policies?}
 
 \paragraph*{Stack safety}
-
-A stack safety property is a property of a transition system, a
-policy, and a callmap that is decomposed into an integrity property and a
-confidentiality property.
+  
+  A stack safety property is a property of a transition system, a policy, a
+  call map and a code map, that is decomposed into an integrity property and a
+  confidentiality property.
 
     \[\begin{split}
-      \textit{stack safety} \triangleq \textit{stack integrity} \land \textit{stack confidentiality} \\
+      \textit{stack safety} \triangleq \textit{stack integrity} \land
+      \textit{stack confidentiality} \\
     \end{split}\]
 
-\leo{TODO: Rephrase from introduction} Informally, {\it Stack
+  \leo{TODO: Rephrase from introduction} Informally, {\it Stack
   integrity} states that if a function call returns, the caller's
-private stack data will be identical to what it was before the
-call. {\it Stack confidentiality} states that data outside a callee's
-stack frame is secret, and do not interfere with its observable
-behavior or with the machine state at return.
+  private stack data will be identical to what it was before the
+  call. {\it Stack confidentiality} states that data outside a callee's
+  stack frame is secret, and do not interfere with its observable
+  behavior or with the machine state at return.
 
-As is standard with security properties, we associate with each
-component of the machine a {\em label}: a pair of security levels
-denoting high or low confidentiality and high or low integrity.
-%
-\[\mathit{label} ::= \{\HIGHSEC,\LOWSEC\} \times \{\HIGHINT,\LOWINT\}\]
-%
-Since we need to enforce integrity and confidentiality at {\em every}
-function call in a trace, we must treat the security level of data
-dynamically. To that end, we introduce the notion of a {\em contour},
-a map from components to labels:
-%
-\[\contour \in \CONTOURS ::= \COMPONENTS \rightarrow \mathit{label}\]
+  As is standard with security properties, we associate with each
+  component of the machine a {\em label}: a pair of security levels
+  denoting high or low confidentiality and high or low integrity.
+  %
+  \[\mathit{label} ::= \{\HIGHSEC,\LOWSEC\} \times \{\HIGHINT,\LOWINT\}\]
+  %
+  Since we need to enforce integrity and confidentiality at {\em every}
+  function call in a trace, we must treat the security level of data
+  dynamically. To that end, we introduce the notion of a {\em contour},
+  a map from components to labels:
+  %
+  \[\contour \in \CONTOURS ::= \COMPONENTS \rightarrow \mathit{label}\]
 
-\leo{What about instructions? Shouldn't they be LC/HI?}
-\sna{We should consider whether applying stack safety to them is right, as
-     opposed to a stronger property. Code could change instructions as long as
-     they're restored before a callee returns. Shenanigans like with ROP would
-     be expected.}
-When \(\mpstate{\mach}{\pol}\) is a call state \(\callmap(\mach) = n\)
-for some \(n\), we can construct a contour based on the bounds of the
-callee's stack frame. Let \(\base \in \WORDS\) be the base of the stack,
-and memory below \(\base\) set aside for code.
-% Fixed. \leo{Should the first two cases have a $k \not \in \REGS$?}
-\[\mathit{Cof}(\mach,n)(\component) =
-\begin{cases}
-  (\LOWSEC,\HIGHINT) & \text{if } \component \not \in \REGS
-                       \text{ and } \component < \base \\
-  (\HIGHSEC,\HIGHINT) & \text{if } \component \not \in \REGS
-                        \text{ and } \base \leq \component \leq \mach(\SP) - n \\
-  (\HIGHSEC,\LOWINT) & \text{if } \component \not \in \REGS
-                       \text{ and } \component \geq \mach(\SP) \\
-  (\LOWSEC,\LOWINT) & \text{else} \\
-\end{cases}\]
-The code section below the stack base is low confidentiality and high
-integrity, as code should be readable but modifiable.
-%
-The private state of the callee is the entire area of the memory from stack
-base to stack pointer, with the exception of the $n$ locations
-corresponding to the arguments of a call. These components are tagged
-high confidentiality and high integrity: the callee should be able to
-neither read, nor write them.
-%
-Everything above the stack pointer at the point of the call is
-``uninitialized'' memory that can be written into but should not be
-read. To protect the callee itself from such reads, these components
-are marked high confidentiality and low integrity.
-%
-Registers and the frame of arguments to the callee are free for the
-callee to use, and are therefore tagged with low integrity and low
-confidentiality.
+  \leo{What about instructions? Shouldn't they be LC/HI?}
+  \sna{Now we are dealing with this!}
 
-%\leo{Shouldn't this be a definition instead of a paragraph?}
-%\paragraph{Integrity}
+  When \(\mach_c\) is a call state \(\callmap(\mach(\PCname)) = n\) for some
+  \(n\) and \(\mach_c \stepstoobs{\obs} \mach_e\), we can construct a contour
+  based on the bounds of the callee's stack frame. Instructions are low
+  confidentiality if they belong to the callee and high confidentiality
+  otherwise; regardless they are always high integrity.
+ 
+  The private state of the callee is the entire area of the memory from stack
+  base to stack pointer, with the exception of the $n$ locations
+  corresponding to the arguments of a call. Private components are marked
+  high confidentiality and high integrity: the callee should be able to
+  neither read, nor write them.
+  
+  Everything above the stack pointer at the point of the call is
+  ``uninitialized'' memory that can be written into but should not be
+  read. To protect the callee itself from such reads, these components
+  are marked high confidentiality and low integrity.
+ 
+  Registers and the frame of arguments to the callee are free for the
+  callee to use, and are therefore tagged with low integrity and low
+  confidentiality. 
+
+ \[\mathit{Cof}(\mach,\funid,n)(\component) =
+  \begin{cases}
+    (\LOWSEC,\HIGHINT) & \text{if } \component \in \WORDS
+                         \text{ and } \codemap(\component) = \codemap(\mach(\PCname)) \\
+    (\HIGHSEC,\HIGHINT) & \text{if } \component \in \WORDS
+                          \text{ and } \codemap(\component) = \funid \not = \codemap(\mach(\PCname)) \\
+    (\HIGHSEC,\HIGHINT) & \text{if } \component \in \WORDS \text{ and } \codemap(\component) = \bot
+                          \text{ and } \component \leq \mach(\SP) - n \\
+    (\HIGHSEC,\LOWINT) & \text{if } \component \in \WORDS \text{ and } \codemap(\component) = \bot
+                         \text{ and } \component \geq \mach(\SP) \\
+    (\LOWSEC,\LOWINT) & \text{else} \\
+  \end{cases}\]
 
 \definition{Stack Integrity}
 
-A system satisfies integrity with respect to a callmap \(\callmap\)
-if for any initial mpstate \(\mpstatename =
-\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\) and each call state
-\(\mpostate{\mach_c}{\pol_c}{\_}\) in the induced trace from \(\mpstatename\)
-where \(\callmap(\mach_c) = n\), if we take the prefix from
-\(\mpstate{\mach_c}{\pol_c}\) until \(\ret{\mach_c}\) holds on some
-\(\mach_p\), \(\mach_p\) matches \(\mach_c\) on each component whose integrity
-in \(\mathit{Cof}(\mach_c,n)\) is \(\HIGHINT\).
+  A system satisfies eager stack integrity with respect to a call map
+  \(\callmap\) and code map \(\codemap\) if for any initial mpstate
+  \(\mpstatename = \mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\) and each
+  adjacent pair of a call state \(\mach_c\) and state \(\mach_e\) with policy
+  state \(\pol_e\) in the induced trace from \(\mpstatename\), where
+  \(\callmap(\mach_c(\PCname)) = n\) and \(\codemap(\mach_e(\PCname)) =
+  \funid\), if we take the prefix until a return
+  \(\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT | \ret{\mach_c}\) and
+  \(\MPT\) ends with some \(\mach_p\), \(\mach_p\) matches \(\mach_c\) on each
+  component whose integrity in \(\mathit{Cof}(\mach_c,\funid,n)\) is
+  \(\HIGHINT\).
 
 \definition{Stack Confidentiality}
 
-Confidentiality is in the style of non-interference, comparing the behavior of
-a program with an arbitrary variant that preserves low confidentiality data but
-may have any configuration of high confidentiality data. We define two machine
-states as variants given a contour if they agree on low confidentiality data:
+  Confidentiality is in the style of non-interference, comparing the behavior
+  of a program with an arbitrary variant that preserves low confidentiality data
+  but may have any configuration of high confidentiality data. We define two
+  machine states as variants given a contour if they agree on low
+  confidentiality data:
   \[\mach \approx_\contour \mach' \triangleq \forall \component .
-    \contour(\component) = \LOWSEC \rightarrow \mach(\component) = \mach'(\component)\]
+    \contour(\component) = \LOWSEC \rightarrow \mach(\component) =
+    \mach'(\component)\]
 
-A system enjoys eager stack confidentiality with respect to a callmap
-\(\callmap\) if, for any initial state \(\mpstatename =
-\mpstate{\mach_0}{\mathit{pinit}(\mach_0,cm)}\), for each call state
-\(\mpostate{\mach_c}{\pol_c}{\_}\) in the induced trace from \(\mpstatename\)
-where \(\callmap(\mach_c) = n\) and each variant \(\mach_c'\) such that
-\(\mach_c \approx_\contour \mach_c'\) for \(\contour = Cof(\mach_c, n)\),
-one of two cases holds.
+  A system satisfies eager stack confidentiality with respect to a call map
+  \(\callmap\) and code map \(\codemap\) if for any initial mpstate
+  \(\mpstatename = \mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\) and each
+  adjacent pair of a call state \(\mach_c\) and state \(\mach_e\) with policy
+  state \(\pol_e\) in the induced trace from \(\mpstatename\), where
+  \(\callmap(\mach_c(\PCname)) = n\) and \(\codemap(\mach_e(\PCname)) =
+  \funid\), one of two cases holds on the induced traces from
+  \(\mpstate{\mach_e}{\pol_e}\) and any variation \(\mach_e'\) with respect
+  to the contour \(\mathit{Cof}(\mach_c,\funid,n)\).
 
-If the trace from the call reaches a return -- \(\mpstate{\mach_c}{\pol_c}
-\hookrightarrow_P \MPT \mpostate{\mach_r}{\pol_r}{\_} | \ret{\mach_c}\) --
-then the trace from the variant \(\mach_c'\) reaches a return --
-\(\mach_c' \hookrightarrow \machT (\mach_r',\_) | \ret{\mach_c}\).
-\(\MPT\) and \(\machT\) are observationally equivalent, \(\pi_o(\MPT) \eqsim
-\pi_o(\machT)\). For any component \(\component\) that changed between
-\(\mach_c\) and \(\mach_r\), or between \(\mach_c'\) and \(\mach_r'\),
-\(\mach_r\) agrees with \(\mach_r'\) on \(\component\).
+  If the trace from the call reaches a return -- \(\mpstate{\mach_e}{\pol_e}
+  \hookrightarrow_P \MPT | \ret{\mach_c}\) -- then the trace from the variant
+  \(\mach_e'\) reaches a return -- \(\mach_e' \hookrightarrow \machT |
+  \ret{\mach_c}\). Let \(\mach_r\) and \(\mach_r'\) be the final states of
+  \(\pi_m(\MPT)\) and \(\machT\), respectively. Until their final states,
+  \(\MPT\) and \(\machT\) must be observationally equivalent, \(\pi_o(\MPT)
+  \cdot \tau \eqsim \pi_o(\machT) \cdot \tau\). For any component
+  \(\component\) where \(\mach_e(\component) \not = \mach_r(\component)\) or
+  \(\mach_e'(\component) \not = \mach_r'(\component)\),
+  \(\mach_r\) agrees with \(\mach_r'\) on \(\component\).
 
-If the trace from the call never reaches a return, neither does the
-trace from the variant. Then if \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P
-\MPT\) and \(\mach_c' \hookrightarrow \machT\), \(\MPT \sim_P \machT\).
+  If the trace from the call never reaches a return, neither does the
+  trace from the variant. Then if \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P
+  \MPT\) and \(\mach_c' \hookrightarrow \machT\), \(\MPT \sim_P \machT\).
 
-      \leo{Think more about whether we vary mc or step mc}
-      \leo{Also, words}
+  \leo{Think more about whether we vary mc or step mc}
+  \sna{With code, it must be step mc}
 
-      \section{Discussion}
+\section{Discussion}
 
-\paragraph{Examples}
+  \paragraph{Examples}
 
-\bcp{Illustrate the definition by using it to discuss a range of ``stack
-  unsafety'' examples from the literature. }
+  \bcp{Illustrate the definition by using it to discuss a range of ``stack
+    unsafety'' examples from the literature. }
 
-\sna{Trying to get at why ROP is potentially a problem in non-returning calls
-     with an example.}
+  \paragraph{What about tail recursion and other non-stack-like control flow}
 
-\paragraph{What about tail recursion and other non-stack-like control flow}
+  \paragraph{Control Hijacking and Well-bracketed Control Flow}
+  
+    Some forms of security rely on protected control flow. In a classic
+    example, a system call that launches a missile might be gated behind code
+    that checks a password. A piece of malicious code might jump into the middle
+    of the sequence and execute the system call without the appropriate password,
+    and still obey integrity if the malicious code never returns to its caller.
+    Integrity here protects data, not privileges. But such a jump does violate
+    eager stack confidentiality if the attacker jumps beyond its own function's
+    instructions without performing a designated call or returning to an
+    appropriate site.
 
-\paragraph{What about well-bracketed control flow?}
+    A jump to a function's own code does not violate either, even if done using
+    nefarious means such as return-oriented programming (ROP). Our model would
+    permit such a jump within the function, so privilege is not elevated by
+    permitting ROP in this case.
 
-Andrew thinks it's mostly orthogonal...?
+    But, our policies do enforce orthogonal control flow properties that
+    protect from calls that enter outside of valid entry points and from all
+    invalid returns, even if they would not escalate privilege. Most notably
+    {\em well-bracketed control flow}, below.
 
-\paragraph{Adding Heap Safety}
+  \paragraph{Adding Heap Safety}
 
-Discuss how we would do it, referring to Arthur's paper.  Probably not very long or formal?
-
-\paragraph{Non-stack Resources}
-
-Stack integrity carries an implicit assumption that memory that has
-become inaccessible should remain so until the correct return state, and
-therefore that a call that never returns fulfills the requirements of
-the property. The caller's integrity is not violated until it is able
-to execute again and finds that its state has changed.
-
-This assumption might be broken in any number of extended models, such as
-the addition of heap memory or global variables. Suppose a function \(f\)
-has some private state associated with it, with a static guarantee that
-only its instructions access that state. A return oriented programming
-attack from a caller could modify the private state using the caller's own
-instructions, and even without returning, if the callee calls \(f\) the
-modifications will be visible.
-
-A safety property for such an extended model would extend the contour to
-determine when the security labels of different classes of components
-change, and integrity would mean that when a component is low
-confidentiality, it must have the same value as the last time it was low
-integrity. Stack integrity is a special case in which a component only
-moves from high to low integrity on a return.
+    Discuss how we would do it, referring to Arthur's paper.  Probably not very long or formal?
 
 \section{Lazy Stack Safety}
 
@@ -678,16 +698,21 @@ moves from high to low integrity on a return.
       resulting trace is the standard to which we expect the real trace to
       conform.
 
-      A system enjoys observable integrity with regard to \(\callmap\) if
-      for any initial state \(\mach_0\) and each call state \(\mpstatename =
-      \mpstate{\mach_c}{\pol_c}\) in the trace induced by
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\) where \(\callmap(\mach_c)
-      = n\), if there is a return state \(\mpstatename \hookrightarrow \MPT
-      \mpostate{\mach_r}{\pol_r}{\_} | \ret{\mach_c}\), the following holds.
-      Let \(\contour = \mathit{Cof}(\mach_c,n)\) describe the security levels
-      of the call and \(\mach_r' = \mathit{roll}(\contour,\mach_c,\mach_r)\).
-      The induced traces \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT\)
-      and \(\mach_r' \hookrightarrow \machT'\) must be equivalent up to
+      A system enjoys observable integrity with regard to \(\callmap\) and 
+      \(\codemap\) if for any initial state \(\mach_0\) and each adjacent pair
+      of a call state \(\mach_c\) and a state \(\mach_e\) with policy state
+      \(\pol_e\) in the trace induced by
+      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\) where
+      \(\callmap(\mach_c) = n\) and \(\codemap(\mach_e) = \funid\),
+      if \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_c}\)
+      with the return state \(\mach_r\) at the end of \(\MPT\), then the
+      following holds.
+
+      Let \(\contour = \mathit{Cof}(\mach_c,\funid,n)\) describe the security
+      levels of the call and
+      \(\mach_r' = \mathit{roll}(\contour,\mach_e,\mach_r)\). The induced
+      traces \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT\) and
+      \(\mach_r' \hookrightarrow \machT'\) must be equivalent up to
       possible policy failure: \(\MPT \sim_P \machT'\).
 
     \definition{Observable Confidentiality}
@@ -713,21 +738,21 @@ moves from high to low integrity on a return.
         \end{cases}\]
 
       A system enjoys observable confidentiality with respect to \(\callmap\)
-      if for any initial mpstate \(\mpstatename =
-      \mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), each call state
-      \(\mpostate{\mach_c}{\pol_c}{\_}\) in the induced trace from
-      \(\mpstatename\) where \(\callmap(\mach_c) = n\), and each variant
-      \(\mach_c'\) where \(\mach_c \approx_\contour \mach_c'\) and
-      \(\contour = \mathit{Cof}(\mach_c, n)\), one of two cases holds on the
-      induced traces from \(\mach_c\) and \(\mach_c'\).
+      and \(\codemap\) if for any initial state \(\mach_0\), each adjacent pair
+      of a call state \(\mach_c\) and a state \(\mach_e\) with policy state
+      \(\pol_e\) in the inducted trace from
+      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), and each variant
+      \(\mach_e' \approx_\contour \mach_e'\) where
+      \(\contour = \mathit{Cof}(\mach_c, \funid, n)\), one of two cases holds
+      on the induced traces from \(\mach_e\) and \(\mach_e'\).
 
-      If \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P \MPT_1 | \ret{\mach_c}\)
+      If \(\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT_1 | \ret{\mach_c}\)
       with \(\MPT_1\) the trace within the callee ending with the machine state
-      \(\mach_r\) and policy state \(\pol_r\), the first state to return to the
-      caller, then the trace from the variant until return
-      \(\mach_c' \hookrightarrow \machT_1 | \ret{\mach_c}\) ends with a return
-      state \(\mach_r'\). Let \(\mach_r'' = \mathit{restore}(\contour,\mach_c,
-      \mach_c',\mach_r,\mach_r')\), and let the induced traces from the
+      \(\mach_r\), the first state to return to the caller, and policy state
+      \(\pol_r\), then the there is a return state \(\mach_r'\) reached by the
+      trace from the variant, \(\mach_c' \hookrightarrow \machT_1 |
+      \ret{\mach_c}\). Let \(\mach_r'' = \mathit{restore}(\contour,\mach_e,
+      \mach_e',\mach_r,\mach_r')\), and let the induced traces from the
       returned states be \(\mpstate{\mach_r}{\pol_r} \hookrightarrow_P \MPT_2\)
       and \(\mach_r'' \hookrightarrow \machT_2\). With the callee and caller
       traces joined, the traces are observationally equivalent up to policy
@@ -737,63 +762,69 @@ moves from high to low integrity on a return.
       eager property: the variant trace also does not return, and the induced
       traces are observationally equivalent up to policy failure.
 
-\section{Well Bracketed Control Flow}
+    \definition{Observable Stack Safety}
+
+      A system enjoys {\em observable stack safety} with regard to a call map
+      and a code map if it enjoys both observable integrity and observable
+      confidentiality with regard to them.
+
+\section{Well-bracketed Control Flow}
 
   Our integrity and confidentiality properties concern themselves with data,
   and may hold on a wide range of programs that violate expected control flow.
-  But some forms of security rely on protected control flow. In a classic
-  example, a system call that launches a missile might be gated behind code
-  that checks a password. A piece of malicious code might jump into the middle
-  of the sequence and execute the system call without the appropriate password,
-  and still obey integrity if the malicious code never returns to its caller.
-  Even with basic control flow protections, a return oriented programming
-  attack could overwrite the return address to produce the same effect.
-
-  Well bracketed control flow prevents this style of attack by guaranteeing
+  But well-bracketed control flow prevents this style of attack by guaranteeing
   that every jump between functions is either a call or a return, and each
   return jumps to the instruction after a corresponding call.
 
-  \paragraph*{Separating Code}
-
-    We extend our model with an explicit notion of functions and their code.
-    Each function has an identifier, and the partial function \(\mathit{own}\)
-    maps an address to the function in which it is an instruction.
-    %
-    \[\funid \in \FUNIDS\]
-    %
-    \[\own:\WORDS \rightharpoonup \FUNIDS\]
-
-  \paragraph*{Return Maps}
-  
-    A {\em return map} is analogous to a call map, abstracting the recognition
-    of a state representing the end of a return sequence. In this case
-    \(\retmap \in \RETMAPS\) is a predicate on machine states.
-
   \definition{Control Separation}
 
-    A system enjoys {\em control separation} with regard to an ownership
-    function \(\own\), a call map \(\callmap\), and a return map \(\retmap\)
+    A system enjoys {\em control separation} with regard to a code map
+    \(\codemap\), a call map \(\callmap\), and a return map \(\retmap\)
     if for any initial state \(\mach_0\) and any adjacent pair of states
     \(\mach_1\) and \(\mach_2\) in the induced trace from
-    \(\mpstate{\mach_0}{\pinit(\callmap,\retmap,\mach_0)}\), if \(\own(\mach_1)
-    \not = \own(\mach_2)\), then either \(\callmap(\mach_1) = n\) for some
-    \(n\), or \(\retmap(\mach_1)\).
+    \(\mpstate{\mach_0}{\pinit(\mach_0)}\), if \(\codemap(\mach_1(\PCname))
+    \not = \codemap(\mach_2)\), then either \(\callmap(\mach_1(\PCname)) = n\)
+    for some \(n\), or \(\retmap(\mach_1)\).
 
-  \definition{Bracketing}
-  
-    A system enjoys {\em bracketing} with regard to a call map \(\callmap\) and
-    a return map \(\retmap\) if for any initial state \(\mach_0\) and any
-    call state and policy state \(\mach_c\) and \(\pol_c\) in the induced trace
-    from \(\mpstate{\mach_0}{\pinit(\callmap,\retmap,\mach_0)}\), if
-    \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P \MPT \mpostate{\mach'}
-    {\pol'}{\obs'} | \retmap\) and \(\mpstate{\mach'}{\pol'} \stepstoobs{\obs'}
-    \mpstate{\mach_r}{\pol_r}\), then \(\ret{\mach_c,\mach_r}\).
+  \definition{Entry Integrity}
+
+    A system enjoys {\em entry integrity} with regard to a call map
+    \(\callmap\) and entry map \(\entmap\) if for any initial state
+    \(\mach_0\) and any adjacent pair of states \(\mach_c\) and \(\mach_e\)
+    in the induced trace from \(\mpstate{\mach_0}{\pinit(\mach_0)}\), if
+    \(\callmap(\mach_c(\PCname)) = n\) then \(\entmap(\mach_e)\).
 
   \definition{Well-bracketed Control Flow}
 
-    A system that enjoys control separation and bracketing with regard to some
-    call map, return map, and ownership function enjoys {\em well-bracketed
-    control flow} with respect to the three.
+    Well-bracketed control flow captures the expected behavior of marked
+    returns with regard to their call points. The coinductive {\em bracketing}
+    predicate, \(\mathit{BR}(\machT)\), is parameterized by a call map
+    \(\callmap\) and a return map \(\retmap\):
+
+    \[\frac{\mathit{BR}(\machT) \hspace{.5cm} \callmap(\mach_c(\PCname)) = n
+              \hspace{.5cm} \retmap(\mach_c(\PCname))}
+           {\mathit{BR}(\mach_c \machT \mach_r)}\]
+    
+    \[\frac{\mathit{BR}(\machT) \hspace{.5cm} \callmap(\mach(\PCname)) = \bot}
+           {\mathit{BR}(\mach \machT)}\]
+
+    A system enjoys {\em well-bracketed control flow} with regard to a call map
+    \(\callmap\) and return map \(\retmap\) if for any initial state
+    \(\mach_0\) and any call state and policy state \(\mach_c\) and \(\pol_c\)
+    in the induced trace from \(\mpstate{\mach_0}{\pinit(\mach_0)}\), if
+    \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P \MPT \mpostate{\mach'}
+    {\pol'}{\obs'} ...\) and \(\MPT\) is bracketed with regard to \(\callmap\)
+    and \(\retmap\), then \(\ret{\mach_c,\mach'}\).
+
+  \definition{Standard Stack Control Flow}
+
+    The above properties are somewhat orthogonal, but together they capture a
+    standard notion of control flow for a stack: functions keep their code
+    separate outside of calls and returns, calls respect explicit entry points,
+    and returns respect implicit entry points corresponding to their call.
+    A system that enjoys them with regard to a code, a call, a return, and an
+    entry map is said to enjoy {\em standard stack control flow} with regard to
+    those maps.
 
 \section{Related Work}
 \label{sec:relwork}
