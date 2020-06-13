@@ -44,21 +44,27 @@ Parameter step : MachineState -> MachineState * Observation.
 
 Parameter FunID : Type.
 
-Definition CallMap := Value -> option nat.
+Definition CallMap := Addr -> option nat.
 
-Definition RetMap := Value -> Prop.
+Definition RetMap := Addr -> Prop.
 
-Definition OwnerMap := Value -> FunID -> Prop.
+Definition EntryMap := Addr -> Prop.
+
+Definition CodeMap := Addr -> FunID -> Prop.
+
+Parameter isCode : CodeMap -> Addr -> bool.
+
+Definition ProgramMap := CallMap * RetMap * EntryMap * CodeMap : Type.
 
 Definition isCall (cm: CallMap) (m: MachineState) (args: nat) : Prop :=
    cm (m (Reg PC)) = Some args.
 
-Definition isRet (mc m: MachineState) : Prop :=
+Definition justRet (mc m: MachineState) : Prop :=
   m (Reg PC) = wplus (mc (Reg PC)) 4 /\ m (Reg SP) = mc (Reg SP).
 
-Definition isRet_dec mc m : {isRet mc m} + {~ isRet mc m}.
+Definition justRet_dec mc m : {justRet mc m} + {~ justRet mc m}.
 Proof.
-  unfold isRet.
+  unfold justRet.
   destruct (WordEqDec (m (Reg PC)) (wplus (mc (Reg PC)) 4));
     destruct (WordEqDec (m (Reg SP)) (mc (Reg SP)));
     try solve [left; auto];
@@ -68,7 +74,7 @@ Qed.
 Parameter PolicyState : Type.
 Parameter pstep : MachineState * PolicyState -> option PolicyState.
 (* TODO: Does this ever fail? *)
-Parameter initPolicyState : MachineState -> CallMap -> PolicyState.
+Parameter initPolicyState : MachineState -> ProgramMap -> PolicyState.
 
 (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.

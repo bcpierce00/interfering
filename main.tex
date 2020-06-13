@@ -794,36 +794,67 @@ property.
     in the induced trace from \(\mpstate{\mach_0}{\pinit(\mach_0)}\), if
     \(\callmap(\mach_c(\PCname)) = n\) then \(\entmap(\mach_e)\).
 
-  \definition{Well-bracketed Control Flow}
+  \definition{Return Integrity}
 
-    Well-bracketed control flow captures the expected behavior of marked
-    returns with regard to their call points. The coinductive {\em bracketing}
-    predicate, \(\mathit{BR}(\machT)\), is parameterized by a call map
-    \(\callmap\) and a return map \(\retmap\):
+    Return integrity captures the expected behavior of marked returns with
+    regard to their call points. We begin by defining a coinductive relation
+    \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT_1 \MPT_2\). Given a call map
+    \(\callmap\) and return map \(\retmap\), \(\MPT\) is related to
+    \(\MPT'\) if \(\MPT'\) is a suffix of \(\MPT\) whose head is the first
+    unmatched return in \(\MPT\). So if \(\MPT\) starts with a return,
+    it is related to itself:
+%
+    \[\frac{\callmap(\mach(\PCname)) = \bot
+              \hspace{.5cm} \retmap(\mach(\PCname))}
+           {\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\ 
+              \mpstate{\mach}{\pol}}\]
+    \[\frac{\callmap(\mach(\PCname)) = \bot
+              \hspace{.5cm} \retmap(\mach(\PCname))}
+           {\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\MPT\ 
+              \mpstate{\mach}{\pol}\MPT}\]
+%
+    If \(\MPT\) starts with a non-call, non-return state, its unmatched
+    return must come later:
+%
+    \[\frac{\begin{split}
+            & \callmap(\mach(\PCname)) = \bot
+              \hspace{.5cm} \neg \retmap(\mach(\PCname)) \\
+            & \mathit{Unmatched}\ \callmap\ \retmap\ \MPT\ \MPT'
+            \end{split}}
+           {\mathit{Unmatched}\ \callmap\ \retmap\ 
+            \mpstate{\mach}{\pol}\MPT\ \MPT'}\]
+%   
+    And most intricately, if \(\MPT\) starts with a call, we must find the
+    return that matches it, which will be the unmatched return once we step
+    past the call. Then the first unmatched return beyond it is the true
+    unmatched return.
+    \[\frac{\begin{split}
+            & \callmap(\mach(\PCname)) = n
+              \hspace{.5cm} \neg \retmap(\mach(\PCname)) \\
+            & \MPT = \mpstate{\mach}{\pol} \MPT_{\mathit{call}} \\
+            & \mathit{Unmatched}\ \callmap\ \retmap\ \MPT_{\mathit{call}}\ \MPT_{\mathit{matched}} \\
+            & \MPT_{\mathit{matched}} = \mpstate{\mach'}{\pol'} \MPT_{\mathit{tail}} \\
+            & \mathit{Unmatched}\ \callmap\ \retmap\ \MPT_{\mathit{tail}}\ \MPT_{\mathit{unmatched}} \\
+            \end{split}}
+            {\mathit{Unmatched}\ \callmap\ \retmap\ \MPT\ \MPT_{\mathit{unmatched}}}\]
 
-    \[\frac{\mathit{BR}(\machT) \hspace{.5cm} \callmap(\mach_c(\PCname)) = n
-              \hspace{.5cm} \retmap(\mach_c(\PCname))}
-           {\mathit{BR}(\mach_c \machT \mach_r)}\]
-    
-    \[\frac{\mathit{BR}(\machT) \hspace{.5cm} \callmap(\mach(\PCname)) = \bot}
-           {\mathit{BR}(\mach \machT)}\]
-
-    A system enjoys {\em well-bracketed control flow} with regard to a call map
+    A system enjoys {\em return integrity} with regard to a call map
     \(\callmap\) and return map \(\retmap\) if for any initial state
     \(\mach_0\) and any call state and policy state \(\mach_c\) and \(\pol_c\)
     in the induced trace from \(\mpstate{\mach_0}{\pinit(\mach_0)}\), if
-    \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P \MPT \mpostate{\mach'}
-    {\pol'}{\obs'} ...\) and \(\MPT\) is bracketed with regard to \(\callmap\)
-    and \(\retmap\), then \(\ret{\mach_c,\mach'}\).
+    \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P \MPT\) and \(\mach_r\) is the
+    first unmatched return, with \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT
+    \ \MPT'\) and \(\mach_r\) the first machine state of \(\MPT'\),
+    then \(\ret{\mach_c}\ \mach_r\).
 
-  \definition{Standard Stack Control Flow}
+  \definition{Well Bracketed Control Flow}
 
     The above properties are somewhat orthogonal, but together they capture a
     standard notion of control flow for a stack: functions keep their code
     separate outside of calls and returns, calls respect explicit entry points,
     and returns respect implicit entry points corresponding to their call.
     A system that enjoys them with regard to a code, a call, a return, and an
-    entry map is said to enjoy {\em standard stack control flow} with regard to
+    entry map is said to enjoy {\em well bracketed control flow} with regard to
     those maps.
 
 \section{Related Work}

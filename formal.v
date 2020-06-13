@@ -13,7 +13,7 @@ Require Import ObsTrace.
 (****************************)
 
 (* Latex-like definition. *)
-Definition EagerStackIntegrity (C : Contour) (MP: MPTrace) : Prop :=
+Definition EagerStackIntegrityThru (C : Contour) (MP: MPTrace) : Prop :=
     forall (k: Component), integrityOf (C k) = HI ->
       forall (mp : MPState),
         InTrace mp MP -> ms (head MP) k = ms mp k.
@@ -23,16 +23,16 @@ Create HintDb StackSafety.
 (* CoInductive variant *)
 (* RB: TODO: Indexing over the contour as well to get cleaner coinduction with
    Paco while sorting things out. *)
-CoInductive EagerStackIntegrity'(*_gen R*) :
+CoInductive EagerStackIntegrityInd(*_gen R*) :
   Contour -> MPTrace -> Prop :=
 | SI_finished : forall C mp,
-    EagerStackIntegrity'(*_gen R*) C (finished mp)
+    EagerStackIntegrityInd(*_gen R*) C (finished mp)
 | SI_notfinished :
     forall (C : Contour) (mp: MPState) (MP : MPTrace),
     (forall (k: Component), integrityOf (C k) = HI -> ms mp k = ms (head MP) k) ->
-    (*R*)EagerStackIntegrity' C MP ->
-    EagerStackIntegrity'(*_gen R*) C (notfinished mp MP).
-Hint Constructors EagerStackIntegrity'(*_gen*) : core.
+    (*R*)EagerStackIntegrityInd C MP ->
+    EagerStackIntegrityInd(*_gen R*) C (notfinished mp MP).
+Hint Constructors EagerStackIntegrityInd(*_gen*) : core.
 
 (* Definition EagerStackIntegrity' (C : Contour) (MP : MPTrace) := *)
 (*   paco2 EagerStackIntegrity'_gen bot2 C MP. *)
@@ -41,29 +41,29 @@ Hint Constructors EagerStackIntegrity'(*_gen*) : core.
 (* Hint Resolve EagerStackIntegrity'_mon : paco. *)
 
 (* RB: TODO: See if these work as well as the old version. *)
-Hint Constructors EagerStackIntegrity'(*_gen*) : StackSafety.
+Hint Constructors EagerStackIntegrityInd(*_gen*) : StackSafety.
 
-Lemma StackIntegrityEquiv : forall (C:Contour) (MP: MPTrace),
-     EagerStackIntegrity C MP -> EagerStackIntegrity' C MP.
+Lemma StackIntegrityThruEquiv : forall (C:Contour) (MP: MPTrace),
+     EagerStackIntegrityThru C MP -> EagerStackIntegrityInd C MP.
 Proof.
   intros C. cofix COFIX.
   intros MP H(*; pfold*).
   destruct MP.
   - constructor.
   - constructor.
-    + intros. unfold EagerStackIntegrity in H.  simpl in H.
+    + intros. unfold EagerStackIntegrityThru in H.  simpl in H.
       apply H; auto. constructor. apply head_InTrace.
     + (*right.*) apply COFIX.
-      unfold EagerStackIntegrity in *.  intros. simpl in H.
+      unfold EagerStackIntegrityThru in *.  intros. simpl in H.
       erewrite <- H; auto.
       * apply H; auto.  constructor. auto.
       * constructor. apply head_InTrace.
 Qed.
 
-Lemma StackIntegrity'Equiv : forall (C:Contour) (MP: MPTrace),
-     EagerStackIntegrity' C MP -> EagerStackIntegrity C MP.
+Lemma StackIntegrityIndEquiv : forall (C:Contour) (MP: MPTrace),
+     EagerStackIntegrityInd C MP -> EagerStackIntegrityThru C MP.
 Proof.
-  unfold EagerStackIntegrity.
+  unfold EagerStackIntegrityThru.
   intros C MP H1 k H2 mp H3.
   induction H3 as [| | ? ? ? IHInTrace].
   - auto.
@@ -74,7 +74,7 @@ Proof.
     +  apply H6.
 Qed.
 
-Definition EagerStackIntegrity'' (C:Contour) (mp:MPState) (justReturned:MachineState -> Prop) : Prop :=
+Definition EagerStackIntegrityEnd (C:Contour) (mp:MPState) (justReturned:MachineState -> Prop) : Prop :=
   forall MP mp',
     PrefixUpTo (fun mp => justReturned (ms mp)) (MPTraceOf mp) MP ->
     Last MP mp' ->
@@ -84,10 +84,11 @@ Definition EagerStackIntegrity'' (C:Contour) (mp:MPState) (justReturned:MachineS
 call instruction (as in a subtrace) or at the first
 instruction of the callee (as in the top-level trace)
 assuming that registers remain LI,LC at all times. *)
-
-Definition variantOf (M N : MachineState) (C : Contour) :=
+(* SNA: With code in the contour, this actually does matter:
+   it needs to be the first instruction of the caller. *)
+Definition variantOf (m n : MachineState) (C : Contour) :=
   forall (k : Component), confidentialityOf (C k) = LC ->
-                          M k = N k.
+                          m k = n k.
 
 Hint Unfold variantOf : StackSafety.
 
@@ -99,7 +100,7 @@ Hint Constructors ObsTracePrefix(*_gen*) : StackSafety.
 (* The entire trace MP represents a callee, that terminates when (and if)
    control has returned to the caller, according to the "justReturned" predicate.
    Note: If we are at a toplevel trace, "justReturn" will never hold. *)
-Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
+Definition EagerStackConfidentialityOld (C : Contour) (MP : MPTrace)
            (justReturned : MachineState -> Prop) :=
   forall m' M',
     (* If m' is a variant of the initial state of MP... *)
@@ -143,13 +144,13 @@ Definition EagerStackConfidentiality (C : Contour) (MP : MPTrace)
      forall mret', ~ Last M' mret' /\
                    (ObsTraceOf MP) ~=_O (ObsTraceOfM M')).
 
-Hint Unfold EagerStackConfidentiality : StackSafety.
+Hint Unfold EagerStackConfidentialityOld : StackSafety.
 
 Definition ObsEqUpToHalt (MPO : MPTrace') (MO : MTrace') : Prop :=
   ObsOfMP MPO <=_O ObsOfM MO /\
   (infinite MPO -> ObsOfMP MPO ~=_O ObsOfM MO).
 
-Definition EagerStackConfidentiality' (C : Contour) (mp : MPState) (justReturned : MachineState -> Prop) :=
+Definition EagerStackConfidentiality (C : Contour) (mp : MPState) (justReturned : MachineState -> Prop) :=
   forall m',
     variantOf (ms mp) m' C ->
     (forall mpret MPO,
@@ -688,7 +689,7 @@ Theorem StrongConfImpliesConf (C: Contour) (R: MachineState -> Prop) (MP : MPTra
   (forall m,
     variantOf (ms (head MP)) m C ->
     StrongEagerStackConfidentiality R MP m) ->
-  EagerStackConfidentiality C MP R.
+  EagerStackConfidentialityOld C MP R.
 Proof.
   intros Conf.
   unfold EagerStackConfidentiality.
@@ -708,7 +709,7 @@ Proof.
 Qed.        
 
 
-Definition updateContour (C: Contour) (args: nat) (m: MachineState) : Contour :=
+(*Definition updateContour (C: Contour) (args: nat) (m: MachineState) : Contour :=
   fun k =>
     match k with
     | Mem a =>
@@ -721,16 +722,22 @@ Definition updateContour (C: Contour) (args: nat) (m: MachineState) : Contour :=
         (HC, LI)
       else C k (* impossible *)
     | _ => C k
-    end.
+    end.*)
 
 (* LEO: TODO: Instruction memory should be tagged LC HI *)
 (* SNA: Since we never actually use the old contour in updateContour,
    I made this for FindCall, below. (Importantly, if we did use the old contour,
    newer versions of subtrace would be wrong.) *)
-Definition makeContour (args : nat) (m : MachineState) : Contour :=
+Definition makeContour (cdm : CodeMap) (*(f : FunID)*) (args : nat) (m : MachineState) : Contour :=
   fun k =>
     match k with
     | Mem a =>
+      if isCode cdm a then
+        (*if inFun cdm a f then*)
+          (LC,HI)
+        (*else
+          (HC,HI)*)
+      else
       let a' := wminus (m (Reg SP)) args in
       if wle a a' then
         (HC, HI)
@@ -776,22 +783,6 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
       Subtrace cm C MM C' MM' ->
       Subtrace cm C (notfinished M MM) C' MM'.
 *)
-(* APT+SNA: rather than two subtraces, with and without suffix, we could just
-   find the starts of calls and then take prefixes/suffixes when we need them.
-   Also we don't really need to update contours so much as just generate them
-   from the state. *)
-CoInductive FindCall(*_gen*) (cm: CallMap) (*R*) :
-  MTrace -> Contour -> MTrace -> Prop :=
-  | FindCallNow : forall C MM MM' args,
-      (* Current instruction is a call *)
-      isCall cm (head MM) args ->
-      (* Construct the contour *)
-      makeContour args (head MM) = C ->
-      FindCall(*_gen*) cm (*R*) MM C MM'
-  | FindCallLater: forall C MM MM' M,
-      (*R*)FindCall cm MM C MM' ->
-      FindCall(*_gen*) cm (*R*) (notfinished M MM) C MM'.
-Hint Constructors FindCall(*_gen*) : core.
 
 (* Definition FindCall (cm : CallMap) (M : MTrace) (C : Contour) (M' : MTrace) := *)
 (*   paco3 (FindCall_gen cm) bot3 M C M'. *)
@@ -799,18 +790,17 @@ Hint Constructors FindCall(*_gen*) : core.
 (* Lemma FindCall_mon cm : monotone3 (FindCall_gen cm). Proof. pmonauto. Qed. *)
 (* Hint Resolve FindCall_mon : paco. *)
 
-
-Inductive FindCallMP (cm : CallMap) : MPTrace -> Contour -> MPTrace -> Prop :=
+Inductive FindCallMP (cm : CallMap) (cdm : CodeMap) : MPTrace -> Contour -> MPTrace -> Prop :=
 | NextCall : forall C MP MPpre MPsuff args,
     SplitInclusive (fun mp => exists args, isCall cm (ms mp) args) MP MPpre MPsuff ->
     isCall cm (ms (head MPsuff)) args ->
-    makeContour args (ms (head MPsuff)) = C ->
-    FindCallMP cm MP C MPsuff
+    makeContour cdm args (ms (head MPsuff)) = C ->
+    FindCallMP cm cdm MP C MPsuff
 | LaterCall : forall C C' mp MP MP' MPsuff MPcall,
-    FindCallMP cm MP C MPsuff ->
+    FindCallMP cm cdm MP C MPsuff ->
     MPsuff = notfinished mp MP' ->
-    FindCallMP cm MP' C' MPcall ->
-    FindCallMP cm MP C' MPcall.
+    FindCallMP cm cdm MP' C' MPcall ->
+    FindCallMP cm cdm MP C' MPcall.
 
 (* TODO: Prove these two equivalent? *)
 (* TODO: Write find call MP coinductively, prove equiv? *)
@@ -824,32 +814,33 @@ CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
        StackSafety cm MM C.
  *)
 
-Definition EagerStackSafety (cm : CallMap) : MPTrace -> Contour -> Prop :=
+Definition EagerStackSafetyOld (cm : CallMap) (cdm : CodeMap) : MPTrace -> Contour -> Prop :=
   fun (MP : MPTrace) (C : Contour) =>
-    (EagerStackIntegrity C MP) /\
-    (EagerStackConfidentiality C MP (fun _ => False)) /\
+    (EagerStackIntegrityThru C MP) /\
+    (EagerStackConfidentialityOld C MP (fun _ => False)) /\
     (forall (MPpre' MP' : MPTrace) C',
-        FindCallMP cm MP C' MP' -> (* Find call*)
-        PrefixUpTo (fun mp => isRet (ms (head MP')) (ms mp)) MP' MPpre' ->
-        EagerStackIntegrity C' MPpre' /\
-        EagerStackConfidentiality C' MPpre' (isRet (ms (head MPpre')))).
+        FindCallMP cm cdm MP C' MP' -> (* Find call*)
+        PrefixUpTo (fun mp => justRet (ms (head MP')) (ms mp)) MP' MPpre' ->
+        EagerStackIntegrityThru C' MPpre' /\
+        EagerStackConfidentialityOld C' MPpre' (justRet (ms (head MPpre')))).
 
-Definition EagerStackSafety'' (cm : CallMap) : Prop :=
+Definition EagerStackSafety cm rm em cdm : Prop :=
   forall m,
-    let initC := makeContour 0 m in
-    let p := initPolicyState m cm in
-    (EagerStackConfidentiality' initC (m,p) (fun _ => False)) /\
+    let pm := (cm,rm,em,cdm) in
+    let initC := makeContour cdm 0 m in
+    let p := initPolicyState m pm in
+    (EagerStackConfidentiality initC (m,p) (fun _ => False)) /\
     (forall (mp : MPState) C,
-        FindCallMP cm (MPTraceOf (m,p)) C (MPTraceOf mp) -> (* Find call*)
-        EagerStackIntegrity'' C mp (isRet (ms mp)) /\
-        EagerStackConfidentiality' C mp (isRet (ms mp))).
+        FindCallMP cm cdm (MPTraceOf (m,p)) C (MPTraceOf mp) -> (* Find call*)
+        EagerStackIntegrityEnd C mp (justRet (ms mp)) /\
+        EagerStackConfidentiality C mp (justRet (ms mp))).
 
-Definition EagerStackSafety' (cm : CallMap) (m : MachineState) :=
-  let initC := makeContour 0 m in
-  let p := initPolicyState m cm in
+Definition EagerStackSafetyOldWrap (pm : ProgramMap) (m : MachineState) :=
+  let '(cm,rm,em,cdm) := pm in
+  let initC := makeContour cdm 0 m in
+  let p := initPolicyState m pm in
   let MP := MPTraceOf (m,p) in
-  EagerStackSafety cm MP initC.
-
+  EagerStackSafetyOld cm cdm MP initC.
 
 (* TODO: step by step property that implies the rest *)
 
@@ -1067,7 +1058,7 @@ Definition WellFormedVS (M : MachineState) (vs : VarStack) : Prop :=
   (Forall (fun vse => InTrace (curr_variant vse) (MTraceOf (init_variant vse))) vs) /\
   (* The ret function is an isRet if not the last element. *)
   (Forall (fun vse =>
-             (exists m', forall m, retP vse m = isRet m' m) \/
+             (exists m', forall m, retP vse m = justRet m' m) \/
              (forall m, retP vse m = False)
           ) vs) /\
   (* All contours have public registers. *)
@@ -1076,14 +1067,14 @@ Definition WellFormedVS (M : MachineState) (vs : VarStack) : Prop :=
 Hint Unfold WellFormedVS : StackSafety.
 
 (* Indexed Stack Safety Test to signify when a return should finish a trace. *)
-CoInductive EagerStackSafetyTest(*_gen*) (cm : CallMap) (*R*)
+CoInductive EagerStackSafetyTest(*_gen*) (cm : CallMap) (cdm : CodeMap) (*R*)
   : nat -> MPTrace -> VarStack -> Prop :=
 | EagerTestFinFault :
     forall depth mp vs,
       WellFormedVS (ms mp) vs ->
       mpstep mp = None ->
       length vs >= depth -> 
-      EagerStackSafetyTest(*_gen*) cm (*R*) depth (finished mp) vs
+      EagerStackSafetyTest(*_gen*) cm cdm (*R*) depth (finished mp) vs
 | EagerTestFinRet :
     forall depth mp vse vs,
       WellFormedVS (ms mp) (vse :: vs) ->
@@ -1092,7 +1083,7 @@ CoInductive EagerStackSafetyTest(*_gen*) (cm : CallMap) (*R*)
       retP vse (ms mp) ->
       (* No other returns. *)
       (forall vse', In vse' vs -> ~ retP vse' (ms mp)) ->
-      EagerStackSafetyTest(*_gen*) cm (*R*) depth (finished mp) (vse :: vs)
+      EagerStackSafetyTest(*_gen*) cm cdm (*R*) depth (finished mp) (vse :: vs)
 | EagerTestStep :
     forall depth mp MP vs vs' m' p' OM,
       (* Not a call or a return *)
@@ -1113,10 +1104,10 @@ CoInductive EagerStackSafetyTest(*_gen*) (cm : CallMap) (*R*)
       (* Step all variants and just recurse *)
       VSEs_step vs = vs' ->
       head MP = (m',p') ->
-      (*R*)EagerStackSafetyTest cm depth MP vs' ->
+      (*R*)EagerStackSafetyTest cm cdm depth MP vs' ->
       length vs >= depth ->
       (* Conclude for current. *)
-      EagerStackSafetyTest(*_gen*) cm (*R*) depth (notfinished mp MP) vs
+      EagerStackSafetyTest(*_gen*) cm cdm (*R*) depth (notfinished mp MP) vs
 | EagerTestCall :
     forall depth args mp MP vs vs' m' p' OM C vsecall,      
       (* Is a call *)
@@ -1140,12 +1131,12 @@ CoInductive EagerStackSafetyTest(*_gen*) (cm : CallMap) (*R*)
       head MP = (m', p') ->
       (* Calculate the new contour based on the top of the current machine. *)
       (* LEO: TODO: Current machine, or HEAD MP? *)
-      makeContour args (ms mp) = C ->
+      makeContour cdm args (ms mp) = C ->
       (* Confidentiality Test for all variants _at the call_: *)
       (forall mvar mvar' OV,
           variantOf (ms mp) mvar C ->
           step mvar = (mvar', OV) ->          
-          EagerConfidentialityTest (isRet (ms mp)) (ms mp) m' mvar mvar' OM OV) ->
+          EagerConfidentialityTest (justRet (ms mp)) (ms mp) m' mvar mvar' OM OV) ->
       (* Integrity Test for new contour _at the call_ : *)
       EagerIntegrityTest C (ms mp) m' ->
       (* Build a variant stack element *)
@@ -1153,14 +1144,14 @@ CoInductive EagerStackSafetyTest(*_gen*) (cm : CallMap) (*R*)
                              ; init_variant := mvar
                              ; curr_variant := mvar
                              ; contour := C
-                             ; retP := isRet (ms mp)
+                             ; retP := justRet (ms mp)
                              |}) ->
       (* Recurse with every variant at the new contour at the top. *)
       (forall mvar, variantOf (ms (head MP)) mvar C ->
-                    (*R*)EagerStackSafetyTest cm depth MP (vsecall mvar :: vs')) ->
+                    (*R*)EagerStackSafetyTest cm cdm depth MP (vsecall mvar :: vs')) ->
       length vs >= depth ->
       (* Conclude for current. *)
-      EagerStackSafetyTest(*_gen*) cm (*R*) depth (notfinished mp MP) vs
+      EagerStackSafetyTest(*_gen*) cm cdm (*R*) depth (notfinished mp MP) vs
 | EagerTestRet :
     forall depth mp MP vs vs' m' p' OM,          
       (* Top return, no other return. *)
@@ -1184,9 +1175,9 @@ CoInductive EagerStackSafetyTest(*_gen*) (cm : CallMap) (*R*)
       VSEs_step vs = vs' ->
       head MP = (m',p') ->
       (* Recurse but take of the top of the stack. *)
-      (*R*)EagerStackSafetyTest cm depth MP (tl vs') ->
+      (*R*)EagerStackSafetyTest cm cdm depth MP (tl vs') ->
       (* Conclude for current. *)
-      EagerStackSafetyTest(*_gen*) cm (*R*) depth (notfinished mp MP) vs
+      EagerStackSafetyTest(*_gen*) cm cdm (*R*) depth (notfinished mp MP) vs
 | EagerTestRetCall :
     forall depth args mp MP vs vs' m' p' OM C vsecall,      
       (* Is a call *)
@@ -1210,12 +1201,12 @@ CoInductive EagerStackSafetyTest(*_gen*) (cm : CallMap) (*R*)
       head MP = (m', p') ->
       (* Calculate the new contour based on the top of the current machine. *)
       (* LEO: TODO: Current machine, or HEAD MP? *)
-      makeContour args (ms mp) = C ->
+      makeContour cdm args (ms mp) = C ->
       (* Confidentiality Test for all variants _at the call_: *)
       (forall mvar mvar' OV,
           variantOf (ms mp) mvar C ->
           step mvar = (mvar', OV) ->          
-          EagerConfidentialityTest (isRet (ms mp)) (ms mp) m' mvar mvar' OM OV) ->
+          EagerConfidentialityTest (justRet (ms mp)) (ms mp) m' mvar mvar' OM OV) ->
       (* Integrity Test for new contour _at the call_ : *)
       EagerIntegrityTest C (ms mp) m' ->
       (* Build a variant stack element *)
@@ -1223,13 +1214,13 @@ CoInductive EagerStackSafetyTest(*_gen*) (cm : CallMap) (*R*)
                              ; init_variant := mvar
                              ; curr_variant := mvar
                              ; contour := C
-                             ; retP := isRet (ms mp)
+                             ; retP := justRet (ms mp)
                              |}) ->
       (* Recurse with every variant at the new contour at the top of the tail of the stack. *)
       (forall mvar, variantOf (ms (head MP)) mvar C ->
-                    (*R*)EagerStackSafetyTest cm depth MP (vsecall mvar :: (tl vs'))) ->
+                    (*R*)EagerStackSafetyTest cm cdm depth MP (vsecall mvar :: (tl vs'))) ->
       (* Conclude for current. *)
-      EagerStackSafetyTest(*_gen*) cm (*R*) depth (notfinished mp MP) vs.
+      EagerStackSafetyTest(*_gen*) cm cdm (*R*) depth (notfinished mp MP) vs.
 
 Hint Constructors EagerStackSafetyTest(*_gen*) : core.
 
@@ -1240,10 +1231,10 @@ Hint Constructors EagerStackSafetyTest(*_gen*) : core.
 (* Lemma EagerStackSafetyTest_mon cm : monotone3 (EagerStackSafetyTest_gen cm). Proof. pmonauto. Qed. *)
 (* Hint Resolve EagerStackSafetyTest_mon : paco. *)
 
-Definition EagerStackSafetyTest' cm MP :=
+Definition EagerStackSafetyTest' cm cdm MP :=
   forall mv,
-    variantOf (ms (head MP)) mv (makeContour 0 (ms (head MP))) ->
-    EagerStackSafetyTest cm 1 MP [Build_VSE (ms (head MP)) mv mv (makeContour 0 (ms (head MP))) (fun _ => False)].
+    variantOf (ms (head MP)) mv (makeContour cdm 0 (ms (head MP))) ->
+    EagerStackSafetyTest cm cdm 1 MP [Build_VSE (ms (head MP)) mv mv (makeContour cdm 0 (ms (head MP))) (fun _ => False)].
 
 Hint Unfold EagerStackSafetyTest' : StackSafety.
 
@@ -1360,15 +1351,15 @@ Proof.
 Qed.
     
 Theorem TestImpliesIntegrityNested :
-  forall cm C MP vs n vscall vse,
+  forall cm cdm C MP vs n vscall vse,
          FinLastN n vs vscall ->
          hd_error vscall = Some vse ->
          contour vse = C ->
          ForallButLast (fun mp => ~ retP vse (ms mp)) MP ->
-  EagerStackSafetyTest cm n MP vs -> EagerStackIntegrity' C MP.
+  EagerStackSafetyTest cm cdm n MP vs -> EagerStackIntegrityInd C MP.
 Proof.
   cofix COFIX.
-  intros cm C MP vs n vscall vse Last Hvse HC HNotR Safety(*; pfold*).
+  intros cm cdm C MP vs n vscall vse Last Hvse HC HNotR Safety(*; pfold*).
   inv Safety.
   - apply SI_finished.
   - apply SI_finished.
@@ -1378,7 +1369,7 @@ Proof.
       rewrite H6; simpl.
       eapply H4; eauto using FinLastNHead_implies_In.
     + (*right.*)
-      eapply (COFIX cm (contour vse) MP0 (VSEs_step vs) n (VSEs_step vscall) (VSE_step vse)); eauto.
+      eapply (COFIX cm cdm (contour vse) MP0 (VSEs_step vs) n (VSEs_step vscall) (VSE_step vse)); eauto.
       * eapply VSE_step_preserves_LastN; eauto.
       * destruct vscall; inversion Hvse; subst; simpl; auto.
       * unfold VSE_step; simpl; auto.
@@ -1393,9 +1384,9 @@ Proof.
       unfold MPState, EagerIntegrityTest in *.
       rewrite H6; simpl.
       eauto using FinLastNHead_implies_In.
-    + remember (Build_VSE (ms mp) (ms (head MP0)) (ms (head MP0)) (makeContour args (ms mp)) (isRet (ms mp))) as vse_call.
+    + remember (Build_VSE (ms mp) (ms (head MP0)) (ms (head MP0)) (makeContour cdm args (ms mp)) (justRet (ms mp))) as vse_call.
       (*right.*)
-      apply (COFIX cm (contour vse) MP0 (vse_call::(VSEs_step vs)) n (VSEs_step vscall) (VSE_step vse)); eauto.
+      apply (COFIX cm cdm (contour vse) MP0 (vse_call::(VSEs_step vs)) n (VSEs_step vscall) (VSE_step vse)); eauto.
       * eapply FinLastLater.
         eapply VSE_step_preserves_LastN; eauto.
       * destruct vscall; inversion Hvse; subst; simpl; auto.
@@ -1418,7 +1409,7 @@ Proof.
       rewriteHyp.
       eauto using FinLastNHead_implies_In.
     + (*right.*)
-      apply (COFIX cm (contour vse) MP0 (tl (VSEs_step vs)) n (VSEs_step vscall) (VSE_step vse)); auto.
+      apply (COFIX cm cdm (contour vse) MP0 (tl (VSEs_step vs)) n (VSEs_step vscall) (VSE_step vse)); auto.
       * destruct vs; simpl in *.
         -- inversion Last; subst; simpl in *; try solve [constructor]; eauto.
         -- inversion Last; subst; simpl in *; eauto.
@@ -1440,8 +1431,8 @@ Proof.
       rewriteHyp.
       eauto using FinLastNHead_implies_In.
     + (*right.*)
-      remember (Build_VSE (ms mp) (ms (head MP0)) (ms (head MP0)) (makeContour args (ms mp)) (isRet (ms mp))) as vse_call.
-      apply (COFIX cm (contour vse) MP0 (vse_call::(tl (VSEs_step vs))) n (VSEs_step vscall) (VSE_step vse)); eauto.
+      remember (Build_VSE (ms mp) (ms (head MP0)) (ms (head MP0)) (makeContour cdm args (ms mp)) (justRet (ms mp))) as vse_call.
+      apply (COFIX cm cdm (contour vse) MP0 (vse_call::(tl (VSEs_step vs))) n (VSEs_step vscall) (VSE_step vse)); eauto.
       * destruct vs; simpl in *.
         -- inversion Last; subst; simpl in *; try solve [constructor]; eauto.
            constructor.
@@ -1502,13 +1493,13 @@ Lemma RetP_Rewrite :
  Forall (fun vse : VSE =>
           a = vse \/ In vse vs ->
           ~ FinLast vse (a :: vs) ->
-          exists m' : MachineState, forall m : MachineState, retP vse m = isRet m' m)
+          exists m' : MachineState, forall m : MachineState, retP vse m = justRet m' m)
          vs ->
   Forall
     (fun vse0 : VSE =>
      In vse0 vs ->
      ~ FinLast vse0 vs ->
-     exists m'0 : MachineState, forall m : MachineState, retP vse0 m = isRet m'0 m) vs.
+     exists m'0 : MachineState, forall m : MachineState, retP vse0 m = justRet m'0 m) vs.
 Proof.
   intros.
   eapply Forall_impl; eauto.
@@ -1527,13 +1518,13 @@ Lemma RetP_Rewrite_Step :
          (fun vse : VSE =>
           a = vse \/ In vse vs ->
           ~ FinLast vse (a :: vs) ->
-          exists m' : MachineState, forall m : MachineState, retP vse m = isRet m' m)
+          exists m' : MachineState, forall m : MachineState, retP vse m = justRet m' m)
          vs ->
   Forall
     (fun vse0 : VSE =>
      In vse0 (VSE_step a :: VSEs_step vs) ->
      ~ FinLast vse0 (VSE_step a :: VSEs_step vs) ->
-     exists m'0 : MachineState, forall m : MachineState, retP vse0 m = isRet m'0 m)
+     exists m'0 : MachineState, forall m : MachineState, retP vse0 m = justRet m'0 m)
     (VSEs_step vs).
 Proof.
   intros.
@@ -1776,7 +1767,7 @@ Lemma well_formed_extend :
     variantOf M (curr_variant vse) (contour vse) ->
     InTrace M (MTraceOf (init_machine vse)) ->
     InTrace (curr_variant vse) (MTraceOf (init_variant vse)) ->
-    (exists m, forall m', retP vse m' = isRet m m') ->
+    (exists m, forall m', retP vse m' = justRet m m') ->
     publicRegisters (contour vse) ->
     WellFormedVS M (vse :: vs).
 Proof.
@@ -1818,10 +1809,10 @@ Proof.
   - destruct IHl.
  *)
 
-Ltac policify cm m :=
+Ltac policify pm m :=
   let p := fresh "p" in
   let HP := fresh "HP" in 
-  pose proof (initPolicyState m cm) as p;
+  pose proof (initPolicyState m pm) as p;
   assert (HP: m = ms (m, p)) by auto;
   rewrite HP.
 
@@ -1834,33 +1825,34 @@ Lemma variant_equalRet :
  *)
 
 Theorem TestImpliesConfidentialityNested :
-  forall cm C MP vs n vscall vse R,
+  forall cm (rm:RetMap) (em:EntryMap) cdm C MP vs n vscall vse R,
     FinLastN n vs vscall ->
     hd_error vscall = Some vse ->
     contour vse = C ->
     ForallButLast (fun mp => ~ retP vse (ms mp)) MP ->
     WellFormedVS (ms (head MP)) vs ->
-    EagerStackSafetyTest cm n MP vs ->
+    EagerStackSafetyTest cm cdm n MP vs ->
     variantOf (ms (head MP)) (curr_variant vse) C ->
     (forall m, retP vse (ms m) = R (ms m)) ->
     StrongEagerStackConfidentiality R MP (curr_variant vse).
 Proof.
   cofix COFIX.
-  intros cm C MP vs n vscall vse R LastN HCall HC Comp [HVar [[vselast [HLast RFalse]] [InMP [InVar [HRet HPub]]]]] Safety Var HR.
+  intros cm rm em cdm C MP vs n vscall vse R LastN HCall HC Comp [HVar [[vselast [HLast RFalse]] [InMP [InVar [HRet HPub]]]]] Safety Var HR.
+  pose (pm := (cm, rm, em, cdm)).
   destruct MP.
   - destruct vs.
     + inv HLast.
     + eapply Forall_forall with (x := vse) in HRet.
       * destruct HRet as [[m0 HRet] | HRet].
-        -- destruct (isRet_dec m0 (ms m)) as [r | r].
+        -- destruct (justRet_dec m0 (ms m)) as [r | r].
            ++ eapply StrongConfEnd.
               ** rewrite <- HR.
                  rewrite HRet.
                  auto.
-              ** policify cm (curr_variant vse).
+              ** policify pm (curr_variant vse).
                  rewrite <- HR.
                  rewrite HRet.
-                 unfold isRet in *.
+                 unfold justRet in *.
                  simpl in *.
                  unfold variantOf in Var.
                  eapply Forall_forall with (x := vse) in HPub; eauto.
@@ -1874,12 +1866,12 @@ Proof.
               ** rewrite <- HR.
                  rewrite HRet.
                  auto.
-              ** pose proof (initPolicyState (curr_variant vse) cm) as p.
+              ** pose proof (initPolicyState (curr_variant vse) pm) as p.
                  assert (H: (curr_variant vse) = (ms (curr_variant vse, p))) by auto.
                  rewrite H.
                  rewrite <- HR.
                  rewrite HRet.
-                 unfold isRet in *.
+                 unfold justRet in *.
                  simpl in *.
                  unfold variantOf in Var.
                  eapply Forall_forall with (x := vse) in HPub; eauto.
@@ -1893,7 +1885,7 @@ Proof.
            ++ rewrite <- HR.
               rewrite HRet.
               auto.
-           ++ pose proof (initPolicyState (curr_variant vse) cm) as p.
+           ++ pose proof (initPolicyState (curr_variant vse) pm) as p.
               assert (H: (curr_variant vse) = (ms (curr_variant vse, p))) by auto.
               rewrite H.
               rewrite <- HR.
@@ -1917,7 +1909,7 @@ Proof.
       * rewrite <- HR.
         inv Comp.
         eauto.
-      * policify cm (curr_variant vse).
+      * policify pm (curr_variant vse).
         rewrite <- HR.
         simpl.
         eapply Forall_forall with (x := vse) in HPub;
@@ -1928,7 +1920,7 @@ Proof.
         -- inv Comp.
            rewrite HRet.
            rewrite HRet in H3.
-           unfold isRet in *.
+           unfold justRet in *.
            intros r.
            unfold variantOf in *.
            do 2 rewrite <- Var in r; eauto;
@@ -1944,7 +1936,7 @@ Proof.
           by (subst; unfold VSE_step; simpl; rewriteHyp; simpl; auto).
         rewrite <- HMV'.
         (* right. *)
-        apply (COFIX cm (contour vse) MP (VSEs_step vs) n (VSEs_step vscall) vse');
+        apply (COFIX cm rm em cdm (contour vse) MP (VSEs_step vs) n (VSEs_step vscall) vse');
           eauto.
         -- eapply VSE_step_preserves_LastN; eauto.
         -- unfold VSEs_step; simpl.
@@ -1978,7 +1970,7 @@ Proof.
       * rewrite <- HR.
         inv Comp.
         eauto.
-      * policify cm (curr_variant vse).
+      * policify pm (curr_variant vse).
         rewrite <- HR.
         simpl.
         eapply Forall_forall with (x := vse) in HPub;
@@ -1989,7 +1981,7 @@ Proof.
         -- inv Comp.
            rewrite HRet.
            rewrite HRet in H3.
-           unfold isRet in *.
+           unfold justRet in *.
            intros r.
            unfold variantOf in *.
            do 2 rewrite <- Var in r; eauto;
@@ -2004,9 +1996,9 @@ Proof.
         assert (HMV' : curr_variant vse' = mv')
           by (subst; unfold VSE_step; simpl; rewriteHyp; simpl; auto).
         rewrite <- HMV'.
-        remember (Build_VSE (ms m) (ms (head MP)) (ms (head MP)) (makeContour args (ms m)) (isRet (ms m))) as vse_call.
+        remember (Build_VSE (ms m) (ms (head MP)) (ms (head MP)) (makeContour cdm args (ms m)) (justRet (ms m))) as vse_call.
         (* right. *)
-        apply (COFIX cm (contour vse) MP (vse_call :: (VSEs_step vs)) n (VSEs_step vscall) vse'); eauto.
+        apply (COFIX cm rm em cdm (contour vse) MP (vse_call :: (VSEs_step vs)) n (VSEs_step vscall) vse'); eauto.
         -- constructor; eapply VSE_step_preserves_LastN; eauto.
         -- unfold VSEs_step; simpl.
            rewriteHyp; apply hd_error_map; auto.
@@ -2059,7 +2051,7 @@ Proof.
       * rewrite <- HR.
         inv Comp.
         eauto.
-      * policify cm (curr_variant vse).
+      * policify pm (curr_variant vse).
         rewrite <- HR.
         simpl.
         eapply Forall_forall with (x := vse) in HPub;
@@ -2070,7 +2062,7 @@ Proof.
         -- inv Comp.
            rewrite HRet.
            rewrite HRet in H8.
-           unfold isRet in *.
+           unfold justRet in *.
            intros r.
            unfold variantOf in *.
            do 2 rewrite <- Var in r; eauto;
@@ -2097,7 +2089,7 @@ Proof.
         rewrite <- HMV'.
 
         (* right. *)
-        apply (COFIX cm (contour vse) MP (VSEs_step vs) n (VSEs_step vscall) vse'); eauto.
+        apply (COFIX cm rm em cdm (contour vse) MP (VSEs_step vs) n (VSEs_step vscall) vse'); eauto.
         -- eapply FinLastN_depth.
            eapply VSE_step_preserves_LastN; unfold VSEs_step; simpl; eauto.
            ++ simpl; eauto.
@@ -2148,7 +2140,7 @@ Proof.
       * rewrite <- HR.
         inv Comp.
         eauto.
-      * policify cm (curr_variant vse).
+      * policify pm (curr_variant vse).
         rewrite <- HR.
         simpl.
         eapply Forall_forall with (x := vse) in HPub;
@@ -2159,7 +2151,7 @@ Proof.
         -- inv Comp.
            rewrite HRet.
            rewrite HRet in H7.
-           unfold isRet in *.
+           unfold justRet in *.
            intros r.
            unfold variantOf in *.
            do 2 rewrite <- Var in r; eauto;
@@ -2184,9 +2176,9 @@ Proof.
           by (subst; unfold VSE_step; simpl; rewriteHyp; simpl; auto).
         rewrite <- HMV'.
 
-        remember (Build_VSE (ms m) (ms (head MP)) (ms (head MP)) (makeContour args (ms m)) (isRet (ms m))) as vse_call.
+        remember (Build_VSE (ms m) (ms (head MP)) (ms (head MP)) (makeContour cdm args (ms m)) (justRet (ms m))) as vse_call.
         
-        apply (COFIX cm (contour vse) MP (vse_call :: (VSEs_step vs)) n (VSEs_step vscall) vse').
+        apply (COFIX cm rm em cdm (contour vse) MP (vse_call :: (VSEs_step vs)) n (VSEs_step vscall) vse').
 
         -- constructor.
            eapply FinLastN_depth.
@@ -2456,15 +2448,15 @@ Proof.
 Qed.
 
 Lemma SplitPreservesSafety :
-  forall cm MP MPpre MPsuff,
+  forall cm cdm MP MPpre MPsuff,
     SplitInclusive (fun mp => exists args, isCall cm (ms mp) args) MP MPpre MPsuff ->
     forall steps rets n vs,
       TLen MPpre steps ->
       RetsContained MPpre (map retP vs) rets ->
-      EagerStackSafetyTest cm n MP vs ->
-      EagerStackSafetyTest cm n MPsuff (fixN (@tl _) rets (fixN VSEs_step steps vs)).
+      EagerStackSafetyTest cm cdm n MP vs ->
+      EagerStackSafetyTest cm cdm n MPsuff (fixN (@tl _) rets (fixN VSEs_step steps vs)).
 Proof.
-  intros cm MP MPpre MPsuff Split;
+  intros cm cdm MP MPpre MPsuff Split;
     induction Split; intros steps rets n vs Len Rets Safety.
   - inv Len; inversion Safety; subst; simpl in *.
     + inv Rets; simpl.
@@ -2512,12 +2504,12 @@ Proof.
 Qed.
 
 Lemma SplitInclusive_Rets :
-  forall cm MP MPpre MPsuff, 
+  forall cm cdm MP MPpre MPsuff, 
     SplitInclusive (fun mp => exists args, isCall cm (ms mp) args) MP MPpre MPsuff ->
-    forall n vs, EagerStackSafetyTest cm n MP vs ->
+    forall n vs, EagerStackSafetyTest cm cdm n MP vs ->
     exists rets, RetsContained MPpre (map retP vs) rets.
 Proof.
-  intros cm MP MPpre MPsuff Split; induction Split; intros n vs Safety.
+  intros cm cdm MP MPpre MPsuff Split; induction Split; intros n vs Safety.
   - exists 0; eapply FinRetC.
   - exists 0; eapply FinRetC.
   - inv Safety.
@@ -2562,14 +2554,14 @@ Proof.
 Qed.
 
 Lemma FindCallMP_Contour :
-  forall cm MP C MPsuff,
-  FindCallMP cm MP C MPsuff ->
+  forall cm cdm MP C MPsuff,
+  FindCallMP cm cdm MP C MPsuff ->
   exists args,
     isCall cm (ms (head MPsuff)) args /\
-    C = makeContour args (ms (head MPsuff)) /\
+    C = makeContour cdm args (ms (head MPsuff)) /\
     publicRegisters C.
 Proof.
-  intros cm MP C MPsuff H; induction H.
+  intros cm cdm MP C MPsuff H; induction H.
   - exists args; repeat split; auto.
     unfold makeContour, publicRegisters in *; simpl; intros; auto.
     rewrite <- H1. auto.
@@ -2577,14 +2569,14 @@ Proof.
 Qed.
     
 Lemma FindCallPreservesSafety :
-  forall cm MP C MPsuff,
-    FindCallMP cm MP C MPsuff ->
+  forall cm cdm MP C MPsuff,
+    FindCallMP cm cdm MP C MPsuff ->
     forall n vs,
-      EagerStackSafetyTest cm n MP vs ->
+      EagerStackSafetyTest cm cdm n MP vs ->
       exists vs', WellFormedVS (ms (head MPsuff)) vs' /\
-      EagerStackSafetyTest cm n MPsuff vs'.
+      EagerStackSafetyTest cm cdm n MPsuff vs'.
 Proof.
-  intros cm MP C MPsuff Find; induction Find; intros n vs Safety.  
+  intros cm cdm MP C MPsuff Find; induction Find; intros n vs Safety.  
   - assert (Hyp: exists steps, TLen MPpre steps).
     { eapply SplitInclusive_TLen; eauto. }
     destruct Hyp as [steps Hsteps].
@@ -2598,7 +2590,7 @@ Proof.
   - eapply IHFind1 in Safety; clear IHFind1.
     destruct Safety as [vs' [WF Safety]].
     subst.
-    destruct (FindCallMP_Contour _ _ _ _ Find1) as [args [HCall _]].
+    destruct (FindCallMP_Contour _ _ _ _ _ Find1) as [f [args [HCall _]]].
     inv Safety.
     + exfalso; eapply H1; eauto.
     + eapply IHFind2 in H14; eauto using variantOf_id.
@@ -2607,11 +2599,11 @@ Proof.
 Qed.
 
 Lemma TestImpliesDepth :
-  forall cm n MP vs,
-  EagerStackSafetyTest cm n MP vs ->
+  forall cm cdm n MP vs,
+  EagerStackSafetyTest cm cdm n MP vs ->
   length vs >= n.
 Proof.
-  intros cm n MP vs Safety.
+  intros cm cdm n MP vs Safety.
   inv Safety; eauto.
   destruct H0 as [? [? [Eq [? [Len ?]]]]].
   rewrite Eq.
@@ -2628,15 +2620,15 @@ Proof.
 Qed.
 
 Lemma SplitInclusive_Safety :
-  forall MP MPpre MPsuff cm (R : MPState -> Prop),
+  forall MP MPpre MPsuff cm cdm (R : MPState -> Prop),
     SplitInclusive R MP MPpre MPsuff ->
     forall n n' vs vse vs',
-      EagerStackSafetyTest cm n MP vs ->
+      EagerStackSafetyTest cm cdm n MP vs ->
       FinLastN n' vs (vse :: vs') ->
       (forall mp, retP vse (ms mp) = R mp) ->
-      EagerStackSafetyTest cm n' MPpre vs.
+      EagerStackSafetyTest cm cdm n' MPpre vs.
 Proof.
-  intros MP MPpre MPsuff cm R HSuff.
+  intros MP MPpre MPsuff cm cdm R HSuff.
     induction HSuff; intros n n' vs vse vs' Safety LastN HR.
     + inversion Safety. 
       * subst; eapply EagerTestFinFault; auto.
@@ -2787,18 +2779,18 @@ Proof.
 Qed.
 
 Lemma Eq_Safety :
-  forall MP MP' cm,
+  forall MP MP' cm cdm,
     MP ~= MP' ->
     forall R n n' vs vse vs',
-      EagerStackSafetyTest cm n MP vs ->      
+      EagerStackSafetyTest cm cdm n MP vs ->      
       ForallTrace (fun m => ~ R m) MP ->
       n <= n' ->
       FinLastN n' vs (vse :: vs') ->
       (forall mp, retP vse (ms mp) = R mp) ->
-      EagerStackSafetyTest cm n' MP' vs.
+      EagerStackSafetyTest cm cdm n' MP' vs.
 Proof.
   cofix COFIX.
-  intros MP MP' cm Eq R n n' vs vse vs' Safety NoR LT LastN EqR.
+  intros MP MP' cm cdm Eq R n n' vs vse vs' Safety NoR LT LastN EqR.
   inversion Safety; subst; inv Eq.
   - eapply EagerTestFinFault; eauto.
     eapply FinLastN_lt; eauto.
@@ -2910,12 +2902,12 @@ Proof.
 Qed.
 
 Lemma PrefixUpTo_Safety : 
-  forall (MP MPpre MPsuff : TraceOf MPState) (cm : CallMap) (R : MPState -> Prop),
+  forall (MP MPpre MPsuff : TraceOf MPState) (cm : CallMap) (cdm : CodeMap) (R : MPState -> Prop),
     PrefixUpTo R MP MPpre ->
     forall (n : nat) (vs : VarStack) (vse : VSE) (vs' : list VSE),
-      EagerStackSafetyTest cm n MP (vse :: vs) ->
+      EagerStackSafetyTest cm cdm n MP (vse :: vs) ->
       (forall mp : MPState, retP vse (ms mp) = R mp) ->
-      EagerStackSafetyTest cm (S (length vs)) MPpre (vse :: vs).
+      EagerStackSafetyTest cm cdm (S (length vs)) MPpre (vse :: vs).
 Proof.
   intros.
   destruct H as [[Tsuff Hsuff] | [NoR Eq]].
@@ -2929,17 +2921,17 @@ Qed.
 
 Lemma PrefixUpTo_FirstStep :
   forall m MP MPpre, 
-  PrefixUpTo (fun mp => isRet (ms m) (ms mp)) 
+  PrefixUpTo (fun mp => justRet (ms m) (ms mp)) 
              (notfinished m MP) MPpre ->
   exists MPpre',
     MPpre = notfinished m MPpre' /\
-    PrefixUpTo (fun mp => isRet (ms m) (ms mp)) MP MPpre'.
+    PrefixUpTo (fun mp => justRet (ms m) (ms mp)) MP MPpre'.
 Proof.  
   intros m MP MPpre Pre.
   destruct Pre as [[TSuff Hsuff] | [NoR Eq]].
   - inv Hsuff.
     + exfalso.
-      unfold isRet in *.
+      unfold justRet in *.
       destruct H3.
       inv H.
       eapply wplus_neq in H2.
@@ -2997,15 +2989,15 @@ Proof.
 Qed.
     
 Theorem TestImpliesSafetyCall :
-  forall cm n MP vs,
-    EagerStackSafetyTest cm n MP vs ->
+  forall cm (rm : RetMap) cdm n MP vs,
+    EagerStackSafetyTest cm cdm n MP vs ->
     forall C' MP' MPpre',
-    FindCallMP cm MP C' MP' ->
-    PrefixUpTo (fun mp => isRet (ms (head MP')) (ms mp)) MP' MPpre' ->
-    EagerStackIntegrity C' MPpre' /\
-    EagerStackConfidentiality C' MPpre' (isRet (ms (head MPpre'))).
+    FindCallMP cm cdm MP C' MP' ->
+    PrefixUpTo (fun mp => justRet (ms (head MP')) (ms mp)) MP' MPpre' ->
+    EagerStackIntegrityThru C' MPpre' /\
+    EagerStackConfidentialityOld C' MPpre' (justRet (ms (head MPpre'))).
 Proof.
-  intros cm n MP vs Safety C' MP' MPpre' Find Pre.
+  intros cm rm cdm n MP vs Safety C' MP' MPpre' Find Pre.
   remember Find as Call; clear HeqCall.
   eapply FindCallPreservesSafety in Call; eauto.
   clear Safety.
@@ -3021,7 +3013,7 @@ Proof.
     }
     subst.
     split.
-    - unfold EagerStackIntegrity; intros; simpl; auto.
+    - unfold EagerStackIntegrityThru; intros; simpl; auto.
       inv H0. auto.
     - eapply StrongConfImpliesConf; intros; simpl.
       inv Safety.
@@ -3029,7 +3021,7 @@ Proof.
         * inv Hsuff; simpl in *.
           eapply StrongConfEnd; auto.
           unfold variantOf in H.
-          unfold isRet in *.
+          unfold justRet in *.
           rewrite <- H; [rewrite <- H | ]; auto;
           unfold publicRegisters in *;
           rewrite HPub; simpl; auto.
@@ -3037,14 +3029,14 @@ Proof.
           eapply StrongConfNotMStep; eauto.
           intros Contra.
           eapply H3.
-          unfold variantOf, isRet in *.
+          unfold variantOf, justRet in *.
           rewrite <- H in Contra; [rewrite <- H in Contra |]; auto;
             unfold publicRegisters in *; rewrite HPub; simpl; auto.
       + destruct Pre as [[TSuff Hsuff] | [NoR Eq]].
         * inv Hsuff; simpl in *.
           eapply StrongConfEnd; auto.
           unfold variantOf in H.
-          unfold isRet in *.
+          unfold justRet in *.
           rewrite <- H; [rewrite <- H | ]; auto;
           unfold publicRegisters in *;
           rewrite HPub; simpl; auto.
@@ -3052,7 +3044,7 @@ Proof.
           eapply StrongConfNotMStep; eauto.
           intros Contra.
           eapply H2.
-          unfold variantOf, isRet in *.
+          unfold variantOf, justRet in *.
           rewrite <- H in Contra; [rewrite <- H in Contra |]; auto;
             unfold publicRegisters in *; rewrite HPub; simpl; auto.
   }
@@ -3064,7 +3056,7 @@ Proof.
     subst; simpl in *.
     auto.
     split.
-    + eapply StackIntegrity'Equiv.
+    + eapply StackIntegrityIndEquiv.
       apply SI_notfinished; auto.
       * unfold EagerIntegrityTest in H6.
         intros k Hk.
@@ -3074,9 +3066,9 @@ Proof.
         unfold MPState. (* lol *)
         rewrite H8; simpl.
         eapply H11; eauto.
-      * remember (Build_VSE (ms m) (ms (head MP')) (ms (head MP')) (makeContour args (ms m)) (isRet (ms m))) as vse.
+      * remember (Build_VSE (ms m) (ms (head MP')) (ms (head MP')) (makeContour cdm args (ms m)) (justRet (ms m))) as vse.
 
-        assert (Safety: EagerStackSafetyTest cm (S (length (VSEs_step vs'))) MPpre (vse :: VSEs_step vs')).
+        assert (Safety: EagerStackSafetyTest cm cdm (S (length (VSEs_step vs'))) MPpre (vse :: VSEs_step vs')).
         { eapply PrefixUpTo_Safety; subst; simpl in*; eauto using variantOf_id. }
 
         eapply TestImpliesIntegrityNested; eauto.
@@ -3093,11 +3085,11 @@ Proof.
       eapply StrongConfStep; eauto.
       * erewrite <- PrefixUpToHead; eauto.
         unfold MPState. rewrite H8. eauto.
-      * unfold isRet.
+      * unfold justRet.
         intros [Contra ?].
         eapply wplus_neq in Contra; eauto.
         omega.
-      * unfold isRet.
+      * unfold justRet.
         intros [Contra ?].
         unfold variantOf in Var.
         rewrite <- Var in Contra; eauto.
@@ -3110,10 +3102,10 @@ Proof.
         destruct Hk.
         -- left. intros Eq; symmetry in Eq; eauto.
         -- right. intros Eq; symmetry in Eq; eauto.
-      * remember (Build_VSE (ms m) mv' mv' (makeContour args (ms m)) (isRet (ms m))) as vse.
+      * remember (Build_VSE (ms m) mv' mv' (makeContour cdm args (ms m)) (justRet (ms m))) as vse.
         replace mv' with (curr_variant vse); [ | subst; auto].
 
-        assert (V: variantOf m' mv' (makeContour args (ms m))).
+        assert (V: variantOf m' mv' (makeContour cdm args (ms m))).
         {
           eapply confStepPreservesVariant; eauto.
           intros k Hk.
@@ -3123,7 +3115,7 @@ Proof.
           -- right. intros Eq; symmetry in Eq; eauto.
         } 
         
-        assert (Safety: EagerStackSafetyTest cm (S (length (VSEs_step vs'))) MPpre (vse :: VSEs_step vs')).
+        assert (Safety: EagerStackSafetyTest cm cdm (S (length (VSEs_step vs'))) MPpre (vse :: VSEs_step vs')).
         { eapply PrefixUpTo_Safety; subst; simpl in*; eauto. }
 
         eapply TestImpliesConfidentialityNested; eauto.
@@ -3178,7 +3170,7 @@ Proof.
     subst; simpl in *.
     auto.
     split.
-    + eapply StackIntegrity'Equiv.
+    + eapply StackIntegrityIndEquiv.
       apply SI_notfinished; auto.
       * unfold EagerIntegrityTest in H6.
         intros k Hk.
@@ -3188,9 +3180,9 @@ Proof.
         unfold MPState. (* lol *)
         rewrite H8; simpl.
         eapply H11; eauto.
-      * remember (Build_VSE (ms m) (ms (head MP')) (ms (head MP')) (makeContour args (ms m)) (isRet (ms m))) as vse.
+      * remember (Build_VSE (ms m) (ms (head MP')) (ms (head MP')) (makeContour cdm args (ms m)) (justRet (ms m))) as vse.
 
-        assert (Safety: EagerStackSafetyTest cm (S (length (tl (VSEs_step vs')))) MPpre (vse :: tl (VSEs_step vs'))).
+        assert (Safety: EagerStackSafetyTest cm cdm (S (length (tl (VSEs_step vs')))) MPpre (vse :: tl (VSEs_step vs'))).
         { eapply PrefixUpTo_Safety; subst; simpl in*; eauto using variantOf_id. }
 
         eapply TestImpliesIntegrityNested; eauto.
@@ -3207,11 +3199,11 @@ Proof.
       eapply StrongConfStep; eauto.
       * erewrite <- PrefixUpToHead; eauto.
         unfold MPState. rewrite H8. eauto.
-      * unfold isRet.
+      * unfold justRet.
         intros [Contra ?].
         eapply wplus_neq in Contra; eauto.
         omega.
-      * unfold isRet.
+      * unfold justRet.
         intros [Contra ?].
         unfold variantOf in Var.
         rewrite <- Var in Contra; eauto.
@@ -3224,10 +3216,10 @@ Proof.
         destruct Hk.
         -- left. intros Eq; symmetry in Eq; eauto.
         -- right. intros Eq; symmetry in Eq; eauto.
-      * remember (Build_VSE (ms m) mv' mv' (makeContour args (ms m)) (isRet (ms m))) as vse.
+      * remember (Build_VSE (ms m) mv' mv' (makeContour cdm args (ms m)) (justRet (ms m))) as vse.
         replace mv' with (curr_variant vse); [ | subst; auto].
 
-        assert (V: variantOf m' mv' (makeContour args (ms m))).
+        assert (V: variantOf m' mv' (makeContour cdm args (ms m))).
         {
           eapply confStepPreservesVariant; eauto.
           intros k Hk.
@@ -3237,7 +3229,7 @@ Proof.
           -- right. intros Eq; symmetry in Eq; eauto.
         } 
         
-        assert (Safety: EagerStackSafetyTest cm (S (length (tl (VSEs_step vs')))) MPpre (vse :: (tl (VSEs_step vs')))).
+        assert (Safety: EagerStackSafetyTest cm cdm (S (length (tl (VSEs_step vs')))) MPpre (vse :: (tl (VSEs_step vs')))).
         { eapply PrefixUpTo_Safety; subst; simpl in*; eauto. }
 
         eapply TestImpliesConfidentialityNested; eauto.
@@ -3306,10 +3298,11 @@ Proof.
         -- subst; simpl; auto.
 Qed.
 
-Definition EagerStackSafetyTest'' cm :=
+Definition EagerStackSafetyTest'' pm :=
   forall m,
-    let initC := makeContour 0 m in
-    let p := initPolicyState m cm in
+    let '(cm,rm,em,cdm) := pm in
+    let initC := makeContour cdm 0 m in
+    let p := initPolicyState m pm in
     let MP := MPTraceOf (m,p) in
     forall mv, variantOf m mv initC ->
                let initvse := {| init_machine := m
@@ -3318,7 +3311,7 @@ Definition EagerStackSafetyTest'' cm :=
                                  ; contour := initC
                                  ; retP := fun _ => False
                               |} in
-               EagerStackSafetyTest cm 1 MP [initvse].
+               EagerStackSafetyTest cm cdm 1 MP [initvse].
 
 Lemma False_Forall :
   forall {A} (T : TraceOf A), ForallButLast (fun _ => ~ False) T.
@@ -3330,16 +3323,16 @@ Qed.
     
 
 Theorem StackSafetyTestImpliesStackSafety :
-  forall cm m,
-  EagerStackSafetyTest'' cm ->
-  EagerStackSafety' cm m.
+  forall pm m,
+  EagerStackSafetyTest'' pm ->
+  EagerStackSafetyOldWrap pm m.
 Proof.  
-  intros cm m Safety.
+  intros pm m Safety. destruct pm as [[[cm rm] em] cdm].
   unfold EagerStackSafetyTest'' in *.
-  unfold EagerStackSafety' in *.
-  unfold EagerStackSafety.
+  unfold EagerStackSafetyOldWrap in *.
+  unfold EagerStackSafetyOld.
   split; [|split].
-  - eapply StackIntegrity'Equiv.
+  - eapply StackIntegrityIndEquiv.
     eapply TestImpliesIntegrityNested; simpl; eauto using variantOf_id.
     + constructor; auto.
     + simpl; eauto.
@@ -3348,7 +3341,7 @@ Proof.
       eapply False_Forall.
   - eapply StrongConfImpliesConf.
     intros mv Var.
-    remember (Build_VSE m mv mv (makeContour 0 m) (fun _ => False)) as vse.
+    remember (Build_VSE m mv mv (makeContour cdm 0 m) (fun _ => False)) as vse.
     replace mv with (curr_variant vse); [|subst; auto].
     eapply TestImpliesConfidentialityNested with (vs := [vse]); subst; simpl in *; eauto.
     + constructor; eauto.
@@ -3356,13 +3349,13 @@ Proof.
     + eapply False_Forall.
     + repeat split.
       * constructor; subst; simpl in *.
-        -- destruct (pstep (m, initPolicyState m cm)); simpl in *; auto.
+        -- destruct (pstep (m, initPolicyState m (cm,rm,em,cdm))); simpl in *; auto.
         -- constructor.
       * eexists; split; eauto.
         -- constructor.
         -- simpl; auto.
       * constructor; subst; simpl in *.
-        -- destruct (pstep (m, initPolicyState m cm)); simpl in *; auto;
+        -- destruct (pstep (m, initPolicyState m (cm,rm,em,cdm))); simpl in *; auto;
            frob (MTraceOf m); apply In_now.
         -- constructor.
       * constructor; subst; simpl in *.
@@ -3377,7 +3370,7 @@ Proof.
            intros; auto.
         -- constructor.
     + simpl; eapply Safety.
-      destruct (pstep (m, initPolicyState m cm)); simpl in *; auto.
+      destruct (pstep (m, initPolicyState m (cm,rm,em,cdm))); simpl in *; auto.
   - intros. eapply TestImpliesSafetyCall; eauto using variantOf_id.
 Qed.
         
@@ -3402,7 +3395,7 @@ Definition LazyReturnM (justReturned : MachineState -> Prop) (M Mpre : MTrace) (
 (* Observable properties take a contour and a trace, with an optional additional trace.
    The contour C represents the security levels for trace MM, and MMOouter is the
    execution following after MM when C no longer applies. *)
-Definition ObservableIntegrity (C:Contour) (MP:MPTrace) (MPsuffO:option MPTrace) : Prop :=
+Definition ObservableIntegrityOld (C:Contour) (MP:MPTrace) (MPsuffO:option MPTrace) : Prop :=
  match MPsuffO with
  | Some actual =>
    let ideal := MTraceOf (RollbackInt C (ms (head MP)) (ms (head actual))) in
@@ -3411,7 +3404,7 @@ Definition ObservableIntegrity (C:Contour) (MP:MPTrace) (MPsuffO:option MPTrace)
  | None => True
  end.
 
-Definition ObservableIntegrity' (C:Contour) (mp:MPState) (justReturned:MachineState -> Prop) : Prop :=
+Definition ObservableIntegrity (C:Contour) (mp:MPState) (justReturned:MachineState -> Prop) : Prop :=
   forall MPpre MPsuff,
     SplitInclusive (fun mp => justReturned (ms mp)) (MPTraceOf mp) MPpre MPsuff ->
     let m' := RollbackInt C (ms mp) (ms (head MPsuff)) in
@@ -3430,7 +3423,7 @@ Definition RollbackConf (Mstart Mend M'start M'end : MachineState) : MachineStat
    just returned to it, or None if MP does not return, either due to nontermination or
    because it is cut short by a monitor fault.
    In a top level trace justReturned will never hold. *)
-Definition ObservableConfidentiality (C : Contour) (MP:MPTrace) (MPsuffO:option MPTrace)
+Definition ObservableConfidentialityOld (C : Contour) (MP:MPTrace) (MPsuffO:option MPTrace)
            (justReturned : MachineState -> Prop) :=
   forall m' M' M'suffO,
     (* If m' is a variant of the initial state of MP... *)
@@ -3485,7 +3478,7 @@ Definition ObservableConfidentiality (C : Contour) (MP:MPTrace) (MPsuffO:option 
      forall mret', ~ Last M' mret' /\
                    ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M')).
 
-Definition ObservableConfidentiality' (C : Contour) (mp:MPState) (justReturned : MachineState -> Prop) : Prop :=
+Definition ObservableConfidentiality (C : Contour) (mp:MPState) (justReturned : MachineState -> Prop) : Prop :=
   forall m',
     variantOf (ms mp) m' C ->
     (forall mpret MP,
@@ -3496,23 +3489,24 @@ Definition ObservableConfidentiality' (C : Contour) (mp:MPState) (justReturned :
     ((forall mpret, InTrace mpret (MPTraceOf mp) -> ~ justReturned (ms mpret)) ->
      ObsEqUpToHalt (MPRunOf mp) (RunOf m')).
 
-Definition LazyStackSafety (cm : CallMap) (MP:MPTrace) : Prop :=
-  ObservableConfidentiality (makeContour 0 (ms (head MP))) MP None (fun _ => False) /\
-  (forall MPcall MPpre C' MPsuffO,
-    FindCallMP cm MP C' MPcall ->
-    LazyReturnMP (fun m => isRet (ms (head MPcall)) m) MPcall MPpre MPsuffO ->
-    ObservableIntegrity C' MPpre MPsuffO /\
-    ObservableConfidentiality C' MPpre MPsuffO (isRet (ms (head MPcall)))).
+Definition LazyStackSafetyOld (cm : CallMap) (cdm : CodeMap) (MP:MPTrace) : Prop :=
+    ObservableConfidentialityOld (makeContour cdm 0 (ms (head MP))) MP None (fun _ => False) /\
+    (forall MPcall MPpre C' MPsuffO,
+        FindCallMP cm cdm MP C' MPcall ->
+        LazyReturnMP (fun m => justRet (ms (head MPcall)) m) MPcall MPpre MPsuffO ->
+        ObservableIntegrityOld C' MPpre MPsuffO /\
+        ObservableConfidentialityOld C' MPpre MPsuffO (justRet (ms (head MPcall)))).
 
-Definition LazyStackSafety' (cm : CallMap) : Prop :=
+Definition LazyStackSafety cm rm em cdm : Prop :=
   forall m,
-    let initC := makeContour 0 m in
-    let p := initPolicyState m cm in
-    ObservableConfidentiality' initC (m,p) (fun _ => False) /\
+    let pm := (cm,rm,em,cdm) in
+    let initC := makeContour cdm 0 m in
+    let p := initPolicyState m (cm,rm,em,cdm) in
+    ObservableConfidentiality initC (m,p) (fun _ => False) /\
     (forall mp C,
-      FindCallMP cm (MPTraceOf (m,p)) C (MPTraceOf mp) ->
-      ObservableIntegrity' C mp (isRet (ms mp)) /\
-      ObservableConfidentiality' C mp (isRet (ms mp))).
+      FindCallMP cm cdm (MPTraceOf (m,p)) C (MPTraceOf mp) ->
+      ObservableIntegrity C mp (justRet (ms mp)) /\
+      ObservableConfidentiality C mp (justRet (ms mp))).
 
 (* More conjectural stuff follows. *)
 
@@ -3541,18 +3535,6 @@ Lemma MTraceOfHead :
     head (MTraceOf m) = m.
 Proof.
   intros. rewrite (idTrace_eq (MTraceOf m)). simpl. auto.
-Qed.
-
-Lemma isRet_dec :
-  forall m1 m2,
-    isRet m1 m2 \/ ~isRet m1 m2.
-Proof.
-  unfold isRet. intros.
-  destruct (WordEqDec (m2 (Reg PC)) (wplus (m1 (Reg PC)) 4)).
-  - destruct (WordEqDec (m2 (Reg SP)) (m1 (Reg SP))).
-    + left; rewrite e, e0; auto. 
-    + right. intros [H1 H2]. rewrite H2 in n; apply n; auto.
-  - right. intros [H1 H2].  rewrite H1 in n; apply n; auto.
 Qed.
 
 Lemma MapTraceHead :
@@ -3770,9 +3752,9 @@ Proof.
 Qed.
 
 Lemma FindCallReal :
-  forall C MP C' MPcall,
+  forall cdm C MP C' MPcall,
     RealMPTrace'' MP ->
-    FindCallMP C MP C' MPcall  ->
+    FindCallMP cdm C MP C' MPcall  ->
     RealMPTrace'' MPcall.
 Proof.
   intros. induction H0.
@@ -3781,16 +3763,16 @@ Proof.
     apply IHFindCallMP2; auto. apply RealMPEquiv. auto.
 Qed.
 
-Lemma EagerImpliesLazyInt :
+Lemma EagerImpliesLazyIntOld :
   forall C MPcall MPpre MPsuffO,
     RealMPTrace'' MPcall ->
-    LazyReturnMP (fun m => isRet (ms (head MPcall)) m) MPcall MPpre MPsuffO ->
-    EagerStackIntegrity C MPpre ->
-    ObservableIntegrity C MPpre MPsuffO.
+    LazyReturnMP (fun m => justRet (ms (head MPcall)) m) MPcall MPpre MPsuffO ->
+    EagerStackIntegrityThru C MPpre ->
+    ObservableIntegrityOld C MPpre MPsuffO.
 Proof.
-  unfold EagerStackIntegrity. unfold ObservableIntegrity. intros.
+  unfold EagerStackIntegrityThru. unfold ObservableIntegrityOld. intros.
   destruct MPsuffO as [MPsuff |] eqn:E; auto.
-  assert (HSplit : SplitInclusive (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuff).
+  assert (HSplit : SplitInclusive (fun mp => justRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuff).
   { unfold LazyReturnMP in H0. destruct H0.
     - destruct H0 as [MPsuffAgain]. destruct H0. inversion H0. eauto.
     - destruct H0. destruct H2. discriminate. }
@@ -3804,7 +3786,7 @@ Proof.
     - auto. }
   rewrite H4. assert (RealMPTrace'' MPsuff).
   { apply RealMPEquiv. apply RealMPEquiv in H.
-    apply (SplitSuffixReal' (fun mp => isRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuff); auto. }
+    apply (SplitSuffixReal' (fun mp => justRet (ms (head MPcall)) (ms mp)) MPcall MPpre MPsuff); auto. }
   pose (mp := head MPsuff). unfold RealMPTrace'' in H5.
   replace (head MPsuff) with mp; auto. replace (head MPsuff) with mp in H5; auto.
   assert (ObsTraceEq (ObsTraceOf MPsuff) (ObsTraceOf (MPTraceOf mp))).
@@ -3821,12 +3803,12 @@ Proof.
       apply (LastTraceEq (MPTraceOf mp) MPsuff) in H8; auto.
 Qed.
 
-Lemma EagerImpliesLazyInt' :
+Lemma EagerImpliesLazyInt :
   forall C mp justReturned,
-    EagerStackIntegrity'' C mp justReturned ->
-    ObservableIntegrity' C mp justReturned.
+    EagerStackIntegrityEnd C mp justReturned ->
+    ObservableIntegrity C mp justReturned.
 Proof.
-  unfold EagerStackIntegrity''. unfold ObservableIntegrity'. intros C mp justReturned H MPpre MPsuff HSplit.
+  unfold EagerStackIntegrityEnd. unfold ObservableIntegrity. intros C mp justReturned H MPpre MPsuff HSplit.
   assert (forall k, integrityOf (C k) = HI -> (ms mp) k = (ms (head MPsuff)) k).
   { intros. specialize H with MPpre (head MPsuff) k. apply H; auto.
     - unfold PrefixUpTo. left. exists MPsuff. auto.
@@ -3859,14 +3841,14 @@ Qed.
       * apply H2; auto.
 Qed. *)
 
-Lemma EagerImpliesLazyConf :
+Lemma EagerImpliesLazyConfOld :
   forall C MPcall MPpre MPsuffO justReturned,
     RealMPTrace'' MPcall ->
     LazyReturnMP justReturned MPcall MPpre MPsuffO ->
-    EagerStackConfidentiality C MPpre justReturned ->
-    ObservableConfidentiality C MPpre MPsuffO justReturned.
+    EagerStackConfidentialityOld C MPpre justReturned ->
+    ObservableConfidentialityOld C MPpre MPsuffO justReturned.
 Proof.
-  unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros. split;try split.
+  unfold EagerStackConfidentialityOld. unfold ObservableConfidentialityOld. intros. split;try split.
 
   - (* this is case 1 *)
     intros. destruct H0.
@@ -3965,12 +3947,12 @@ Proof.
       + destruct H5. apply H6; auto.
 Qed.
 
-Lemma EagerImpliesLazyConf' :
+Lemma EagerImpliesLazyConf :
   forall C mp justReturned,
-    EagerStackConfidentiality' C mp justReturned ->
-    ObservableConfidentiality' C mp justReturned.
+    EagerStackConfidentiality C mp justReturned ->
+    ObservableConfidentiality C mp justReturned.
 Proof.
-  unfold EagerStackConfidentiality'. unfold ObservableConfidentiality'. intros. split.
+  unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros. split.
 
   - (* this is case 1 *)
     intros. specialize H with m'. destruct H; auto.
@@ -4046,20 +4028,22 @@ Proof.
     intros. specialize H with m'. destruct H; auto.
 Qed.
 
-Theorem EagerSafetyImpliesLazy':
-  forall cm,
-    EagerStackSafety'' cm -> LazyStackSafety' cm.
+Theorem EagerSafetyImpliesLazy:
+  forall cm rm em cdm,
+    EagerStackSafety cm rm em cdm -> LazyStackSafety cm rm em cdm.
 Proof.
-  unfold EagerStackSafety''. unfold LazyStackSafety'. intros.
-  specialize H with m. pose (p := initPolicyState m cm).
-  destruct H. split.
-  - apply (EagerImpliesLazyConf' (makeContour 0 m) (m,p)). auto.
+  unfold EagerStackSafety. unfold LazyStackSafety. intros.
+  specialize H with m.
+  pose (pm := (cm,rm,em,cdm)).
+  pose (p := initPolicyState m pm).
+  destruct H; auto. split.
+  - apply (EagerImpliesLazyConf (makeContour cdm 0 m) (m,p)). auto.
   - intros. specialize H0 with mp C. apply H0 in H1. destruct H1. split.
-    + apply EagerImpliesLazyInt'; auto.
-    + apply EagerImpliesLazyConf'; auto.
+    + apply EagerImpliesLazyInt; auto.
+    + apply EagerImpliesLazyConf; auto.
 Qed.
 
-Theorem EagerSafetyImpliesLazy:
+(*Theorem EagerSafetyImpliesLazy:
   forall cm MP,
     RealMPTrace'' MP ->
     EagerStackSafety cm MP (makeContour 0 (ms (head MP))) -> LazyStackSafety cm MP.
@@ -4094,7 +4078,7 @@ Proof.
             apply SplitInclusiveHeadEq in H7. auto.
           - destruct H2. destruct H7. inversion H7;auto. }
         rewrite H7. auto.
-Qed.
+Qed.*)
 
 (*Conjecture Lazy'ImpliesLazy :
   forall cm C MM,
@@ -4134,23 +4118,56 @@ not be equal, and the behavior is [0]. So confidentegrity does not hold. *)
 
 (* ********* Well Bracketed Control Flow ******** *)
 
-Definition ControlSeparation (cm:CallMap) (rm:RetMap) (om:OwnerMap) : Prop :=
+Definition ControlSeparation cm rm em cdm : Prop :=
   forall m m1 p1 m2 p2 o n,
-    InTrace (m1,p1) (MPTraceOf (m,initPolicyState m cm)) ->
+    InTrace (m1,p1) (MPTraceOf (m,initPolicyState m (cm,rm,em,cdm))) ->
     step m1 = (m2,o) ->
     pstep (m1,p1) = Some p2 ->
-    om (m1 (Reg PC)) <> om (m2 (Reg PC)) ->
-    cm (m1 (Reg PC)) = Some n.
+    cdm (m1 (Reg PC)) <> cdm (m2 (Reg PC)) ->
+    cm (m1 (Reg PC)) = Some n \/ rm (m1 (Reg PC)).
 
-(* TODO: make this handle nesting right *)
-Definition Bracketing (cm:CallMap) (rm:RetMap) : Prop :=
-  forall m C mc pc MP mr pr,
-    FindCallMP cm (MPTraceOf (m,initPolicyState m cm)) C (MPTraceOf (mc,pc)) ->
-    SplitInclusive (fun mp => rm ((ms mp) (Reg PC))) (MPTraceOf (mc,pc)) MP (MPTraceOf (mr,pr)) ->
-    isRet mc mr.
+(* MatchReturn cm rm MPO MPO' -> head MPO' is the first unmatched return in MPO *)
+CoInductive UnmatchedReturn : CallMap -> RetMap -> MPTrace -> MPTrace -> Prop :=
+| MRNow : forall cm (rm:RetMap) MP m p,
+    head MP = (m,p) ->
+    (forall n, ~ (cm (m (Reg PC)) = n)) ->
+    rm (m (Reg PC)) ->
+    UnmatchedReturn cm rm MP MP
+| MRLater : forall cm rm MP m p MP',
+    (forall n, ~ (cm (m (Reg PC)) = n)) ->
+    ~ rm (m (Reg PC)) ->
+    UnmatchedReturn cm rm MP MP' ->
+    UnmatchedReturn cm rm (notfinished (m,p) MP) MP'
+| MRCall : forall cm rm n MP m p MPcallee mpret MPret MPafter MPresult,
+    cm (m (Reg PC)) = n ->
+    ~ rm (m (Reg PC)) ->
+    MP = notfinished (m,p) MPcallee ->
+    UnmatchedReturn cm rm MPcallee MPret ->
+    MPret = (notfinished mpret MPafter) ->
+    UnmatchedReturn cm rm MPafter MPresult ->
+    UnmatchedReturn cm rm MP MPresult.
 
-Definition WellBracketedControlFlow (cm:CallMap) (rm:RetMap) (om:OwnerMap) : Prop :=
-  ControlSeparation cm rm om /\ Bracketing cm rm.
+Definition ReturnIntegrity cm rm em cdm : Prop :=
+  forall m,
+    let MPTop := MPTraceOf (m, initPolicyState m (cm,rm,em,cdm)) in
+    (forall C mpcall MPcallee MPret mpret,
+        FindCallMP cm cdm MPTop C (notfinished mpcall MPcallee) ->
+        UnmatchedReturn cm rm MPcallee (notfinished mpret MPret) ->
+        justRet (ms mpcall) (ms (head MPret))) /\
+    (forall MPret, ~ UnmatchedReturn cm rm MPTop MPret).
+
+Definition EntryIntegrity cm rm em cdm : Prop :=
+  forall m m1 p1 m2 p2 o n,
+    InTrace (m1,p1) (MPTraceOf (m, initPolicyState m (cm,rm,em,cdm))) ->
+    step m1 = (m2,o) ->
+    pstep (m1,p1) = Some p2 ->
+    cm (m1 (Reg PC)) = Some n ->
+    em (m2 (Reg PC)).
+
+Definition WellBracketedControlFlow cm rm em cdm : Prop :=
+  ControlSeparation cm rm em cdm /\
+  ReturnIntegrity cm rm em cdm /\
+  EntryIntegrity cm rm em cdm.
 
 (*
 
