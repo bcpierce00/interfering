@@ -4126,7 +4126,7 @@ Definition ControlSeparation cm rm em cdm : Prop :=
     cdm (m1 (Reg PC)) <> cdm (m2 (Reg PC)) ->
     cm (m1 (Reg PC)) = Some n \/ rm (m1 (Reg PC)).
 
-(* MatchReturn cm rm MPO MPO' -> head MPO' is the first unmatched return in MPO *)
+(* UnmatchedReturn cm rm MPO MPO' -> head MPO' is the first unmatched return in MPO *)
 CoInductive UnmatchedReturn : CallMap -> RetMap -> MPTrace -> MPTrace -> Prop :=
 | MRNow : forall cm (rm:RetMap) MP m p,
     head MP = (m,p) ->
