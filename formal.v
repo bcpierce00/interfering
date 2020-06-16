@@ -149,6 +149,25 @@ Hint Unfold EagerStackConfidentialityOld : StackSafety.
 Definition ObsEqUpToHalt (MPO : MPTrace') (MO : MTrace') : Prop :=
   ObsOfMP MPO <=_O ObsOfM MO /\
   (infinite MPO -> ObsOfMP MPO ~=_O ObsOfM MO).
+(* APT: There is something fishy about this definition.
+   First of all, it doesn't quite match the latex, because the predicate
+   can hold even if we cannot show that MPO is finite or infinite.
+   (And that is not a given constructively.)
+
+   Also, by ObsTrace.v/infiniteObsTracePrefixEq, we can show that 
+
+   infinite (ObsOfMP MPO) -> 
+   ObsOfMP MPO <=_O ObsOfM MO -> 
+   ObsOfMP MPO ~=_O ObsOfM MO.
+
+   So the second clause of the /\ essentially follows from the first.
+   [I can't quite show that precisely, because I can't prove that
+   infinite MPO -> infinite (ObsOfMP MPO) 
+   even though this seems morally true.] 
+
+   So it is very close to being simply <=_O, which suggests maybe it is not needed?
+*)
+   
 
 Definition EagerStackConfidentiality (C : Contour) (mp : MPState) (justReturned : MachineState -> Prop) :=
   forall m',

@@ -779,3 +779,32 @@ End foo.
 
 End ObsTraceRelsNotTrans.
 
+Remark infiniteObsTracePrefixEq: forall MPO MO, 
+    infinite MPO -> 
+    MPO <=_O MO ->
+    MPO ~=_O  MO.
+Proof.
+  cofix COFIX.
+  intros.
+  inv H0. 
+  - constructor.
+    eapply COFIX; eauto. 
+  - constructor.
+    eapply COFIX; eauto.
+    unfold infinite in *. 
+    intros.
+    intro.
+    eapply H. 
+    constructor.
+    apply H0. 
+  - constructor.
+    eapply COFIX; eauto.
+    unfold infinite in *. 
+    intros; intro.
+    eapply H. 
+    constructor.
+    apply H0. 
+  - exfalso.  eapply H.  constructor. 
+  - exfalso.  eapply H. constructor. 
+  - constructor.
+Qed.
