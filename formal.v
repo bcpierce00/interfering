@@ -825,10 +825,10 @@ Definition EagerStackSafetyOld (cm : CallMap) (cdm : CodeMap) : MPTrace -> Conto
         EagerStackConfidentialityOld C' MPpre' (justRet (ms (head MPpre')))).
 
 Definition EagerStackSafety cm rm em cdm : Prop :=
-  forall m,
+  forall m p,
     let pm := (cm,rm,em,cdm) in
     let initC := makeContour cdm 0 m in
-    let p := initPolicyState m pm in
+    initPolicyState m pm = Some p ->
     (EagerStackConfidentiality initC (m,p) (fun _ => False)) /\
     (forall (mp : MPState) C,
         FindCallMP cm cdm (MPTraceOf (m,p)) C (MPTraceOf mp) -> (* Find call*)
@@ -836,11 +836,12 @@ Definition EagerStackSafety cm rm em cdm : Prop :=
         EagerStackConfidentiality C mp (justRet (ms mp))).
 
 Definition EagerStackSafetyOldWrap (pm : ProgramMap) (m : MachineState) :=
-  let '(cm,rm,em,cdm) := pm in
-  let initC := makeContour cdm 0 m in
-  let p := initPolicyState m pm in
-  let MP := MPTraceOf (m,p) in
-  EagerStackSafetyOld cm cdm MP initC.
+  forall p,
+    let '(cm,rm,em,cdm) := pm in
+    let initC := makeContour cdm 0 m in
+    let MP := MPTraceOf (m,p) in
+    initPolicyState m pm = Some p ->
+    EagerStackSafetyOld cm cdm MP initC.
 
 (* TODO: step by step property that implies the rest *)
 
@@ -1809,11 +1810,18 @@ Proof.
   - destruct IHl.
  *)
 
-Ltac policify pm m :=
+(* This appears to be a hack to get an arbitrary policy state,
+   but doesn't work with partial pinit; I propose the one below: *)
+(*Ltac policify pm m :=
   let p := fresh "p" in
   let HP := fresh "HP" in 
   pose proof (initPolicyState m pm) as p;
   assert (HP: m = ms (m, p)) by auto;
+  rewrite HP.*)
+
+Ltac policify mp m' :=
+  destruct mp as (m,p);
+  assert (HP: m' = ms (m', p)) by auto;
   rewrite HP.
 
 (*
@@ -1849,7 +1857,7 @@ Proof.
               ** rewrite <- HR.
                  rewrite HRet.
                  auto.
-              ** policify pm (curr_variant vse).
+              ** policify m (curr_variant vse).
                  rewrite <- HR.
                  rewrite HRet.
                  unfold justRet in *.
@@ -1866,9 +1874,7 @@ Proof.
               ** rewrite <- HR.
                  rewrite HRet.
                  auto.
-              ** pose proof (initPolicyState (curr_variant vse) pm) as p.
-                 assert (H: (curr_variant vse) = (ms (curr_variant vse, p))) by auto.
-                 rewrite H.
+              ** policify m (curr_variant vse).
                  rewrite <- HR.
                  rewrite HRet.
                  unfold justRet in *.
@@ -1885,9 +1891,7 @@ Proof.
            ++ rewrite <- HR.
               rewrite HRet.
               auto.
-           ++ pose proof (initPolicyState (curr_variant vse) pm) as p.
-              assert (H: (curr_variant vse) = (ms (curr_variant vse, p))) by auto.
-              rewrite H.
+           ++ policify m (curr_variant vse).
               rewrite <- HR.
               rewrite HRet.
               auto.
@@ -1909,7 +1913,7 @@ Proof.
       * rewrite <- HR.
         inv Comp.
         eauto.
-      * policify pm (curr_variant vse).
+      * policify m (curr_variant vse).
         rewrite <- HR.
         simpl.
         eapply Forall_forall with (x := vse) in HPub;
@@ -1970,7 +1974,7 @@ Proof.
       * rewrite <- HR.
         inv Comp.
         eauto.
-      * policify pm (curr_variant vse).
+      * policify m (curr_variant vse).
         rewrite <- HR.
         simpl.
         eapply Forall_forall with (x := vse) in HPub;
@@ -2051,7 +2055,7 @@ Proof.
       * rewrite <- HR.
         inv Comp.
         eauto.
-      * policify pm (curr_variant vse).
+      * policify m (curr_variant vse).
         rewrite <- HR.
         simpl.
         eapply Forall_forall with (x := vse) in HPub;
@@ -2140,7 +2144,7 @@ Proof.
       * rewrite <- HR.
         inv Comp.
         eauto.
-      * policify pm (curr_variant vse).
+      * policify m (curr_variant vse).
         rewrite <- HR.
         simpl.
         eapply Forall_forall with (x := vse) in HPub;
@@ -3299,11 +3303,11 @@ Proof.
 Qed.
 
 Definition EagerStackSafetyTest'' pm :=
-  forall m,
+  forall m p,
     let '(cm,rm,em,cdm) := pm in
     let initC := makeContour cdm 0 m in
-    let p := initPolicyState m pm in
     let MP := MPTraceOf (m,p) in
+    initPolicyState m pm = Some p ->
     forall mv, variantOf m mv initC ->
                let initvse := {| init_machine := m
                                  ; init_variant := mv 
@@ -3326,7 +3330,7 @@ Theorem StackSafetyTestImpliesStackSafety :
   forall pm m,
   EagerStackSafetyTest'' pm ->
   EagerStackSafetyOldWrap pm m.
-Proof.  
+Proof.
   intros pm m Safety. destruct pm as [[[cm rm] em] cdm].
   unfold EagerStackSafetyTest'' in *.
   unfold EagerStackSafetyOldWrap in *.
@@ -3349,13 +3353,13 @@ Proof.
     + eapply False_Forall.
     + repeat split.
       * constructor; subst; simpl in *.
-        -- destruct (pstep (m, initPolicyState m (cm,rm,em,cdm))); simpl in *; auto.
+        -- destruct (pstep (m, p)); simpl in *; auto.
         -- constructor.
       * eexists; split; eauto.
         -- constructor.
         -- simpl; auto.
       * constructor; subst; simpl in *.
-        -- destruct (pstep (m, initPolicyState m (cm,rm,em,cdm))); simpl in *; auto;
+        -- destruct (pstep (m, p)); simpl in *; auto;
            frob (MTraceOf m); apply In_now.
         -- constructor.
       * constructor; subst; simpl in *.
@@ -3369,8 +3373,8 @@ Proof.
            unfold makeContour, publicRegisters.
            intros; auto.
         -- constructor.
-    + simpl; eapply Safety.
-      destruct (pstep (m, initPolicyState m (cm,rm,em,cdm))); simpl in *; auto.
+    + simpl; eapply Safety;
+      destruct (pstep (m, p)); simpl in *; auto.
   - intros. eapply TestImpliesSafetyCall; eauto using variantOf_id.
 Qed.
         
@@ -3498,10 +3502,10 @@ Definition LazyStackSafetyOld (cm : CallMap) (cdm : CodeMap) (MP:MPTrace) : Prop
         ObservableConfidentialityOld C' MPpre MPsuffO (justRet (ms (head MPcall)))).
 
 Definition LazyStackSafety cm rm em cdm : Prop :=
-  forall m,
+  forall m p,
     let pm := (cm,rm,em,cdm) in
     let initC := makeContour cdm 0 m in
-    let p := initPolicyState m (cm,rm,em,cdm) in
+    initPolicyState m (cm,rm,em,cdm) = Some p ->
     ObservableConfidentiality initC (m,p) (fun _ => False) /\
     (forall mp C,
       FindCallMP cm cdm (MPTraceOf (m,p)) C (MPTraceOf mp) ->
@@ -4033,12 +4037,11 @@ Theorem EagerSafetyImpliesLazy:
     EagerStackSafety cm rm em cdm -> LazyStackSafety cm rm em cdm.
 Proof.
   unfold EagerStackSafety. unfold LazyStackSafety. intros.
-  specialize H with m.
+  specialize H with m p.
   pose (pm := (cm,rm,em,cdm)).
-  pose (p := initPolicyState m pm).
   destruct H; auto. split.
   - apply (EagerImpliesLazyConf (makeContour cdm 0 m) (m,p)). auto.
-  - intros. specialize H0 with mp C. apply H0 in H1. destruct H1. split.
+  - intros. specialize H1 with mp C. apply H1 in H2. destruct H2. split.
     + apply EagerImpliesLazyInt; auto.
     + apply EagerImpliesLazyConf; auto.
 Qed.
@@ -4119,8 +4122,9 @@ not be equal, and the behavior is [0]. So confidentegrity does not hold. *)
 (* ********* Well Bracketed Control Flow ******** *)
 
 Definition ControlSeparation cm rm em cdm : Prop :=
-  forall m m1 p1 m2 p2 o n,
-    InTrace (m1,p1) (MPTraceOf (m,initPolicyState m (cm,rm,em,cdm))) ->
+  forall m p m1 p1 m2 p2 o n,
+    initPolicyState m (cm,rm,em,cdm) = Some p ->
+    InTrace (m1,p1) (MPTraceOf (m,p)) ->
     step m1 = (m2,o) ->
     pstep (m1,p1) = Some p2 ->
     cdm (m1 (Reg PC)) <> cdm (m2 (Reg PC)) ->
@@ -4130,17 +4134,17 @@ Definition ControlSeparation cm rm em cdm : Prop :=
    means that MPO' is the suffix of MPO such that 
    head MPO' is the first unmatched return in MPO *)
 CoInductive UnmatchedReturn : CallMap -> RetMap -> MPTrace -> MPTrace -> Prop :=
-| MRNow : forall cm (rm:RetMap) MP m p,
+| URNow : forall cm (rm:RetMap) MP m p,
     head MP = (m,p) ->
     cm (m (Reg PC)) = None ->
     rm (m (Reg PC)) ->
     UnmatchedReturn cm rm MP MP
-| MRLater : forall cm rm MP m p MP',
+| URLater : forall cm rm MP m p MP',
     cm (m (Reg PC)) = None ->
     ~ rm (m (Reg PC)) ->
     UnmatchedReturn cm rm MP MP' ->
     UnmatchedReturn cm rm (notfinished (m,p) MP) MP'
-| MRCall : forall cm rm n MP m p MPcallee mpret MPret MPafter MPresult,
+| URCall : forall cm rm n MP m p MPcallee mpret MPret MPafter MPresult,
     cm (m (Reg PC)) = Some n ->
     ~ rm (m (Reg PC)) ->
     MP = notfinished (m,p) MPcallee ->
@@ -4151,8 +4155,9 @@ CoInductive UnmatchedReturn : CallMap -> RetMap -> MPTrace -> MPTrace -> Prop :=
 
 
 Definition ReturnIntegrity cm rm em cdm : Prop :=
-  forall m,
-    let MPTop := MPTraceOf (m, initPolicyState m (cm,rm,em,cdm)) in
+  forall m p,
+    let MPTop := MPTraceOf (m, p) in
+    initPolicyState m (cm,rm,em,cdm) = Some p ->
     (forall C mpcall MPcallee MPret mpret,
         FindCallMP cm cdm MPTop C (notfinished mpcall MPcallee) ->
         UnmatchedReturn cm rm MPcallee (notfinished mpret MPret) ->
@@ -4160,8 +4165,9 @@ Definition ReturnIntegrity cm rm em cdm : Prop :=
     (forall MPret, ~ UnmatchedReturn cm rm MPTop MPret).
 
 Definition EntryIntegrity cm rm em cdm : Prop :=
-  forall m m1 p1 m2 p2 o n,
-    InTrace (m1,p1) (MPTraceOf (m, initPolicyState m (cm,rm,em,cdm))) ->
+  forall m p m1 p1 m2 p2 o n,
+    initPolicyState m (cm,rm,em,cdm) = Some p ->
+    InTrace (m1,p1) (MPTraceOf (m,p)) ->
     step m1 = (m2,o) ->
     pstep (m1,p1) = Some p2 ->
     cm (m1 (Reg PC)) = Some n ->
