@@ -779,6 +779,20 @@ End foo.
 
 End ObsTraceRelsNotTrans.
 
+Remark inf_infObsOfMP : forall MPO,
+    infinite MPO -> infinite (ObsOfMP MPO).
+Proof.                     
+  intros.
+  apply inf_Inf in H.  apply Inf_inf.
+  revert MPO H. 
+  unfold ObsOfMP. 
+  cofix COFIX; intros.
+  inv H. 
+  rewrite idTrace_eq.  simpl.  constructor. 
+  apply COFIX. 
+  apply H0. 
+Qed. 
+
 Remark infiniteObsTracePrefixEq: forall MPO MO, 
     infinite MPO -> 
     MPO <=_O MO ->
