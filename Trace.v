@@ -478,6 +478,30 @@ Qed.
 Definition infinite {A} (T : TraceOf A) : Prop :=
   forall a, ~ Last T a.
 
+CoInductive Infinite {A}  : TraceOf A -> Prop :=
+| InfI : forall a T,  Infinite T -> Infinite (notfinished a T). 
+
+Lemma Inf_inf: forall {A} (T:TraceOf A), Infinite T -> infinite T. 
+Proof.
+  intros.
+  unfold infinite. 
+  intros. intro.
+  induction H0. 
+  inv H. 
+  apply IHLast. 
+  inv H. 
+  apply H2.
+Qed.
+
+Lemma inf_Inf: forall {A} (T:TraceOf A), infinite T -> Infinite T.
+Proof.  
+  cofix COFIX; intros.
+  destruct T. 
+  - exfalso. unfold infinite in H.  eapply H. constructor.
+  - constructor.  apply COFIX. 
+    unfold infinite in *. intros. pose proof (H a0). intro. apply H0. constructor. apply H1. 
+Qed.
+
 Ltac join_frobber :=
   repeat match goal with
          | |- context[(finished ?T) ^^ ?OT] =>

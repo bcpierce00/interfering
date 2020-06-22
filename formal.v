@@ -154,18 +154,22 @@ Definition ObsEqUpToHalt (MPO : MPTrace') (MO : MTrace') : Prop :=
    can hold even if we cannot show that MPO is finite or infinite.
    (And that is not a given constructively.)
 
-   Also, by ObsTrace.v/infiniteObsTracePrefixEq, we can show that 
+   But also, using some facts proved at the bottom of ObsTrace.v
+   (which rely on a new alternative coinductive characterization of Infinite traces):
+*)
 
-   infinite (ObsOfMP MPO) -> 
+Remark redundant: forall (MPO: MPTrace') (MO: MTrace'), 
    ObsOfMP MPO <=_O ObsOfM MO -> 
+   infinite MPO -> 
    ObsOfMP MPO ~=_O ObsOfM MO.
-
-   So the second clause of the /\ essentially follows from the first.
-   [I can't quite show that precisely, because I can't prove that
-   infinite MPO -> infinite (ObsOfMP MPO) 
-   even though this seems morally true.] 
-
-   So it is very close to being simply <=_O, which suggests maybe it is not needed?
+Proof.
+  intros.
+  apply inf_infObsOfMP in H0. 
+  apply infiniteObsTracePrefixEq; auto. 
+Qed.
+   
+(* 
+   So the second clause of the /\ follows from the first, and so this definition of ObsEqUpToHalt reduces to just <=_O. 
 *)
    
 
