@@ -74,7 +74,7 @@ Qed.
 Parameter PolicyState : Type.
 Parameter pstep : MachineState * PolicyState -> option PolicyState.
 (* TODO: Does this ever fail? *)
-Parameter initPolicyState : MachineState -> ProgramMap -> PolicyState.
+Parameter initPolicyState : MachineState -> ProgramMap -> option PolicyState.
 
 (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.
