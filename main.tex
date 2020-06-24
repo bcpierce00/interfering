@@ -216,23 +216,31 @@ techniques have been proposed in the literature\leo{cite, point out?
   stack canaries, cherry, nicks...} aiming to achieve {\em stack
   safety}.
 
-But what {\em is} stack safety? A formal definition of stack safety is
-lacking from the literature, with the notion only being defined
-negatively: through examples of stack unsafety. Two classical examples
-of stack unsafety appear in Figure~\ref{fig:stackunsafety}.
+But what {\em is} stack safety? A precise formal definition of stack
+safety is lacking from the literature, with the notion only being
+defined negatively: through examples of stack unsafety. Two classical
+examples of stack unsafety appear in Figure~\ref{fig:stackunsafety}.
 \leo{Goal: on the left, a bad read; on the right, a bad write.}
 \leo{Do we also need an example of ROP/control flow for the new part?}
-\leo{Stack tokens introduce two properties: lse + wbcf, high level
-  semantics, refinement to a machine with ``builtin'' ``by construction''
-  (pretty weak :)) We make them formal and extensional}
+Recently, a \leo{inspiring/awesome/something good} work reasoned
+about a stack safety enforcement mechanism using capabilities\leo{cite};
+while impressive, stack safety was defined with respect to an abstract
+machine that ``exhibits stack safety by construction''. Which begs
+the question, what {\em is} the property that holds by construction?
 
-A common undertone in such examples is the intention to protect
-callers from callees: a callee should be not be able to access or
-overwrite a caller's private data. In this paper we turn this
-intuition into a formal security property, with a confidentiality and
-an integrity component.
+\leo{StackTokens} provides some intuition towards answering that question,
+by informally describing two components that comprise stack safety:
+local state encapsulation and well-bracketed control flow. In this paper
+we turn this intuition into two formal \leo{extensional} security properties,
+that together form a formal definition of stack safety.
+
+The underlying notion behind local state encapsulation is the
+intention to protect callers from callees: a callee should be not be
+able to access or overwrite a caller's private data. We formalize this
+intuition as a security property, with a confidentiality and an
+integrity component.
 %
-Informally, {\em stack confidentiality} ensures that a callee's
+At a high level, {\em stack confidentiality} ensures that a callee's
 observable behavior is not affected by memory outside its stack frame
 (e.g. a caller's private data or uninitialized memory).  {\em Stack
   integrity} guarantees that if a function call returns, the caller's
@@ -247,30 +255,28 @@ this paper we address this challenge by varying the observation power
 of the attacker at call points, and demonstrate that our policy is
 implementable by pre-existing monitoring mechanisms.
 
-\leo{This will probably need to be fixed depending on what we end up
-  doing}
-%
-A second common concern is to protect the call structure itself: a
-callee should not be allowed to jump to the middle of an arbitrary
-block of code either directly (via a jump instruction) or indirectly
-(by corrupting stack data and returning). In this work we enforce
-well-bracketed control flow by ensuring that code transitions are
-valid based on a statically-known call graph of the
-program. \leo{e.g. provided by the compiler?}
+Similarly, the underlying notion behind well-bracketed control flow is
+the need to protect the call structure itself: a callee should not be
+allowed to jump to the middle of an arbitrary block of code either
+directly (via a jump instruction) or indirectly (by corrupting stack
+data and returning). \leo{There needs to be some informal description
+  of the wbcf part here. Sean?}
 
 We begin by giving some background in Section~\ref{sec:prelim}.
 Our contributions are:
 \begin{itemize}
-\item \leo{More? Extensional} formal characterizations of the intuitive concepts
-  of local state encapsualtion \leo{ref} and well-bracketed control flow \leo{ref}.
-  Evidence that this property is strong enough to capture the folk
-  intuition: we show that the stack unsafe examples from the literature also fail
-  our property.
+\item \leo{More? Extensional} formal characterizations of the
+  intuitive concepts of local state encapsulation~\ref{sec:lse} and
+  well-bracketed control flow~\ref{sec:wbcf}.  Evidence that this
+  property is strong enough to capture the folk intuition: we show
+  that the stack unsafe examples from the literature also fail our
+  property.
 \item Evidence that the property is not too strong. It's realizible by
-  a previously proposed  micropolicy enforcement mechanism \leo{And it
-    says yes on a substantial body of code}
-  We then present a variation of the property + policy that is lazy,
-  easier/more efficient to implement, and provably weaker.
+  a previously proposed micropolicy enforcement
+  mechanism~\ref{sec:micropolicy}. \leo{And it says yes on a
+    substantial body of code} We then present a variation of the
+  property + policy that is lazy, easier/more efficient to implement,
+  and provably weaker.
 \item A provably stronger (inductive? step-by-step/stepwise) variant
   of this property tuned for testing/verification.  We test the whole
   thing with a cool framework.
@@ -281,65 +287,65 @@ sketch directions for future work in Section~\ref{sec:future}.
 \section{Background}
 \label{sec:prelim}
 
-We begin by describing our machine model. Concretely, we have in mind a
+Before we define stack safety, we need to first set the stage by
+describing our machine model. Concretely, we have in mind a
 conventional machine architecture with a standard (RISC-V) processor
 extended with some kind of (static or dynamic, software- or
-hardware-enforced) security monitor, but we won't need to make any
-specific choices about details until we get to \bcp{the policy one, probably}.
-%In this section we will describe an abstract interface to our machine model.
+hardware-enforced) security monitor. However, our definition of stack
+safety is generic: we will begin with an abstract interface to our
+machine model and only make specific choices about details when we get
+to the policy enforcement section~\ref{sec:micropolicy}.
 
-Values and addresses are words drawn from some set of all words $\WORDS$. We will
-denote words with $\word$.\leo{TODO: If we ever need ``A'' come back to this.}
+\paragraph*{Values, States, and Observations}
 
-Components are words (denoting addresses) and registers.
+The basic building blocks of the machine are {\em values} and {\em
+  addresses}. Both are drawn from some set of all possible words
+$\WORDS$. We will denote words with $\word$.
+%
+Our machine states are comprised of {\em components}, that can be word
+(denoting memory addresses) or registers (drawn from some set $\REGS$.
 %
     \[\reg \in \REGS\]
     \[\component \in \COMPONENTS = \WORDS + \REGS \]
 %
 The registers must include two special purpose registers: the program
 counter \PCname and the stack pointer \SP.
-
-A machine state is just a map from components to values:
+%
+Formally, a machine state is just a map from components to values:
 %
 \[\mach \in \MACHS = \COMPONENTS \rightarrow \WORDS\]
 
-
-Our stack safety property will be defined in terms of {\em observations}, which may be
-silent (written $\tau$) or a word of data:
+Our stack safety property will be defined in terms of {\em
+  observations}, which may be silent (written $\tau$) or a word of
+data:\leo{Needs more exposition}
 %
 \[\obs \in \OBSS = \tau ~ | ~ \word \in \WORDS\]
-
+%
 These observations are a byproduct of the step function of the
 machine, which takes a machine state and produces a pair of a
 machine state and an observation.
 %
 \(\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \).
 
-\paragraph*{Policy}
+\paragraph*{Policies}
 
 A policy is a general model of an enforcement mechanism, consisting of
-a set of policy states, \(\pol \in \POLS\) and a policy step function
+a set of policy states \(\pol \in \POLS\), and a policy step function
 \((\mach, \pol) \stepstopol \pol' : \MACHS \times \POLS
 \rightharpoonup \POLS\).
 
-%    The initializer and step function are both partial functions,
-%    the former to reflect static guarantees (some initial states may not be valid at all) and
-%    the latter to reflect dynamic fail-stop behavior. We then define machine-policy pairs and
-%    a step function on them:
-
-Let $\MPS$ be the set of all pairs of machine states and policy states.
+We write $\MPS$ for the set of all pairs of machine states and policy
+states.
 %
 \[\MPS = \MACHS \times \POLS\]
 %
-Then we can lift this policy step function to operate on such pairs,
+We then lift this policy step function to operate on such pairs,
 by combining it with the regular step function for machine states.
 
-%    \[\stepstoobs{}_P \subseteq \MPS \times \MPS\]
+\judgmenttwo{\(\mach_1 \stepstoobs{\obs} \mach_2\)}{\((\mach_1, \pol_1) \stepstopol \pol_2\)}
+            {\(\mpstate{\mach_1}{\pol_1} \stepstoobs{\obs}_P \mpstate{\mach_2}{\pol_2}\)}
 
-    \judgmenttwo{\(\mach_1 \stepstoobs{\obs} \mach_2\)}{\((\mach_1, \pol_1) \stepstopol \pol_2\)}
-           {\(\mpstate{\mach_1}{\pol_1} \stepstoobs{\obs}_P \mpstate{\mach_2}{\pol_2}\)}
-
-\leo{Notation: Should $\stepstoobs{}$ be partial?}
+\leo{Notation: Should $\stepstoobs{}$ use harpoon for the lifted step?}
 
 \paragraph{Traces}
 
@@ -347,71 +353,91 @@ A trace over some type $A$ is a potentially infinite, nonempty
 sequence of $A$s. We will mostly be concerned with sequences of
 machines states, usually denoted $\machT$, and with sequences of
 triples of (machine states, policy states, and observations), usually
-denoted $\MPT$.
+denoted $\MPT$. To continue, we will require three generic operations
+on traces: a ``trace-of'' operation to construct the potentially
+infinite traced induced by a step relation; a ``split'', to break a
+trace into two components based on a predicate; a ``join'', the
+reverse of split; and a ``prefix'', as a shorthand to only keep the
+first component of a split.
 
-We define a few operations on traces generically.
-The {\it split} operation \(\mathit{split}(f,T)\) takes a trace \(T\) and a predicate on elements \(f\) and
-separates \(T\) into a prefix and suffix at the first element on which \(f\) holds:
-
-  \judgment{\(f\ t\)}
-           {\(\mathit{split}(f,tT) = t, tT\)}
-  
-  \judgmenttwo{\(\neg f\ t\)}{\(\mathit{split}(f,T) = T_1,T_2\)}
-              {\(\mathit{split}(f,tT) = tT_1,T_2\)}
-
-The {\it join} operation \(T_1 \cdot T_2\) takes two traces and links them by replacing the last element
-of the first (if it has one) with the first of the second:
-  
-  \judgment{}
-           {\(T_1t \cdot T_2 = T_1 T_2\)}
-
-We define the ``trace-of'' operator \(\hookrightarrow\) that coinductively
+The ``trace-of'' operator, written \(\hookrightarrow\), coinductively
 relates a machine state with the trace of machine states paired with
 observations produced by repeated application of step:
-\[\machT \in \mathit{MOTrace} = \mathit{Trace}\ (\MACHS \times \OBSS)\]
-\[\hookrightarrow : \machT \rightarrow \mathit{MOTrace}\]
-
+%
+\[\hookrightarrow : \machT \rightarrow \MOTRACE\]%
+%
 \judgmenttwo{\(\mach_0 \stepstoobs{\obs} \mach_1\)}{\(\mach_1 \hookrightarrow \machT\)}
-            {\(\mach_0 \hookrightarrow (\mach_0,\obs) \machT\)}
-
+            {\(\mach_0 \hookrightarrow (\mach_0,\obs) \machT\)}%
+%
+\noindent
 Since the step function is total, if \(\mach \hookrightarrow \machT\),
 then \(\machT\) must be infinite.
-
-\sna{Lambdas in the split are a bit busy, not sure anything will look better.}
-We will also wish to take a prefix of the trace from an initial state up through the first state where
-some condition holds, using {\it split}. Let \(f\) be a predicate on machine states. Then we define
-\(\mach \hookrightarrow \machT | f\) (read ``\(\machT'\) is the prefix of \(\machT\) up to \(f\)''):
-  
-  \judgmenttwo{\(\mach \hookrightarrow \machT\)}
-              {\(\mathit{split}(\lambda (\mach',\obs).f(\mach'),\machT) = \machT_1,\machT_2\)}
-              {\(\mach \hookrightarrow \machT_1 | f\)}
 
 Similarly, we define \(\hookrightarrow_P\) to relate a machine-policy
 state pair to the trace of triples of machine states, policy states,
 and observations induced by by \(\stepstoobs{}_P\):
+%
+\[\hookrightarrow_P : \MACHS \times \POLS \rightarrow \MPOTRACE \]
+%
+\judgment{\(\neg \exists \pol_1 . \pol_0 \rightharpoonup \pol_1\)}
+         {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}\)}
+%  
+\judgmentthree{\(\mach_0 \stepstoobs{\obs} \mach_1\)}
+              {\(\pol_0 \rightharpoonup \pol_1\)}
+              {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \machT\)}
+              {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT\)}
+We will also use \(\pi_m\) to project the trace of machine states
+out of a trace, \(\pi_p\) to project the trace of policy states, and
+\(\pi_o\) to project the observations.
 
-\leo{I think this would read better as not exists. Thoughts?}
-\sna{Looks good.}
-  \[\MPT \in \mathit{MPOTrace} = \mathit{Trace}\ (\MACHS \times \POLS \times \OBSS)\]
-  \[\hookrightarrow_P : \MACHS \times \POLS \rightarrow \mathit{MPOTrace}\]
+The {\it split} operation \(\mathit{split}(f,T)\) takes a trace \(T\)
+and a predicate on elements \(f\) and separates \(T\) into a prefix
+and suffix at the first element on which \(f\) holds:
 
-  \judgment{\(\neg \exists \pol_1 . \pol_0 \rightharpoonup \pol_1\)}
-           {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}\)}
+\judgment{\(f\ t\)}
+         {\(\mathit{split}(f,tT) = t, tT\)}
+%  
+\judgmenttwo{\(\neg f\ t\)}{\(\mathit{split}(f,T) = T_1,T_2\)}
+            {\(\mathit{split}(f,tT) = tT_1,T_2\)}
+%
+Note that the last element of the prefix and the first element of the
+suffix coincide. As we will mostly be using $\mathit{split}$ to
+partition a trace to a callee and a caller portion, this choice will
+allow us to preserve local state encapsulation invariants during
+the transition between the two.
+            
+The {\it join} operation, written \(T_1 \cdot T_2\) is the reverse of
+$\mathit{split}$: it takes two traces and links them by replacing the
+last element of the first (if it has one) with the first element of
+the second
+
+\judgment{} {\(t \cdot T = T\)}
+\judgment{\(T_1 \cdot T_2 = T\)}{\(tT_1 \cdot T_2 = tT\)}
+\leo{Lemma/theorem: split/join = id?}
+\leo{TODO: FORMATTING: Remove force line break/par at end of judgments}
+
+Finally, we will also want to take a prefix of the trace from an
+initial state up through the first state where some condition holds.
+This can easily be implemented using $\mathit{split}$, but as we're
+going to be making heavy use of it we're going to provide special
+notation for convenience.
+%
+Let \(f\) be a predicate on machine states. Then we define \(\mach
+\hookrightarrow \machT | f\) (read ``\(\machT'\) is the prefix of
+\(\machT\) up to \(f\)''):
   
-  \judgmentthree{\(\mach_0 \stepstoobs{\obs} \mach_1\)}
-                {\(\pol_0 \rightharpoonup \pol_1\)}
-                {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \machT\)}
-      {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT\)}
-
-We also lift the prefix-up-to relation to such traces.
+\judgmenttwo{\(\mach \hookrightarrow \machT\)}
+            {\(\mathit{split}(\lambda (\mach',\obs).f(\mach'),\machT)
+              = (\machT_1,\machT_2)\)}
+            {\(\mach \hookrightarrow \machT_1 | f\)}
+\noindent
+And similarly for traces with policies:
   
   \judgmenttwo{\(\mpstatename \hookrightarrow \MPT\)}
               {\(\mathit{split}(\lambda \mpostate{\mach}{\pol}{\obs}.f(\mach),\MPT) = \MPT_1,\MPT_2\)}
          {\(\mpstatename \hookrightarrow \MPT_1 | f\)}
 
-Finally, we will use \(\pi_m\) to project the trace of machine states
-out of a trace, \(\pi_p\) to project the trace of policy states, and
-\(\pi_o\) to project the observations.
+
 
 %    \COQ{this operation steps until it reaches a state on which \(f\) holds,
 %    and is infinite if it doesn't. It doesn't compute the observation of the step after the final,
@@ -420,13 +446,14 @@ out of a trace, \(\pi_p\) to project the trace of policy states, and
 %      So its only the Eager implies Lazy direction that might need tweaking, but not the Test implies Eager one?}
 %    \leo{Also, it steps until it reaches an f-state or if the policy raises a fault}
 
-\paragraph*{Observations and Equivalence}
+\paragraph*{Observational Equivalence}
 
 We say that a trace of observations $\obsT_1$ is a prefix of $\obsT_2$
 \leo{Benjamin suggested ``as far as an attacker is conerned in an
   e-mail, but we haven't said anything about attackers yet.}, if the
-sequence of word-observations of $\obsT_1$ is a prefix of those of
-$\obsT_2$, that is we operate up to deletion of \(\tau\) observations, coinductively:
+sequence of non-silent observations of $\obsT_1$ is a prefix of those
+of $\obsT_2$; that is we operate up to deletion of \(\tau\)
+observations, coinductively:
 
 \judgment{}{\(\obsT \lesssim \obsT\)}
 
@@ -458,10 +485,11 @@ We then define equivalence of observation traces as traces prefixing each other:
 %      presentation purposes)}
 
 Let the predicate \(\isinf(T)\) hold when the trace $T$ is infinite.
-We then define {\em policy-sensitive observational equivalence}: an
-{\it MPOTrace} \(\MPT\) is equivalent to an {\it MOTrace} trace \(\machT\) if \(\MPT\)
-is infinite and the observations of \(\MPT\) and \(\machT\) coincide, or if the \(\MPT\)
-is finite (due to a policy fault) and its observations are a prefix of those of M.
+We then define {\em policy-sensitive observational equivalence}: a
+trace $\MPT \in \MPOTRACE$ is equivalent to a trace $\machT \in
+\MOTRACE$ if (1) \(\MPT\) is infinite and the observations of \(\MPT\)
+and \(\machT\) are equivalent, or (2) if the \(\MPT\) is finite (due to a
+policy fault) and its observations are a prefix of those of M.
 
 % Fixed by Sean
 %\leo{Why $\mathit{Obs}$ and not $\pi_o$ defined earlier?}
