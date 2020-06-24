@@ -289,7 +289,7 @@ Admitted. (* Qed. *)
 (********************** ObsTrace Prefix *************************)
 (* not at all sure about how to formulate this *)
 
-CoInductive ObsTracePrefix(*_gen R*) : TraceOf Observation -> TraceOf Observation -> Prop :=
+*CoInductive ObsTracePrefix(*_gen R*) : TraceOf Observation -> TraceOf Observation -> Prop :=
 | ObsPreTau1 : forall OO OO'
                       (HR : (*R*)ObsTracePrefix OO OO' : Prop),
                       (InfTau OO -> InfTau  OO') -> 
@@ -309,6 +309,43 @@ CoInductive ObsTracePrefix(*_gen R*) : TraceOf Observation -> TraceOf Observatio
     ObsTracePrefix(*_gen R*) OO (finished Tau)
 .
 Hint Constructors ObsTracePrefix(*_gen*) : core.
+
+(* another try: *)
+
+Module Foo.
+
+Inductive Productive : TraceOf Observation -> Prop :=
+| ProdFinished : forall w, Productive (finished (Out w))
+| ProdNotFInished: forall w T, Productive (notfinished (Out w) T)
+| ProdTau : forall T, Productive T -> Productive (notfinished Tau T).
+
+CoInductive ObsTracePrefix(*_gen R*) : TraceOf Observation -> TraceOf Observation -> Prop :=
+| ObsPreTau1 : forall OO OO',
+                       Productive OO -> Productive OO' -> 
+(* or??                 ~ InfTau OO ->  ~ InfTau OO' ->  *)
+                      ObsTracePrefix OO OO' -> 
+                      ObsTracePrefix (notfinished Tau OO) (OO')
+| ObsPreTau2 : forall OO OO',
+                      Productive OO -> Productive OO' -> 
+                      ObsTracePrefix OO OO' -> 
+                      ObsTracePrefix OO (notfinished Tau OO')
+| ObsPreNow : forall w OO OO'
+                      (HR : (*R*)ObsTracePrefix OO OO' : Prop),
+    ObsTracePrefix(*_gen R*) (notfinished (Out w) OO) (notfinished (Out w) OO')
+| ObsPreFinishedOut1 : forall o,
+    ObsTracePrefix(*_gen R*) (finished o) (finished o)
+| ObsPreFinishedOut2 : forall w OO,
+    ObsTracePrefix(*_gen R*) (notfinished (Out w) OO) (finished (Out w))
+| ObsPreFinishedTau : forall OO,
+    ObsTracePrefix(*_gen R*) OO (finished Tau)
+| ObsPreAllTau: forall OO OO',
+    InfTau OO -> InfTau OO' -> 
+(* ?? ~ Productive OO -> ~ Productive OO' -> *)    
+    ObsTracePrefix OO OO'
+.
+Hint Constructors ObsTracePrefix(*_gen*) : core.
+
+End Foo.
 
 
 Notation "OO' <=_O OO" := (ObsTracePrefix OO OO') (at level 80).
