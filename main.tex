@@ -501,113 +501,103 @@ policy fault) and its observations are a prefix of those of M.
 
 \section{Stack Safety, Formally}
 
-In this section we will describe stack safety as a formal
-property.
-\leo{Should call maps and returns go here or in preliminaries?}
+In this section we will describe stack safety as a formal property. We
+begin with our model of knowledge about the program structure\leo{I
+  hate this}, and then dive in to local state encapsulation and
+well-bracketed control flow. 
 
-\paragraph*{Program Structure}
+\subsection{Program Structre}
 
-  Our properties and policies are parameterized by several types of annotations
-  describing features of a program. A {\em code map} identifies some addresses
-  as code and assigns each to a function. A {\em call map} identifies addresses
-  that complete a call sequence, abstracting away from any concrete calling
-  convention. Likewise a {\em return map} identifies addresses that complete a
-  return sequence. An {\em entry map} identifies valid entry points to a
-  function.
+Our properties and policies are parameterized by several types of
+annotations describing features of a program. A {\em code map}
+identifies some addresses as code and assigns each to a function. A
+{\em call map} identifies addresses that complete a call sequence,
+abstracting away from any concrete calling convention. Likewise a {\em
+  return map} identifies addresses that complete a return sequence. An
+{\em entry map} identifies valid entry points to a function.
 
-  Formally a code map is a partial function from addresses to a function
-  identifier drawn from the set \(\FUNIDS\).
+Formally a code map is a partial function from addresses to a function
+identifier drawn from the set \(\FUNIDS\).
   %
-  \[\codemap \in \CODEMAPS = \WORDS \rightharpoonup \FUNIDS\]
+\[\codemap \in \CODEMAPS = \WORDS \rightharpoonup \FUNIDS\]
 
-  A call map is a partial function from addresses to a natural number,
-  the number of arguments of the call.
+A call map is a partial function from addresses to a natural number,
+the number of arguments of the call.
   %
-  \[\callmap \in \CALLMAPS = \WORDS \rightharpoonup \mathbb{N}\]
+\[\callmap \in \CALLMAPS = \WORDS \rightharpoonup \mathbb{N}\]
 
-  For concreteness, in a typical calling convention, a call map may be
-  considered to identify the state just before the \(\JAL\), in which
-  space for arguments is already allocated, but the mechanism is more
-  general. A state in which a call map is defined on the program counter is
-  referred to as a {\it call state}.
+For concreteness, in a typical calling convention, a call map may be
+considered to identify the state just before the \(\JAL\), in which
+space for arguments is already allocated, but the mechanism is more
+general. A state in which a call map is defined on the program counter
+is referred to as a {\it call state}.
   
-  A return map is simply a predicate on addresses and may be considered to
-  identify the final jump of the return sequence. An entry map is likewise a
-  predicate on addresses.
+A return map is simply a predicate on addresses and may be considered
+to identify the final jump of the return sequence. An entry map is
+likewise a predicate on addresses.
   %
-  \[\retmap \in \RETMAPS \subseteq \WORDS\]
-  \[\entmap \in \ENTMAPS \subseteq \WORDS\]
+\[\retmap \in \RETMAPS \subseteq \WORDS\]
+\[\entmap \in \ENTMAPS \subseteq \WORDS\]
 
-\paragraph*{State Returns}
+\paragraph*{What is a return?}
 
-  We separately identify, for any call state, what is means for a state to
-  have correctly returned from a call. We consider the call to have returned
-  the first time control returns to the instruction following the \(\JAL\) with
-  the stack restored. Formally this is a relation between the states:
+We separately identify, for any call state, what is means for a state
+to have correctly returned from a call. We consider the call to have
+returned the first time control returns to the instruction following
+the \(\JAL\) with the stack restored. Formally this is a relation
+between the states:
     
-  \[\begin{split}
+\[\begin{split}
     \ret{\mach_c}\ \mach_r \triangleq & \mach_r(\PCname) =
-    \nextPC(\mach_c(\PCname)) \land \\
-    & \mach_r(\SP) = \mach_c(\SP)
-  \end{split}\]
+    \nextPC(\mach_c(\PCname)) \land \\ & \mach_r(\SP) = \mach_c(\SP)
+\end{split}\]
 
-\leo{How do we initialize the first policy state based on a call map? It's not
-  part of the policy. Do we parameterize policies?}
-
-\paragraph*{Stack safety}
+\subsection{Local State Encapsulation}
   
-  A stack safety property is a property of a transition system, a policy, a
-  call map and a code map, that is decomposed into an integrity property and a
-  confidentiality property.
+The first part of stack safety is {\em local state encapsulation}.
+Informally, it captures the notion that a caller's data is
+protected from a callee's actions. We formalize this notion
+as a security property with a confidentiality and an integrity
+component, where the former protects the caller's data from being
+read and the latter from being written.
 
-    \[\begin{split}
-      \textit{stack safety} \triangleq \textit{stack integrity} \land
-      \textit{stack confidentiality} \\
-    \end{split}\]
+As is standard with security properties, we associate with each
+component of the machine a {\em label}: a pair of security levels
+denoting high or low confidentiality and high or low integrity.
+%
+\[\mathit{label} ::= \{\HIGHSEC,\LOWSEC\} \times \{\HIGHINT,\LOWINT\}\]
+%
+Since we need to enforce integrity and confidentiality at {\em every}
+function call in a trace, we must treat the security level of data
+dynamically. To that end, we introduce the notion of a {\em contour},
+a map from components to labels:
+%
+\[\contour \in \CONTOURS ::= \COMPONENTS \rightarrow \mathit{label}\]
 
-  \leo{TODO: Rephrase from introduction} Informally, {\it Stack
-  integrity} states that if a function call returns, the caller's
-  private stack data will be identical to what it was before the
-  call. {\it Stack confidentiality} states that data outside a callee's
-  stack frame is secret, and do not interfere with its observable
-  behavior or with the machine state at return.
-
-  As is standard with security properties, we associate with each
-  component of the machine a {\em label}: a pair of security levels
-  denoting high or low confidentiality and high or low integrity.
-  %
-  \[\mathit{label} ::= \{\HIGHSEC,\LOWSEC\} \times \{\HIGHINT,\LOWINT\}\]
-  %
-  Since we need to enforce integrity and confidentiality at {\em every}
-  function call in a trace, we must treat the security level of data
-  dynamically. To that end, we introduce the notion of a {\em contour},
-  a map from components to labels:
-  %
-  \[\contour \in \CONTOURS ::= \COMPONENTS \rightarrow \mathit{label}\]
-
-  \leo{What about instructions? Shouldn't they be LC/HI?}
-  \sna{Now we are dealing with this!}
-
-  When \(\mach_c\) is a call state \(\callmap(\mach(\PCname)) = n\) for some
-  \(n\) and \(\mach_c \stepstoobs{\obs} \mach_e\), we can construct a contour
-  based on the bounds of the callee's stack frame. Instructions are low
-  confidentiality if they belong to the callee and high confidentiality
-  otherwise; regardless they are always high integrity.
- 
-  The private state of the callee is the entire area of the memory from stack
-  base to stack pointer, with the exception of the $n$ locations
-  corresponding to the arguments of a call. Private components are marked
-  high confidentiality and high integrity: the callee should be able to
-  neither read, nor write them.
-  
-  Everything above the stack pointer at the point of the call is
-  ``uninitialized'' memory that can be written into but should not be
-  read. To protect the callee itself from such reads, these components
-  are marked high confidentiality and low integrity.
- 
-  Registers and the frame of arguments to the callee are free for the
-  callee to use, and are therefore tagged with low integrity and low
-  confidentiality. 
+When \(\mach_c\) is a call state \(\callmap(\mach(\PCname)) = n\) for
+some \(n\) and \(\mach_c \stepstoobs{\obs} \mach_e\), we can construct
+a contour based on the bounds of the callee's stack frame.
+%
+The private state of the callee is the entire area of the memory from
+stack base to stack pointer, with the exception of the $n$ locations
+corresponding to the arguments of a call. Private components are
+marked high confidentiality and high integrity: the callee should be
+able to neither read, nor write them.
+%  
+Everything above the stack pointer at the point of the call is
+``uninitialized'' memory that can be written into but should not be
+read. To protect the callee itself from such reads, these components
+are marked high confidentiality and low integrity.
+%
+Special care is needed for the code memory corresponding to the
+callee: they are marked low confidentiality if they belong to the
+callee and high confidentiality otherwise; regardless they are always
+high integrity.\leo{That would mean we scramble some instructions, I
+  guess that makes sense.}
+%
+Finally, registers and the frame of arguments to the callee are free
+for the callee to use, and are therefore tagged with low integrity and
+low confidentiality.
 
  \[\mathit{Cof}(\mach,\funid,n)(\component) =
   \begin{cases}
@@ -620,6 +610,59 @@ property.
     (\LOWSEC,\LOWINT) & \text{else} \\
   \end{cases}\]
 
+\paragraph*{Stack Confidentiality}
+
+Confidentiality is a noninterference-style property, comparing the
+behavior of a program with an arbitrary variant that preserves low
+confidentiality data but may have any configuration of high
+confidentiality data.
+
+\definition{Variations}
+
+We say two machine states $\mach$ and $\mach'$ are {\em variations} of one
+another given a contour $\contour$ if they agree on low
+confidentiality data:
+  \[\mach \approx_\contour \mach' \triangleq \forall \component .
+    \contour(\component) = \LOWSEC \rightarrow \mach(\component) =
+    \mach'(\component)\]
+
+\definition{Stack Confidentiality}    
+
+A system satisfies eager {\em stack confidentiality} with respect to a
+call map \(\callmap\) and a code map \(\codemap\) if for any initial
+mpstate $\mpstate{\mach_0}{\pol_0}$
+%\(\mpstatename = \mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\)
+and each adjacent pair of a call state \(\mach_c\) and state
+\(\mach_e\) with policy state \(\pol_e\) in the induced trace from
+\(\mpstatename\), where \(\callmap(\mach_c(\PCname)) = n\) and
+\(\codemap(\mach_e(\PCname)) = \funid\), one of two cases holds on the
+induced traces from \(\mpstate{\mach_e}{\pol_e}\) and any variation
+\(\mach_e'\) with respect to the contour
+\(\mathit{Cof}(\mach_c,\funid,n)\):
+
+\begin{itemize}
+\item
+If the trace from the call reaches a return -- \(\mpstate{\mach_e}{\pol_e}
+  \hookrightarrow_P \MPT | \ret{\mach_c}\) -- then the trace from the variant
+  \(\mach_e'\) reaches a return -- \(\mach_e' \hookrightarrow \machT |
+  \ret{\mach_c}\). Let \(\mach_r\) and \(\mach_r'\) be the final states of
+  \(\pi_m(\MPT)\) and \(\machT\), respectively. Until their final states,
+  \(\MPT\) and \(\machT\) must be observationally equivalent, \(\pi_o(\MPT)
+  \cdot \tau \eqsim \pi_o(\machT) \cdot \tau\). For any component
+  \(\component\) where \(\mach_e(\component) \not = \mach_r(\component)\) or
+  \(\mach_e'(\component) \not = \mach_r'(\component)\),
+  \(\mach_r\) agrees with \(\mach_r'\) on \(\component\).
+\item
+  If the trace from the call never reaches a return, neither does the
+  trace from the variant. Then if \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P
+  \MPT\) and \(\mach_c' \hookrightarrow \machT\), \(\MPT \sim_P \machT\).
+\end{itemize}  
+
+
+
+  \leo{Think more about whether we vary mc or step mc}
+  \sna{I've left it at step mc for now}
+  
 \definition{Stack Integrity}
 
   A system satisfies eager stack integrity with respect to a call map
@@ -634,44 +677,6 @@ property.
   component whose integrity in \(\mathit{Cof}(\mach_c,\funid,n)\) is
   \(\HIGHINT\).
 
-\definition{Stack Confidentiality}
-
-  Confidentiality is in the style of non-interference, comparing the behavior
-  of a program with an arbitrary variant that preserves low confidentiality data
-  but may have any configuration of high confidentiality data. We define two
-  machine states as variants given a contour if they agree on low
-  confidentiality data:
-  \[\mach \approx_\contour \mach' \triangleq \forall \component .
-    \contour(\component) = \LOWSEC \rightarrow \mach(\component) =
-    \mach'(\component)\]
-
-  A system satisfies eager stack confidentiality with respect to a call map
-  \(\callmap\) and code map \(\codemap\) if for any initial mpstate
-  \(\mpstatename = \mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\) and each
-  adjacent pair of a call state \(\mach_c\) and state \(\mach_e\) with policy
-  state \(\pol_e\) in the induced trace from \(\mpstatename\), where
-  \(\callmap(\mach_c(\PCname)) = n\) and \(\codemap(\mach_e(\PCname)) =
-  \funid\), one of two cases holds on the induced traces from
-  \(\mpstate{\mach_e}{\pol_e}\) and any variation \(\mach_e'\) with respect
-  to the contour \(\mathit{Cof}(\mach_c,\funid,n)\).
-
-  If the trace from the call reaches a return -- \(\mpstate{\mach_e}{\pol_e}
-  \hookrightarrow_P \MPT | \ret{\mach_c}\) -- then the trace from the variant
-  \(\mach_e'\) reaches a return -- \(\mach_e' \hookrightarrow \machT |
-  \ret{\mach_c}\). Let \(\mach_r\) and \(\mach_r'\) be the final states of
-  \(\pi_m(\MPT)\) and \(\machT\), respectively. Until their final states,
-  \(\MPT\) and \(\machT\) must be observationally equivalent, \(\pi_o(\MPT)
-  \cdot \tau \eqsim \pi_o(\machT) \cdot \tau\). For any component
-  \(\component\) where \(\mach_e(\component) \not = \mach_r(\component)\) or
-  \(\mach_e'(\component) \not = \mach_r'(\component)\),
-  \(\mach_r\) agrees with \(\mach_r'\) on \(\component\).
-
-  If the trace from the call never reaches a return, neither does the
-  trace from the variant. Then if \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P
-  \MPT\) and \(\mach_c' \hookrightarrow \machT\), \(\MPT \sim_P \machT\).
-
-  \leo{Think more about whether we vary mc or step mc}
-  \sna{I've left it at step mc for now}
 
 \section{Discussion}
 
