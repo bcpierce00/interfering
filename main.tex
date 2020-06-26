@@ -448,8 +448,6 @@ And similarly for traces with policies:
 
 \paragraph*{Observational Equivalence}
 
-\leo{Here is where we should talk about infinite stuff being weird.}
-
 We say that a trace of observations $\obsT_1$ is a prefix of $\obsT_2$
 \leo{Benjamin suggested ``as far as an attacker is conerned in an
   e-mail, but we haven't said anything about attackers yet.}, if the
@@ -457,20 +455,20 @@ sequence of non-silent observations of $\obsT_1$ is a prefix of those
 of $\obsT_2$; that is we operate up to deletion of \(\tau\)
 observations, coinductively:
 
+\leo{TODO: We really need a better layout than centered paragraphs.}
 \judgment{}{\(\obsT \lesssim \obsT\)}
 
 \judgment{}{\(\tau \lesssim \obsT\)}
+\judgment{}{\(w \lesssim w\obsT\)}
 
-\judgmenttwo{\(\obsT_1 = \tau \obsT_1'\)}{\(\obsT_1' \lesssim \obsT_2\)}
-            {\(\obsT_1 \lesssim \obsT_2\)}
+\judgment{\(\obsT_1 \lesssim \obsT_2\)}
+         {\(\tau \obsT_1 \lesssim \obsT_2\)}
 
-\judgmenttwo{\(\obsT_2 = \tau \obsT_2'\)}{\(\obsT_1 \lesssim \obsT_2'\)}
-            {\(\obsT_1 \lesssim \obsT_2\)}
+\judgment{\(\obsT_1 \lesssim \obsT_2\)}
+         {\(\obsT_1 \lesssim \tau \obsT_2\)}
 
-\judgmentthree{\(\obsT_1 = w \obsT_1'\)}
-              {\(\obsT_2 = w \obsT_2'\)}
-              {\(\obsT_1' \lesssim \obsT_2'\)}
-              {\(\obsT_1 \lesssim \obsT_2\)}
+\judgment{\(\obsT_1 \lesssim \obsT_2\)}
+         {\(w\obsT_1 \lesssim w\obsT_2\)}
 
 % Fixed by Andrew:
 %\COQ{This is the same as the coq version minus a redundant case.}
@@ -478,28 +476,33 @@ observations, coinductively:
 We then define equivalence of observation traces as traces prefixing each other:
 \[O_1 \simeq O_2 \triangleq O_1 \lesssim O_2 \land O_2 \lesssim O_1\]
 
-\leo{Should we point out here the edge cases of all-tau traces?}
+\leo{Rephrase transition. I hate it:} There are two interesting things
+to note.  First, observation trace equivalence could alternatively be
+defined as the prefix relation but dropping the only assymetric rules
+\leo{2 + 3. TODO: name rules?}
 
-% Fixed by Andrew:
-%    \COQ{this should be equivalent to the coq version, and we should adopt it.}
-%    \leo{We had this, but it was much harder to work with for my proofs. We should still
-%      prove them equivalent if we want to present it this way (which is probably cleaner for
-%      presentation purposes)}
+\leo{Also rephrase this.}
+Second, an infinite silent trace is a prefix of (and equivalent to)
+any other trace. While this might seem surprising at first, it makes
+sense in a timing-insensitive context: an external observer looking
+at two machine runs cannot distinguish between a machine that
+steps forever or a machine that steps for a long time before producing
+some output, before that time has passed.
 
-Let the predicate \(\isinf(T)\) hold when the trace $T$ is infinite.
-We then define {\em policy-sensitive observational equivalence}: a
-trace $\MPT \in \MPOTRACE$ is equivalent to a trace $\machT \in
-\MOTRACE$ if (1) \(\MPT\) is infinite and the observations of \(\MPT\)
-and \(\machT\) are equivalent, or (2) if the \(\MPT\) is finite (due to a
-policy fault) and its observations are a prefix of those of M.
-
-% Fixed by Sean
-%\leo{Why $\mathit{Obs}$ and not $\pi_o$ defined earlier?}
-\judgmenttwo{\(\neg \isinf(\MPT)\)}{\(\pi_o(\MPT) \lesssim \pi_o(\machT)\)}
-            {\(\MPT \sim_P \machT\)}
-
-\judgmenttwo{\(\isinf(\MPT)\)}{\(\pi_o(\MPT) \simeq \pi_o(\machT)\)}
-            {\(\MPT \sim_P \machT\)}
+%Let the predicate \(\isinf(T)\) hold when the trace $T$ is infinite.
+%We then define {\em policy-sensitive observational equivalence}: a
+%trace $\MPT \in \MPOTRACE$ is equivalent to a trace $\machT \in
+%\MOTRACE$ if (1) \(\MPT\) is infinite and the observations of \(\MPT\)
+%and \(\machT\) are equivalent, or (2) if the \(\MPT\) is finite (due to a
+%policy fault) and its observations are a prefix of those of M.
+% 
+%% Fixed by Sean
+%%\leo{Why $\mathit{Obs}$ and not $\pi_o$ defined earlier?}
+%\judgmenttwo{\(\neg \isinf(\MPT)\)}{\(\pi_o(\MPT) \lesssim \pi_o(\machT)\)}
+%            {\(\MPT \sim_P \machT\)}
+% 
+%\judgmenttwo{\(\isinf(\MPT)\)}{\(\pi_o(\MPT) \simeq \pi_o(\machT)\)}
+%            {\(\MPT \sim_P \machT\)}
 
 \section{Stack Safety, Formally}
 
@@ -615,56 +618,77 @@ low confidentiality.
 \paragraph*{Stack Confidentiality}
 
 Confidentiality is a noninterference-style property, comparing the
-behavior of a program with an arbitrary variant that preserves low
-confidentiality data but may have any configuration of high
-confidentiality data.
+behavior of a machine with an arbitrary variant that preserves low
+confidentiality data. 
 
+\leo{Variations or variants?}
 \definition{Variations}
 
 We say two machine states $\mach$ and $\mach'$ are {\em variations} of one
 another given a contour $\contour$ if they agree on low
 confidentiality data:
-  \[\mach \approx_\contour \mach' \triangleq \forall \component .
-    \contour(\component) = \LOWSEC \rightarrow \mach(\component) =
-    \mach'(\component)\]
+%
+\[
+\mach \approx_\contour \mach' \triangleq \forall \component .
+\contour(\component) = \LOWSEC \rightarrow \mach(\component) =
+\mach'(\component)
+\]
 
-\definition{Stack Confidentiality}    
+Let $\callmap$ be a call map and $\codemap$ a code map.
+Confidentiality with respect to $\callmap$ and $\codemap$ should be
+enforced at {\em every} transition between a caller $f$ and a callee
+$f'$.
+%
+Suppose that an execution trace starting from some initial
+machine-policy state pair contains such a transition. That is, it
+contains some step between state state pairs $(\mach_c,\pol_c)
+\stepstoobs{\obs}_P (\mach_e, \pol_e)$ for some observation $\obs$
+such that $\mach_c$ is a valid call with $n$ arguments
+($\callmap(\mach_c(\PCname)) = n$) and $\mach_e$ is an entry point for
+$f'$ ($\codemap(\mach_e(\PCname)) = f'$).
 
-A system satisfies eager {\em stack confidentiality} with respect to a
-call map \(\callmap\) and a code map \(\codemap\) if for any initial
-mpstate $\mpstate{\mach_0}{\pol_0}$
-%\(\mpstatename = \mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\)
-and each adjacent pair of a call state \(\mach_c\) and state
-\(\mach_e\) with policy state \(\pol_e\) in the induced trace from
-\(\mpstatename\), where \(\callmap(\mach_c(\PCname)) = n\) and
-\(\codemap(\mach_e(\PCname)) = \funid\), one of two cases holds on the
-induced traces from \(\mpstate{\mach_e}{\pol_e}\) and any variation
-\(\mach_e'\) with respect to the contour
-\(\mathit{Cof}(\mach_c,\funid,n)\):
+Now let $MP$ be the (potentially infinite) prefix of the trace
+starting at the entry $(\mach_e, \pol_e)$ until the corresponding
+return: $(\mach_e, \pol_e) \hookrightarrow MP ~ | ~ \ret{\mach_c}$ and
+$\contour$ be the contour at the call: $\contour =
+\mathit{Cof}(\mach_c, f', n)$.
 
+\definition{Trace Confidentiality}
+
+We will say that $MP$ satisfies {\em trace confidentiality} with
+respect to $\callmap$, $\codemap$, and $\contour$ if, for every
+$\contour$-variation $\mach_e'$ of the entry state, and the prefix $M$
+of its induced traced until the corresponding return $\mach_e'
+\hookrightarrow M ~ | ~ \ret{\mach_c}$, one of three cases holds:
 \begin{itemize}
-\item
-If the trace from the call reaches a return -- \(\mpstate{\mach_e}{\pol_e}
-  \hookrightarrow_P \MPT | \ret{\mach_c}\) -- then the trace from the variant
-  \(\mach_e'\) reaches a return -- \(\mach_e' \hookrightarrow \machT |
-  \ret{\mach_c}\). Let \(\mach_r\) and \(\mach_r'\) be the final states of
-  \(\pi_m(\MPT)\) and \(\machT\), respectively. Until their final states,
-  \(\MPT\) and \(\machT\) must be observationally equivalent, \(\pi_o(\MPT)
-  \cdot \tau \eqsim \pi_o(\machT) \cdot \tau\). For any component
-  \(\component\) where \(\mach_e(\component) \not = \mach_r(\component)\) or
-  \(\mach_e'(\component) \not = \mach_r'(\component)\),
-  \(\mach_r\) agrees with \(\mach_r'\) on \(\component\).
-\item
-  If the trace from the call never reaches a return, neither does the
-  trace from the variant. Then if \(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P
-  \MPT\) and \(\mach_c' \hookrightarrow \machT\), \(\MPT \sim_P \machT\).
-\end{itemize}  
-
-
-
-  \leo{Think more about whether we vary mc or step mc}
-  \sna{I've left it at step mc for now}
+\item If the call successfully returns, that is $MP$ is finite and its
+  final state $\mach_r$ is a valid return, then $M$ must also be
+  finite with some final state $\mach_r'$ that has changed in the same
+  manner:
+$$\forall \component. ~ \mach_e(\component) \not = \mach_r(\component)
+  \vee \mach_e'(\component) \not = \mach_r'(\component) \rightarrow
+  \mach_r(\component) = \mach_r'(\component)$$
   
+  In addittion their observations must be equivalent:
+  $$\pi_o(MP) \eqsim \pi_o(M)$$
+\item If the call trace never returns and is infinite, then the
+  variant trace must also never return and their observations are
+  equivalent:
+  $$\pi_o(MP) \eqsim \pi_o(M)$$  
+\item Finally, if the call trace ends prematurely with a policy fault,
+  then we require that the observations of $MP$ are a prefix of those
+  of the variation:
+  $$\pi_o(MP) \lesssim \pi_o(M)$$
+\end{itemize}
+  
+\definition{Stack Confidentiality}
+
+We say that a system satisfies {\em stack confidentiality} with
+respect to a call map $\callmap$ and a code map $\codemap$ if for
+every initial machine-policy pair $(\mach_0, \pol_0)$ and its induced
+trace, every call subtrace\leo{Can i reuse stuff above?} in it
+satisfies trace confidentiality.
+
 \definition{Stack Integrity}
 
   A system satisfies eager stack integrity with respect to a call map
