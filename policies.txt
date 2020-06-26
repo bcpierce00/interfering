@@ -128,8 +128,8 @@ The details of how to enforce sp behavior depend on how much
 flexibility we want to allow in the code.  The simplest thing is
 require that each stack frame's size is fixed by adjusting sp at the
 beginning of the function, and not changing it thereafter. To cover
-this, the (single-element) entry sequence simply increments the sp by
-n and tags it with a special "saved SP" tag, and the (two-element)
+this, the (single-instruction) entry sequence simply increments the sp by
+n and tags it with a special "saved SP" tag, and the (two-instruction)
 exit sequence decrements the sp by n after checking that it has the
 special "saved SP" tag, and then does the return.  If any intervening
 code overwrites the sp, the exit sequence will fail, which is safe.
@@ -165,7 +165,7 @@ jalrGrp (
 
 Note that control cannot transfer directly to a Return-tagged
 instruction because the PC tag only contains Return if we have just
-executed the Exit1 instruction.  The same approach can be used to to
+executed the Exit1 instruction.  The same approach can be used to 
 avoid jumping into the middle of longer blessed sequences.
 
 
@@ -187,14 +187,26 @@ other features.  Here are some we need to consider:
 EAGER POLICIES AND DEPTH-BASED TAGS:
 
 With unique activation-ids, eager policies work almost exactly like lazy ones; the only difference
-is in the store rule.  With depth-based tags, lazy policies clearly fail, but eager ones should
-still work provided that each frame is initialized during function entry. This can presumably
-be done as part of the blessed entry sequence, although the details seem messy (e.g. if we
-want to write a loop rather than execute a series of separate stores). A more serious issue
-is that we don't know how big the frame needs to be in order to make sure that all the
-accesses we "expect" to be legal are within that frame. In other words, I don't see a simple
-way to give a _static_ characterization of the programs that we expect to be protected
-by this micropolicy/blessed sequence scheme.
+is in the store rule.  With depth-based tags, lazy policies clearly fail, because stale tags may
+persist after functions return. But eager policies should
+still work provided that each frame is initialized during function entry and cleared during function
+exit. More specifically, following Nick and Andre's paper:
+
+- Initially the entire stack is marked "No Depth"
+- On function entry at depth n, each frame location is marked "Depth n".
+- Reads and writes in the function body insist that the memory tag match the current depth.
+- On function exit, frame locations are restored to "No Depth."
+
+This can presumably be done as part of the blessed entry and exit sequences, although
+the details seem messy.  If we want to pin down exactly what the blessed sequences
+are, we have to commit to a code sequence to to the tagging (e.g. via a loop) whereas
+in reality a compiler would choose from a variety of code sequences depending on the
+number of addresses that need tagging. So instead, we should try to characterize the
+_effect_ of the blessed sequences.
+
+[I had some concerns about what it means to get the size of the frame "right"
+for the depth-based schemes, but now I cannot see that they are any different from
+the unique acivation schemes.]
 
 ARGUMENT PASSING ON THE STACK.
 
