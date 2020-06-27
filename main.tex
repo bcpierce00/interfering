@@ -562,9 +562,9 @@ between the states:
 The first part of stack safety is {\em local state encapsulation}.
 Informally, it captures the notion that a caller's data is
 protected from a callee's actions. We formalize this notion
-as a security property with a confidentiality and an integrity
+as a security property with an integrity and a confidentiality
 component, where the former protects the caller's data from being
-read and the latter from being written.
+written and the latter from being read.
 
 As is standard with security properties, we associate with each
 component of the machine a {\em label}: a pair of security levels
@@ -572,10 +572,16 @@ denoting high or low confidentiality and high or low integrity.
 %
 \[\mathit{label} ::= \{\HIGHSEC,\LOWSEC\} \times \{\HIGHINT,\LOWINT\}\]
 %
-Since we need to enforce integrity and confidentiality at {\em every}
-function call in a trace, we must treat the security level of data
-dynamically. To that end, we introduce the notion of a {\em contour},
-a map from components to labels:
+In a traditional setting, integrity would enforce that the contents of
+$\HIGHINT$ locations remain unchanged, while confidentiality would
+enforce that the contents of $\HIGHSEC$ locations don't influence the
+observable behavior. However, when dealing with nested calls and
+returns, stack safety needs to enforce integrity and confidentiality
+for {\em every} function call in a trace; that is, we must treat the
+security level of data dynamically.
+%
+To that end, we introduce the notion of a {\em contour}, a map from
+components to labels:
 %
 \[\contour \in \CONTOURS ::= \COMPONENTS \rightarrow \mathit{label}\]
 
@@ -615,13 +621,95 @@ low confidentiality.
     (\LOWSEC,\LOWINT) & \text{else} \\
   \end{cases}\]
 
+\paragraph*{Stack Integrity}
+
+The first component of local state encapsulation is an integrity
+property: it ensures that the caller's data is never overwritten by a
+callee. We will formally define integrity in two steps: first, we will
+define integrity as a trace property over the trace corresponding to a
+single call (from its entry point to its corresponding return), and
+then we will lift that to a property for every such subtrace of a
+callee.
+
+\definition{Trace Integrity}
+\label{def:trace-integrity}
+
+Let $\contour$ be a contour and $MP$ be a (potentially infinite)
+$\MPOTRACE$. We will say $MP$ satisfies {\em trace integrity} with
+respect to $\contour$ if its final state (if any) agrees with its
+initial one on all components marked $\HIGHSEC$ in $\contour$:
+%
+\[
+\mathit{int} ~ \contour ~ MP \triangleq
+\left \{ \begin{array}{ll}
+  \mathit{True}, & \text{if $MP$ is infinite}\\
+  \forall \component. ~ \contour(\component) = \HIGHSEC \rightarrow m_0(\component) = m_f(\component), & \text{otherwise} \\
+\end{array}
+\right .
+\]  
+\leo{TODO: DISCUSS: Figure out notation for first/last machine state in a trace}
+
+Intuitively, the caller expects to find their private data untouched
+after the callee returns. That means that if the callee never returns,
+integrity is trivially satisfied. Similarly, the callee is allowed to
+temporarily overwrite these locations, as long as they are restored
+once control returns. We will see variations of this later on: a
+stronger, inductive integrity property that ensures that the caller's
+private data is never overwritten, even during the caller's execution
+(a variation that leads to easier reasoning and more effective testing);
+and a weaker, lazy integrity property that only ensures that the
+locations that a caller accesses are preserved (a variation that allows
+for a more efficient enforcement mechanism).
+
+Trace integrity characterizes the trace corresponding to a single
+callee. We now lift this definition to an integrity property for a
+complete execution trace. We do this by requiring that trace integrity
+holds for every transition between a caller and a callee $f$ for
+the entirety of the trace of $f$.
+
+\definition{Transition}
+
+Given a trace $MP$, a call map $\callmap$ and a code map $\codemap$,
+an $n-${\em transition} to a callee $f$ is a pair of machine-policy
+state pairs $(\mach_c, \pol_c)$ and $(\mach_e, \pol_e)$ in the trace
+such that:
+\begin{itemize}
+\item one state pair steps to the other: 
+  $$\exists \obs. ~ (\mach_c, \pol_c) \stepstoobs{\obs}_P (\mach_e, \pol_e),$$
+\item $\mach_c$ is a valid call with $n$ arguments:
+  $$\callmap(\mach_c(\PCname)) = n,$$
+\item and $\mach_e$ is an entry point for $f$:
+  $$\codemap(\mach_e(\PCname)) = f.$$
+\end{itemize}
+
+\definition{Stack Integrity}
+
+Let $\callmap$ be a call map and $\codemap$ a code map. We say that a
+system satisfies {\em stack integrity} with respect to $\callmap$ and
+$\codemap$ if, for every initial machine-policy state pair $(\mach_0,
+\pol_0)$ and its induced trace $MP$, and every $n$-transition
+$(\mach_c, \pol_c)$ and $(\mach_e, \pol_e)$ to a callee $f$ in $MP$,
+the prefix $MP_{pre}$ of $MP$ from $(\mach_e, \pol_e)$ until the first
+return corresponding to $\mach_c$ (if any) satisfies trace integrity
+with respect to the contour at the call:
+%
+$$\forall MP_{pre}. ~ \mpstate{\mach_e}{\pol_e} \hookrightarrow_P
+MP_{pre} ~ | ~ \ret{\mach_c} \rightarrow
+\mathit{int}~\mathit{Cof}(\mach_c, f, n)~MP_{pre}$$
+
 \paragraph*{Stack Confidentiality}
 
-Confidentiality is a noninterference-style property, comparing the
-behavior of a machine with an arbitrary variant that preserves low
-confidentiality data. 
+The second component of local state encapsulation is a confidentiality
+property: just like integrity ensures that a caller's data is never
+overwritten by a callee, confidentiality ensures that it never
+influences its observable behavior. We will formally define
+confidentiality in two similar steps: a trace version and a system
+version.
 
-\leo{Variations or variants?}
+Unlike integrity, confidentiality is a noninterference-style property,
+comparing the behavior of a machine with an arbitrary variant that
+preserves low confidentiality data.
+
 \definition{Variations}
 
 We say two machine states $\mach$ and $\mach'$ are {\em variations} of one
@@ -633,76 +721,55 @@ confidentiality data:
 \contour(\component) = \LOWSEC \rightarrow \mach(\component) =
 \mach'(\component)
 \]
-
-Let $\callmap$ be a call map and $\codemap$ a code map.
-Confidentiality with respect to $\callmap$ and $\codemap$ should be
-enforced at {\em every} transition between a caller $f$ and a callee
-$f'$.
 %
-Suppose that an execution trace starting from some initial
-machine-policy state pair contains such a transition. That is, it
-contains some step between state state pairs $(\mach_c,\pol_c)
-\stepstoobs{\obs}_P (\mach_e, \pol_e)$ for some observation $\obs$
-such that $\mach_c$ is a valid call with $n$ arguments
-($\callmap(\mach_c(\PCname)) = n$) and $\mach_e$ is an entry point for
-$f'$ ($\codemap(\mach_e(\PCname)) = f'$).
-
-Now let $MP$ be the (potentially infinite) prefix of the trace
-starting at the entry $(\mach_e, \pol_e)$ until the corresponding
-return: $(\mach_e, \pol_e) \hookrightarrow MP ~ | ~ \ret{\mach_c}$ and
-$\contour$ be the contour at the call: $\contour =
-\mathit{Cof}(\mach_c, f', n)$.
+Then, the trace version of confidentiality operates on two traces: the
+``original'' one $MP \in \MPOTRACE$ that corresponds to a callee $f$
+and a ``variant'' one $M \in \MTRACE$ that would corresponding to $f$
+if it started from a variant initial machine state.
 
 \definition{Trace Confidentiality}
 
-We will say that $MP$ satisfies {\em trace confidentiality} with
-respect to $\callmap$, $\codemap$, and $\contour$ if, for every
-$\contour$-variation $\mach_e'$ of the entry state, and the prefix $M$
-of its induced traced until the corresponding return $\mach_e'
-\hookrightarrow M ~ | ~ \ret{\mach_c}$, one of three cases holds:
+\leo{Add info for ``valid return'':}
+We will say two traces $MP$ and $M$ satisfy {\em trace
+  confidentiality} with respect to $\contour$ if:
 \begin{itemize}
-\item If the call successfully returns, that is $MP$ is finite and its
-  final state $\mach_r$ is a valid return, then $M$ must also be
-  finite with some final state $\mach_r'$ that has changed in the same
-  manner:
+\item If $MP$ is finite and its final state $\mach_r$ is a valid
+  return, then $M$ is also finite with some final state $\mach_r'$ and
+  any changes from the initial states have changed in the same way:
 $$\forall \component. ~ \mach_e(\component) \not = \mach_r(\component)
   \vee \mach_e'(\component) \not = \mach_r'(\component) \rightarrow
   \mach_r(\component) = \mach_r'(\component)$$
-  
   In addittion their observations must be equivalent:
   $$\pi_o(MP) \eqsim \pi_o(M)$$
-\item If the call trace never returns and is infinite, then the
-  variant trace must also never return and their observations are
-  equivalent:
+\item If $MP$ is infinite, then $M$ is also infinite and their
+  observations are equivalent:
   $$\pi_o(MP) \eqsim \pi_o(M)$$  
-\item Finally, if the call trace ends prematurely with a policy fault,
-  then we require that the observations of $MP$ are a prefix of those
-  of the variation:
+\item If the $MP$ ends prematurely with a policy fault, then
+  we require that its observations are a prefix of those of $M$:
   $$\pi_o(MP) \lesssim \pi_o(M)$$
 \end{itemize}
+
+\leo{Discuss variations in a similar manner}
+
+To lift trace confidentiality to a system property, we follow the same
+pattern as in stack integrity:
   
 \definition{Stack Confidentiality}
 
-We say that a system satisfies {\em stack confidentiality} with
-respect to a call map $\callmap$ and a code map $\codemap$ if for
-every initial machine-policy pair $(\mach_0, \pol_0)$ and its induced
-trace, every call subtrace\leo{Can i reuse stuff above?} in it
-satisfies trace confidentiality.
-
-\definition{Stack Integrity}
-
-  A system satisfies eager stack integrity with respect to a call map
-  \(\callmap\) and code map \(\codemap\) if for any initial mpstate
-  \(\mpstatename = \mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\) and each
-  adjacent pair of a call state \(\mach_c\) and state \(\mach_e\) with policy
-  state \(\pol_e\) in the induced trace from \(\mpstatename\), where
-  \(\callmap(\mach_c(\PCname)) = n\) and \(\codemap(\mach_e(\PCname)) =
-  \funid\), if we take the prefix until a return
-  \(\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT | \ret{\mach_c}\) and
-  \(\MPT\) ends with some \(\mach_p\), \(\mach_p\) matches \(\mach_c\) on each
-  component whose integrity in \(\mathit{Cof}(\mach_c,\funid,n)\) is
-  \(\HIGHINT\).
-
+Let $\callmap$ be a call map and $\codemap$ a code map. We say that a
+system satisfies {\em stack confidentiality} with respect to
+$\callmap$ and $\codemap$ if, for every initial machine-policy state
+pair $(\mach_0, \pol_0)$ and its induced trace $MP$, and every
+$n$-transition $(\mach_c, \pol_c)$ and $(\mach_e, \pol_e)$ to a callee
+$f$ in $MP$, the prefix $MP_{pre}$ of $MP$ from $(\mach_e, \pol_e)$
+until the first return corresponding to $\mach_c$ (if any) satisfies
+trace integrity with respect to every similarly prefixed machine trace
+of every variation $\mach_e'$ with the contour at the call:
+$$\forall MP_{pre} ~ M_{pre}. ~
+\mpstate{\mach_e}{\pol_e} \hookrightarrow_P MP_{pre} ~ | ~ \ret{\mach_c} \rightarrow$$
+$$\forall \mach_e'. ~ \mach_e \approx_{\mathit{Cof}(\mach_c, f, n)} \mach_e' \wedge
+\mach_e' \hookrightarrow M_{pre} ~ | ~ \ret{\mach_c} \rightarrow$$
+$$\mathit{conf}~\mathit{Cof}(\mach_c, f, n) ~ MP_{pre} ~ M_{pre}$$
 
 \section{Discussion}
 
