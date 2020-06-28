@@ -96,7 +96,6 @@ Hint Constructors ObsTraceEq(*_gen*) : StackSafety.
 
 Hint Constructors ObsTracePrefix(*_gen*) : StackSafety.
 
-
 (* The entire trace MP represents a callee, that terminates when (and if)
    control has returned to the caller, according to the "justReturned" predicate.
    Note: If we are at a toplevel trace, "justReturn" will never hold. *)
@@ -151,7 +150,7 @@ Definition ObsEqUpToHalt (MPO : MPTrace') (MO : MTrace') : Prop :=
   (infinite MPO -> ObsOfMP MPO ~=_O ObsOfM MO).
 (* APT: There is something fishy about this definition.
    First of all, it doesn't quite match the latex, because the predicate
-   can hold even if we cannot show that MPO is finite or infinite.
+   can hold even if we cannot show that MPO  is finite or infinite.
    (And that is not a given constructively.)
 
    But also, using some facts proved at the bottom of ObsTrace.v
@@ -171,20 +170,28 @@ Qed.
 (* 
    So the second clause of the /\ follows from the first, and so this definition of ObsEqUpToHalt reduces to just <=_O. 
 *)
-   
+
 
 Definition EagerStackConfidentiality (C : Contour) (mp : MPState) (justReturned : MachineState -> Prop) :=
-  forall m',
+  forall m' callMPO call'MO,
     variantOf (ms mp) m' C ->
-    (forall mpret MPO,
-        SplitInclusive (fun '(m,_,_) => justReturned m) (MPRunOf mp) MPO (MPRunOf mpret) ->
-        exists m'ret MO', SplitInclusive (fun '(m,_) => justReturned m) (RunOf m') MO' (RunOf m'ret) /\
-                           (ObsOfMP MPO) ~=_O (ObsOfM MO') /\
-                           forall k, 
-                             (ms mp k <> ms mpret k \/ m' k <> m'ret k) ->
-                             ms mpret k = m'ret k) /\
-    ((forall mpret, InTrace mpret (MPTraceOf mp) -> ~ justReturned (ms mpret)) ->
-     ObsEqUpToHalt (MPRunOf mp) (RunOf m')).
+    PrefixUpTo (fun '(m,_,_) => justReturned m) (MPRunOf mp) callMPO ->
+    PrefixUpTo (fun '(m,_) => justReturned m) (RunOf m') call'MO ->
+    (forall mpret o, Last callMPO (mpret,o) ->
+                    exists m'ret o', Last call'MO (m'ret,o') /\
+                                  (ObsOfMP callMPO) ~=_O (ObsOfM call'MO) /\
+                                  forall k, 
+                                    (ms mp k <> ms mpret k \/ m' k <> m'ret k) ->
+                                    ms mpret k = m'ret k) /\
+    (* Case 2: The call runs forever without returning *)
+    (Infinite callMPO ->
+     Infinite call'MO /\
+     ObsOfMP callMPO ~=_O ObsOfM call'MO) /\
+    (* Case 3: The policy fail-stops before the call return *)
+    (forall mpohalt, Last callMPO mpohalt ->
+                     ~ justReturned (ms (fst mpohalt)) ->
+                     ObsOfMP callMPO <=_O ObsOfM call'MO)
+.
 
 CoInductive StrongEagerStackConfidentiality(*_gen*) (R : MachineState -> Prop) (*Rcoind*) :
   MPTrace -> MachineState -> Prop :=
@@ -3506,15 +3513,21 @@ Definition ObservableConfidentialityOld (C : Contour) (MP:MPTrace) (MPsuffO:opti
                    ObsTraceEq (ObsTraceOf MP) (ObsTraceOfM M')).
 
 Definition ObservableConfidentiality (C : Contour) (mp:MPState) (justReturned : MachineState -> Prop) : Prop :=
-  forall m',
+  forall m' callMPO call'MO,
     variantOf (ms mp) m' C ->
-    (forall mpret MP,
-        SplitInclusive (fun '(m,_,_) => justReturned m) (MPRunOf mp) MP (MPRunOf mpret) ->
-        exists m'ret M', SplitInclusive (fun '(m,_) => justReturned m) (RunOf m') M' (RunOf m'ret) /\
-                         let m'roll := RollbackConf (ms mp) (ms mpret) m' m'ret in
-                         ObsEqUpToHalt (MP ^^ MPRunOf mpret) (M' ^^ RunOf m'roll)) /\
-    ((forall mpret, InTrace mpret (MPTraceOf mp) -> ~ justReturned (ms mpret)) ->
-     ObsEqUpToHalt (MPRunOf mp) (RunOf m')).
+    PrefixUpTo (fun '(m,_,_) => justReturned m) (MPRunOf mp) callMPO ->
+    PrefixUpTo (fun '(m,_) => justReturned m) (RunOf m') call'MO ->
+    (forall mpret (o:Observation),
+        Last callMPO (mpret, o) ->
+        (exists m'ret (o':Observation), Last call'MO (m'ret,o') /\
+                          let m'roll := RollbackConf (ms mp) (ms mpret) m' m'ret in
+                          ObsOfMP callMPO ~=_O ObsOfM call'MO /\
+                          ObsOfMP (MPRunOf mpret) <=_O ObsOfM (RunOf m'roll))) /\
+    (Infinite callMPO -> Infinite call'MO /\ ObsOfMP callMPO ~=_O ObsOfM call'MO) /\
+    (forall mpohalt,
+        Last callMPO mpohalt ->
+        ~ justReturned (ms (fst mpohalt)) ->
+        ObsOfMP callMPO <=_O ObsOfM call'MO).
 
 Definition LazyStackSafetyOld (cm : CallMap) (cdm : CodeMap) (MP:MPTrace) : Prop :=
     ObservableConfidentialityOld (makeContour cdm 0 (ms (head MP))) MP None (fun _ => False) /\
@@ -3982,10 +3995,10 @@ Proof.
   unfold EagerStackConfidentiality. unfold ObservableConfidentiality. intros. split.
 
   - (* this is case 1 *)
-    intros. specialize H with m'. destruct H; auto.
-    specialize H with mpret MP. destruct H as [m'ret]; auto.
-    destruct H as [M']. exists m'ret. exists M'.
-    destruct H. split; auto. destruct H3 as [HTracesEq HSame].
+    intros. specialize H with m' callMPO call'MO. destruct H; auto.
+    specialize H with mpret o. destruct H as [m'ret]; auto.
+    destruct H as [o']. exists m'ret. exists o'.
+    destruct H. split; auto. destruct H5 as [HTracesEq HSame].
     pose (m'roll := (RollbackConf (ms mp) (ms mpret) m' m'ret)).
     replace (RollbackConf (ms mp) (ms mpret) m' m'ret) with m'roll; auto.
     assert (HRetsEq: ms mpret = m'roll).
@@ -4004,55 +4017,10 @@ Proof.
           apply HSame. right. auto.
           - apply not_weq_implies_neq in Unchanged.
             apply HSame. left. auto. }
-    rewrite <- HRetsEq.
-    assert (HMPfin:exists o, Last MP (mpret,o)). (* In either case we want to know each call trace is finite. *)
-    { destruct (pstep mpret) as [p |] eqn:E.
-      - exists (snd (step (ms mpret))).
-        assert (HmpretHead:head (MPRunOf mpret) = (mpret, snd (step (ms mpret)))).
-        { simpl; rewrite E; auto. }
-        rewrite <- HmpretHead.
-        apply SplitInclusiveIsInclusive with
-            (P := fun '(m,_,_) => justReturned m)
-            (T1 := MPRunOf mp); auto.
-      - exists Tau.
-        assert (HmpretHead:head (MPRunOf mpret) = (mpret, Tau)).
-        { simpl; rewrite E; auto. }
-        rewrite <- HmpretHead.
-        apply SplitInclusiveIsInclusive with
-                (P := fun '(m,_,_) => justReturned m)
-                (T1 := MPRunOf mp); auto. }
-    assert (Ho:exists o, Last (ObsOfM M') o).
-    { unfold ObsOfMP. exists (snd (step m'ret)).
-      apply (MapLast snd M' (m'ret, snd (step m'ret))).
-      assert (Hm'retHead:head (RunOf m'ret) = (m'ret, snd (step (m'ret)))); auto.
-      rewrite <- Hm'retHead.
-      apply SplitInclusiveIsInclusive with
-          (P := fun '(m,_) => justReturned m)
-          (T1 := RunOf m'); auto. }
-    split.
-    + (* pref case *)
-      apply (ObsPrefOverEq (ObsOfMP MP ^^ ObsOfMP (MPRunOf mpret))).
-      * apply TraceEqSym. apply ObsOfMPJoin.
-      * assert (ObsOfM M' ^^ ObsOfM (RunOf (ms mpret)) ~= ObsOfM (M' ^^ RunOf (ms mpret))).
-        { apply TraceEqSym. apply ObsOfMJoin. }
-        apply (ObsPrefOverEq2 (ObsOfMP MP ^^ (ObsOfMP (MPRunOf mpret)))) in H3; auto.
-        destruct HMPfin as [o1].
-        destruct Ho as [o1'].
-        apply (MapLast snd MP (mpret,o1)) in H4.
-        eapply ObsPrefJoin; eauto.
-        -- apply MPRunPrefRun; auto. (* Need a run-based version of the MPTrace - MTrace connection. *)
-    + (* eq case *)
-      intros. apply (ObsEqOverEq (ObsOfMP MP ^^ ObsOfMP (MPRunOf mpret))).
-      * apply TraceEqSym. apply ObsOfMPJoin.
-      * apply ObsTraceEq_sym. apply (ObsEqOverEq (ObsOfM M' ^^ ObsOfM (RunOf (ms mpret)))).
-        -- apply TraceEqSym. apply ObsOfMJoin.
-        -- destruct HMPfin as [o1]. destruct Ho as [o1'].
-           apply ObsTraceEq_sym. eapply ObsEqJoin; eauto.
-           ++ apply (MapLast snd MP (mpret,o1)) in H4. eauto.
-           ++ apply RunEqInfMPRun; auto.
-           apply InfJoin with (T1 := MP) (a := (mpret,o1)); auto.
-  - (* Case 2: No return *)
-    intros. specialize H with m'. destruct H; auto.
+    rewrite <- HRetsEq. split; auto.
+    apply MPRunPrefRun; auto.
+  - (* Cases 2 and 3 are identical *)
+    specialize H with m' callMPO call'MO. destruct H; auto.
 Qed.
 
 Theorem EagerSafetyImpliesLazy:
