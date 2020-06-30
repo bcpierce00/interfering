@@ -950,47 +950,59 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
 
 \section{Lazy Stack Safety}
 
-    \definition{Observable Integrity}
+    \definition{Observable Trace Integrity}
 
-      Observable integrity weakens eager integrity by allowing a returned state
-      to differ from its call state at high integrity components, provided the
-      observable behavior of the induced trace from the return matches that of
-      an idealized state whose high integrity components do match the call
-      state.
+      Suppose a function \(f\) calls another function \(g\) with contour
+      \(\contour\). If \(g\) alters an address below its stack frame, where
+      \(\contour\) is \(\HIGHSEC\), the trace from the entry point to the
+      return will not enjoy Trace Integrity. But if \(f\) immediately
+      overwrites the overwritten location, the illegal write can be safely
+      ignored, as it will never affect the behavior of the program.
+      {\em Observable trace integrity} captures this intuition by guaranteeing
+      that the final state, instead of being identical to the initial one,
+      has the same behavior as it would if the writes had not occurred.
 
-      Given a contour, a call state, and a returned state, we define a
-      ``rollback'' function \(\mathit{roll} : \CONTOURS \times \MACHS \times
-      \MACHS \rightarrow \MACHS\). The rollback returns a state that matches
-      the call state on those components that are high integrity in its
-      contour, and matches the return state on low integrity components:
-      \[\mathit{roll}(\contour,\mach_c,\mach_r)(\component) =
+      Let \(\contour\) be a contour and \(\MPT\) be a finite \(\MPOTRACE\)
+      whose initial machine state is \(\mach_e\). \(\MPT\) satisfies {\em trace
+      integrity} with respect to \(\contour\) if the trace induced by its final
+      state, \(\mpostate{\mach_r}{\pol}{\obs}\), is an observational prefix of
+      that induced by an idealized state \(\mach_r'\) that agrees with
+      \(\mach_r\) on all components marked \(\HIGHSEC\) in \(\contour\).
+      Formally we define a rollback function, \(\mathit{roll}\), that takes
+      two machine states and produces a third.
+      %
+      \[\mathit{roll}(\contour,\mach_e,\mach_r)(\component) =
       \begin{cases}
         \mach_c(\component) & \contour(\component) = (\HIGHINT,\_) \\
         \mach_r(\component) & \contour(\component) = (\LOWINT,\_) \\
       \end{cases}\]
 
-      Intuitively, the result of a rollback is an idealized state that
-      reflects changes to accessible components, but ignores the callee's
-      interference with the caller's data. Then the observable behavior of the
-      resulting trace is the standard to which we expect the real trace to
-      conform.
+      If \(\mach_e\) is an entry to a call with contour \(\contour\) and
+      \(\mach_r\) its return, \(\mathit{roll}(\contour,\mach_e,\mach_r)\)
+      agrees with \(\mach_e\) on every component the callee should not change,
+      but with \(\mach_r\) on those components that it is permitted to change.
+      So the observable behavior that follows is the idealized behavior to
+      which we compare the trace from \(\mach_r\), which must prefix it (to
+      account for premature halts due to policy violations.)
+      %
+      \[\begin{split}
+        \text{\sc ObsInt}_\contour ~ \MPT \triangleq
+          & \MPT = \mpostate{\mach_e}{\pol_e}{\obs_e} \dots
+            \mpostate{\mach_r}{\pol_r}{\obs_r} \Rightarrow \\
+        & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' \Rightarrow \\
+        & \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT' \Rightarrow \\
+        & \pi_o(\MPT') \lesssim_O \pi_o(\machT')
+      \end{split}\]
 
-      A system enjoys observable integrity with regard to \(\callmap\) and 
-      \(\codemap\) if for any initial state \(\mach_0\) and each adjacent pair
-      of a call state \(\mach_c\) and a state \(\mach_e\) with policy state
-      \(\pol_e\) in the trace induced by
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\) where
-      \(\callmap(\mach_c) = n\) and \(\codemap(\mach_e) = \funid\),
-      if \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_c}\)
-      with the return state \(\mach_r\) at the end of \(\MPT\), then the
-      following holds.
+    \definition{Observable Stack Integrity}
 
-      Let \(\contour = \mathit{Cof}(\mach_c,\funid,n)\) describe the security
-      levels of the call and
-      \(\mach_r' = \mathit{roll}(\contour,\mach_e,\mach_r)\). The induced
-      traces \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT\) and
-      \(\mach_r' \hookrightarrow \machT'\) must be equivalent up to
-      possible policy failure: \(\MPT \sim_P \machT'\).
+      A system enjoys {\em observable integrity} with regard to \(\callmap\)
+      and  \(\codemap\) if for any initial state \(\mach_0\) and each
+      transition with entry state \(\mpostate{\mach_e}{\pol_e}{\obs_e}\) and
+      contour \(\contour\) in the induced trace from
+      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), if
+      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_e}\),
+      then \(\text{\sc ObsInt}_\contour ~ \MPT\).
 
     \definition{Observable Confidentiality}
 
