@@ -218,7 +218,8 @@ techniques have been proposed in the literature\leo{cite, point out?
 
 But what {\em is} stack safety? A precise formal definition of stack
 safety is lacking from the literature, with the notion only being
-defined negatively: through examples of stack unsafety. Two classical
+defined negatively: through examples of stack unsafety
+\rb{usually though not always; as noted below there are other approaches}. Two classical
 examples of stack unsafety appear in Figure~\ref{fig:stackunsafety}.
 \leo{Goal: on the left, a bad read; on the right, a bad write.}
 \leo{Do we also need an example of ROP/control flow for the new part?}
@@ -233,6 +234,8 @@ by informally describing two components that comprise stack safety:
 local state encapsulation and well-bracketed control flow. In this paper
 we turn this intuition into two formal \leo{extensional} security properties,
 that together form a formal definition of stack safety.
+\rb{I think the merit of StkTokens goes beyond mere intuition. There is a lot of
+rigor in it, even if some notions are implicit or not fully developed.}
 
 The underlying notion behind local state encapsulation is the
 intention to protect callers from callees: a callee should be not be
@@ -248,7 +251,7 @@ stack data will be identical to what it was before the call.
 
 While integrity and confidentiality are relatively standard security
 properties, this setting provides an interesting additional challenge:
-the notion of who the attacker shifts throught execution. Not only
+the notion of who the attacker is shifts throught execution. Not only
 does a caller need to be protected from its callee, but the callee
 itself needs to be potentially proteced from {\em its} callees.  In
 this paper we address this challenge by varying the observation power
@@ -288,13 +291,13 @@ sketch directions for future work in Section~\ref{sec:future}.
 \label{sec:prelim}
 
 Before we define stack safety, we need to first set the stage by
-describing our machine model. Concretely, we have in mind a
+describing our machine model. Our definition of stack safety is
+generic and this sections discusses an abstract interface to our
+machine model and some kind of static or dynamic, software- or
+hardware-enforced security monitor. At the same time, for
+concreteness, we will build up our running example using a
 conventional machine architecture with a standard (RISC-V) processor
-extended with some kind of (static or dynamic, software- or
-hardware-enforced) security monitor. However, our definition of stack
-safety is generic: we will begin with an abstract interface to our
-machine model and only make specific choices about details when we get
-to the policy enforcement section~\ref{sec:micropolicy}.
+and later extend it with a dynamic policy mechanism.
 
 \paragraph*{Values, States, and Observations}
 
@@ -303,13 +306,13 @@ The basic building blocks of the machine are {\em values} and {\em
 $\WORDS$. We will denote words with $\word$.
 %
 Our machine states are comprised of {\em components}, that can be word
-(denoting memory addresses) or registers (drawn from some set $\REGS$.
+(denoting memory addresses) or registers (drawn from some set $\REGS$).
 %
     \[\reg \in \REGS\]
     \[\component \in \COMPONENTS = \WORDS + \REGS \]
 %
 The registers must include two special purpose registers: the program
-counter \PCname and the stack pointer \SP.
+counter {\PCname} and the stack pointer \SP.
 %
 Formally, a machine state is just a map from components to values:
 %
@@ -326,6 +329,24 @@ machine, which takes a machine state and produces a pair of a
 machine state and an observation.
 %
 \(\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \).
+
+\paragraph*{Running Example: RISC-V}
+
+Mapping a conventional architecture to this abstract interface is
+straightforward. To build up our running example, we are going to use
+a standard 64-bit RISC machine, just like the one we are using in our
+experiments later on \leo{Mention FORVIS?}. In this setting, $\WORDS$
+is the set of 64-bit integers, $\REGS$ is the set $\{r_0, \cdots,
+r_{31}\} \cup {\PCname}$, and $\SP = r_2$. \leo{Mention We use the
+  standard encoding of instructions to words?}
+
+The first interesting choice is that of observations, as there are
+multiple reasonable options. At one extreme, we could choose to define
+observations as the value written at any component. However, that
+would pose problems later on when we treat some components as ``secret''
+when they correspond to a caller's private state. \leo{On the other extreme,
+we could pick a particular component and treat it as the ``output'' of
+our system. }
 
 \paragraph*{Policies}
 
@@ -347,15 +368,21 @@ by combining it with the regular step function for machine states.
 
 \leo{Notation: Should $\stepstoobs{}$ use harpoon for the lifted step?}
 
+\leo{TODO: Forward pointer to policies right?}
+
 \paragraph{Traces}
 
 A trace over some type $A$ is a potentially infinite, nonempty
 sequence of $A$s. We will mostly be concerned with sequences of
 machines states, usually denoted $\machT$, and with sequences of
 triples of (machine states, policy states, and observations), usually
-denoted $\MPT$. To continue, we will require three generic operations
+denoted $\MPT$.
+\rb{The way the definitions are set up, one may expect MPO, but\ldots}
+To continue, we will require four generic operations
 on traces: a ``trace-of'' operation to construct the potentially
-infinite traced induced by a step relation; a ``split'', to break a
+infinite traced induced by a step relation
+\rb{not an op on traces per se?};
+a ``split'', to break a
 trace into two components based on a predicate; a ``join'', the
 reverse of split; and a ``prefix'', as a shorthand to only keep the
 first component of a split.
@@ -372,6 +399,8 @@ observations produced by repeated application of step:
 \noindent
 Since the step function is total, if \(\mach \hookrightarrow \machT\),
 then \(\machT\) must be infinite.
+
+\leo{TODO: Add an example of a trace once I figure out the notations}
 
 Similarly, we define \(\hookrightarrow_P\) to relate a machine-policy
 state pair to the trace of triples of machine states, policy states,
@@ -390,6 +419,9 @@ We will also use \(\pi_m\) to project the trace of machine states
 out of a trace, \(\pi_p\) to project the trace of policy states, and
 \(\pi_o\) to project the observations.
 
+% SNA: fixed
+%\leo{PUT is completely ambiguous as a choice of abbreviation. Just ``Pre''
+%  seems better}
 The {\it prefUpTo} operation \(\PUT(\Trace,f)\) takes a trace \(T\)
 and a predicate on elements \(f\) and gives the prefix of \(T\)
 ending with the first element on which \(f\) holds, coinductively:
@@ -507,9 +539,162 @@ some output, before that time has passed.
 In this section we will describe stack safety as a formal property. We
 begin with our model of knowledge about the program structure\leo{I
   hate this}, and then dive in to local state encapsulation and
-well-bracketed control flow. 
+well-bracketed control flow.
 
-\subsection{Program Structre}
+\subsection{Running Example}
+
+\leo{TODO: Figure out presentation}
+
+\newcommand*{\add}{\text{add}}
+\newcommand*{\addi}{\text{addi}}
+\newcommand*{\sw}{\text{sw}}
+\newcommand*{\lw}{\text{lw}}
+\newcommand*{\jal}{\text{jal}}
+\newcommand*{\jalr}{\text{jalr}}
+%\begin{lstlisting}
+%START:
+%  addi r2 r2 12 ; allocate 3 words in the stack
+%  sw r2 42 -8; store 42 in a private location
+%  sw r2 0 -4; store 0 as an argument
+%  sw r2 0 0; zero out the return location
+%  jal r1 F ; call F and store return address
+% 
+%F:
+%  addi r2 r2 4 ; allocate for ra 
+%  sw r2 r1 -4 ; store the return address to sp-4
+%  addi r2 r2 8 ; allocate for arg + ret
+%  sw r2 17 -4; store 0 as an argument
+%  sw r2 0 0; zero out the return location
+%  jal r1 G ; call G and store return address
+% 
+%G:  
+%  addi r2 r2 4 ; allocate for ra 
+%  sw r2 r1 -4 ; store the return address to sp-4
+%  
+%\end{lstlisting}
+
+Starting State:
+
+Instruction memory in locations 0 - ..
+PC at 100.
+Stack memory starting at 1000.
+Assume we're in a function. 
+Stack Pointer at 1040.
+1040: 42.
+
+\begin{center}
+\MemoryLabel{1.7em}{1.8em}{0}
+\MemoryLabel{21.2em}{1.8em}{1000}
+\MemoryLabel{29.7em}{1.8em}{1040}
+\MemoryLabel{35.2em}{1.8em}{$\downarrow$}
+\MemoryLabel{35em}{3em}{SP}
+\memory{6}{gray}[{\makebox[0pt]{Instructions}}]%
+~$\cdots$
+\memory{2}{gray}[{\makebox[0pt]{Stack}}]%
+~$\cdots$
+\memory{2}{green}[{\makebox[0pt]{$F_{priv}$}}]%
+\memory{4}{gray}[{\makebox[0pt]{Uninitialized}}]
+~$\cdots$
+\MemoryLabel{-18.7em}{0.6em}{42}
+\MemoryLabel{-16.4em}{0.6em}{0}
+\\
+\end{center}
+
+
+Program:
+
+\begin{verbatim}
+top{
+  return f(0);
+}
+
+f(x){
+  return (x + g(17));
+}
+
+g(x){
+  return (x + 1);
+}
+\end{verbatim}
+
+\newcommand*{\instr}[3]{ & #1: & #2 & ; \text{\em #3}\\}
+\newcommand*{\clabel}[1]{#1: & & &\\}
+\newcommand*{\rsp}{sp}
+\newcommand*{\rra}{ra}
+\[
+\begin{array}{llll}
+  \clabel{TOP}  
+  \instr{100}{\addi ~ \rsp ~ \rsp ~ 8}{allocate 2 words in stack}
+  \instr{104}{\sw ~ \rsp ~ r_0 ~ -4}{store 0 as an argument}
+  \instr{108}{\sw ~ \rsp ~ r_0 ~ 0}{zero out the return location}
+  \instr{112}{\jal ~ \rra ~ F}{call F and store the return address}
+  & & & \\
+  & & & \\
+  \clabel{F}
+  \instr{140}{\addi ~ \rsp ~ \rsp ~ 4}{allocate for the return address}
+  \instr{144}{\sw ~ \rsp ~ \rra ~ 0}{store the return address to sp}
+  \instr{148}{\addi ~ \rsp \rsp ~ 8}{allocate for nested arg + ret}
+  \instr{152}{\addi ~ r_4 ~ r_0 ~ 17}{put 17 in register $r_4$}
+  \instr{156}{\sw ~ \rsp ~ r_4 ~ -4}{store 17 as the argument to G}
+  \instr{160}{\sw ~ \rsp ~ r_0 ~ 0}{zero out the return location}
+  \instr{164}{\jal ~ \rra ~ G}{call G and store the return address}
+  \instr{168}{\lw ~ r_4 ~ \rsp}{load the return value of G to $r_4$}
+  \instr{172}{\lw ~ r_5 ~ \rsp -12}{load the argument of F to $r_5$}
+  \instr{176}{\add ~ r_4 ~ r_4 ~ r_5}{add $r_4$ and $r_5$}
+  \instr{172}{\sw ~ \rsp ~ r_4 ~ -8}{store $r_4$ as ther return of F}
+  \instr{176}{\addi ~ \rsp ~ \rsp ~ -8}{deallocate local state}
+  \instr{180}{\lw ~ \rra ~ \rsp ~ -4}{load the return address from the stack pointer}
+  \instr{184}{\addi ~ \rsp ~ \rsp ~ -4}{restore the stack pointer of F}
+  \instr{188}{\jalr ~ \rra ~ \rra ~ 0}{return to TOP}
+  & & & \\
+  & & & \\  
+  \clabel{G}
+  \instr{200}{\addi ~ \rsp ~ \rsp ~ 4}{allocate for the return address}
+  \instr{204}{\sw ~ \rsp ~ \rra ~ 0}{store the return address to sp}
+  \instr{208}{\lw ~ r_4 ~ \rsp ~ -12}{load the argument of G to $r_4$}
+  \instr{212}{\addi ~ r_4 ~ r_4 ~ 1}{increment $r_4$ by 1}
+  \instr{216}{\sw ~ \rsp ~ r_4 ~ -8}{store $r_4$ as the return value}
+  \instr{220}{\lw ~ \rra ~ \rsp ~ -4}{load the return address from the stack pointer}
+  \instr{224}{\addi ~ \rsp ~ \rsp ~ -4}{restore the stack pointer of F}
+  \instr{228}{\jalr ~ \rra ~ \rra ~ 0}{return to F}
+  
+%  addi r2 r2 8 ; allocate for arg + ret
+%  sw r2 17 -4; store 0 as an argument
+%  sw r2 0 0; zero out the return location
+%  jal r1 G ; call G and store return address
+    
+\end{array}
+\]
+
+%  sw r2 42 -8; store 42 in a private location
+%  sw r2 0 -4; store 0 as an argument
+%  sw r2 0 0; zero out the return location
+%  jal r1 F ; call F and store return address
+
+%  0: & \addi ~ r_4 ~ r_0 ~ 40 &
+%     ; ~ \text{\em put $40$ in register $r_4$}\\
+%  4: & \sw ~ r_4 ~ r_4 ~ 1000 &
+%     ; ~ \text{\em store $40$ in location $1040$}\\
+%  8: & \jal ~ r_1 ~ 20        &
+%     ; ~ \text{\em jump to $20$, store return addres in $r_1$}\\
+%  12: & & \\
+%  16: & & \\
+%  20: & \sw ~ r_2 ~ r_1 ~ 4 &
+%     ; ~ \text{\em store the return address to the $\SP + 4$}\\
+%  24: & \addi ~ r_2 ~ r_2 ~ 8 &
+%     ; ~ \text{\em increase the $\SP$ by 8}\\
+%\end{array}
+%\]
+% 
+%  , (SW sp ra 4  , tagH1)
+%  , (ADDI sp sp 8, tagH2)
+%  , (LW 3 3 1000, instrTag)
+%  ]
+  
+
+
+
+\subsection{Program Structure}
 
 Our properties and policies are parameterized by several types of
 annotations describing features of a program. A {\em code map}
@@ -524,10 +709,14 @@ identifier drawn from the set \(\FUNIDS\).
   %
 \[\codemap \in \CODEMAPS = \WORDS \rightharpoonup \FUNIDS\]
 
+\leo{Visible from assembly}
+
 A call map is a partial function from addresses to a natural number,
 the number of arguments of the call.
   %
 \[\callmap \in \CALLMAPS = \WORDS \rightharpoonup \mathbb{N}\]
+
+\leo{The two JAL instructions map to 2 (arg + return)}
 
 For concreteness, in a typical calling convention, a call map may be
 considered to identify the state just before the \(\JAL\), in which
@@ -542,6 +731,9 @@ likewise a predicate on addresses.
 \[\retmap \in \RETMAPS \subseteq \WORDS\]
 \[\entmap \in \ENTMAPS \subseteq \WORDS\]
 
+\leo{retmap is the jal + 1}
+\leo{entrymap is the ones after the labels}
+
 \paragraph*{What is a return?}
 
 We separately identify, for any call state, what is means for a state
@@ -554,6 +746,8 @@ between the states:
     \ret{\mach_c}\ \mach_r \triangleq & \mach_r(\PCname) =
     \nextPC(\mach_c(\PCname)) \land \\ & \mach_r(\SP) = \mach_c(\SP)
 \end{split}\]
+
+\leo{Point to the trace. two return points}
 
 \subsection{Local State Encapsulation}
 \label{sec:lse}
@@ -620,6 +814,9 @@ low confidentiality.
     (\LOWSEC,\LOWINT) & \text{else} \\
   \end{cases}\]
 
+  \leo{Snapshot state at the point of the call from TOP to F, collor
+    the different things}
+  
 \paragraph*{Stack Integrity}
 
 The first component of local state encapsulation is an integrity
@@ -822,8 +1019,6 @@ corresponding call.
     invalid returns, even if they would not escalate privilege. Most notably
     {\em well-bracketed control flow}, below.
 
-
-
 \definition{Control Separation}
 A system enjoys {\em control separation} with regard to a code map
 \(\codemap\), a call map \(\callmap\), and a return map \(\retmap\) if
@@ -990,30 +1185,28 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
           \mach_r'(\component) & \text{else} \\
         \end{cases}\]
 
-      A system enjoys observable confidentiality with respect to \(\callmap\)
-      and \(\codemap\) if for any initial state \(\mach_0\), each adjacent pair
-      of a call state \(\mach_c\) and a state \(\mach_e\) with policy state
-      \(\pol_e\) in the inducted trace from
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), and each variant
-      \(\mach_e' \approx_\contour \mach_e'\) where
-      \(\contour = \mathit{Cof}(\mach_c, \funid, n)\), one of two cases holds
-      on the induced traces from \(\mach_e\) and \(\mach_e'\).
+      A pair of traces \(\MPT\) and \(\machT\) starting from \(\mach_c\) and
+      \(\mach_c'\), respectively, with \(\mach_c \approx_\contour \mach_c'\),
+      enjoy observable trace confidentiality with respect to \(\contour\) if
+      two conditions hold:
 
-      If \(\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT_1 | \ret{\mach_c}\)
-      with \(\MPT_1\) the trace within the callee ending with the machine state
-      \(\mach_r\), the first state to return to the caller, and policy state
-      \(\pol_r\), then the there is a return state \(\mach_r'\) reached by the
-      trace from the variant, \(\mach_c' \hookrightarrow \machT_1 |
-      \ret{\mach_c}\). Let \(\mach_r'' = \mathit{restore}(\contour,\mach_e,
-      \mach_e',\mach_r,\mach_r')\), and let the induced traces from the
-      returned states be \(\mpstate{\mach_r}{\pol_r} \hookrightarrow_P \MPT_2\)
-      and \(\mach_r'' \hookrightarrow \machT_2\). With the callee and caller
-      traces joined, the traces are observationally equivalent up to policy
-      failures: \(\MPT_1 \cdot \MPT_2 \sim_P \machT_1 \cdot \machT_2\).
+      The two traces are observationally equivalent: \(\pi_o(\MPT) \eqsim_O
+      \pi_o(\machT)\).
 
-      The case in which the induced trace does not return is the same as in the
-      eager property: the variant trace also does not return, and the induced
-      traces are observationally equivalent up to policy failure.
+      If \(\MPT\) is finite and ends with the state
+      \(\mpostate{\mach_r}{\pol_r}{\obs_r}\), then \(\machT\) is finite. Let
+      \(\mach_r'\) be the final state of \(\machT\). Then the induced traces
+      \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT'\) and
+      \(\mathit{restore}(\contour,\mach_c,\mach_c',\mach_r,\mach_r')
+      \hookrightarrow \machT'\) are observationally prefixed,
+      \(\pi_o(\MPT') \lesssim_O \pi_o(\machT')\).
+
+      \sna{Structured like this, we need to start with the call state, not
+           the entry. That's because we need to know what to restore to.
+           But we could also define restore in the stack confidentiality
+           section, maybe?}
+
+    \definition{Observable Stack Confidentiality}
 
     \definition{Observable Stack Safety}
       A system enjoys {\em observable stack safety} with regard to a call map
