@@ -314,45 +314,46 @@ Section~\ref{sec:prelim}.
 \section{Background}
 \label{sec:prelim}
 
-Before we define stack safety, we need to first set the stage by
-describing our machine model. Our definition of stack safety is
-generic and this sections discusses an abstract interface to our
+To set the stage, we first
+describe our machine model. Our definition of stack safety is
+generic and this section discusses an abstract interface to our
 machine model and some kind of static or dynamic, software- or
-hardware-enforced security monitor. At the same time, for
-concreteness, we will build up our running example using a
-conventional machine architecture with a standard (RISC-V) processor
-and later extend it with a dynamic policy mechanism.
+hardware-enforced security monitor.  For
+concreteness, our running examples will use a
+conventional machine architecture and a standard (RISC-V) instruction set;
+in~\Cref{sec:micropolicies} we will
+extend this model it with a dynamic policy enforcement mechanism based
+on \bcp{NickPaper,AndMaybeSomeOthers}.
 
 \paragraph*{Values, States, and Observations}
 
 The basic building blocks of the machine are {\em values} and {\em
-  addresses}. Both are drawn from some set of all possible words
-$\WORDS$. We will denote words with $\word$.
+  addresses}. Both are drawn from some set of {\em words}
+$\WORDS$, ranged over by $\word$.
 %
-Our machine states are comprised of {\em components}, that can be word
-(denoting memory addresses) or registers (drawn from some set $\REGS$).
+Our machine states are composed of {\em components} $k$, addressed either by
+words (memory addresses) or by by register names ($r$) drawn from some set
+$\REGS$.
 %
-    \[\reg \in \REGS\]
     \[\component \in \COMPONENTS = \WORDS + \REGS \]
 %
-The registers must include two special purpose registers: the program
-counter {\PCname} and the stack pointer \SP.
-%
-Formally, a machine state is just a map from components to values:
+The register names are assumed to include two special purpose registers: the
+program counter {\PCname} and the stack pointer \SP.
+
+A machine state is a map from components to values:
 %
 \[\mach \in \MACHS = \COMPONENTS \rightarrow \WORDS\]
 
-Our stack safety property will be defined in terms of {\em
-  observations}, which may be silent (written $\tau$) or a word of
-data:\leo{Needs more exposition}
+The step function of the
+machine takes a machine state and produces a pair of a
+machine state and an {\em observation}, which may be either
+silent (written $\tau$) or a word of data that the machine communicates to
+the outside world (e.g., by writing to a DMA address):\leo{Needs more
+  exposition}\bcp{Like that?}
 %
-\[\obs \in \OBSS = \tau ~ | ~ \word \in \WORDS\]
+\[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
+\[\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \]
 %
-These observations are a byproduct of the step function of the
-machine, which takes a machine state and produces a pair of a
-machine state and an observation.
-%
-\(\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \).
 
 \paragraph*{Running Example: RISC-V}
 
@@ -361,8 +362,9 @@ straightforward. To build up our running example, we are going to use
 a standard 64-bit RISC machine, just like the one we are using in our
 experiments later on \leo{Mention FORVIS?}. In this setting, $\WORDS$
 is the set of 64-bit integers, $\REGS$ is the set $\{r_0, \cdots,
-r_{31}\} \cup {\PCname}$, and $\SP = r_2$. \leo{Mention We use the
-  standard encoding of instructions to words?}
+r_{31}\} \cup \{\PCname\}$, and $\SP = r_2$.
+% \leo{Mention We use the standard encoding of instructions to words?}
+% BCP: Nah.
 
 The first interesting choice is that of observations, as there are
 multiple reasonable options. At one extreme, we could choose to define
@@ -370,11 +372,13 @@ observations as the value written at any component. However, that
 would pose problems later on when we treat some components as ``secret''
 when they correspond to a caller's private state. \leo{On the other extreme,
 we could pick a particular component and treat it as the ``output'' of
-our system. }
+our system. }  \bcp{But in this paragraph we are describing the particular
+choise that we make for our running example, no?  But we certainly want to
+discuss this fully someplace!}
 
 \paragraph*{Policies}
 
-A policy is a general model of an enforcement mechanism, consisting of
+\bcp{More explanation needed, plus examples.}A policy is a general model of an enforcement mechanism, consisting of
 a set of policy states \(\pol \in \POLS\), and a policy step function
 \((\mach, \pol) \stepstopol \pol' : \MACHS \times \POLS
 \rightharpoonup \POLS\).
@@ -384,36 +388,42 @@ states.
 %
 \[\MPS = \MACHS \times \POLS\]
 %
-We then lift this policy step function to operate on such pairs,
+We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
 
 \judgmenttwo{\(\mach_1 \stepstoobs{\obs} \mach_2\)}{\((\mach_1, \pol_1) \stepstopol \pol_2\)}
             {\(\mpstate{\mach_1}{\pol_1} \stepstoobs{\obs}_P \mpstate{\mach_2}{\pol_2}\)}
 
-\leo{Notation: Should $\stepstoobs{}$ use harpoon for the lifted step?}
+\leo{Notation: Should $\stepstoobs{}$ use harpoon for the lifted
+  step?}\bcp{Yes.}
 
-\leo{TODO: Forward pointer to policies right?}
+\leo{TODO: Forward pointer to policies right?}\bcp{Yes.  But also we can say
+in more detail that the intention is to capture any kind of dynamic
+enforcement mechanism and give as many names and citations as we can.}
 
 \paragraph{Traces}
 
-A trace over some type $A$ is a potentially infinite, nonempty
+A trace over a type $A$ is a nonempty, finite or infinite
 sequence of $A$s. We will mostly be concerned with sequences of
-machines states, usually denoted $\machT$, and with sequences of
+machines states, usually\bcp{not always?} denoted $\machT$, and with sequences of
 triples of (machine states, policy states, and observations), usually
 denoted $\MPT$.
 \rb{The way the definitions are set up, one may expect MPO, but\ldots}
-To continue, we will require four generic operations
-on traces: a ``trace-of'' operation to construct the potentially
-infinite traced induced by a step relation
-\rb{not an op on traces per se?};
+To continue\bcp{??}, we will require four generic operations
+on traces: a ``trace-of'' operation to construct the
+trace induced by a step relation and a machine state
+\rb{not an op on traces per se?}\bcp{+1};
 a ``split'', to break a
 trace into two components based on a predicate; a ``join'', the
 reverse of split; and a ``prefix'', as a shorthand to only keep the
-first component of a split.
+first component of a split.  \bcp{Not sure it's worth enumerating them
+  rather than just getting down to the actual definitions below.}
 
 The ``trace-of'' operator, written \(\hookrightarrow\), coinductively
 relates a machine state with the trace of machine states paired with
-observations produced by repeated application of step:
+observations produced by repeated application of step:  \bcp{above, we
+  showed operators applied to metavariables, not just the bare operator
+  symbol.}
 %
 \[\hookrightarrow : \machT \rightarrow \MOTRACE\]%
 %
@@ -425,10 +435,13 @@ Since the step function is total, if \(\mach \hookrightarrow \machT\),
 then \(\machT\) must be infinite.
 
 \leo{TODO: Add an example of a trace once I figure out the notations}
+\bcp{Let's also try to clean up the spacing a little -- many of these
+  sequences of rules can be typeset on fewer lines}
 
 Similarly, we define \(\hookrightarrow_P\) to relate a machine-policy
 state pair to the trace of triples of machine states, policy states,
-and observations induced by by \(\stepstoobs{}_P\):
+and observations induced by by \(\stepstoobs{}_P\): \bcp{Observe that this
+  time the trace can be either finite or infinite.}
 %
 \[\hookrightarrow_P : \MACHS \times \POLS \rightarrow \MPOTRACE \]
 %
@@ -441,12 +454,16 @@ and observations induced by by \(\stepstoobs{}_P\):
               {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT\)}
 We will also use \(\pi_m\) to project the trace of machine states
 out of a trace, \(\pi_p\) to project the trace of policy states, and
-\(\pi_o\) to project the observations.
+\(\pi_o\) to project the observations.  \bcp{I'm getting a little lost in
+  all these.  E.g., do these traces include the final state of a finite
+  execution?  If so, what observation is it paired with?}
 
 % SNA: fixed
 %\leo{PUT is completely ambiguous as a choice of abbreviation. Just ``Pre''
 %  seems better}
-The {\it prefUpTo} operation \(\PUT(\Trace,f)\) takes a trace \(T\)
+The {\it prefUpTo} operation \(\PUT(\Trace,f)\) \bcp{Why does it have two
+  different abbreviated names?  And wouldn't ``While'' be more mnemonic?}
+takes a trace \(T\) 
 and a predicate on elements \(f\) and gives the prefix of \(T\)
 ending with the first element on which \(f\) holds, coinductively:
 
@@ -460,7 +477,7 @@ ending with the first element on which \(f\) holds, coinductively:
             {\(\PUT(f,\traceelem\Trace) = \traceelem\Trace'\)}
 %
 Note that if the resulting trace is a strict prefix of the parameter, then the
-predicate must hold on its final element. Conversely, if the predicate never
+predicate must hold on its final element. Conversely\bcp{why conversely?}, if the predicate never
 holds, \(\PUT\) is the identity function.
 
 % The {\it join} operation, written \(T_1 \cdot T_2\) is the reverse of
