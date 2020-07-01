@@ -536,13 +536,59 @@ some output, before that time has passed.
 \section{Stack Safety, Formally}
 
 In this section we will describe stack safety as a formal property. We
-begin with our model of knowledge about the program structure\leo{I
-  hate this}, and then dive in to local state encapsulation and
+begin with introducing a running example that will help keep things
+concrete throughout this section, continue with our model of
+\leo{compiler-provided?} knowledge about the program structure, and
+then dive in to formal definitions local state encapsulation and
 well-bracketed control flow.
+
+\begin{figure}[b]
+  \begin{centering}
+    \begin{minipage}{0.5\textwidth}
+\begin{verbatim}
+f{
+  int x, y;
+  ...
+  y = g(0);
+  ...
+}
+
+g(x){
+  return (x + h(17));
+}
+
+h(x){
+  return (x + 1);
+}
+\end{verbatim}
+\end{minipage}
+\end{centering}
+\caption{High-level Program with Simple Nested Calls}
+\label{fig:running-program}
+\end{figure}
 
 \subsection{Running Example}
 
-\leo{TODO: Figure out presentation}
+Our running example consists of three functions $f$, $g$, and $h$ that
+perform a nested sequence of calls. A high level C-like view of the
+excerpt program can be found in Figure~\ref{fig:running-program}.
+Suppose that the starting state for our running example is right
+before $f$'s call to $g$. A rough example layout of the memory at that
+point can be found in the top of Figure~\ref{fig:running-trace-b}:
+\begin{itemize}
+\item The low part of the memory (0-1000) is dedicated to instructions.
+\item The stack starts at location 1000.
+\item The stack of $f$ starts at 1040.
+\item The location of $x$ is 1040 and stores $42$.
+\item The location of $y$ is 1044 and stores $0$.
+\end{itemize}
+Directly below the layout, we summarize the parts of the register file
+that are relevant to the example.
+
+The rest of Figure~\ref{fig:running-trace-b} detail the execution of the
+program, showing the machine state at call and return points, as well
+as describing the full effect of each instruction in detail.
+\leo{Unoptimized, etc.}
 
 \newcommand*{\add}{\text{add}}
 \newcommand*{\addi}{\text{addi}}
@@ -550,37 +596,14 @@ well-bracketed control flow.
 \newcommand*{\lw}{\text{lw}}
 \newcommand*{\jal}{\text{jal}}
 \newcommand*{\jalr}{\text{jalr}}
-%\begin{lstlisting}
-%START:
-%  addi r2 r2 12 ; allocate 3 words in the stack
-%  sw r2 42 -8; store 42 in a private location
-%  sw r2 0 -4; store 0 as an argument
-%  sw r2 0 0; zero out the return location
-%  jal r1 F ; call F and store return address
-% 
-%F:
-%  addi r2 r2 4 ; allocate for ra 
-%  sw r2 r1 -4 ; store the return address to sp-4
-%  addi r2 r2 8 ; allocate for arg + ret
-%  sw r2 17 -4; store 0 as an argument
-%  sw r2 0 0; zero out the return location
-%  jal r1 G ; call G and store return address
-% 
-%G:  
-%  addi r2 r2 4 ; allocate for ra 
-%  sw r2 r1 -4 ; store the return address to sp-4
-%  
-%\end{lstlisting}
+\newcommand*{\rsp}{\mathit{sp}}
+\newcommand*{\rra}{\mathit{ra}}
 
-Starting State:
+\newcommand*{\tracerow}[5]{#1: & #2 & #3 & #4 & \text{#5}\\}
 
-Instruction memory in locations 0 - ..
-PC at 100.
-Stack memory starting at 1000.
-Assume we're in a function. 
-Stack Pointer at 1040.
-1040: 42.
+\begin{figure}
 
+%Starting Memory Layout
 \begin{center}
 \MemoryLabel{1.7em}{1.8em}{0}
 \MemoryLabel{21.2em}{1.8em}{1000}
@@ -592,78 +615,317 @@ Stack Pointer at 1040.
 \memory{2}{gray}[{\makebox[0pt]{Stack}}]%
 ~$\cdots$
 \memory{2}{green}[{\makebox[0pt]{$F_{priv}$}}]%
-\memory{4}{gray}[{\makebox[0pt]{Uninitialized}}]
+\memory{8}{gray}[{\makebox[0pt]{Uninitialized}}]
 ~$\cdots$
-\MemoryLabel{-18.7em}{0.6em}{42}
-\MemoryLabel{-16.4em}{0.6em}{0}
+\MemoryLabel{-29.6em}{0.6em}{42}
+\MemoryLabel{-27.4em}{0.6em}{0}
 \\
 \end{center}
-
-
-Program:
-
-\begin{verbatim}
-top{
-  return f(0);
-}
-
-f(x){
-  return (x + g(17));
-}
-
-g(x){
-  return (x + 1);
-}
-\end{verbatim}
-
-\newcommand*{\instr}[3]{ & #1: & #2 & ; \text{\em #3}\\}
-\newcommand*{\clabel}[1]{#1: & & &\\}
-\newcommand*{\rsp}{sp}
-\newcommand*{\rra}{ra}
+% Starting Register File
 \[
-\begin{array}{llll}
-  \clabel{TOP}  
-  \instr{100}{\addi ~ \rsp ~ \rsp ~ 8}{allocate 2 words in stack}
-  \instr{104}{\sw ~ \rsp ~ r_0 ~ -4}{store 0 as an argument}
-  \instr{108}{\sw ~ \rsp ~ r_0 ~ 0}{zero out the return location}
-  \instr{112}{\jal ~ \rra ~ F}{call F and store the return address}
-  & & & \\
-  & & & \\
-  \clabel{F}
-  \instr{140}{\addi ~ \rsp ~ \rsp ~ 4}{allocate for the return address}
-  \instr{144}{\sw ~ \rsp ~ \rra ~ 0}{store the return address to sp}
-  \instr{148}{\addi ~ \rsp \rsp ~ 8}{allocate for nested arg + ret}
-  \instr{152}{\addi ~ r_4 ~ r_0 ~ 17}{put 17 in register $r_4$}
-  \instr{156}{\sw ~ \rsp ~ r_4 ~ -4}{store 17 as the argument to G}
-  \instr{160}{\sw ~ \rsp ~ r_0 ~ 0}{zero out the return location}
-  \instr{164}{\jal ~ \rra ~ G}{call G and store the return address}
-  \instr{168}{\lw ~ r_4 ~ \rsp}{load the return value of G to $r_4$}
-  \instr{172}{\lw ~ r_5 ~ \rsp -12}{load the argument of F to $r_5$}
-  \instr{176}{\add ~ r_4 ~ r_4 ~ r_5}{add $r_4$ and $r_5$}
-  \instr{172}{\sw ~ \rsp ~ r_4 ~ -8}{store $r_4$ as ther return of F}
-  \instr{176}{\addi ~ \rsp ~ \rsp ~ -8}{deallocate local state}
-  \instr{180}{\lw ~ \rra ~ \rsp ~ -4}{load the return address from the stack pointer}
-  \instr{184}{\addi ~ \rsp ~ \rsp ~ -4}{restore the stack pointer of F}
-  \instr{188}{\jalr ~ \rra ~ \rra ~ 0}{return to TOP}
-  & & & \\
-  & & & \\  
-  \clabel{G}
-  \instr{200}{\addi ~ \rsp ~ \rsp ~ 4}{allocate for the return address}
-  \instr{204}{\sw ~ \rsp ~ \rra ~ 0}{store the return address to sp}
-  \instr{208}{\lw ~ r_4 ~ \rsp ~ -12}{load the argument of G to $r_4$}
-  \instr{212}{\addi ~ r_4 ~ r_4 ~ 1}{increment $r_4$ by 1}
-  \instr{216}{\sw ~ \rsp ~ r_4 ~ -8}{store $r_4$ as the return value}
-  \instr{220}{\lw ~ \rra ~ \rsp ~ -4}{load the return address from the stack pointer}
-  \instr{224}{\addi ~ \rsp ~ \rsp ~ -4}{restore the stack pointer of F}
-  \instr{228}{\jalr ~ \rra ~ \rra ~ 0}{return to F}
-  
-%  addi r2 r2 8 ; allocate for arg + ret
-%  sw r2 17 -4; store 0 as an argument
-%  sw r2 0 0; zero out the return location
-%  jal r1 G ; call G and store return address
-    
+\begin{array}{cccccc}
+  PC: 100 & r_0 : 0 & \rra : ? & \rsp : 1048 & r_4 : ? & r_5 : ? 
 \end{array}
 \]
+\vspace*{0.2em}
+\[
+  \begin{array}{r|c|c|c|c}
+    & PC & \mathit{Instruction} & \mathit{Effect} &  \\
+    \hline
+    \tracerow{1}{100}{\addi ~ \rsp ~ \rsp ~ 8}{\rsp \leftarrow 1056}{Allocate call frame}
+    \tracerow{2}{104}{\sw ~ \rsp ~ r_0 ~ -8}{[1048] \leftarrow 0}{Store 0 as argument}
+    \tracerow{3}{108}{\sw ~ \rsp ~ r_0 ~ -4}{[1052] \leftarrow 0}{Zero out result}
+    \tracerow{4}{112}{\jal ~ \rra ~ 140}{PC \leftarrow 140; ~ \rra \leftarrow 116}{Make the call}
+  \end{array}
+  \]
+~ \\
+% At Call to G
+% Memory Layout
+\begin{center}
+\MemoryLabel{1.7em}{1.8em}{0}
+\MemoryLabel{21.2em}{1.8em}{1000}
+\MemoryLabel{29.7em}{1.8em}{1040}
+\MemoryLabel{41em}{1.8em}{$\downarrow$}
+\MemoryLabel{40.8em}{3em}{SP}
+\memory{6}{gray}[{\makebox[0pt]{Instructions}}]%
+~$\cdots$
+\memory{2}{gray}[{\makebox[0pt]{Stack}}]%
+~$\cdots$
+\memory{2}{green}[{\makebox[0pt]{$F_{priv}$}}]%
+\memory{2}{yellow}[{\makebox[0pt]{arg + result}}]%
+\memory{6}{gray}[{\makebox[0pt]{Uninitialized}}]
+~$\cdots$
+\MemoryLabel{-29.4em}{0.6em}{42}
+\MemoryLabel{-27.2em}{0.6em}{0}
+\MemoryLabel{-25.0em}{0.6em}{0}
+\MemoryLabel{-22.8em}{0.6em}{0}
+\\
+\end{center}
+% Register File
+\[
+\begin{array}{cccccc}
+  PC: 140 & r_0 : 0 & \rra : 116 & \rsp : 1056 & r_4 : ? & r_5 : ? 
+\end{array}
+\]
+% G - Body - 1
+\vspace*{0.2em}
+\[
+  \begin{array}{r|c|c|c|c}
+    \tracerow{5}{140}{\addi ~ \rsp ~ \rsp ~ 4}{\rsp \leftarrow 1060}{Allocate for return address}
+    \tracerow{6}{144}{\sw ~ \rsp ~ \rra ~ -4}{[1056] \leftarrow 116}{Store return address}
+    \tracerow{7}{148}{\addi ~ \rsp ~ \rsp ~ 8}{\rsp \leftarrow 1068}{Allocate for call frame}
+    \tracerow{8}{152}{\addi ~ r_4 ~ r_0 ~ 17}{r_4 \leftarrow 17}{Store 17 to $r_4$}
+    \tracerow{9}{156}{\sw ~ \rsp ~ r_4 ~ -8}{[1060] \leftarrow 17}{Store 17 as the argument}
+    \tracerow{10}{160}{\sw ~ \rsp ~ r_0 ~ -4}{[1064] \leftarrow 0 }{Zero out return}
+    \tracerow{11}{164}{\jal ~ \rra ~ 200}{PC \leftarrow 200; ~ \rra \leftarrow 168}{Make the call to $h$}
+  \end{array}
+  \]
+  ~ \\
+% At Call to H
+% Memory Layout
+\begin{center}
+\MemoryLabel{1.7em}{1.8em}{0}
+\MemoryLabel{21.2em}{1.8em}{1000}
+\MemoryLabel{29.7em}{1.8em}{1040}
+\MemoryLabel{49em}{1.8em}{$\downarrow$}
+\MemoryLabel{48.8em}{3em}{SP}
+\memory{6}{gray}[{\makebox[0pt]{Instructions}}]%
+~$\cdots$
+\memory{2}{gray}[{\makebox[0pt]{Stack}}]%
+~$\cdots$
+\memory{2}{green}[{\makebox[0pt]{$F_{priv}$}}]%
+\memory{2}{yellow}[{\makebox[0pt]{arg-res}}]%
+\memory{3}{red}[{\makebox[0pt]{ra-arg-res}}]%
+\memory{3}{gray}[{\makebox[0pt]{Uninitialized}}]
+~$\cdots$
+\MemoryLabel{-29.4em}{0.6em}{42}
+\MemoryLabel{-27.2em}{0.6em}{0}
+\MemoryLabel{-25.0em}{0.6em}{0}
+\MemoryLabel{-22.8em}{0.6em}{0}
+\MemoryLabel{-20.6em}{0.6em}{116}
+\MemoryLabel{-18.4em}{0.6em}{17}
+\MemoryLabel{-16.2em}{0.6em}{0}
+\\
+\end{center}
+% Register File
+\[
+\begin{array}{cccccc}
+  PC: 200 & r_0 : 0 & \rra : 168 & \rsp : 1068 & r_4 : 17 & r_5 : ? 
+\end{array}
+\]
+% H - Body
+\vspace*{0.2em}
+\[
+\begin{array}{r|c|c|c|c}
+  \tracerow{12}{200}{\addi ~ \rsp ~ \rsp ~ 4}{\rsp \leftarrow 1072}{Allocate for return address}
+  \tracerow{13}{204}{\sw ~ \rsp ~ \rra ~ -4}{[1068] \leftarrow 168}{Store return address}
+  \tracerow{14}{208}{\lw ~ r_4 ~ \rsp ~ -12}{r_4 \leftarrow 17}{Load the argument of $h$ to $r_4$}
+  \tracerow{15}{212}{\addi ~ r_4 ~ r_4 ~ 1}{r_4 \leftarrow r_4 + 1}{Increment $r_4$ by 1}\end{array}
+\]
+% At Middle of H
+% Memory Layout
+\begin{center}
+\MemoryLabel{1.7em}{1.8em}{0}
+\MemoryLabel{21.2em}{1.8em}{1000}
+\MemoryLabel{29.7em}{1.8em}{1040}
+\MemoryLabel{52em}{1.8em}{$\downarrow$}
+\MemoryLabel{51.8em}{3em}{SP}
+\memory{6}{gray}[{\makebox[0pt]{Instructions}}]%
+~$\cdots$
+\memory{2}{gray}[{\makebox[0pt]{Stack}}]%
+~$\cdots$
+\memory{2}{green}[{\makebox[0pt]{$F_{priv}$}}]%
+\memory{2}{yellow}[{\makebox[0pt]{arg-res}}]%
+\memory{3}{red}[{\makebox[0pt]{ra-arg-res}}]%
+\memory{1}{cyan}%
+\memory{2}{gray}[{\makebox[0pt]{Uninitialized}}]
+~$\cdots$
+\MemoryLabel{-29.4em}{0.6em}{42}
+\MemoryLabel{-27.2em}{0.6em}{0}
+\MemoryLabel{-25.0em}{0.6em}{0}
+\MemoryLabel{-22.8em}{0.6em}{0}
+\MemoryLabel{-20.6em}{0.6em}{116}
+\MemoryLabel{-18.4em}{0.6em}{17}
+\MemoryLabel{-16.2em}{0.6em}{0}
+\MemoryLabel{-14.0em}{0.6em}{168}
+\\
+\end{center}
+% Register File
+\[
+\begin{array}{cccccc}
+  PC: 212 & r_0 : 0 & \rra : 168 & \rsp : 1072 & r_4 : 18 & r_5 : ? 
+\end{array}
+\]
+\vspace*{0.2em}
+\[
+\begin{array}{r|c|c|c|c}
+  \tracerow{16}{216}{\sw ~ \rsp ~ r_4 ~ -8}{[1064] \leftarrow 18}{Store $r_4$ as the return value}
+  \tracerow{17}{220}{\lw ~ \rra ~ \rsp ~ -4}{\rra \leftarrow 168}{Load return address}
+  \tracerow{18}{224}{\addi ~ \rsp ~ \rsp ~ -4}{\rsp \leftarrow 1068}{Restore the stack pointer of $g$}
+  \tracerow{19}{228}{\jalr ~ \rra ~ \rra ~ 0}{PC \leftarrow 168}{Return to $g$}
+  \end{array}
+\]
+\label{fig:running-trace-a}
+\end{figure}
+
+\begin{figure}
+% After Return from H
+% Memory Layout
+\begin{center}
+\MemoryLabel{1.7em}{1.8em}{0}
+\MemoryLabel{21.2em}{1.8em}{1000}
+\MemoryLabel{29.7em}{1.8em}{1040}
+\MemoryLabel{49em}{1.8em}{$\downarrow$}
+\MemoryLabel{48.8em}{3em}{SP}
+\memory{6}{gray}[{\makebox[0pt]{Instructions}}]%
+~$\cdots$
+\memory{2}{gray}[{\makebox[0pt]{Stack}}]%
+~$\cdots$
+\memory{2}{green}[{\makebox[0pt]{$F_{priv}$}}]%
+\memory{2}{yellow}[{\makebox[0pt]{arg-res}}]%
+\memory{3}{red}[{\makebox[0pt]{ra-arg-res}}]%
+\memory{3}{gray}
+~$\cdots$
+\MemoryLabel{-29.4em}{0.6em}{42}
+\MemoryLabel{-27.2em}{0.6em}{0}
+\MemoryLabel{-25.0em}{0.6em}{0}
+\MemoryLabel{-22.8em}{0.6em}{0}
+\MemoryLabel{-20.6em}{0.6em}{116}
+\MemoryLabel{-18.4em}{0.6em}{17}
+\MemoryLabel{-16.2em}{0.6em}{18}
+\\
+\end{center}
+% Register File
+\[
+\begin{array}{cccccc}
+  PC: 168 & r_0 : 0 & \rra : 168 & \rsp : 1068 & r_4 : 18 & r_5 : ? 
+\end{array}
+\]
+% H - Body
+\vspace*{0.2em}
+\[
+\begin{array}{r|c|c|c|c}
+  \tracerow{20}{168}{\lw ~ r_4 ~ \rsp}{r_4 \leftarrow 18}{Load return value to $r_4$}
+  \tracerow{21}{172}{\lw ~ r_5 ~ \rsp ~ -20}{r_5 \leftarrow 0}{Load the argument of $g$ to $r_5$}
+  \tracerow{22}{176}{\add ~ r_4 ~ r_4 ~ r_5}{r_4 \leftarrow 18 + 0}{Add $r_4$ and $r_5$}
+  \tracerow{23}{180}{\sw ~ \rsp ~ r_4 ~ -8}{[1056] \leftarrow 18}{Store $r_4$ as ther return of $g$}
+  \tracerow{24}{184}{\addi ~ \rsp ~ \rsp ~ -8}{\rsp \leftarrow 1060}{Deallocate local state}
+  \tracerow{25}{188}{\lw ~ \rra ~ \rsp ~ -4}{\rra \leftarrow 116}{Load return address}
+  \tracerow{26}{192}{\addi ~ \rsp ~ \rsp ~ -4}{\rsp \leftarrow 1056}{Restore the stack pointer of $f$}
+  \tracerow{27}{196}{\jalr ~ \rra ~ \rra ~ 0}{PC \leftarrow 116}{Return to $f$}
+\end{array}
+\]
+% At Call to G
+% Memory Layout
+\begin{center}
+\MemoryLabel{1.7em}{1.8em}{0}
+\MemoryLabel{21.2em}{1.8em}{1000}
+\MemoryLabel{29.7em}{1.8em}{1040}
+\MemoryLabel{41em}{1.8em}{$\downarrow$}
+\MemoryLabel{40.8em}{3em}{SP}
+\memory{6}{gray}[{\makebox[0pt]{Instructions}}]%
+~$\cdots$
+\memory{2}{gray}[{\makebox[0pt]{Stack}}]%
+~$\cdots$
+\memory{2}{green}[{\makebox[0pt]{$F_{priv}$}}]%
+\memory{2}{yellow}[{\makebox[0pt]{arg + result}}]%
+\memory{6}{gray}
+~$\cdots$
+\MemoryLabel{-29.4em}{0.6em}{42}
+\MemoryLabel{-27.2em}{0.6em}{0}
+\MemoryLabel{-25.0em}{0.6em}{0}
+\MemoryLabel{-22.8em}{0.6em}{18}
+\\
+\end{center}
+% Register File
+\[
+\begin{array}{cccccc}
+  PC: 116 & r_0 : 0 & \rra : 116 & \rsp : 1056 & r_4 : 18 & r_5 : 0
+\end{array}
+\]
+\vspace*{0.2em}
+\[
+\begin{array}{r|c|c|c|c}
+  \tracerow{28}{116}{\lw ~ r_4 ~ \rsp}{r_4 \leftarrow 18}{Load return value to $r_4$}
+  \tracerow{29}{120}{\sw ~ \rsp ~ r_4 ~ -12}{[1048] \leftarrow 18}{Set $y$ to the return value}
+  \tracerow{30}{124}{\addi ~ \rsp ~ \rsp ~ -8}{\rsp \leftarrow 1048}{Deallocate Call Frame}
+\end{array}
+\]
+\vspace*{0.2em}  
+% Ending Memory Layout
+\begin{center}
+\MemoryLabel{1.7em}{1.8em}{0}
+\MemoryLabel{21.2em}{1.8em}{1000}
+\MemoryLabel{29.7em}{1.8em}{1040}
+\MemoryLabel{35.2em}{1.8em}{$\downarrow$}
+\MemoryLabel{35em}{3em}{SP}
+\memory{6}{gray}[{\makebox[0pt]{Instructions}}]%
+~$\cdots$
+\memory{2}{gray}[{\makebox[0pt]{Stack}}]%
+~$\cdots$
+\memory{2}{green}[{\makebox[0pt]{$F_{priv}$}}]%
+\memory{8}{gray}
+~$\cdots$
+\MemoryLabel{-29.6em}{0.6em}{42}
+\MemoryLabel{-27.4em}{0.6em}{0}
+\\
+\end{center}
+% Starting Register File
+\[
+\begin{array}{cccccc}
+  PC: 128 & r_0 : 0 & \rra : 116 & \rsp : 1048 & r_4 : 18 & r_5 : 0
+\end{array}
+\]
+\caption{Detailed Execution Trace}
+\label{fig:running-trace-b}
+\end{figure}
+
+
+%\end{minipage}
+%\begin{minipage}{0.7\textwidth}
+%\newcommand*{\instr}[3]{ & #1: & #2 & ; \text{\em #3}\\}
+%\newcommand*{\clabel}[1]{#1: & & &\\}
+%\[
+%\begin{array}{llll}
+%  \clabel{TOP}  
+%  \instr{100}{\addi ~ \rsp ~ \rsp ~ 8}{allocate 2 words in stack}
+%  \instr{104}{\sw ~ \rsp ~ r_0 ~ -4}{store 0 as an argument}
+%  \instr{108}{\sw ~ \rsp ~ r_0 ~ 0}{zero out the return location}
+%  \instr{112}{\jal ~ \rra ~ F}{call F and store the return address}
+%  & & & \\
+%  & & & \\
+%  \clabel{F}
+%  \instr{140}{\addi ~ \rsp ~ \rsp ~ 4}{allocate for the return address}
+%  \instr{144}{\sw ~ \rsp ~ \rra ~ 0}{store the return address to sp}
+%  \instr{148}{\addi ~ \rsp \rsp ~ 8}{allocate for nested arg + ret}
+%  \instr{152}{\addi ~ r_4 ~ r_0 ~ 17}{put 17 in register $r_4$}
+%  \instr{156}{\sw ~ \rsp ~ r_4 ~ -4}{store 17 as the argument to G}
+%  \instr{160}{\sw ~ \rsp ~ r_0 ~ 0}{zero out the return location}
+%  \instr{164}{\jal ~ \rra ~ G}{call G and store the return address}
+%  \instr{168}{\lw ~ r_4 ~ \rsp}{load the return value of G to $r_4$}
+%  \instr{172}{\lw ~ r_5 ~ \rsp -12}{load the argument of F to $r_5$}
+%  \instr{176}{\add ~ r_4 ~ r_4 ~ r_5}{add $r_4$ and $r_5$}
+%  \instr{172}{\sw ~ \rsp ~ r_4 ~ -8}{store $r_4$ as ther return of F}
+%  \instr{176}{\addi ~ \rsp ~ \rsp ~ -8}{deallocate local state}
+%  \instr{180}{\lw ~ \rra ~ \rsp ~ -4}{load the return address from the stack pointer}
+%  \instr{184}{\addi ~ \rsp ~ \rsp ~ -4}{restore the stack pointer of F}
+%  \instr{188}{\jalr ~ \rra ~ \rra ~ 0}{return to TOP}
+%  & & & \\
+%  & & & \\  
+%  \clabel{G}
+%  \instr{200}{\addi ~ \rsp ~ \rsp ~ 4}{allocate for the return address}
+%  \instr{204}{\sw ~ \rsp ~ \rra ~ 0}{store the return address to sp}
+%  \instr{208}{\lw ~ r_4 ~ \rsp ~ -12}{load the argument of G to $r_4$}
+%  \instr{212}{\addi ~ r_4 ~ r_4 ~ 1}{increment $r_4$ by 1}
+%  \instr{216}{\sw ~ \rsp ~ r_4 ~ -8}{store $r_4$ as the return value}
+%  \instr{220}{\lw ~ \rra ~ \rsp ~ -4}{load the return address from the stack pointer}
+%  \instr{224}{\addi ~ \rsp ~ \rsp ~ -4}{restore the stack pointer of F}
+%  \instr{228}{\jalr ~ \rra ~ \rra ~ 0}{return to F}
+%\end{array}
+%\]
+%\end{minipage}
+%\label{fig:running-program}
+%\end{figure}
 
 %  sw r2 42 -8; store 42 in a private location
 %  sw r2 0 -4; store 0 as an argument
@@ -707,15 +969,21 @@ Formally a code map is a partial function from addresses to a function
 identifier drawn from the set \(\FUNIDS\).
   %
 \[\codemap \in \CODEMAPS = \WORDS \rightharpoonup \FUNIDS\]
-
-\leo{Visible from assembly}
+%
+In our running example, instructions 100-124 correspond to $f$,
+instructions 140-196 correspond to $g$, and instructions 200-228
+correspond to $h$.
 
 A call map is a partial function from addresses to a natural number,
-the number of arguments of the call.
+the number of arguments and return values of the call.
   %
 \[\callmap \in \CALLMAPS = \WORDS \rightharpoonup \mathbb{N}\]
-
-\leo{The two JAL instructions map to 2 (arg + return)}
+%
+In our running example, the callmap would contain (at least) two
+entries: the word 112 corresponding to the first $\jal$
+instruction to $g$, which would map to $2$ as the call has one
+argument; and the word 164 also mapping to $2$ corresponding
+to the call to $h$.
 
 For concreteness, in a typical calling convention, a call map may be
 considered to identify the state just before the \(\JAL\), in which
@@ -729,9 +997,10 @@ likewise a predicate on addresses.
   %
 \[\retmap \in \RETMAPS \subseteq \WORDS\]
 \[\entmap \in \ENTMAPS \subseteq \WORDS\]
-
-\leo{retmap is the jal + 1}
-\leo{entrymap is the ones after the labels}
+%
+In our running example, the return map identifies the $\jalr$
+instructions 196 and 224, while the entry map identifies
+instructions 140 and 200.
 
 \paragraph*{What is a return?}
 
