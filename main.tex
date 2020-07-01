@@ -262,8 +262,13 @@ Similarly, the underlying notion behind well-bracketed control flow is
 the need to protect the call structure itself: a callee should not be
 allowed to jump to the middle of an arbitrary block of code either
 directly (via a jump instruction) or indirectly (by corrupting stack
-data and returning). \leo{There needs to be some informal description
-  of the wbcf part here. Sean?}
+data and returning). Well-bracketed control flow establshes safety between
+functions: all code is owned by a function, and all jumps between functions
+are either calls that enter at a marked entry point or returns that enter
+just after their associated call in the standard nested call structure.
+
+%\leo{There needs to be some informal description
+%  of the wbcf part here. Sean?}
 
 We begin by giving some background in Section~\ref{sec:prelim}.
 Our contributions are:
@@ -1178,8 +1183,74 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
       This requires restoring varied components to their original values,
       since after return they will once again be accessible legitimately.
 
-      [Example goes here, showing how, when we return from a call, execution
-      becomes incoherent unless the state is restored.]
+\begin{figure}
+  \begin{minipage}{.49\textwidth}
+    \begin{center}
+      \MemoryLabel{10em}{1.5em}{40}
+      \MemoryLabel{15em}{1.5em}{42}
+      \memory{2}{gray}%
+      \memory{4}{red}[{\makebox[0pt]{\(\HIGHSEC\)}}]%
+      \memory{2}{green}[{\makebox[0pt]{\(\LOWSEC\)}}]%
+      \memory{2}{gray}%
+      \\
+    \end{center}
+  \end{minipage}
+  \begin{minipage}{.49\textwidth}
+    \begin{center}
+      \MemoryLabel{10em}{1.5em}{40}
+      \MemoryLabel{15em}{1.5em}{42}
+      \memory{2}{gray}%
+      \memory{4}{yellow}[{\makebox[0pt]{\(\HIGHSEC\)}}]%
+      \memory{2}{green}[{\makebox[0pt]{\(\LOWSEC\)}}]%
+      \memory{2}{gray}%
+      \\
+    \end{center}
+  \end{minipage} \\
+  ~\\
+  ~\\
+  \begin{verbatim}
+    // read HC data and write based on it
+    lw r1 r0 40
+    bnz r1 2
+    sw 0 r0 42
+    jmp r2 // return
+    sw 1 r0 42
+    jmp r2 // return
+  \end{verbatim}
+  \begin{minipage}{.49\textwidth}
+    \begin{center}
+      \memory{2}{gray}%
+      \memory{3}{red}
+      \memory{1}{black}
+      \memory{2}{green}
+      \memory{2}{gray}%
+      \\
+    \end{center}
+  \end{minipage}
+  \begin{minipage}{.49\textwidth}
+    \begin{center}
+      \memory{2}{gray}%
+      \memory{3}{yellow}%
+      \memory{1}{white}
+      \memory{2}{green}
+      \memory{2}{gray}%
+      \\
+    \end{center}
+  \end{minipage} \\
+
+
+  \caption{Failing Trace Confidentiality}
+  \label{fig:lazyex}
+\end{figure}
+
+      In Figure \ref{fig:lazyex}, the final states of the original and variant
+      differ, because a written value (in black or white) depended on the value
+      of a high confidentiality location. So the resulting trace fails Trace
+      Confidentiality. For observable trace confidentiality, we ask whether the
+      differing values at address 42 cause any observable distinctions in
+      future behavior. To do so, we must undo the variation of formerly high
+      confidentiality locations, so that those in yellow match those in red,
+      while preserving the updated values where data may have been leaked.
       
       The \(\mathit{restore}\) function takes a contour and four states: the
       original call state, a variant call state, and corresponding return
