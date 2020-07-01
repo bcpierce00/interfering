@@ -202,7 +202,9 @@ sw r0 r0 40
 \end{verbatim}
     \end{center}
   \end{minipage}
-  \caption{Examples of Unsafe Programs}
+  \caption{Examples of Unsafe Programs\bcp{The numbers don't line up with
+      the boxes; the program fragments need comments explaining what each
+      line does.}}
   \label{fig:stackunsafety}
 \end{figure}
 
@@ -213,122 +215,145 @@ exploiting memory safety vulnerabilities, with potential consequences
 ranging from attackers reading or corrupting private stack data, to
 highjacking a program's control flow. To prevent such attacks, many
 techniques have been proposed in the literature\leo{cite, point out?
-  stack canaries, cherry, nicks...} aiming to achieve {\em stack
-  safety}.
+  stack canaries, cherry, nicks...}\bcp{I think pointing out makes a
+  stronger point.} aiming to achieve ``stack
+  safety''.
 
-But what {\em is} stack safety? A precise formal definition of stack
-safety is lacking from the literature, with the notion only being
+But what {\em is} this stack safety of which we speak? A precise formal
+definition is lacking in the literature, with the notion usually being
 defined negatively: through examples of stack unsafety
-\rb{usually though not always; as noted below there are other approaches}. Two classical
+\rb{usually though not always; as noted below there are other
+  approaches}\bcp{Yes, we have to be very careful about this}. Two classical
 examples of stack unsafety appear in Figure~\ref{fig:stackunsafety}.
 \leo{Goal: on the left, a bad read; on the right, a bad write.}
-\leo{Do we also need an example of ROP/control flow for the new part?}
-Recently, a \leo{inspiring/awesome/something good} work reasoned
+\leo{Do we also need an example of ROP/control flow for the new
+  part?}\bcp{If it is not too complicated to explain, we should definitely
+  put it
+  here.  If it is complicated, we can just say in text that there are other
+  sorts of attacks too, and that we deal with them, and give a forward
+  pointer.}
+Recently, a \leo{inspiring/awesome/something good}\bcp{Maybe just say that
+  we are only aware of one, quite recent, attempt to do something better} work reasoned
 about a stack safety enforcement mechanism using capabilities\leo{cite};
-while impressive, stack safety was defined with respect to an abstract
-machine that ``exhibits stack safety by construction''. Which begs
-the question, what {\em is} the property that holds by construction?
+but even here, stack safety is defined with respect to an abstract
+machine that ``exhibits stack safety by construction,'' begging
+the question of what {\em is} the property that holds by construction?
 
 \leo{StackTokens} provides some intuition towards answering that question,
 by informally describing two components that comprise stack safety:
-local state encapsulation and well-bracketed control flow. In this paper
-we turn this intuition into two formal \leo{extensional} security properties,
+local state encapsulation and well-bracketed control flow. The first
+contribution of the present paper is to
+turn this intuition into two formal \leo{extensional}\bcp{Not sure we can
+  claim this} security properties,
 that together form a formal definition of stack safety.
 \rb{I think the merit of StkTokens goes beyond mere intuition. There is a lot of
-rigor in it, even if some notions are implicit or not fully developed.}
+rigor in it, even if some notions are implicit or not fully
+developed.}\bcp{Yes, and let's remember that they are highly likely to be
+reviewing this paper!  Let's be as generous as we can be without
+under-selling our delta.}
 
 The underlying notion behind local state encapsulation is the
 intention to protect callers from callees: a callee should be not be
 able to access or overwrite a caller's private data. We formalize this
-intuition as a security property, with a confidentiality and an
-integrity component.
+intuition as a security property with both confidentiality and
+integrity components.
 %
-At a high level, {\em stack confidentiality} ensures that a callee's
+Intuitively, {\em stack confidentiality} promises that a callee's
 observable behavior is not affected by memory outside its stack frame
 (e.g. a caller's private data or uninitialized memory).  {\em Stack
-  integrity} guarantees that if a function call returns, the caller's
-stack data will be identical to what it was before the call.
+  integrity} guarantees that, if a function call ever returns, the caller's
+stack data at the point of return will be identical to what it was before
+the call.  \bcp{We need to point out somewhere that we are only dealing with
+stack safety, though we discuss (somewhere) how our property can be combined
+with the heap safety property of [Azevedo et al]}
 
 While integrity and confidentiality are relatively standard security
-properties, this setting provides an interesting additional challenge:
+properties, the stack-safety setting raises an interesting additional
+challenge:
 the notion of who the attacker is shifts throught execution. Not only
 does a caller need to be protected from its callee, but the callee
-itself needs to be potentially proteced from {\em its} callees.  In
-this paper we address this challenge by varying the observation power
+itself needs to be proteced from {\em its} callees.
+We address this challenge by varying the observation power
 of the attacker at call points, and demonstrate that our policy is
-implementable by pre-existing monitoring mechanisms.
+implementable by pre-existing monitoring mechanisms. \bcp{The two parts of
+  the sentence are about two very different things.  The second deserves its
+  own paragraph, IMO.}
 
 Similarly, the underlying notion behind well-bracketed control flow is
 the need to protect the call structure itself: a callee should not be
-allowed to jump to the middle of an arbitrary block of code either
-directly (via a jump instruction) or indirectly (by corrupting stack
-data and returning). \leo{There needs to be some informal description
-  of the wbcf part here. Sean?}
+allowed to jump to the middle of an arbitrary block of code, either
+directly (via a jump instruction) or indirectly (by corrupting the return
+address on the stack and then returning). \leo{There needs to be some
+  informal description of the wbcf part here. Sean?}
 
-We begin by giving some background in Section~\ref{sec:prelim}.
-Our contributions are:
+In summary, we offer the following contributions:
 \begin{itemize}
-\item \leo{More? Extensional} formal characterizations of the
-  intuitive concepts of local state encapsulation~\ref{sec:lse} and
-  well-bracketed control flow~\ref{sec:wbcf}.  Evidence that this
-  property is strong enough to capture the folk intuition: we show
+\item \leo{More? Extensional}\bcp{We might need to invent a word for this---''quasi-extensional''?} formal characterizations of the
+  intuitive concepts of local state encapsulation and
+  well-bracketed control flow~(\Cref{sec:lse-and-wbcf}).  As evidence that this
+  property is strong enough to capture the folk intuition, we show
   that the stack unsafe examples from the literature also fail our
-  property.
-\item Evidence that the property is not too strong. It's realizible by
+  property~(\Cref{sec:disc}).
+\item As evidence that the property is not too strong, we show that it is
+  realizible by
   a previously proposed micropolicy enforcement
-  mechanism~\ref{sec:micropolicy}. \leo{And it says yes on a
-    substantial body of code} We then present a variation of the
+  mechanism~(\Cref{sec:micropolicy}). \leo{And it says yes on a
+    substantial body of code}. We also present a variation of the
   property + policy that is lazy, easier/more efficient to implement,
-  and provably weaker.
+  and provably weaker (\Cref{sec:lazy}).
 \item A provably stronger (inductive? step-by-step/stepwise) variant
   of this property tuned for testing/verification.  We test the whole
-  thing with a cool framework.
+  thing with a cool framework. \bcp{Which section?}
 \end{itemize}
-Finally, in Section~\ref{sec:relwork} we discuss related work and
-sketch directions for future work in Section~\ref{sec:future}.
+Section~\ref{sec:relwork} discusses related work, and
+Section~\ref{sec:future} sketches directions for future work.
+%
+We begin with some technical preliminaries in
+Section~\ref{sec:prelim}.
 
 \section{Background}
 \label{sec:prelim}
 
-Before we define stack safety, we need to first set the stage by
-describing our machine model. Our definition of stack safety is
-generic and this sections discusses an abstract interface to our
+To set the stage, we first
+describe our machine model. Our definition of stack safety is
+generic and this section discusses an abstract interface to our
 machine model and some kind of static or dynamic, software- or
-hardware-enforced security monitor. At the same time, for
-concreteness, we will build up our running example using a
-conventional machine architecture with a standard (RISC-V) processor
-and later extend it with a dynamic policy mechanism.
+hardware-enforced security monitor.  For
+concreteness, our running examples will use a
+conventional machine architecture and a standard (RISC-V) instruction set;
+in~\Cref{sec:micropolicies} we will
+extend this model it with a dynamic policy enforcement mechanism based
+on \bcp{NickPaper,AndMaybeSomeOthers}.
 
 \paragraph*{Values, States, and Observations}
 
 The basic building blocks of the machine are {\em values} and {\em
-  addresses}. Both are drawn from some set of all possible words
-$\WORDS$. We will denote words with $\word$.
+  addresses}. Both are drawn from some set of {\em words}
+$\WORDS$, ranged over by $\word$.
 %
-Our machine states are comprised of {\em components}, that can be word
-(denoting memory addresses) or registers (drawn from some set $\REGS$).
+Our machine states are composed of {\em components} $k$, addressed either by
+words (memory addresses) or by by register names ($r$) drawn from some set
+$\REGS$.
 %
-    \[\reg \in \REGS\]
     \[\component \in \COMPONENTS = \WORDS + \REGS \]
 %
-The registers must include two special purpose registers: the program
-counter {\PCname} and the stack pointer \SP.
-%
-Formally, a machine state is just a map from components to values:
+The register names are assumed to include two special purpose registers: the
+program counter {\PCname} and the stack pointer \SP.
+
+A machine state is a map from components to values:
 %
 \[\mach \in \MACHS = \COMPONENTS \rightarrow \WORDS\]
 
-Our stack safety property will be defined in terms of {\em
-  observations}, which may be silent (written $\tau$) or a word of
-data:\leo{Needs more exposition}
+The step function of the
+machine takes a machine state and produces a pair of a
+machine state and an {\em observation}, which may be either
+silent (written $\tau$) or a word of data that the machine communicates to
+the outside world (e.g., by writing to a DMA address):\leo{Needs more
+  exposition}\bcp{Like that?}
 %
-\[\obs \in \OBSS = \tau ~ | ~ \word \in \WORDS\]
+\[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
+\[\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \]
 %
-These observations are a byproduct of the step function of the
-machine, which takes a machine state and produces a pair of a
-machine state and an observation.
-%
-\(\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \).
 
 \paragraph*{Running Example: RISC-V}
 
@@ -337,8 +362,9 @@ straightforward. To build up our running example, we are going to use
 a standard 64-bit RISC machine, just like the one we are using in our
 experiments later on \leo{Mention FORVIS?}. In this setting, $\WORDS$
 is the set of 64-bit integers, $\REGS$ is the set $\{r_0, \cdots,
-r_{31}\} \cup {\PCname}$, and $\SP = r_2$. \leo{Mention We use the
-  standard encoding of instructions to words?}
+r_{31}\} \cup \{\PCname\}$, and $\SP = r_2$.
+% \leo{Mention We use the standard encoding of instructions to words?}
+% BCP: Nah.
 
 The first interesting choice is that of observations, as there are
 multiple reasonable options. At one extreme, we could choose to define
@@ -346,11 +372,13 @@ observations as the value written at any component. However, that
 would pose problems later on when we treat some components as ``secret''
 when they correspond to a caller's private state. \leo{On the other extreme,
 we could pick a particular component and treat it as the ``output'' of
-our system. }
+our system. }  \bcp{But in this paragraph we are describing the particular
+choise that we make for our running example, no?  But we certainly want to
+discuss this fully someplace!}
 
 \paragraph*{Policies}
 
-A policy is a general model of an enforcement mechanism, consisting of
+\bcp{More explanation needed, plus examples.}A policy is a general model of an enforcement mechanism, consisting of
 a set of policy states \(\pol \in \POLS\), and a policy step function
 \((\mach, \pol) \stepstopol \pol' : \MACHS \times \POLS
 \rightharpoonup \POLS\).
@@ -360,36 +388,42 @@ states.
 %
 \[\MPS = \MACHS \times \POLS\]
 %
-We then lift this policy step function to operate on such pairs,
+We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
 
 \judgmenttwo{\(\mach_1 \stepstoobs{\obs} \mach_2\)}{\((\mach_1, \pol_1) \stepstopol \pol_2\)}
             {\(\mpstate{\mach_1}{\pol_1} \stepstoobs{\obs}_P \mpstate{\mach_2}{\pol_2}\)}
 
-\leo{Notation: Should $\stepstoobs{}$ use harpoon for the lifted step?}
+\leo{Notation: Should $\stepstoobs{}$ use harpoon for the lifted
+  step?}\bcp{Yes.}
 
-\leo{TODO: Forward pointer to policies right?}
+\leo{TODO: Forward pointer to policies right?}\bcp{Yes.  But also we can say
+in more detail that the intention is to capture any kind of dynamic
+enforcement mechanism and give as many names and citations as we can.}
 
 \paragraph{Traces}
 
-A trace over some type $A$ is a potentially infinite, nonempty
+A trace over a type $A$ is a nonempty, finite or infinite
 sequence of $A$s. We will mostly be concerned with sequences of
-machines states, usually denoted $\machT$, and with sequences of
+machines states, usually\bcp{not always?} denoted $\machT$, and with sequences of
 triples of (machine states, policy states, and observations), usually
 denoted $\MPT$.
 \rb{The way the definitions are set up, one may expect MPO, but\ldots}
-To continue, we will require four generic operations
-on traces: a ``trace-of'' operation to construct the potentially
-infinite traced induced by a step relation
-\rb{not an op on traces per se?};
+To continue\bcp{??}, we will require four generic operations
+on traces: a ``trace-of'' operation to construct the
+trace induced by a step relation and a machine state
+\rb{not an op on traces per se?}\bcp{+1};
 a ``split'', to break a
 trace into two components based on a predicate; a ``join'', the
 reverse of split; and a ``prefix'', as a shorthand to only keep the
-first component of a split.
+first component of a split.  \bcp{Not sure it's worth enumerating them
+  rather than just getting down to the actual definitions below.}
 
 The ``trace-of'' operator, written \(\hookrightarrow\), coinductively
 relates a machine state with the trace of machine states paired with
-observations produced by repeated application of step:
+observations produced by repeated application of step:  \bcp{above, we
+  showed operators applied to metavariables, not just the bare operator
+  symbol.}
 %
 \[\hookrightarrow : \machT \rightarrow \MOTRACE\]%
 %
@@ -401,27 +435,35 @@ Since the step function is total, if \(\mach \hookrightarrow \machT\),
 then \(\machT\) must be infinite.
 
 \leo{TODO: Add an example of a trace once I figure out the notations}
+\bcp{Let's also try to clean up the spacing a little -- many of these
+  sequences of rules can be typeset on fewer lines}
 
 Similarly, we define \(\hookrightarrow_P\) to relate a machine-policy
 state pair to the trace of triples of machine states, policy states,
-and observations induced by by \(\stepstoobs{}_P\):
+and observations induced by by \(\stepstoobs{}_P\): \bcp{Observe that this
+  time the trace can be either finite or infinite.}
 %
 \[\hookrightarrow_P : \MACHS \times \POLS \rightarrow \MPOTRACE \]
 %
 \judgment{\(\neg \exists \pol_1 . \pol_0 \rightharpoonup \pol_1\)}
          {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}\)}
-%  
+%
 \judgmentthree{\(\mach_0 \stepstoobs{\obs} \mach_1\)}
               {\(\pol_0 \rightharpoonup \pol_1\)}
               {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \machT\)}
               {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT\)}
 We will also use \(\pi_m\) to project the trace of machine states
 out of a trace, \(\pi_p\) to project the trace of policy states, and
-\(\pi_o\) to project the observations.
+\(\pi_o\) to project the observations.  \bcp{I'm getting a little lost in
+  all these.  E.g., do these traces include the final state of a finite
+  execution?  If so, what observation is it paired with?}
 
-\leo{PUT is completely ambiguous as a choice of abbreviation. Just ``Pre''
-  seems better}
-The {\it prefUpTo} operation \(\PUT(\Trace,f)\) takes a trace \(T\)
+% SNA: fixed
+%\leo{PUT is completely ambiguous as a choice of abbreviation. Just ``Pre''
+%  seems better}
+The {\it prefUpTo} operation \(\PUT(\Trace,f)\) \bcp{Why does it have two
+  different abbreviated names?  And wouldn't ``While'' be more mnemonic?}
+takes a trace \(T\) 
 and a predicate on elements \(f\) and gives the prefix of \(T\)
 ending with the first element on which \(f\) holds, coinductively:
 
@@ -435,7 +477,7 @@ ending with the first element on which \(f\) holds, coinductively:
             {\(\PUT(f,\traceelem\Trace) = \traceelem\Trace'\)}
 %
 Note that if the resulting trace is a strict prefix of the parameter, then the
-predicate must hold on its final element. Conversely, if the predicate never
+predicate must hold on its final element. Conversely\bcp{why conversely?}, if the predicate never
 holds, \(\PUT\) is the identity function.
 
 % The {\it join} operation, written \(T_1 \cdot T_2\) is the reverse of
@@ -455,15 +497,15 @@ for convenience.
 %
 Let \(f\) be a predicate on machine states. Then we define \(\mach
 \hookrightarrow \machT | f\) (read ``\(\machT'\) is the prefix of
-running \(\mach\) up to \(f\)''):
-  
+running \(\mach\) up to \(f\)''): \bcp{M and M' should be swapped, I think.} 
+
 \judgmenttwo{\(\mach \hookrightarrow \machT\)}
             {\(\PUT(\lambda (\mach',\obs).f\ \mach',\machT)
               = \machT'\)}
             {\(\mach \hookrightarrow \machT' | f\)}
 \noindent
 And similarly for traces with policies:
-  
+
 \judgmenttwo{\(\mpstatename \hookrightarrow \MPT\)}
             {\(\PUT(\lambda \mpostate{\mach}{\pol}{\obs}.f(\mach),\MPT) = \MPT'\)}
          {\(\mpstatename \hookrightarrow \MPT' | f\)}
@@ -478,8 +520,9 @@ And similarly for traces with policies:
 \paragraph*{Observational Equivalence}
 
 We say that a trace of observations $\obsT_1$ is a prefix of $\obsT_2$
-\leo{Benjamin suggested ``as far as an attacker is conerned in an
-  e-mail, but we haven't said anything about attackers yet.}, if the
+\leo{Benjamin suggested ``as far as an attacker is concerned'' in an
+  e-mail, but we haven't said anything about attackers yet.}\bcp{We don't
+  have to talk about attackers, just external observers.}, if the
 sequence of non-silent observations of $\obsT_1$ is a prefix of those
 of $\obsT_2$; that is we operate up to deletion of \(\tau\)
 observations, coinductively:
@@ -502,7 +545,8 @@ observations, coinductively:
 % Fixed by Andrew:
 %\COQ{This is the same as the coq version minus a redundant case.}
 
-We then define equivalence of observation traces as traces prefixing each other:
+We then define equivalence\bcp{Can we please call it something else?  An
+  ``equivalence'' should always be transitive.} of observation traces as traces prefixing each other:
 \[O_1 \simeq O_2 \triangleq O_1 \lesssim O_2 \land O_2 \lesssim O_1\]
 
 \leo{Rephrase transition. I hate it:} There are two interesting things
@@ -514,9 +558,9 @@ defined as the prefix relation but dropping the only assymetric rules
 Second, an infinite silent trace is a prefix of (and equivalent to)
 any other trace. While this might seem surprising at first, it makes
 sense in a timing-insensitive context: an external observer looking
-at two machine runs cannot distinguish between a machine that
-steps forever or a machine that steps for a long time before producing
-some output, before that time has passed.
+at two machine runs cannot (computably) distinguish between a machine that
+steps forever and a machine that steps for a long time before producing
+some output.
 
 %Let the predicate \(\isinf(T)\) hold when the trace $T$ is infinite.
 %We then define {\em policy-sensitive observational equivalence}: a
@@ -524,16 +568,17 @@ some output, before that time has passed.
 %\MOTRACE$ if (1) \(\MPT\) is infinite and the observations of \(\MPT\)
 %and \(\machT\) are equivalent, or (2) if the \(\MPT\) is finite (due to a
 %policy fault) and its observations are a prefix of those of M.
-% 
+%
 %% Fixed by Sean
 %%\leo{Why $\mathit{Obs}$ and not $\pi_o$ defined earlier?}
 %\judgmenttwo{\(\neg \isinf(\MPT)\)}{\(\pi_o(\MPT) \lesssim \pi_o(\machT)\)}
 %            {\(\MPT \sim_P \machT\)}
-% 
+%
 %\judgmenttwo{\(\isinf(\MPT)\)}{\(\pi_o(\MPT) \simeq \pi_o(\machT)\)}
 %            {\(\MPT \sim_P \machT\)}
 
 \section{Stack Safety, Formally}
+\label{sec:lse-and-wbcf}
 
 In this section we will describe stack safety as a formal property. We
 begin with introducing a running example that will help keep things
@@ -946,12 +991,12 @@ as describing the full effect of each instruction in detail.
 %     ; ~ \text{\em increase the $\SP$ by 8}\\
 %\end{array}
 %\]
-% 
+%
 %  , (SW sp ra 4  , tagH1)
 %  , (ADDI sp sp 8, tagH2)
 %  , (LW 3 3 1000, instrTag)
 %  ]
-  
+
 
 
 
@@ -990,7 +1035,7 @@ considered to identify the state just before the \(\JAL\), in which
 space for arguments is already allocated, but the mechanism is more
 general. A state in which a call map is defined on the program counter
 is referred to as a {\it call state}.
-  
+
 A return map is simply a predicate on addresses and may be considered
 to identify the final jump of the return sequence. An entry map is
 likewise a predicate on addresses.
@@ -1009,7 +1054,7 @@ to have correctly returned from a call. We consider the call to have
 returned the first time control returns to the instruction following
 the \(\JAL\) with the stack restored. Formally this is a relation
 between the states:
-    
+
 \[\begin{split}
     \ret{\mach_c}\ \mach_r \triangleq & \mach_r(\PCname) =
     \nextPC(\mach_c(\PCname)) \land \\ & \mach_r(\SP) = \mach_c(\SP)
@@ -1019,7 +1064,7 @@ between the states:
 
 \subsection{Local State Encapsulation}
 \label{sec:lse}
-  
+
 The first part of stack safety is {\em local state encapsulation}.
 Informally, it captures the notion that a caller's data is
 protected from a callee's actions. We formalize this notion
@@ -1055,7 +1100,7 @@ stack base to stack pointer, with the exception of the $n$ locations
 corresponding to the arguments of a call. Private components are
 marked high confidentiality and high integrity: the callee should be
 able to neither read, nor write them.
-%  
+%
 Everything above the stack pointer at the point of the call is
 ``uninitialized'' memory that can be written into but should not be
 read. To protect the callee itself from such reads, these components
@@ -1084,7 +1129,7 @@ low confidentiality.
 
   \leo{Snapshot state at the point of the call from TOP to F, collor
     the different things}
-  
+
 \paragraph*{Stack Integrity}
 
 The first component of local state encapsulation is an integrity
@@ -1097,7 +1142,6 @@ callee.
 
 \definition{Trace Integrity}
 \label{def:trace-integrity}
-
 Let $\contour$ be a contour and $MP$ be a (potentially infinite)
 $\MPOTRACE$. We will say $MP$ satisfies {\em trace integrity} with
 respect to $\contour$ if its final state (if any) agrees with its
@@ -1110,7 +1154,7 @@ initial one on all components marked $\HIGHSEC$ in $\contour$:
   \forall \component. ~ \contour(\component) = \HIGHSEC \rightarrow m_0(\component) = m_f(\component), & \text{otherwise} \\
 \end{array}
 \right .
-\]  
+\]
 \leo{TODO: DISCUSS: Figure out notation for first/last machine state in a trace}
 
 Intuitively, the caller expects to find their private data untouched
@@ -1132,13 +1176,12 @@ holds for every transition between a caller and a callee $f$ for
 the entirety of the trace of $f$.
 
 \definition{Transition}
-
 Given a trace $MP$, a call map $\callmap$ and a code map $\codemap$,
-an $n-${\em transition} to a callee $f$ is a pair of machine-policy
+an $n$-{\em transition} to a callee $f$ is a pair of machine-policy
 state pairs $(\mach_c, \pol_c)$ and $(\mach_e, \pol_e)$ in the trace
 such that:
 \begin{itemize}
-\item one state pair steps to the other: 
+\item one state pair steps to the other:
   $$\exists \obs. ~ (\mach_c, \pol_c) \stepstoobs{\obs}_P (\mach_e, \pol_e),$$
 \item $\mach_c$ is a valid call with $n$ arguments:
   $$\callmap(\mach_c(\PCname)) = n,$$
@@ -1147,7 +1190,6 @@ such that:
 \end{itemize}
 
 \definition{Stack Integrity}
-
 Let $\callmap$ be a call map and $\codemap$ a code map. We say that a
 system satisfies {\em stack integrity} with respect to $\callmap$ and
 $\codemap$ if, for every initial machine-policy state pair $(\mach_0,
@@ -1175,7 +1217,6 @@ comparing the behavior of a machine with an arbitrary variant that
 preserves low confidentiality data.
 
 \definition{Variations}
-
 We say two machine states $\mach$ and $\mach'$ are {\em variations} of one
 another given a contour $\contour$ if they agree on low
 confidentiality data:
@@ -1192,7 +1233,6 @@ and a ``variant'' one $M \in \MTRACE$ that would corresponding to $f$
 if it started from a variant initial machine state.
 
 \definition{Trace Confidentiality}
-
 \leo{Add info for ``valid return'':}
 We will say two traces $MP$ and $M$ satisfy {\em trace
   confidentiality} with respect to $\contour$ if:
@@ -1207,7 +1247,7 @@ $$\forall \component. ~ \mach_e(\component) \not = \mach_r(\component)
   $$\pi_o(MP) \eqsim \pi_o(M)$$
 \item If $MP$ is infinite, then $M$ is also infinite and their
   observations are equivalent:
-  $$\pi_o(MP) \eqsim \pi_o(M)$$  
+  $$\pi_o(MP) \eqsim \pi_o(M)$$
 \item If the $MP$ ends prematurely with a policy fault, then
   we require that its observations are a prefix of those of $M$:
   $$\pi_o(MP) \lesssim \pi_o(M)$$
@@ -1220,7 +1260,6 @@ pattern as in stack integrity:
 
 \sna{Version for stepping from a state}
 \definition{Confidential Execution}
-
   Stack confidentiality, below, is a property of a system that, from a call to
   a return, each trace obeys a local confidentiality property,
   {\it confidential execution}.
@@ -1232,7 +1271,7 @@ pattern as in stack integrity:
   \(\mach'\) behave the same across three cases. Let
   \(\mpstate{\mach}{\pol} \hookrightarrow \MPT | R\) and
   \(\mach' \hookrightarrow \machT | R\).
-  
+
   If \(\MPT\) ends with a state \(\mach_r\) and \(R\ \mach_r\), then \(\machT\)
   ends with a state \(\mach_r'\) such that \(R\ \mach_r'\). \(\MPT\) and
   \(\machT\) are observationally equivalent, and for each component
@@ -1245,12 +1284,9 @@ pattern as in stack integrity:
   If \(\MPT\) ends before \(R\) ever holds, meaning that it halted due to a
   policy violation, then it is a strict observational prefix of \(\machT\),
   which must be infinite.
-  
-\definition{Stack Confidentiality}
 
-Let $\callmap$ be a call map and $\codemap$ a code map.
-\rb{Could we find better symbols for the maps?}
-We say that a
+\definition{Stack Confidentiality}
+Let $\callmap$ be a call map and $\codemap$ a code map. We say that a
 system satisfies {\em stack confidentiality} with respect to
 $\callmap$ and $\codemap$ if, for every initial machine-policy state
 pair $(\mach_0, \pol_0)$ and its induced trace $MP$, and every
@@ -1275,7 +1311,7 @@ attack by guaranteeing that every jump between functions is either a
 call or a return, and each return jumps to the instruction after a
 corresponding call.
 
-\leo{Also dumping in relevant wbcf discussion part. TODO: merge}  
+\leo{Also dumping in relevant wbcf discussion part. TODO: merge}
     Some forms of security rely on protected control flow. In a classic
     example, a system call that launches a missile might be gated behind code
     that checks a password. A piece of malicious code can jump into the middle
@@ -1296,10 +1332,7 @@ corresponding call.
     invalid returns, even if they would not escalate privilege. Most notably
     {\em well-bracketed control flow}, below.
 
-
-
 \definition{Control Separation}
-
 A system enjoys {\em control separation} with regard to a code map
 \(\codemap\), a call map \(\callmap\), and a return map \(\retmap\) if
 for any initial state \(\mach_0\) and any adjacent pair of states
@@ -1310,7 +1343,6 @@ for any initial state \(\mach_0\) and any adjacent pair of states
 \(\retmap(\mach_1)\).
 
 \definition{Entry Integrity}
-
 A system enjoys {\em entry integrity} with regard to a call map
 \(\callmap\) and entry map \(\entmap\) if for any initial state
 \(\mach_0\) and any adjacent pair of states \(\mach_c\) and
@@ -1319,7 +1351,6 @@ A system enjoys {\em entry integrity} with regard to a call map
 \(\callmap(\mach_c(\PCname)) = n\) then \(\entmap(\mach_e)\).
 
 \definition{Return Integrity}
-
 Return integrity captures the expected behavior of marked returns with
 regard to their call points. We begin by defining a coinductive
 relation \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT_1
@@ -1330,11 +1361,11 @@ starts with a return, it is related to itself:
 
   \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
            {\(\retmap(\mach(\PCname))\)}
-      {\(\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\ 
+      {\(\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\
         \mpstate{\mach}{\pol}\)}
   \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
               {\(\retmap(\mach(\PCname))\)}
-      {\(\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\MPT\ 
+      {\(\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\MPT\
               \mpstate{\mach}{\pol}\MPT\)}
 
 If \(\MPT\) starts with a non-call, non-return state, its unmatched
@@ -1344,21 +1375,21 @@ return must come later:
               \hspace{.5cm} \neg \retmap(\mach(\PCname))
 
               \mathit{Unmatched}\ \callmap\ \retmap\ \MPT\ \MPT'\)}
-           {\(\mathit{Unmatched}\ \callmap\ \retmap\ 
+           {\(\mathit{Unmatched}\ \callmap\ \retmap\
             \mpstate{\mach}{\pol}\MPT\ \MPT'\)}
 
 And most intricately, if \(\MPT\) starts with a call, we must find the
 return that matches it, which will be the unmatched return once we
 step past the call. Then the first unmatched return beyond it is the
 true unmatched return.
-    
+
     \judgment{\(\callmap(\mach(\PCname)) = n
               \hspace{.5cm} \neg \retmap(\mach(\PCname))\)
 
               \(\MPT = \mpstate{\mach}{\pol} \MPT_{\mathit{call}}\)
-              
+
               \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT_{\mathit{call}}\ \MPT_{\mathit{matched}}\)
-            
+
               \(\MPT_{\mathit{matched}} = \mpstate{\mach'}{\pol'} \MPT_{\mathit{tail}}\)
 
               \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT_{\mathit{tail}}\ \MPT_{\mathit{unmatched}}\)}
@@ -1375,7 +1406,6 @@ and \(\mach_r\) the first machine state of \(\MPT'\), then
 \(\ret{\mach_c}\ \mach_r\).
 
 \definition{Well Bracketed Control Flow}
-
 The above properties are somewhat orthogonal, but together they
 capture a standard notion of control flow for a stack: functions keep
 their code separate outside of calls and returns, calls respect
@@ -1385,6 +1415,8 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
   bracketed control flow} with regard to those maps.
 
 \section{Discussion}
+\bcp{Make this a subsection?}
+\label{sec:disc}
 
   \paragraph{Examples}
 
@@ -1405,63 +1437,50 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
     treated as low confidentiality and low integrity.
 
 \section{Lazy Stack Safety}
+\label{sec:lazy}
 
-    \definition{Observable Trace Integrity}
+    \definition{Observable Integrity}
+      Observable integrity weakens eager integrity by allowing a returned state
+      to differ from its call state at high integrity components, provided the
+      observable behavior of the induced trace from the return matches that of
+      an idealized state whose high integrity components do match the call
+      state.
 
-      Suppose a function \(f\) calls another function \(g\) with contour
-      \(\contour\). If \(g\) alters an address below its stack frame, where
-      \(\contour\) is \(\HIGHSEC\), the trace from the entry point to the
-      return will not enjoy Trace Integrity. But if \(f\) immediately
-      overwrites the overwritten location, the illegal write can be safely
-      ignored, as it will never affect the behavior of the program.
-      {\em Observable trace integrity} captures this intuition by guaranteeing
-      that the final state, instead of being identical to the initial one,
-      has the same behavior as it would if the writes had not occurred.
-
-      Let \(\contour\) be a contour and \(\MPT\) be a finite \(\MPOTRACE\)
-      whose initial machine state is \(\mach_e\). \(\MPT\) satisfies {\em trace
-      integrity} with respect to \(\contour\) if the trace induced by its final
-      state, \(\mpostate{\mach_r}{\pol}{\obs}\), is an observational prefix of
-      that induced by an idealized state \(\mach_r'\) that agrees with
-      \(\mach_r\) on all components marked \(\HIGHSEC\) in \(\contour\).
-      Formally we define a rollback function, \(\mathit{roll}\), that takes
-      two machine states and produces a third.
-      %
-      \[\mathit{roll}(\contour,\mach_e,\mach_r)(\component) =
+      Given a contour, a call state, and a returned state, we define a
+      ``rollback'' function \(\mathit{roll} : \CONTOURS \times \MACHS \times
+      \MACHS \rightarrow \MACHS\). The rollback returns a state that matches
+      the call state on those components that are high integrity in its
+      contour, and matches the return state on low integrity components:
+      \[\mathit{roll}(\contour,\mach_c,\mach_r)(\component) =
       \begin{cases}
         \mach_c(\component) & \contour(\component) = (\HIGHINT,\_) \\
         \mach_r(\component) & \contour(\component) = (\LOWINT,\_) \\
       \end{cases}\]
 
-      If \(\mach_e\) is an entry to a call with contour \(\contour\) and
-      \(\mach_r\) its return, \(\mathit{roll}(\contour,\mach_e,\mach_r)\)
-      agrees with \(\mach_e\) on every component the callee should not change,
-      but with \(\mach_r\) on those components that it is permitted to change.
-      So the observable behavior that follows is the idealized behavior to
-      which we compare the trace from \(\mach_r\), which must prefix it (to
-      account for premature halts due to policy violations.)
-      %
-      \[\begin{split}
-        \text{\sc ObsInt}_\contour ~ \MPT \triangleq
-          & \MPT = \mpostate{\mach_e}{\pol_e}{\obs_e} \dots
-            \mpostate{\mach_r}{\pol_r}{\obs_r} \Rightarrow \\
-        & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' \Rightarrow \\
-        & \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT' \Rightarrow \\
-        & \pi_o(\MPT') \lesssim_O \pi_o(\machT')
-      \end{split}\]
+      Intuitively, the result of a rollback is an idealized state that
+      reflects changes to accessible components, but ignores the callee's
+      interference with the caller's data. Then the observable behavior of the
+      resulting trace is the standard to which we expect the real trace to
+      conform.
 
-    \definition{Observable Stack Integrity}
+      A system enjoys observable integrity with regard to \(\callmap\) and
+      \(\codemap\) if for any initial state \(\mach_0\) and each adjacent pair
+      of a call state \(\mach_c\) and a state \(\mach_e\) with policy state
+      \(\pol_e\) in the trace induced by
+      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\) where
+      \(\callmap(\mach_c) = n\) and \(\codemap(\mach_e) = \funid\),
+      if \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_c}\)
+      with the return state \(\mach_r\) at the end of \(\MPT\), then the
+      following holds.
 
-      A system enjoys {\em observable integrity} with regard to \(\callmap\)
-      and  \(\codemap\) if for any initial state \(\mach_0\) and each
-      transition with entry state \(\mpostate{\mach_e}{\pol_e}{\obs_e}\) and
-      contour \(\contour\) in the induced trace from
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), if
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_e}\),
-      then \(\text{\sc ObsInt}_\contour ~ \MPT\).
+      Let \(\contour = \mathit{Cof}(\mach_c,\funid,n)\) describe the security
+      levels of the call and
+      \(\mach_r' = \mathit{roll}(\contour,\mach_e,\mach_r)\). The induced
+      traces \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT\) and
+      \(\mach_r' \hookrightarrow \machT'\) must be equivalent up to
+      possible policy failure: \(\MPT \sim_P \machT'\).
 
     \definition{Observable Confidentiality}
-
       Observable confidentiality is concerned with whether high confidentiality
       data influences observable both behavior during and after a call. As with
       eager confidentiality, we will compare the behavior of the trace induced
@@ -1482,33 +1501,30 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
           \mach_r'(\component) & \text{else} \\
         \end{cases}\]
 
-      A system enjoys observable confidentiality with respect to \(\callmap\)
-      and \(\codemap\) if for any initial state \(\mach_0\), each adjacent pair
-      of a call state \(\mach_c\) and a state \(\mach_e\) with policy state
-      \(\pol_e\) in the inducted trace from
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), and each variant
-      \(\mach_e' \approx_\contour \mach_e'\) where
-      \(\contour = \mathit{Cof}(\mach_c, \funid, n)\), one of two cases holds
-      on the induced traces from \(\mach_e\) and \(\mach_e'\).
+      A pair of traces \(\MPT\) and \(\machT\) starting from \(\mach_c\) and
+      \(\mach_c'\), respectively, with \(\mach_c \approx_\contour \mach_c'\),
+      enjoy observable trace confidentiality with respect to \(\contour\) if
+      two conditions hold:
 
-      If \(\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT_1 | \ret{\mach_c}\)
-      with \(\MPT_1\) the trace within the callee ending with the machine state
-      \(\mach_r\), the first state to return to the caller, and policy state
-      \(\pol_r\), then the there is a return state \(\mach_r'\) reached by the
-      trace from the variant, \(\mach_c' \hookrightarrow \machT_1 |
-      \ret{\mach_c}\). Let \(\mach_r'' = \mathit{restore}(\contour,\mach_e,
-      \mach_e',\mach_r,\mach_r')\), and let the induced traces from the
-      returned states be \(\mpstate{\mach_r}{\pol_r} \hookrightarrow_P \MPT_2\)
-      and \(\mach_r'' \hookrightarrow \machT_2\). With the callee and caller
-      traces joined, the traces are observationally equivalent up to policy
-      failures: \(\MPT_1 \cdot \MPT_2 \sim_P \machT_1 \cdot \machT_2\).
+      The two traces are observationally equivalent: \(\pi_o(\MPT) \eqsim_O
+      \pi_o(\machT)\).
 
-      The case in which the induced trace does not return is the same as in the
-      eager property: the variant trace also does not return, and the induced
-      traces are observationally equivalent up to policy failure.
+      If \(\MPT\) is finite and ends with the state
+      \(\mpostate{\mach_r}{\pol_r}{\obs_r}\), then \(\machT\) is finite. Let
+      \(\mach_r'\) be the final state of \(\machT\). Then the induced traces
+      \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT'\) and
+      \(\mathit{restore}(\contour,\mach_c,\mach_c',\mach_r,\mach_r')
+      \hookrightarrow \machT'\) are observationally prefixed,
+      \(\pi_o(\MPT') \lesssim_O \pi_o(\machT')\).
+
+      \sna{Structured like this, we need to start with the call state, not
+           the entry. That's because we need to know what to restore to.
+           But we could also define restore in the stack confidentiality
+           section, maybe?}
+
+    \definition{Observable Stack Confidentiality}
 
     \definition{Observable Stack Safety}
-
       A system enjoys {\em observable stack safety} with regard to a call map
       and a code map if it enjoys both observable integrity and observable
       confidentiality with regard to them.
