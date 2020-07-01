@@ -202,7 +202,9 @@ sw r0 r0 40
 \end{verbatim}
     \end{center}
   \end{minipage}
-  \caption{Examples of Unsafe Programs}
+  \caption{Examples of Unsafe Programs\bcp{The numbers don't line up with
+      the boxes; the program fragments need comments explaining what each
+      line does.}}
   \label{fig:stackunsafety}
 \end{figure}
 
@@ -213,60 +215,78 @@ exploiting memory safety vulnerabilities, with potential consequences
 ranging from attackers reading or corrupting private stack data, to
 highjacking a program's control flow. To prevent such attacks, many
 techniques have been proposed in the literature\leo{cite, point out?
-  stack canaries, cherry, nicks...} aiming to achieve {\em stack
-  safety}.
+  stack canaries, cherry, nicks...}\bcp{I think pointing out makes a
+  stronger point.} aiming to achieve ``stack
+  safety''.
 
-But what {\em is} stack safety? A precise formal definition of stack
-safety is lacking from the literature, with the notion only being
+But what {\em is} this stack safety of which we speak? A precise formal
+definition is lacking in the literature, with the notion usually being
 defined negatively: through examples of stack unsafety
-\rb{usually though not always; as noted below there are other approaches}. Two classical
+\rb{usually though not always; as noted below there are other
+  approaches}\bcp{Yes, we have to be very careful about this}. Two classical
 examples of stack unsafety appear in Figure~\ref{fig:stackunsafety}.
 \leo{Goal: on the left, a bad read; on the right, a bad write.}
-\leo{Do we also need an example of ROP/control flow for the new part?}
-Recently, a \leo{inspiring/awesome/something good} work reasoned
+\leo{Do we also need an example of ROP/control flow for the new
+  part?}\bcp{If it is not too complicated to explain, we should definitely
+  put it
+  here.  If it is complicated, we can just say in text that there are other
+  sorts of attacks too, and that we deal with them, and give a forward
+  pointer.}
+Recently, a \leo{inspiring/awesome/something good}\bcp{Maybe just say that
+  we are only aware of one, quite recent, attempt to do something better} work reasoned
 about a stack safety enforcement mechanism using capabilities\leo{cite};
-while impressive, stack safety was defined with respect to an abstract
-machine that ``exhibits stack safety by construction''. Which begs
-the question, what {\em is} the property that holds by construction?
+but even here, stack safety is defined with respect to an abstract
+machine that ``exhibits stack safety by construction,'' begging
+the question of what {\em is} the property that holds by construction?
 
 \leo{StackTokens} provides some intuition towards answering that question,
 by informally describing two components that comprise stack safety:
-local state encapsulation and well-bracketed control flow. In this paper
-we turn this intuition into two formal \leo{extensional} security properties,
+local state encapsulation and well-bracketed control flow. The first
+contribution of the present paper is to
+turn this intuition into two formal \leo{extensional}\bcp{Not sure we can
+  claim this} security properties,
 that together form a formal definition of stack safety.
 \rb{I think the merit of StkTokens goes beyond mere intuition. There is a lot of
-rigor in it, even if some notions are implicit or not fully developed.}
+rigor in it, even if some notions are implicit or not fully
+developed.}\bcp{Yes, and let's remember that they are highly likely to be
+reviewing this paper!  Let's be as generous as we can be without
+under-selling our delta.}
 
 The underlying notion behind local state encapsulation is the
 intention to protect callers from callees: a callee should be not be
 able to access or overwrite a caller's private data. We formalize this
-intuition as a security property, with a confidentiality and an
-integrity component.
+intuition as a security property with both confidentiality and
+integrity components.
 %
-At a high level, {\em stack confidentiality} ensures that a callee's
+Intuitively, {\em stack confidentiality} promises that a callee's
 observable behavior is not affected by memory outside its stack frame
 (e.g. a caller's private data or uninitialized memory).  {\em Stack
-  integrity} guarantees that if a function call returns, the caller's
-stack data will be identical to what it was before the call.
+  integrity} guarantees that, if a function call ever returns, the caller's
+stack data at the point of return will be identical to what it was before
+the call.  \bcp{We need to point out somewhere that we are only dealing with
+stack safety, though we discuss (somewhere) how our property can be combined
+with the heap safety property of [Azevedo et al]}
 
 While integrity and confidentiality are relatively standard security
-properties, this setting provides an interesting additional challenge:
+properties, the stack-safety setting raises an interesting additional
+challenge:
 the notion of who the attacker is shifts throught execution. Not only
 does a caller need to be protected from its callee, but the callee
-itself needs to be potentially proteced from {\em its} callees.  In
-this paper we address this challenge by varying the observation power
+itself needs to be proteced from {\em its} callees.
+We address this challenge by varying the observation power
 of the attacker at call points, and demonstrate that our policy is
-implementable by pre-existing monitoring mechanisms.
+implementable by pre-existing monitoring mechanisms. \bcp{The two parts of
+  the sentence are about two very different things.  The second deserves its
+  own paragraph, IMO.}
 
 Similarly, the underlying notion behind well-bracketed control flow is
 the need to protect the call structure itself: a callee should not be
-allowed to jump to the middle of an arbitrary block of code either
-directly (via a jump instruction) or indirectly (by corrupting stack
-data and returning). \leo{There needs to be some informal description
-  of the wbcf part here. Sean?}
+allowed to jump to the middle of an arbitrary block of code, either
+directly (via a jump instruction) or indirectly (by corrupting the return
+address on the stack and then returning). \leo{There needs to be some
+  informal description of the wbcf part here. Sean?}
 
-We begin by giving some background in Section~\ref{sec:prelim}.
-Our contributions are:
+In summary, we offer the following contributions:
 \begin{itemize}
 \item \leo{More? Extensional} formal characterizations of the
   intuitive concepts of local state encapsulation~\ref{sec:lse} and
@@ -284,8 +304,9 @@ Our contributions are:
   of this property tuned for testing/verification.  We test the whole
   thing with a cool framework.
 \end{itemize}
-Finally, in Section~\ref{sec:relwork} we discuss related work and
-sketch directions for future work in Section~\ref{sec:future}.
+We begin with some technical preliminaries in
+Section~\ref{sec:prelim}. Section~\ref{sec:relwork} discusses related work, and
+Section~\ref{sec:future} sketches directions for future work. 
 
 \section{Background}
 \label{sec:prelim}
