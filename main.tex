@@ -419,8 +419,9 @@ We will also use \(\pi_m\) to project the trace of machine states
 out of a trace, \(\pi_p\) to project the trace of policy states, and
 \(\pi_o\) to project the observations.
 
-\leo{PUT is completely ambiguous as a choice of abbreviation. Just ``Pre''
-  seems better}
+% SNA: fixed
+%\leo{PUT is completely ambiguous as a choice of abbreviation. Just ``Pre''
+%  seems better}
 The {\it prefUpTo} operation \(\PUT(\Trace,f)\) takes a trace \(T\)
 and a predicate on elements \(f\) and gives the prefix of \(T\)
 ending with the first element on which \(f\) holds, coinductively:
@@ -948,34 +949,6 @@ $$\forall \component. ~ \mach_e(\component) \not = \mach_r(\component)
 
 To lift trace confidentiality to a system property, we follow the same
 pattern as in stack integrity:
-
-\sna{Version for stepping from a state}
-\definition{Confidential Execution}
-
-  Stack confidentiality, below, is a property of a system that, from a call to
-  a return, each trace obeys a local confidentiality property,
-  {\it confidential execution}.
-
-  We will say that a state \(\mpstate{\mach}{\pol}\) satisfies confidential
-  execution with regard to a contour \(\contour\) and an ending condition
-  \(R\) that is a predicate on machine states if, for all variant states
-  \(\mach' \approx_\contour \mach\), the induced traces from \(\mach\) and
-  \(\mach'\) behave the same across three cases. Let
-  \(\mpstate{\mach}{\pol} \hookrightarrow \MPT | R\) and
-  \(\mach' \hookrightarrow \machT | R\).
-  
-  If \(\MPT\) ends with a state \(\mach_r\) and \(R\ \mach_r\), then \(\machT\)
-  ends with a state \(\mach_r'\) such that \(R\ \mach_r'\). \(\MPT\) and
-  \(\machT\) are observationally equivalent, and for each component
-  \(\component\) such that \(\contour(\component) = \HIGHSEC\),
-  \(\mach_r(\component) = \mach_r'(\component)\).
-
-  If \(\MPT\) is infinite, then \(\machT\) is infinite, and they are
-  observationally equivalent.
-
-  If \(\MPT\) ends before \(R\) ever holds, meaning that it halted due to a
-  policy violation, then it is a strict observational prefix of \(\machT\),
-  which must be infinite.
   
 \definition{Stack Confidentiality}
 
@@ -1026,8 +999,6 @@ corresponding call.
     protect from calls that enter outside of valid entry points and from all
     invalid returns, even if they would not escalate privilege. Most notably
     {\em well-bracketed control flow}, below.
-
-
 
 \definition{Control Separation}
 
@@ -1191,15 +1162,25 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
       \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_e}\),
       then \(\text{\sc ObsInt}_\contour ~ \MPT\).
 
-    \definition{Observable Confidentiality}
+    \definition{Observable Trace Confidentiality}
 
-      Observable confidentiality is concerned with whether high confidentiality
-      data influences observable both behavior during and after a call. As with
-      eager confidentiality, we will compare the behavior of the trace induced
-      by a state to another induced by its variant. But if the original returns,
-      before continuing, we must reset the variant to conform with the original
-      state.
+      Trace confidentiality is a property of two traces whose initial machine
+      states are variations, with two sub-properties. First, the behavioral
+      condition -- that their observable behaviors prior to the end of the
+      trace are equivalent -- reflects the intuition that secret values should
+      not influence visible behavior. Second, we have the end condition that
+      their final states (if any) are equal up to the original variation. The
+      end condition over-approximates the extension of the behavioral condition
+      to future execution.
 
+      We introduce {\em observable trace confidentiality}, which extends the
+      behavioral condition to apply to execution from the final state on.
+      This requires restoring varied components to their original values,
+      since after return they will once again be accessible legitimately.
+
+      [Example goes here, showing how, when we return from a call, execution
+      becomes incoherent unless the state is restored.]
+      
       The \(\mathit{restore}\) function takes a contour and four states: the
       original call state, a variant call state, and corresponding return
       states, and returns another state. The resulting state restores those
@@ -1213,30 +1194,28 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
           \mach_r'(\component) & \text{else} \\
         \end{cases}\]
 
-      A system enjoys observable confidentiality with respect to \(\callmap\)
-      and \(\codemap\) if for any initial state \(\mach_0\), each adjacent pair
-      of a call state \(\mach_c\) and a state \(\mach_e\) with policy state
-      \(\pol_e\) in the inducted trace from
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), and each variant
-      \(\mach_e' \approx_\contour \mach_e'\) where
-      \(\contour = \mathit{Cof}(\mach_c, \funid, n)\), one of two cases holds
-      on the induced traces from \(\mach_e\) and \(\mach_e'\).
+      A pair of traces \(\MPT\) and \(\machT\) starting from \(\mach_c\) and
+      \(\mach_c'\), respectively, with \(\mach_c \approx_\contour \mach_c'\),
+      enjoy observable trace confidentiality with respect to \(\contour\) if
+      two conditions hold:
 
-      If \(\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT_1 | \ret{\mach_c}\)
-      with \(\MPT_1\) the trace within the callee ending with the machine state
-      \(\mach_r\), the first state to return to the caller, and policy state
-      \(\pol_r\), then the there is a return state \(\mach_r'\) reached by the
-      trace from the variant, \(\mach_c' \hookrightarrow \machT_1 |
-      \ret{\mach_c}\). Let \(\mach_r'' = \mathit{restore}(\contour,\mach_e,
-      \mach_e',\mach_r,\mach_r')\), and let the induced traces from the
-      returned states be \(\mpstate{\mach_r}{\pol_r} \hookrightarrow_P \MPT_2\)
-      and \(\mach_r'' \hookrightarrow \machT_2\). With the callee and caller
-      traces joined, the traces are observationally equivalent up to policy
-      failures: \(\MPT_1 \cdot \MPT_2 \sim_P \machT_1 \cdot \machT_2\).
+      The two traces are observationally equivalent: \(\pi_o(\MPT) \eqsim_O
+      \pi_o(\machT)\).
 
-      The case in which the induced trace does not return is the same as in the
-      eager property: the variant trace also does not return, and the induced
-      traces are observationally equivalent up to policy failure.
+      If \(\MPT\) is finite and ends with the state
+      \(\mpostate{\mach_r}{\pol_r}{\obs_r}\), then \(\machT\) is finite. Let
+      \(\mach_r'\) be the final state of \(\machT\). Then the induced traces
+      \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT'\) and
+      \(\mathit{restore}(\contour,\mach_c,\mach_c',\mach_r,\mach_r')
+      \hookrightarrow \machT'\) are observationally prefixed,
+      \(\pi_o(\MPT') \lesssim_O \pi_o(\machT')\).
+
+      \sna{Structured like this, we need to start with the call state, not
+           the entry. That's because we need to know what to restore to.
+           But we could also define restore in the stack confidentiality
+           section, maybe?}
+
+    \definition{Observable Stack Confidentiality}
 
     \definition{Observable Stack Safety}
 
