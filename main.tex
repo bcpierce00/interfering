@@ -288,25 +288,28 @@ address on the stack and then returning). \leo{There needs to be some
 
 In summary, we offer the following contributions:
 \begin{itemize}
-\item \leo{More? Extensional} formal characterizations of the
-  intuitive concepts of local state encapsulation~\ref{sec:lse} and
-  well-bracketed control flow~\ref{sec:wbcf}.  Evidence that this
-  property is strong enough to capture the folk intuition: we show
+\item \leo{More? Extensional}\bcp{We might need to invent a word for this---''quasi-extensional''?} formal characterizations of the
+  intuitive concepts of local state encapsulation and
+  well-bracketed control flow~(\Cref{sec:lse-and-wbcf}).  As evidence that this
+  property is strong enough to capture the folk intuition, we show
   that the stack unsafe examples from the literature also fail our
-  property.
-\item Evidence that the property is not too strong. It's realizible by
+  property~(\Cref{sec:disc}).
+\item As evidence that the property is not too strong, we show that it is
+  realizible by
   a previously proposed micropolicy enforcement
-  mechanism~\ref{sec:micropolicy}. \leo{And it says yes on a
-    substantial body of code} We then present a variation of the
+  mechanism~(\Cref{sec:micropolicy}). \leo{And it says yes on a
+    substantial body of code}. We also present a variation of the
   property + policy that is lazy, easier/more efficient to implement,
-  and provably weaker.
+  and provably weaker (\Cref{sec:lazy}).
 \item A provably stronger (inductive? step-by-step/stepwise) variant
   of this property tuned for testing/verification.  We test the whole
-  thing with a cool framework.
+  thing with a cool framework. \bcp{Which section?}
 \end{itemize}
+Section~\ref{sec:relwork} discusses related work, and
+Section~\ref{sec:future} sketches directions for future work.
+%
 We begin with some technical preliminaries in
-Section~\ref{sec:prelim}. Section~\ref{sec:relwork} discusses related work, and
-Section~\ref{sec:future} sketches directions for future work. 
+Section~\ref{sec:prelim}.
 
 \section{Background}
 \label{sec:prelim}
@@ -431,7 +434,7 @@ and observations induced by by \(\stepstoobs{}_P\):
 %
 \judgment{\(\neg \exists \pol_1 . \pol_0 \rightharpoonup \pol_1\)}
          {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}\)}
-%  
+%
 \judgmentthree{\(\mach_0 \stepstoobs{\obs} \mach_1\)}
               {\(\pol_0 \rightharpoonup \pol_1\)}
               {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \machT\)}
@@ -478,14 +481,14 @@ for convenience.
 Let \(f\) be a predicate on machine states. Then we define \(\mach
 \hookrightarrow \machT | f\) (read ``\(\machT'\) is the prefix of
 running \(\mach\) up to \(f\)''):
-  
+
 \judgmenttwo{\(\mach \hookrightarrow \machT\)}
             {\(\PUT(\lambda (\mach',\obs).f\ \mach',\machT)
               = \machT'\)}
             {\(\mach \hookrightarrow \machT' | f\)}
 \noindent
 And similarly for traces with policies:
-  
+
 \judgmenttwo{\(\mpstatename \hookrightarrow \MPT\)}
             {\(\PUT(\lambda \mpostate{\mach}{\pol}{\obs}.f(\mach),\MPT) = \MPT'\)}
          {\(\mpstatename \hookrightarrow \MPT' | f\)}
@@ -546,16 +549,17 @@ some output, before that time has passed.
 %\MOTRACE$ if (1) \(\MPT\) is infinite and the observations of \(\MPT\)
 %and \(\machT\) are equivalent, or (2) if the \(\MPT\) is finite (due to a
 %policy fault) and its observations are a prefix of those of M.
-% 
+%
 %% Fixed by Sean
 %%\leo{Why $\mathit{Obs}$ and not $\pi_o$ defined earlier?}
 %\judgmenttwo{\(\neg \isinf(\MPT)\)}{\(\pi_o(\MPT) \lesssim \pi_o(\machT)\)}
 %            {\(\MPT \sim_P \machT\)}
-% 
+%
 %\judgmenttwo{\(\isinf(\MPT)\)}{\(\pi_o(\MPT) \simeq \pi_o(\machT)\)}
 %            {\(\MPT \sim_P \machT\)}
 
 \section{Stack Safety, Formally}
+\label{sec:lse-and-wbcf}
 
 In this section we will describe stack safety as a formal property. We
 begin with our model of knowledge about the program structure\leo{I
@@ -579,19 +583,19 @@ well-bracketed control flow.
 %  sw r2 0 -4; store 0 as an argument
 %  sw r2 0 0; zero out the return location
 %  jal r1 F ; call F and store return address
-% 
+%
 %F:
-%  addi r2 r2 4 ; allocate for ra 
+%  addi r2 r2 4 ; allocate for ra
 %  sw r2 r1 -4 ; store the return address to sp-4
 %  addi r2 r2 8 ; allocate for arg + ret
 %  sw r2 17 -4; store 0 as an argument
 %  sw r2 0 0; zero out the return location
 %  jal r1 G ; call G and store return address
-% 
-%G:  
-%  addi r2 r2 4 ; allocate for ra 
+%
+%G:
+%  addi r2 r2 4 ; allocate for ra
 %  sw r2 r1 -4 ; store the return address to sp-4
-%  
+%
 %\end{lstlisting}
 
 Starting State:
@@ -599,7 +603,7 @@ Starting State:
 Instruction memory in locations 0 - ..
 PC at 100.
 Stack memory starting at 1000.
-Assume we're in a function. 
+Assume we're in a function.
 Stack Pointer at 1040.
 1040: 42.
 
@@ -644,7 +648,7 @@ g(x){
 \newcommand*{\rra}{ra}
 \[
 \begin{array}{llll}
-  \clabel{TOP}  
+  \clabel{TOP}
   \instr{100}{\addi ~ \rsp ~ \rsp ~ 8}{allocate 2 words in stack}
   \instr{104}{\sw ~ \rsp ~ r_0 ~ -4}{store 0 as an argument}
   \instr{108}{\sw ~ \rsp ~ r_0 ~ 0}{zero out the return location}
@@ -668,7 +672,7 @@ g(x){
   \instr{184}{\addi ~ \rsp ~ \rsp ~ -4}{restore the stack pointer of F}
   \instr{188}{\jalr ~ \rra ~ \rra ~ 0}{return to TOP}
   & & & \\
-  & & & \\  
+  & & & \\
   \clabel{G}
   \instr{200}{\addi ~ \rsp ~ \rsp ~ 4}{allocate for the return address}
   \instr{204}{\sw ~ \rsp ~ \rra ~ 0}{store the return address to sp}
@@ -678,12 +682,12 @@ g(x){
   \instr{220}{\lw ~ \rra ~ \rsp ~ -4}{load the return address from the stack pointer}
   \instr{224}{\addi ~ \rsp ~ \rsp ~ -4}{restore the stack pointer of F}
   \instr{228}{\jalr ~ \rra ~ \rra ~ 0}{return to F}
-  
+
 %  addi r2 r2 8 ; allocate for arg + ret
 %  sw r2 17 -4; store 0 as an argument
 %  sw r2 0 0; zero out the return location
 %  jal r1 G ; call G and store return address
-    
+
 \end{array}
 \]
 
@@ -706,12 +710,12 @@ g(x){
 %     ; ~ \text{\em increase the $\SP$ by 8}\\
 %\end{array}
 %\]
-% 
+%
 %  , (SW sp ra 4  , tagH1)
 %  , (ADDI sp sp 8, tagH2)
 %  , (LW 3 3 1000, instrTag)
 %  ]
-  
+
 
 
 
@@ -744,7 +748,7 @@ considered to identify the state just before the \(\JAL\), in which
 space for arguments is already allocated, but the mechanism is more
 general. A state in which a call map is defined on the program counter
 is referred to as a {\it call state}.
-  
+
 A return map is simply a predicate on addresses and may be considered
 to identify the final jump of the return sequence. An entry map is
 likewise a predicate on addresses.
@@ -762,7 +766,7 @@ to have correctly returned from a call. We consider the call to have
 returned the first time control returns to the instruction following
 the \(\JAL\) with the stack restored. Formally this is a relation
 between the states:
-    
+
 \[\begin{split}
     \ret{\mach_c}\ \mach_r \triangleq & \mach_r(\PCname) =
     \nextPC(\mach_c(\PCname)) \land \\ & \mach_r(\SP) = \mach_c(\SP)
@@ -772,7 +776,7 @@ between the states:
 
 \subsection{Local State Encapsulation}
 \label{sec:lse}
-  
+
 The first part of stack safety is {\em local state encapsulation}.
 Informally, it captures the notion that a caller's data is
 protected from a callee's actions. We formalize this notion
@@ -808,7 +812,7 @@ stack base to stack pointer, with the exception of the $n$ locations
 corresponding to the arguments of a call. Private components are
 marked high confidentiality and high integrity: the callee should be
 able to neither read, nor write them.
-%  
+%
 Everything above the stack pointer at the point of the call is
 ``uninitialized'' memory that can be written into but should not be
 read. To protect the callee itself from such reads, these components
@@ -837,7 +841,7 @@ low confidentiality.
 
   \leo{Snapshot state at the point of the call from TOP to F, collor
     the different things}
-  
+
 \paragraph*{Stack Integrity}
 
 The first component of local state encapsulation is an integrity
@@ -889,7 +893,7 @@ an $n$-{\em transition} to a callee $f$ is a pair of machine-policy
 state pairs $(\mach_c, \pol_c)$ and $(\mach_e, \pol_e)$ in the trace
 such that:
 \begin{itemize}
-\item one state pair steps to the other: 
+\item one state pair steps to the other:
   $$\exists \obs. ~ (\mach_c, \pol_c) \stepstoobs{\obs}_P (\mach_e, \pol_e),$$
 \item $\mach_c$ is a valid call with $n$ arguments:
   $$\callmap(\mach_c(\PCname)) = n,$$
@@ -955,7 +959,7 @@ $$\forall \component. ~ \mach_e(\component) \not = \mach_r(\component)
   $$\pi_o(MP) \eqsim \pi_o(M)$$
 \item If $MP$ is infinite, then $M$ is also infinite and their
   observations are equivalent:
-  $$\pi_o(MP) \eqsim \pi_o(M)$$  
+  $$\pi_o(MP) \eqsim \pi_o(M)$$
 \item If the $MP$ ends prematurely with a policy fault, then
   we require that its observations are a prefix of those of $M$:
   $$\pi_o(MP) \lesssim \pi_o(M)$$
@@ -979,7 +983,7 @@ pattern as in stack integrity:
   \(\mach'\) behave the same across three cases. Let
   \(\mpstate{\mach}{\pol} \hookrightarrow \MPT | R\) and
   \(\mach' \hookrightarrow \machT | R\).
-  
+
   If \(\MPT\) ends with a state \(\mach_r\) and \(R\ \mach_r\), then \(\machT\)
   ends with a state \(\mach_r'\) such that \(R\ \mach_r'\). \(\MPT\) and
   \(\machT\) are observationally equivalent, and for each component
@@ -992,7 +996,7 @@ pattern as in stack integrity:
   If \(\MPT\) ends before \(R\) ever holds, meaning that it halted due to a
   policy violation, then it is a strict observational prefix of \(\machT\),
   which must be infinite.
-  
+
 \definition{Stack Confidentiality}
 Let $\callmap$ be a call map and $\codemap$ a code map. We say that a
 system satisfies {\em stack confidentiality} with respect to
@@ -1019,7 +1023,7 @@ attack by guaranteeing that every jump between functions is either a
 call or a return, and each return jumps to the instruction after a
 corresponding call.
 
-\leo{Also dumping in relevant wbcf discussion part. TODO: merge}  
+\leo{Also dumping in relevant wbcf discussion part. TODO: merge}
     Some forms of security rely on protected control flow. In a classic
     example, a system call that launches a missile might be gated behind code
     that checks a password. A piece of malicious code can jump into the middle
@@ -1069,11 +1073,11 @@ starts with a return, it is related to itself:
 
   \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
            {\(\retmap(\mach(\PCname))\)}
-      {\(\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\ 
+      {\(\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\
         \mpstate{\mach}{\pol}\)}
   \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
               {\(\retmap(\mach(\PCname))\)}
-      {\(\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\MPT\ 
+      {\(\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\MPT\
               \mpstate{\mach}{\pol}\MPT\)}
 
 If \(\MPT\) starts with a non-call, non-return state, its unmatched
@@ -1083,21 +1087,21 @@ return must come later:
               \hspace{.5cm} \neg \retmap(\mach(\PCname))
 
               \mathit{Unmatched}\ \callmap\ \retmap\ \MPT\ \MPT'\)}
-           {\(\mathit{Unmatched}\ \callmap\ \retmap\ 
+           {\(\mathit{Unmatched}\ \callmap\ \retmap\
             \mpstate{\mach}{\pol}\MPT\ \MPT'\)}
 
 And most intricately, if \(\MPT\) starts with a call, we must find the
 return that matches it, which will be the unmatched return once we
 step past the call. Then the first unmatched return beyond it is the
 true unmatched return.
-    
+
     \judgment{\(\callmap(\mach(\PCname)) = n
               \hspace{.5cm} \neg \retmap(\mach(\PCname))\)
 
               \(\MPT = \mpstate{\mach}{\pol} \MPT_{\mathit{call}}\)
-              
+
               \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT_{\mathit{call}}\ \MPT_{\mathit{matched}}\)
-            
+
               \(\MPT_{\mathit{matched}} = \mpstate{\mach'}{\pol'} \MPT_{\mathit{tail}}\)
 
               \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT_{\mathit{tail}}\ \MPT_{\mathit{unmatched}}\)}
@@ -1123,6 +1127,8 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
   bracketed control flow} with regard to those maps.
 
 \section{Discussion}
+\bcp{Make this a subsection?}
+\label{sec:disc}
 
   \paragraph{Examples}
 
@@ -1143,6 +1149,7 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
     treated as low confidentiality and low integrity.
 
 \section{Lazy Stack Safety}
+\label{sec:lazy}
 
     \definition{Observable Integrity}
       Observable integrity weakens eager integrity by allowing a returned state
@@ -1168,7 +1175,7 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
       resulting trace is the standard to which we expect the real trace to
       conform.
 
-      A system enjoys observable integrity with regard to \(\callmap\) and 
+      A system enjoys observable integrity with regard to \(\callmap\) and
       \(\codemap\) if for any initial state \(\mach_0\) and each adjacent pair
       of a call state \(\mach_c\) and a state \(\mach_e\) with policy state
       \(\pol_e\) in the trace induced by
