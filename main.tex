@@ -656,7 +656,13 @@ later (I think we can, but we should really convince ourselves) to make it
 worthwhile.
 \item Use ``='' instead of ``:'' in the ``summaries'' below the pictures.
 And put a bit more space between the components.
-\item
+\item Create a new column that just literally pronounces each instruction in
+English, so people don't have to read RISC-V opcodes.
+\item As discussed, we should move this to before section 2, we should
+extend it with a bit more at the end so we can talk about the lazy policy
+with the same example, we should add
+in some bad variants, and we should consider discussing the attacker model
+here (we need to discuss it someplace in any case!)
 \end{itemize}
 }
 
@@ -691,6 +697,7 @@ as describing the full effect of each instruction in detail.
 \newcommand*{\rra}{\mathit{ra}}
 
 \newcommand*{\tracerow}[5]{#1: & #2 & #3 & #4 & \text{#5}\\}
+\newcommand{\negate}{\textrm{-}}
 
 \begin{figure}
 
@@ -724,8 +731,8 @@ as describing the full effect of each instruction in detail.
     & PC & \mathit{Instruction} & \mathit{Effect} &  \\
     \hline
     \tracerow{1}{100}{\addi ~ \rsp ~ \rsp ~ 8}{\rsp \leftarrow 1056}{Allocate call frame}
-    \tracerow{2}{104}{\sw ~ \rsp ~ r_0 ~ -8}{[1048] \leftarrow 0}{Store 0 as argument}
-    \tracerow{3}{108}{\sw ~ \rsp ~ r_0 ~ -4}{[1052] \leftarrow 0}{Zero out result}
+    \tracerow{2}{104}{\sw ~ \rsp ~ r_0 ~ \negate 8}{[1048] \leftarrow 0}{Store 0 as argument}
+    \tracerow{3}{108}{\sw ~ \rsp ~ r_0 ~ \negate 4}{[1052] \leftarrow 0}{Zero out result}
     \tracerow{4}{112}{\jal ~ \rra ~ 140}{PC \leftarrow 140; ~ \rra \leftarrow 116}{Make the call}
   \end{array}
   \]
@@ -763,11 +770,11 @@ as describing the full effect of each instruction in detail.
 \[
   \begin{array}{l|l|l|l|l}
     \tracerow{5}{140}{\addi ~ \rsp ~ \rsp ~ 4}{\rsp \leftarrow 1060}{Allocate for return address}
-    \tracerow{6}{144}{\sw ~ \rsp ~ \rra ~ -4}{[1056] \leftarrow 116}{Store return address}
+    \tracerow{6}{144}{\sw ~ \rsp ~ \rra ~ \negate 4}{[1056] \leftarrow 116}{Store return address}
     \tracerow{7}{148}{\addi ~ \rsp ~ \rsp ~ 8}{\rsp \leftarrow 1068}{Allocate for call frame}
     \tracerow{8}{152}{\addi ~ r_4 ~ r_0 ~ 17}{r_4 \leftarrow 17}{Store 17 to $r_4$}
-    \tracerow{9}{156}{\sw ~ \rsp ~ r_4 ~ -8}{[1060] \leftarrow 17}{Store 17 as the argument}
-    \tracerow{10}{160}{\sw ~ \rsp ~ r_0 ~ -4}{[1064] \leftarrow 0 }{Zero out return}
+    \tracerow{9}{156}{\sw ~ \rsp ~ r_4 ~ \negate 8}{[1060] \leftarrow 17}{Store 17 as the argument}
+    \tracerow{10}{160}{\sw ~ \rsp ~ r_0 ~ \negate 4}{[1064] \leftarrow 0 }{Zero out return}
     \tracerow{11}{164}{\jal ~ \rra ~ 200}{PC \leftarrow 200; ~ \rra \leftarrow 168}{Make the call to $h$}
   \end{array}
   \]
@@ -809,8 +816,8 @@ as describing the full effect of each instruction in detail.
 \[
 \begin{array}{l|l|l|l|l}
   \tracerow{12}{200}{\addi ~ \rsp ~ \rsp ~ 4}{\rsp \leftarrow 1072}{Allocate for return address}
-  \tracerow{13}{204}{\sw ~ \rsp ~ \rra ~ -4}{[1068] \leftarrow 168}{Store return address}
-  \tracerow{14}{208}{\lw ~ r_4 ~ \rsp ~ -12}{r_4 \leftarrow 17}{Load the argument of $h$ to $r_4$}
+  \tracerow{13}{204}{\sw ~ \rsp ~ \rra ~ \negate 4}{[1068] \leftarrow 168}{Store return address}
+  \tracerow{14}{208}{\lw ~ r_4 ~ \rsp ~ \negate 12}{r_4 \leftarrow 17}{Load the argument of $h$ to $r_4$}
   \tracerow{15}{212}{\addi ~ r_4 ~ r_4 ~ 1}{r_4 \leftarrow r_4 + 1}{Increment $r_4$ by 1}\end{array}
 \]
 % At Middle of H
@@ -850,9 +857,9 @@ as describing the full effect of each instruction in detail.
 \vspace*{0.2em}
 \[
 \begin{array}{l|l|l|l|l}
-  \tracerow{16}{216}{\sw ~ \rsp ~ r_4 ~ -8}{[1064] \leftarrow 18}{Store $r_4$ as the return value}
-  \tracerow{17}{220}{\lw ~ \rra ~ \rsp ~ -4}{\rra \leftarrow 168}{Load return address}
-  \tracerow{18}{224}{\addi ~ \rsp ~ \rsp ~ -4}{\rsp \leftarrow 1068}{Restore the stack pointer of $g$}
+  \tracerow{16}{216}{\sw ~ \rsp ~ r_4 ~ \negate 8}{[1064] \leftarrow 18}{Store $r_4$ as the return value}
+  \tracerow{17}{220}{\lw ~ \rra ~ \rsp ~ \negate 4}{\rra \leftarrow 168}{Load return address}
+  \tracerow{18}{224}{\addi ~ \rsp ~ \rsp ~ \negate 4}{\rsp \leftarrow 1068}{Restore the stack pointer of $g$}
   \tracerow{19}{228}{\jalr ~ \rra ~ \rra ~ 0}{PC \leftarrow 168}{Return to $g$}
   \end{array}
 \]
@@ -897,12 +904,12 @@ as describing the full effect of each instruction in detail.
 \[
 \begin{array}{l|l|l|l|l}
   \tracerow{20}{168}{\lw ~ r_4 ~ \rsp}{r_4 \leftarrow 18}{Load return value to $r_4$}
-  \tracerow{21}{172}{\lw ~ r_5 ~ \rsp ~ -20}{r_5 \leftarrow 0}{Load the argument of $g$ to $r_5$}
+  \tracerow{21}{172}{\lw ~ r_5 ~ \rsp ~ \negate 20}{r_5 \leftarrow 0}{Load the argument of $g$ to $r_5$}
   \tracerow{22}{176}{\add ~ r_4 ~ r_4 ~ r_5}{r_4 \leftarrow 18 + 0}{Add $r_4$ and $r_5$}
-  \tracerow{23}{180}{\sw ~ \rsp ~ r_4 ~ -8}{[1056] \leftarrow 18}{Store $r_4$ as ther return of $g$}
-  \tracerow{24}{184}{\addi ~ \rsp ~ \rsp ~ -8}{\rsp \leftarrow 1060}{Deallocate local state}
-  \tracerow{25}{188}{\lw ~ \rra ~ \rsp ~ -4}{\rra \leftarrow 116}{Load return address}
-  \tracerow{26}{192}{\addi ~ \rsp ~ \rsp ~ -4}{\rsp \leftarrow 1056}{Restore the stack pointer of $f$}
+  \tracerow{23}{180}{\sw ~ \rsp ~ r_4 ~ \negate 8}{[1056] \leftarrow 18}{Store $r_4$ as ther return of $g$}
+  \tracerow{24}{184}{\addi ~ \rsp ~ \rsp ~ \negate 8}{\rsp \leftarrow 1060}{Deallocate local state}
+  \tracerow{25}{188}{\lw ~ \rra ~ \rsp ~ \negate 4}{\rra \leftarrow 116}{Load return address}
+  \tracerow{26}{192}{\addi ~ \rsp ~ \rsp ~ \negate 4}{\rsp \leftarrow 1056}{Restore the stack pointer of $f$}
   \tracerow{27}{196}{\jalr ~ \rra ~ \rra ~ 0}{PC \leftarrow 116}{Return to $f$}
 \end{array}
 \]
@@ -938,8 +945,8 @@ as describing the full effect of each instruction in detail.
 \[
 \begin{array}{l|l|l|l|l}
   \tracerow{28}{116}{\lw ~ r_4 ~ \rsp}{r_4 \leftarrow 18}{Load return value to $r_4$}
-  \tracerow{29}{120}{\sw ~ \rsp ~ r_4 ~ -12}{[1048] \leftarrow 18}{Set $y$ to the return value}
-  \tracerow{30}{124}{\addi ~ \rsp ~ \rsp ~ -8}{\rsp \leftarrow 1048}{Deallocate Call Frame}
+  \tracerow{29}{120}{\sw ~ \rsp ~ r_4 ~ \negate 12}{[1048] \leftarrow 18}{Set $y$ to the return value}
+  \tracerow{30}{124}{\addi ~ \rsp ~ \rsp ~ \negate 8}{\rsp \leftarrow 1048}{Deallocate Call Frame}
 \end{array}
 \]
 \vspace*{0.2em}
@@ -1056,7 +1063,9 @@ abstracting away from any concrete calling convention. Likewise a {\em
   return map} identifies addresses that complete a return sequence. An
 {\em entry map} identifies valid entry points to a function.
 
-Formally a code map is a partial function from addresses to a function
+Formally a code map\bcp{I'd love to change ``cdm'' to ``km''.  Should we
+  also call it a ``kode map'' in English?  Maybe that's a bit too far.} is a
+partial function from addresses to a function
 identifier drawn from the set \(\FUNIDS\).
   %
 \[\codemap \in \CODEMAPS = \WORDS \rightharpoonup \FUNIDS\]
@@ -1167,7 +1176,7 @@ low confidentiality.
     (\LOWSEC,\HIGHINT) & \text{if } \component \in \WORDS
                          \text{ and for some } \funid, \codemap(\component) = \funid \\
     (\HIGHSEC,\HIGHINT) & \text{else if } \component \in \WORDS
-                          \text{ and } \component \leq \mach(\SP) - n \\
+                          \text{ and } \component \leq \mach(\SP) \negate  n \\
     (\HIGHSEC,\LOWINT) & \text{else if } \component \in \WORDS
                          \text{ and } \component \geq \mach(\SP) \\
     (\LOWSEC,\LOWINT) & \text{else} \\
