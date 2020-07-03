@@ -366,72 +366,6 @@ h(v) = {
 \label{fig:running-program}
 \end{figure}
 
-To show a trace of the execution of this program, we are going to need
-a low-level view of both the code and the machine it runs on. While
-our concrete implementation (Section~\leo{cite}) operates on a full
-conventional RISC-V architecture, we will make a few simplifying
-assumptions here to ease the exposition. 
-
-First of all, we are going to ignore the heap. We are mainly concerned
-with stack interactions so that will be the main focus. \leo{We're
-  going to come back to that at the end. Will we?} We are then going
-to abstract away low-level details of memory layout and present a
-machine that is word-addressed, with instructions starting from
-location 0, a dedicated output at location 99, and lay the stack from
-location 100 upwards. \leo{Explain more? How to connect to realistic
-  one? Observations? DMA? Interrupt handlers?}
-%
-A sketch of the memory layout at that point can be found in the top of
-Figure~\ref{fig:running-trace-b}: instructions for {\tt main} begin at
-0, the dedicated output is empty, while the (uninitialized) stack
-begins at 100. Directly below the layout, we summarize the parts of
-the register file that are relevant to the example.
-%
-The rest of Figure~\ref{fig:running-trace-b} details the execution of the
-program, showing the machine state at call and return points, as well
-as describing the full effect of each instruction in detail.
-\leo{Expand upon this?}
-
-
-\bcp{ Comments on the example:
-\begin{itemize}
-\item We can simplify a bit by renaming $f$ to $\mathit{main}$ and
-relocating its stack to location 1000.  And maybe move its instructions to
-start at 0.  (We can comment that on a real RISC-V this is where interrupt
-handlers go, but POPL readers will not care too much.)  We should streamline
-the example as much as possible.
-%
-\item We should also emphasize, again, that there is no heap (if there were,
-we might put it above the stack or between the instructions and the stack).
-%
-\item We will also need to be careful about fonts ($f$ vs {\texttt f}),
-capitalization of register names (sp vs SP), etc. Maybe typeset instructions
-in small caps?  Maybe typeset everything that is part of a concrete machine
-in small caps??
-%
-\item The colors are helpful in making the big page of instruction traces easier
-on the eye; maybe they would be even more helpful if
-corresponding colors appeared elsewhere in the example (on the instructions
-themselves, e.g.).  But we need to be careful to keep it readable -- maybe
-they should be background colors, like you've done, rather than text colors.
-\item The first column of numbers is redundant with the second column (PC).
-Suggest deleting the first.
-\item Asking readers to wade through all this is asking quite a bit!  We
-need to make sure we are going to get sufficient value out of the example
-later (I think we can, but we should really convince ourselves) to make it
-worthwhile.
-\item Use ``='' instead of ``:'' in the ``summaries'' below the pictures.
-And put a bit more space between the components.
-\item Create a new column that just literally pronounces each instruction in
-English, so people don't have to read RISC-V opcodes.
-\item As discussed, we should move this to before section 2, we should
-extend it with a bit more at the end so we can talk about the lazy policy
-with the same example, we should add
-in some bad variants (doing it here replaces the ``Examples'' from the
-Discussion section), and we should consider discussing the attacker model 
-here (we need to discuss it someplace in any case!)
-\end{itemize}
-}
 
 \newcommand*{\add}{\textsc{add}}
 \newcommand*{\addi}{\textsc{addi}}
@@ -682,7 +616,7 @@ $\cdots$
       {Set {\tt w} to 18}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\rsp \leftarrow 106}
       {Deallocate {\tt h}'s call frame}
-  \row{\lw ~ r_5 ~ \rsp ~ \negate 6}{r_5 \leftarrow [\rsp - 4]}{r_5 \leftarrow 0}
+  \row{\lw ~ r_5 ~ \rsp ~ \negate 6}{r_5 \leftarrow [\rsp - 6]}{r_5 \leftarrow 0}
       {Load argument {\tt z} $r_5$}
   \row{\sw ~ \rout ~ r_5 ~ 0}{[\rout] \leftarrow r_5}{[99] \leftarrow 0}
       {Print {\tt z}}      
@@ -763,94 +697,112 @@ $\cdots$
 \label{fig:running-trace-b}
 \end{figure}
 
+To show a trace of the execution of this program, we are going to need
+a low-level view of both the code and the machine it runs on. While
+our concrete implementation (Section~\leo{cite}) operates on a full
+conventional RISC-V architecture, we will make a few simplifying
+assumptions here to ease the exposition. 
 
-%\end{minipage}
-%\begin{minipage}{0.7\textwidth}
-%\newcommand*{\instr}[3]{ & #1: & #2 & ; \text{\em #3}\\}
-%\newcommand*{\clabel}[1]{#1: & & &\\}
-%\[
-%\begin{array}{llll}
-%  \clabel{TOP}
-%  \instr{100}{\addi ~ \rsp ~ \rsp ~ 8}{allocate 2 words in stack}
-%  \instr{104}{\sw ~ \rsp ~ r_0 ~ -4}{store 0 as an argument}
-%  \instr{108}{\sw ~ \rsp ~ r_0 ~ 0}{zero out the return location}
-%  \instr{112}{\jal ~ \rra ~ F}{call F and store the return address}
-%  & & & \\
-%  & & & \\
-%  \clabel{F}
-%  \instr{140}{\addi ~ \rsp ~ \rsp ~ 4}{allocate for the return address}
-%  \instr{144}{\sw ~ \rsp ~ \rra ~ 0}{store the return address to sp}
-%  \instr{148}{\addi ~ \rsp \rsp ~ 8}{allocate for nested arg + ret}
-%  \instr{152}{\addi ~ r_4 ~ r_0 ~ 17}{put 17 in register $r_4$}
-%  \instr{156}{\sw ~ \rsp ~ r_4 ~ -4}{store 17 as the argument to G}
-%  \instr{160}{\sw ~ \rsp ~ r_0 ~ 0}{zero out the return location}
-%  \instr{164}{\jal ~ \rra ~ G}{call G and store the return address}
-%  \instr{168}{\lw ~ r_4 ~ \rsp}{load the return value of G to $r_4$}
-%  \instr{172}{\lw ~ r_5 ~ \rsp -12}{load the argument of F to $r_5$}
-%  \instr{176}{\add ~ r_4 ~ r_4 ~ r_5}{add $r_4$ and $r_5$}
-%  \instr{172}{\sw ~ \rsp ~ r_4 ~ -8}{store $r_4$ as ther return of F}
-%  \instr{176}{\addi ~ \rsp ~ \rsp ~ -8}{deallocate local state}
-%  \instr{180}{\lw ~ \rra ~ \rsp ~ -4}{load the return address from the stack pointer}
-%  \instr{184}{\addi ~ \rsp ~ \rsp ~ -4}{restore the stack pointer of F}
-%  \instr{188}{\jalr ~ \rra ~ \rra ~ 0}{return to TOP}
-%  & & & \\
-%  & & & \\
-%  \clabel{G}
-%  \instr{200}{\addi ~ \rsp ~ \rsp ~ 4}{allocate for the return address}
-%  \instr{204}{\sw ~ \rsp ~ \rra ~ 0}{store the return address to sp}
-%  \instr{208}{\lw ~ r_4 ~ \rsp ~ -12}{load the argument of G to $r_4$}
-%  \instr{212}{\addi ~ r_4 ~ r_4 ~ 1}{increment $r_4$ by 1}
-%  \instr{216}{\sw ~ \rsp ~ r_4 ~ -8}{store $r_4$ as the return value}
-%  \instr{220}{\lw ~ \rra ~ \rsp ~ -4}{load the return address from the stack pointer}
-%  \instr{224}{\addi ~ \rsp ~ \rsp ~ -4}{restore the stack pointer of F}
-%  \instr{228}{\jalr ~ \rra ~ \rra ~ 0}{return to F}
-%\end{array}
-%\]
-%\end{minipage}
-%\label{fig:running-program}
-%\end{figure}
-
-%  sw r2 42 -8; store 42 in a private location
-%  sw r2 0 -4; store 0 as an argument
-%  sw r2 0 0; zero out the return location
-%  jal r1 F ; call F and store return address
-
-%  0: & \addi ~ r_4 ~ r_0 ~ 40 &
-%     ; ~ \text{\em put $40$ in register $r_4$}\\
-%  4: & \sw ~ r_4 ~ r_4 ~ 1000 &
-%     ; ~ \text{\em store $40$ in location $1040$}\\
-%  8: & \jal ~ r_1 ~ 20        &
-%     ; ~ \text{\em jump to $20$, store return addres in $r_1$}\\
-%  12: & & \\
-%  16: & & \\
-%  20: & \sw ~ r_2 ~ r_1 ~ 4 &
-%     ; ~ \text{\em store the return address to the $\SP + 4$}\\
-%  24: & \addi ~ r_2 ~ r_2 ~ 8 &
-%     ; ~ \text{\em increase the $\SP$ by 8}\\
-%\end{array}
-%\]
+\bcp{We should also emphasize, again, that there is no heap (if there were,
+we might put it above the stack or between the instructions and the stack)}
+First of all, we are going to ignore the heap. We are mainly concerned
+with stack interactions so that will be the main focus. \leo{We're
+  going to come back to that at the end. Will we?} We are then going
+to abstract away low-level details of memory layout and present a
+machine that is word-addressed, with instructions starting from
+location 0, a dedicated output at location 99, and lay the stack from
+location 100 upwards. \leo{Explain more? How to connect to realistic
+  one? Observations? DMA? Interrupt handlers?}
 %
-%  , (SW sp ra 4  , tagH1)
-%  , (ADDI sp sp 8, tagH2)
-%  , (LW 3 3 1000, instrTag)
-%  ]
+A sketch of the memory layout at that point can be found in the top of
+Figure~\ref{fig:running-trace-b}: instructions for {\tt main} begin at
+0, the dedicated output is empty, while the (uninitialized) stack
+begins at 100. Directly below the layout, we summarize the parts of
+the register file that are relevant to the example.
+%
+The rest of Figure~\ref{fig:running-trace-b} details the execution of the
+program, showing the machine state at call and return points, as well
+as describing the full effect of each instruction in detail.
+\leo{Expand upon this?}
 
 
+\bcp{ Comments on the example:
+\begin{itemize}
+\item We will also need to be careful about fonts ($f$ vs {\texttt f}),
+capitalization of register names (sp vs SP), etc. Maybe typeset instructions
+in small caps?  Maybe typeset everything that is part of a concrete machine
+in small caps??
+%
+\item The colors are helpful in making the big page of instruction traces easier
+on the eye; maybe they would be even more helpful if
+corresponding colors appeared elsewhere in the example (on the instructions
+themselves, e.g.).  But we need to be careful to keep it readable -- maybe
+they should be background colors, like you've done, rather than text colors.
+\item Asking readers to wade through all this is asking quite a bit!  We
+need to make sure we are going to get sufficient value out of the example
+later (I think we can, but we should really convince ourselves) to make it
+worthwhile.
+\item Create a new column that just literally pronounces each instruction in
+English, so people don't have to read RISC-V opcodes.
+\item As discussed, we should move this to before section 2, we should
+extend it with a bit more at the end so we can talk about the lazy policy
+with the same example, we should add
+in some bad variants (doing it here replaces the ``Examples'' from the
+Discussion section), and we should consider discussing the attacker model 
+here (we need to discuss it someplace in any case!)
+\end{itemize}
+}
 
+\subsection{Attacker Model + Unsafe Variations}
+
+\leo{TODO: Make attacker model more explicit} The execution trace
+shown in Figure~\ref{fig:running-trace-b} is an example of a
+``stack-safe'' execution: each process interacts only with the
+registers, its local stack space and its call frame. But what could go
+wrong if an attacker could hijack an arbitrary call and execute
+arbitrary code? In the rest of this section we'll go over examples of
+unsafe behaviors, before formally capturing what stack-safe means
+formally and discussing enforcement techniques from the literature
+in later sections.
+
+\paragraph*{Bad write}
+
+\[
+44 : ~ \sw ~ \rsp ~ r_4 ~ \negate 5
+\]
+
+Instruction 44 currently is $\sw ~ \rsp ~ r_4 ~ \negate 2$, with the
+effect of storing the contents of $r_4$ as the result of {\tt h}. If
+instead it wrote to location $[\rsp - 5]$ then it would be overriding
+private data (the return address) belonging to {\tt g}.
+
+\paragraph*{Bad read}
+
+\[
+30 : ~ \lw ~ r_5 ~ \rsp ~ \negate 8
+\]
+
+Instruction 30 currently is $\lw ~ r_5 ~ \rsp ~ \negate 6$, with the
+effect of loading the argument of {\tt g} to $r_4$. If instead it
+loaded the contents of location $[\rsp - 8]$, it would obtain access
+to {\tt main}'s private information. Worse, since the next instruction
+outputs the contents of $r_5$ that would immediately be made public.
+
+\paragraph*{Control flow}
+
+\leo{What should we do here? Overwrite our own ra and return?}
 
 \section{Background}
 \label{sec:prelim}
 
-To set the stage, we first
-describe our machine model. Our definition of stack safety is
-generic and this section discusses an abstract interface to our
-machine model and some kind of static or dynamic, software- or
-hardware-enforced security monitor.  For
-concreteness, our running examples will use a
-conventional machine architecture and a standard (RISC-V) instruction set;
-in~\Cref{sec:micropolicies} we will
-extend this model it with a dynamic policy enforcement mechanism based
-on \bcp{NickPaper,AndMaybeSomeOthers}.
+To set the stage, we first describe our machine model. Our definition
+of stack safety is generic and this section discusses an abstract
+interface to our machine model and some kind of static or dynamic,
+software- or hardware-enforced security monitor.  For concreteness,
+our running examples will use a conventional machine architecture and
+a standard (RISC-V) instruction set; in~\Cref{sec:micropolicies} we
+will extend this model it with a dynamic policy enforcement mechanism
+based on \bcp{NickPaper,AndMaybeSomeOthers}.
 
 \paragraph*{Values, States, and Observations}
 
