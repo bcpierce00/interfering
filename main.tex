@@ -210,7 +210,7 @@ Text of abstract \ldots.
 % 
 %\leo{I hate the writing here, but I wanted to make a start.}
 
-The call stack is an increasingly popular target for attacks
+The call stack is an increasingly\apt{``a perennially'' ?} popular target for attacks
 exploiting memory safety vulnerabilities, with potential consequences
 ranging from attackers reading or corrupting private stack data, to
 highjacking a program's control flow. To prevent such attacks, many
@@ -225,6 +225,7 @@ defined negatively: through examples of stack unsafety
 \rb{usually though not always; as noted below there are other
   approaches}\bcp{Yes, we have to be very careful about this}. Two classical
 examples of stack unsafety appear in Figure~\ref{fig:stackunsafety}.
+\apt{is this gone?}
 \leo{Goal: on the left, a bad read; on the right, a bad write.}
 \leo{Do we also need an example of ROP/control flow for the new
   part?}\bcp{If it is not too complicated to explain, we should definitely
@@ -236,8 +237,9 @@ Recently, a \leo{inspiring/awesome/something good}\bcp{Maybe just say that
   we are only aware of one, quite recent, attempt to do something better} work reasoned
 about a stack safety enforcement mechanism using capabilities\leo{cite};
 but even here, stack safety is defined with respect to an abstract
-machine that ``exhibits stack safety by construction,'' begging
+machine that ``satisfies stack safety by construction,'' begging
 the question of what {\em is} the property that holds by construction?
+\apt{Suggest to move first sentence of next para up to this one.}
 
 \leo{StackTokens} provides some intuition towards answering that question,
 by informally describing two components that comprise stack safety:
@@ -273,33 +275,34 @@ challenge:
 the notion of who the attacker is shifts throught execution. Not only
 does a caller need to be protected from its callee, but the callee
 itself needs to be proteced from {\em its} callees.
-We address this challenge by varying the observation power
+We address this challenge by varying the observation power\apt{is this
+  the right word? doesn't it conflict with our later use of ``observation''?}
 of the attacker at call points, and demonstrate that our policy is
 implementable by pre-existing monitoring mechanisms. \bcp{The two parts of
   the sentence are about two very different things.  The second deserves its
-  own paragraph, IMO.}
+  own paragraph, IMO.}\apt{+1}
 
 Similarly, the underlying notion behind well-bracketed control flow is
 the need to protect the call structure itself: a callee should not be
 allowed to jump to the middle of an arbitrary block of code either
 directly (via a jump instruction) or indirectly (by corrupting stack
-data and returning). Well-bracketed control flow establshes safety between
-functions: all code is owned by a function, and all jumps between functions
+data and returning). Well-bracketed control flow establishes safety between
+functions: all code is uniquely owned by some function, and all jumps between functions
 are either calls that enter at a marked entry point or returns that enter
 just after their associated call in the standard nested call structure.
 
 %\leo{There needs to be some informal description
 %  of the wbcf part here. Sean?}
 
-In summary, we offer the following contributions:
+In summary, we offer the following contributions\apt{is this up to date with current paper organization?}:
 \begin{itemize}
 \item \leo{More? Extensional}\bcp{We might need to invent a word for this---''quasi-extensional''?} formal characterizations of the
   intuitive concepts of local state encapsulation and
   well-bracketed control flow~(\Cref{sec:lse-and-wbcf}).  As evidence that this
   property is strong enough to capture the folk intuition, we show
   that the stack unsafe examples from the literature also fail our
-  property~(\Cref{sec:disc}).
-\item As evidence that the property is not too strong, we show that it is
+  property~(\Cref{sec:disc}).\apt{Something about relation to StkTokens formalization?}
+\item As evidence that the property is not too strong\apt{But we add the lazy version because the strict version \emph{is} too strong, in some sense.}, we show that it is
   realizible by
   a previously proposed micropolicy enforcement
   mechanism~(\Cref{sec:micropolicy}). \leo{And it says yes on a
@@ -1728,7 +1731,36 @@ a code, a call, a return, and an entry map is said to enjoy {\em well
 \section{Enforcement}
 \label{sec:enforcement}
 
+\rb{Better section name and headings, references.}
+
 \paragraph*{Micropolicies}
+%
+In order to enforce a given security policy on a system dynamically, we resort
+to a programmable, tag-based reference monitor that runs alongside the program.
+To control this monitor, we use a programming model that allows fine-grained
+manipulation of metadata tags to encode so-called \emph{micropolicies}
+\rb{cite}.
+
+In such a system, all memory addresses, registers and the program counter are
+enriched with an abstract metadata tag, which can point to the representation of
+an arbitrary data structure. A micropolicy is thus defined by a collection of
+rules to be checked as each instruction executes and together define the
+transfer function of the security policy. Each rule inspects the tags associated
+to the inputs of an instruction (PC, registers, memory) as well as the
+instruction opcode itself, and produces one of two outcomes: either the
+instruction is allowed to execute (and tags for the new PC and its result are
+produced and assigned to those), or the machine fail-stops with a policy
+violation.
+
+Efficient execution of these micropolicies relies on hardware implementations
+such as the PUMP architecture \rb{cite}, which include a monitor rule cache that
+maps tag inputs to outputs and a mechanism to trap misses to software handlers
+and thereby computes the transfer function of the software-defined policy.
+Previous work has shown that a wide range of micropolicies can be defined and
+enforced efficiently \rb{cite}.
+%
+\rb{Maybe go into more detail, examples later\ldots or try to segue into stack
+policies}
 
 \paragraph*{A conservative policy}
 
