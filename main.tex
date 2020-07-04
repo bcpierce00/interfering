@@ -58,7 +58,7 @@
 %% Title information
 \title{Stack Safety as a Security Property}         %% [Short Title] is optional;
                                         %% when present, will be used in
-                                        %% header instead of Full Title.
+v                                        %% header instead of Full Title.
 %\titlenote{with title note}             %% \titlenote is optional;
 %                                        %% can be repeated if necessary;
 %                                        %% contents suppressed with 'anonymous'
@@ -210,42 +210,40 @@ Text of abstract \ldots.
 % 
 %\leo{I hate the writing here, but I wanted to make a start.}
 
-The call stack is an increasingly\apt{``a perennially'' ?} popular target for attacks
+The call stack is a perennially popular target for attacks
 exploiting memory safety vulnerabilities, with potential consequences
-ranging from attackers reading or corrupting private stack data, to
-highjacking a program's control flow. To prevent such attacks, many
-techniques have been proposed in the literature\leo{cite, point out?
-  stack canaries, cherry, nicks...}\bcp{I think pointing out makes a
-  stronger point.} aiming to achieve ``stack
-  safety''.
+ranging from leakage or corruption of private stack data to
+hijacking of the program's control flow. To prevent such attacks, many
+software and hardware techniques for stack safety have been proposed, % in the literature and implemented in production systems,
+including stack canaries~\citep{Cowan+98},
+shadow stacks~\citep{Dang+15,Shanbhogue+19},
+split stacks~\citep{Kuznetsov+14},
+bounds checking~\citep{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
+capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b},
+and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \apt{Mostly from nick;there could be more}
 
-But what {\em is} this stack safety of which we speak? A precise formal
-definition is lacking in the literature, with the notion usually being
-defined negatively: through examples of stack unsafety
-\rb{usually though not always; as noted below there are other
-  approaches}\bcp{Yes, we have to be very careful about this}.
-\leo{Examples at a high level}
-Recently, a \leo{inspiring/awesome/something good}\bcp{Maybe just say that
-  we are only aware of one, quite recent, attempt to do something better} work reasoned
-about a stack safety enforcement mechanism using capabilities\leo{cite};
-but even here, stack safety is defined with respect to an abstract
-machine that ``satisfies stack safety by construction,'' begging
-the question of what {\em is} the property that holds by construction?
-\apt{Suggest to move first sentence of next para up to this one.}
+But what {\em is} this ``stack safety'' of which we speak? Precise formal
+definitions are lacking in the literature; instead, the notion of safety
+is usually defined negatively, by enumerating the bad things that a safe system
+prevents, such as corruption of return addresses, buffer overflows, or
+use of uninitialized variables.
+%with the notion usually being
+%defined negatively: through examples of stack-based exploits 
+%\rb{usually though not always; as noted below there are other
+%  approaches}\bcp{Yes, we have to be very careful about this}.
+%\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ... 
+We are only aware of one, quite recent, attempt to frame a positive definition.
+\citet{Skorstengaard+19} define stack safety as
+the conjunction of two properties, local state encapsulation and well-bracketed control flow.
+They formalize these properties by defining an abstract capability-based machine   
+that ``satisfies [stack safety] by construction.'' We believe there is still room
+to craft a more abstract and less intensional characterization of
+stack safety, and that is the goal of the present paper. \apt{still needs tuning}
 
-\leo{StackTokens} provides some intuition towards answering that question,
-by informally describing two components that comprise stack safety:
-local state encapsulation and well-bracketed control flow. The first
-contribution of the present paper is to
-turn this intuition into two formal \leo{extensional}\bcp{Not sure we can
-  claim this} security properties,
-that together form a formal definition of stack safety.
-\rb{I think the merit of StkTokens goes beyond mere intuition. There is a lot of
-rigor in it, even if some notions are implicit or not fully
-developed.}\bcp{Yes, and let's remember that they are highly likely to be
-reviewing this paper!  Let's be as generous as we can be without
-under-selling our delta.}
-
+Our approach is to give alternative formal
+definitions of local state encapsulation and well-bracketed control flow
+using the conceptual framework of language-based security.
+%
 The underlying notion behind local state encapsulation is the
 intention to protect callers from callees: a callee should be not be
 able to access or overwrite a caller's private data. We formalize this
@@ -261,51 +259,52 @@ the call.  \bcp{We need to point out somewhere that we are only dealing with
 stack safety, though we discuss (somewhere) how our property can be combined
 with the heap safety property of [Azevedo et al]}
 
-\bcp{``alternative framework that uses the conceptual framework of language-based security''}
-\bcp{idea:intrinsic vs. extrinsic: stktokens only talks}
+% BCP idea: contrast intrinsic vs. extrinsic property definition
+% Remember to talk about spatial vs temporal safety 
 
-Another dimension: spatial vs temporal safety 
-
-While integrity and confidentiality are relatively standard security
-properties, the stack-safety setting raises an interesting additional
-challenge:
-the notion of who the attacker is shifts throught execution. Not only
+While integrity and confidentiality are standard security
+properties, applying them in the stack-safety setting raises a novel challenge:
+the notion of ``attacker'' changes during execution. Not only
 does a caller need to be protected from its callee, but the callee
-itself needs to be proteced from {\em its} callees.
-We address this challenge by varying the access powers
-of the attacker at call points. 
+itself needs to be protected from {\em its} callees.
+We address this challenge by adjusting the integrity and confidentiality
+of different stack frames at each call or return transition between functions.\apt{connection to ``attacker'' still vague.}
 
-Similarly, the underlying notion behind well-bracketed control flow is
+The underlying notion behind well-bracketed control flow is
 the need to protect the call structure itself: a callee should not be
 allowed to jump to the middle of an arbitrary block of code either
 directly (via a jump instruction) or indirectly (by corrupting stack
 data and returning). Well-bracketed control flow establishes safety between
-functions: all code is uniquely owned by some function, and all jumps between functions
-are either calls that enter at a marked entry point or returns that enter
+functions: each instruction is uniquely owned by some function, and all jumps between functions
+are either calls that enter at a marked entry point or returns that re-enter
 just after their associated call in the standard nested call structure.
+\apt{clarify what we are contributing here.}
 
+To provide evidence that our definitions capture the inituitive notion of stack safety,
+we show that they rule out a wide \apt{really?} range of exploitable bad behaviors.\apt{``from the literature''??}
+To assess whether they are implementable, 
+we compare them against the proposed capability-based enforcement
+mechanism of \citet{Skorstengaard+19} \apt{we really should} and the existing tag-based enforcement mechanism
+of \citet{DBLP:conf/sp/RoesslerD18}.
 
- and demonstrate that our policy is
-implementable by pre-existing monitoring mechanisms. \bcp{The two parts of
-  the sentence are about two very different things.  The second deserves its
-  own paragraph, IMO.}\apt{+1}
-%\leo{There needs to be some informal description
-%  of the wbcf part here. Sean?}
-
-In summary, we offer the following contributions\apt{is this up to date with current paper organization?}:
+In summary, we offer the following contributions:
 \begin{itemize}
-\item \leo{More? Extensional}\bcp{We might need to invent a word for
-  this---''quasi-extensional''?} formal characterizations of the
+\item
+  % \leo{More? Extensional}\bcp{We might need to invent a word for   this---''quasi-extensional''?}
+  Abstract formal properties capturing the 
   intuitive concepts of local state encapsulation and well-bracketed
-  control flow~(\Cref{sec:lse-and-wbcf}). \leo{Make one sentence} examples from the literature also fail our
-  property.\apt{Something about relation to StkTokens formalization?}
-\item Case Study:
-  \leo{Existing enforcement (Nick-eager). Satisfies Property.
-  Satisfies even stronger property (provably).}
-\item Pragmatically motivated refinement:
-  \leo{Lazy enforcement mechanism (Nick-lazy).
-    Plus a lazy variant of the property.}
-%\item As evidence that the property is not too strong\apt{But we add the lazy version because the strict version \emph{is} too strong, in some sense.}, we show that it is
+  control flow~(\Cref{sec:lse-and-wbcf}) in a very general setting. These properties
+  rule out common examples of stack memory abuse.
+\item
+  A case study of the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, based on hardware tags~(\Cref{sec:enforcement}).
+  This policy enforces our stack safety property, and also a (provably) stronger property that is easier to test.
+  \apt{If we have no testing, do we even want to talk about the testing property?}
+\item
+  A refinement of the case study that considers the more efficient Lazy Tagging and Clearing policy 
+  of \citet{DBLP:conf/sp/RoesslerD18}~(\Cref{sec:lazy}).  This policy does not enforce our property, but we give a
+  variant of the policy that does enforce a (provably) weaker variant of our property. \apt{Awkward, but the truth I fear.}
+
+  %\item As evidence that the property is not too strong\apt{But we add the lazy version because the strict version \emph{is} too strong, in some sense.}, we show that it is
 %  realizible by
 %  a previously proposed micropolicy enforcement
 %  mechanism~(\Cref{sec:micropolicy}). \leo{And it says yes on a
@@ -319,7 +318,7 @@ In summary, we offer the following contributions\apt{is this up to date with cur
 Section~\ref{sec:relwork} discusses related work, and
 Section~\ref{sec:future} sketches directions for future work.
 %
-We begin with a running example that we're going to keep coming back
+We begin with a running example that we refer
 to throughout the paper (Section~\ref{sec:running-example}) and some
 technical preliminaries (Section~\ref{sec:prelim}).
 
@@ -1965,7 +1964,7 @@ should go further. :-)
 
 
 %% Bibliography
-%\bibliography{bcp.bib}
+\bibliography{bcp.bib,local.bib}
 
 
 %% Appendix
