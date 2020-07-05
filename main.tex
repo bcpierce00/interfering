@@ -330,9 +330,9 @@ In summary, we offer the following contributions:
     but the point we can make is still strong: To make the property easier
     to enforce, we can slightly weaken its guarantees; the weaker version is
     a bit more complicated to state but still retains the pragmatic
-    protections of the original.}\apt{To clarify: Nick's LT&C policy uses
+    protections of the original.}\apt{To clarify: Nick's LT\&C policy uses
     depth-based tags, which do not enforce even our lazy policy. So we need to
-    introduce a version of LT&C that uses unique activation tags.}
+    introduce a version of LT\&C that uses unique activation tags.}
 
   %\item As evidence that the property is not too strong\apt{But we add the lazy version because the strict version \emph{is} too strong, in some sense.}, we show that it is
 %  realizible by
@@ -936,11 +936,11 @@ enforcement mechanism and give as many names and citations as we can.}
   in metavariables?}
 
 A trace over a type $A$ is a nonempty, finite or infinite sequence of
-$A$s. We will mostly be concerned with sequences of machines states,
-denoted $\machT$, and with sequences of triples of (machine states,
-policy states, and observations), usually denoted $\MPT$.  \rb{The way
-  the definitions are set up, one may expect MPO, but\ldots} We
-will require four generic operations on traces.
+$A$s. We will mostly be concerned with sequences of pairs of machine states
+and observations, called machine traces and denoted $\machOT \in \MOTRACE$,
+and with sequences of triples of a machine state, a policy state, and an
+observation, denoted $\MPT \in \MPOTRACE$ and referred to as MP-traces. 
+\rb{The way the definitions are set up, one may expect MPO, but\ldots}
 
 \bcp{TODO: Let's also try to clean up the spacing a little -- many of these
   sequences of rules can be typeset on fewer lines}
@@ -953,12 +953,12 @@ observations produced by repeated application of step:
 %
 \[\mach \hookrightarrow \machOT : \MACHS \rightarrow \MOTRACE\]%
 %
-\judgmenttwo{\(\mach_0 \stepstoobs{\obs} \mach_1\)}{\(\mach_1 \hookrightarrow \machT\)}
-            {\(\mach_0 \hookrightarrow (\mach_0,\obs) \machT\)}%
+\judgmenttwo{\(\mach_0 \stepstoobs{\obs} \mach_1\)}{\(\mach_1 \hookrightarrow \machOT\)}
+            {\(\mach_0 \hookrightarrow (\mach_0,\obs) \machOT\)}%
 %
 \noindent
-Since the step function is total, if \(\mach \hookrightarrow \machT\),
-then \(\machT\) must be infinite.
+Since the step function is total, if \(\mach \hookrightarrow \machOT\),
+then \(\machOT\) must be infinite.
 
 In our running example in Figure~\Cref{fig:running-example-b} we can
 see a depiction of such a trace: starting from an initial machine
@@ -968,28 +968,31 @@ state at the very top, each instruction constructs a new machine state
 the exception of instructions 31 and 13 which are writes to $\rout$
 and where the observations are $0$ and $60$ respectively.
 
-In a similar fashion, we define \(\hookrightarrow_P\) to relate a
-machine-policy state pair to the trace of triples of machine states,
-policy states, and observations induced by by \(\stepstoobs{}_P\).
-Unlike the $\MOTRACE$ above, this trace can be finite as the
-policy can cause a fault:
-%
-\[(m,p) \hookrightarrow_P MP : \MACHS \times \POLS \rightarrow \MPOTRACE \]
+In a similar fashion, we define \(\mpstatename \hookrightarrow_P \MPT\)
+to relate a machine-policy state pair to the MP-trace
+induced by by \(\stepstoobs{}_P\). Unlike the $\MOTRACE$ above, this trace can
+be finite as the policy can cause a fault, in which case the final state is
+a \(\tau\):
 %
 \judgment{\(\neg \exists \pol_1 . \pol_0 \rightharpoonup \pol_1\)}
          {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}\)}
 %
 \judgmentthree{\(\mach_0 \stepstoobs{\obs} \mach_1\)}
               {\(\pol_0 \rightharpoonup \pol_1\)}
-              {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \machT\)}
-              {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT\)}
+              {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \machOT\)}
+              {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machOT\)}
 We will also use \(\pi_m\) to project the trace of machine states
 out of a trace, \(\pi_p\) to project the trace of policy states, and
-\(\pi_o\) to project the observations.  \bcp{I'm getting a little lost in
+\(\pi_o\) to project the observations, with \(\pi_m\) and \(\pi_o\) overloaded
+for machine traces and MP-traces.
+
+\bcp{I'm getting a little lost in
   all these.  E.g., do these traces include the final state of a finite
   execution?  If so, what observation is it paired with?}\leo{The final
   observation is a $\tau$ based on the rule in the inlined figure, so
-  it is essentially ignored. Point that out somehow?}
+  it is essentially ignored. Point that out somehow?}\sna{It is now pointed
+  out, but it also reminds me as we go back to prefix-up-to that the final
+  observation of a prefix needs to be tau...}
 
 \paragraph*{Prefix-Up-To}
 The ``prefix-up-to'' operation \(\PUT(\Trace,f)\) \bcp{Wouldn't
@@ -1034,16 +1037,16 @@ This can easily be implemented using \(\PUT\), and we provide special notation
 for convenience.
 %
 Let \(f\) be a predicate on machine states. Then we define \(\mach
-\hookrightarrow \machT | f\) (read ``\(\machT\) is the prefix of
+\hookrightarrow \machOT | f\) (read ``\(\machOT\) is the prefix of
 running \(\mach\) up to \(f\)''): \bcp{M and M' should be swapped, I
   think.}  \leo{There were inconsistencies which i fixed. I wanted the
   metavariables defined to be consistent and the ``temporary''
   variable which is the full trace to be primed. Should I swap those?}
 
-\judgmenttwo{\(\mach \hookrightarrow \machT'\)}
-            {\(\PUT(\lambda (\mach',\obs).f\ \mach',\machT')
-              = \machT\)}
-            {\(\mach \hookrightarrow \machT | f\)}
+\judgmenttwo{\(\mach \hookrightarrow \machOT'\)}
+            {\(\PUT(\lambda (\mach',\obs).f\ \mach',\machOT')
+              = \machOT\)}
+            {\(\mach \hookrightarrow \machOT | f\)}
 \noindent
 And similarly for traces with policies:
 
@@ -1691,8 +1694,8 @@ enforce an inductive property, which may be more amenable to proving.
           & \MPT = \mpostate{\mach_e}{\pol_e}{\obs_e} \dots
             \mpostate{\mach_r}{\pol_r}{\obs_r} \Rightarrow \\
         & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' \Rightarrow \\
-        & \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT' \Rightarrow \\
-        & \pi_o(\MPT') \lesssim_O \pi_o(\machT')
+        & \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machOT' \Rightarrow \\
+        & \pi_o(\MPT') \lesssim_O \pi_o(\machOT')
       \end{split}\]
 
     \definition{Observable Stack Integrity}
@@ -1743,21 +1746,21 @@ enforce an inductive property, which may be more amenable to proving.
           \mach_r'(\component) & \text{else} \\
         \end{cases}\]
 
-      A pair of traces \(\MPT\) and \(\machT\) starting from \(\mach_e\) and
+      A pair of traces \(\MPT\) and \(\machOT\) starting from \(\mach_e\) and
       \(\mach_e'\), respectively, with \(\mach_e \approx_\contour \mach_r'\),
       enjoy observable trace confidentiality with respect to \(\contour\) if
       two conditions hold:
 
       The two traces are observationally equivalent: \(\pi_o(\MPT) \eqsim
-      \pi_o(\machT)\).
+      \pi_o(\machOT)\).
 
       If \(\MPT\) is finite and ends with the state
-      \(\mpostate{\mach_r}{\pol_r}{\obs_r}\), then \(\machT\) is finite. Let
-      \(\mach_r'\) be the final state of \(\machT\). Then the induced traces
+      \(\mpostate{\mach_r}{\pol_r}{\obs_r}\), then \(\machOT\) is finite. Let
+      \(\mach_r'\) be the final state of \(\machOT\). Then the induced traces
       \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT'\) and
       \(\mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r')
-      \hookrightarrow \machT'\) are observationally prefixed,
-      \(\pi_o(\MPT') \lesssim \pi_o(\machT')\).
+      \hookrightarrow \machOT'\) are observationally prefixed,
+      \(\pi_o(\MPT') \lesssim \pi_o(\machOT')\).
 
       We write this \(\text{\sc ObsConf}_\contour ~ \MPT\).
 
