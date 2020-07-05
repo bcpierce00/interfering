@@ -1736,35 +1736,70 @@ enforce an inductive property, which may be more amenable to proving.
 \label{sec:relwork}
 
 \section{Future Work}
-\label{sec:future}
+  \label{sec:future}
+
+  We have presented a pure notion of stack safety that omits many complicating
+  factors common to real system. In particular, our model as presented exploits
+  the simplifying assumption that privilege never increases during a function
+  call, and that therefore a contour computed once on the entry to a function
+  describes its privilege throughout. Our future plans are to extend the model
+  with common language features, some of which violate this assumption. Here we
+  describe the basic principles by which our model can be extended to some of
+  these cases.
+
+  \paragraph{Stack-derived Pointers}
+    
+    Common programming idioms involve a caller passing a pointer to its local
+    data into a callee. Using standard notions of pointer provenance [cite],
+    we can extend our model to distinguish safe use of this idiom from true
+    stack safety violations. We require additional annotation to identify
+    which addresses within a function's stack frame correspond to distinct
+    objects. Then a valid pointer to an object is one derived through legal
+    arithmetic from its base address, and at each call point, an object's
+    addresses are marked low confidentiality and integrity if a valid pointer
+    exists in a register or in the transitive closure of the callee's
+    accessible memory. All pointers to an object cease to be valid when it is
+    deallocated along with its stack frame.
+
+  \paragraph{Adding Heap Safety}
+
+    Heap safety, like stack safety, may be framed as a form of noninterference
+    [cite Meaning of Memory Safety]. The above model describing safety of
+    shared stack-allocated objects extends naturally to heap safety,
+    complicated by the fact that these objects are not deallocated by returns,
+    and therefore a function's privilege may increase or decrease after its
+    entry point. For instance, if a callee allocates a heap object and returns
+    the pointer to its caller, that object's addresses become accessible in
+    contradiction to a contour computed at the caller's entry. So such an
+    extension must enforce trace confidentiality and integrity properties
+    separately on continuous segments of each call, with contours computed at
+    each crossing between caller and callee.
+
+  \paragraph{Non-stack control flow}
+
+    Control structures beyond well-bracketed calls and returns require
+    modifications to the model. Tail calls, for instance, reuse the caller's
+    stack frame for its callee, and every nested tail call returns
+    simultaneously to the top non-tail-calling function. Under normal stack
+    integrity, the first function in a chain of tail calls returns and violates
+    integrity, while subsequent tail calls never actually return at all.
+    Instead we need a variant that treats the entry of a tail call as the
+    return of its caller for purposes.
+
+    More complex is the addition of a coroutine model, in which multiple stacks
+    respect stack safety internally, but might also yield to one another.
+    Here we must distinguish three levels of integrity: accessible, in the same
+    stack, and in another stack. Stack integrity requires that same-stack data
+    be unchanged when a function returns, but other-stack data may change. A
+    similar {\em yield integrity} property requires that, from a yield out of
+    a coroutine to the next yield back into it, all accessible and same-stack
+    data are unchanged. Confidentiality properties are split similarly.
+
 
 \section{Discussion}
 
 \bcp{Make this a subsection?}
 \label{sec:disc}
-
-
-  \paragraph{What about tail recursion and other non-stack-like control flow}
-
-\bcp{And this and the next belong in Future Work...}
-
-  \paragraph{Adding Heap Safety}
-
-    While these ideas are here presented in a stack-centric style, they could
-    be extended to heap safety in a system extended with a heap. Heap safety,
-    like stack safety, may be framed as a form of noninterference
-    [cite Meaning of Memory Safety]. For each certain component marked as
-    containing a valid pointer to a heap object, we can propagate that
-    validity when the pointer moves or is used in pointer arithmetic. Heap
-    objects to which a valid pointer is in a register are reachable, and
-    treated as low confidentiality and low integrity.
-
-We've assumed that callees always have less access than their callers, but
-in real systems things are more complicated (because of objects, static
-variables in C, software compartmentalization, coroutines, ...).  What we've
-defined is a very ``pure'' variant of stack safety.  In future work, we
-should go further. :-)
-
 
 %% Acknowledgments
 \begin{acks}                            %% acks environment is optional
