@@ -213,14 +213,17 @@ Text of abstract \ldots.
 The call stack is a perennially popular target for attacks
 exploiting memory safety vulnerabilities, with potential consequences
 ranging from leakage or corruption of private stack data to
-hijacking of the program's control flow. To prevent such attacks, many
-software and hardware techniques for stack safety have been proposed, % in the literature and implemented in production systems,
+control-flow hijacking. To detect or prevent such attacks, many
+software and hardware techniques for stack safety have been proposed,
+%
 including stack canaries~\citep{Cowan+98},
-shadow stacks~\citep{Dang+15,Shanbhogue+19},
-split stacks~\citep{Kuznetsov+14},
 bounds checking~\citep{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
+split stacks~\citep{Kuznetsov+14},
+shadow stacks~\citep{Dang+15,Shanbhogue+19},
 capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b},
-and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \apt{Mostly from nick;there could be more}
+and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \apt{Mostly from
+  nick;there could be more}\bcp{How about static techniques??  We decided
+  these were also in-scope.}
 
 But what {\em is} this ``stack safety'' of which we speak? Precise formal
 definitions are lacking in the literature; instead, the notion of safety
@@ -228,27 +231,39 @@ is usually defined negatively, by enumerating the bad things that a safe system
 prevents, such as corruption of return addresses, buffer overflows, or
 use of uninitialized variables.
 %with the notion usually being
-%defined negatively: through examples of stack-based exploits 
+%defined negatively: through examples of stack-based exploits
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
-%\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ... 
+%\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
 We are only aware of one, quite recent, attempt to frame a positive definition.
 \citet{Skorstengaard+19} define stack safety as
-the conjunction of two properties, local state encapsulation and well-bracketed control flow.
-They formalize these properties by defining an abstract capability-based machine   
+the conjunction of two properties, {\em local state encapsulation} and {\em
+  well-bracketed control flow}.
+They formalize these properties by defining an abstract capability-based machine
 that ``satisfies [stack safety] by construction.'' We believe there is still room
 to craft a more abstract and less intensional characterization of
-stack safety, and that is the goal of the present paper. \apt{still needs tuning}
+stack safety, and that is the goal of the present paper. \apt{still needs
+  tuning}\bcp{Yes, I think we need to go into a little more detail on what
+  their definition looks like in order to justify why an alternative
+  definition might be valuable.  What questions does their presentation not
+  answer? What uses does it not support? E.g., can it be enforced
+  efficiently? (I guess so, by capabilities, though I think their
+  capabilities are more powerful than what Cheri actually provides, while
+  our policies are exactly what Nick needs.)  Why would it be good to look
+  at stack safety through the lens of security?  (Because it is
+  fundamentally a security mechanism?)}
+\rb{BCP idea: contrast intrinsic vs. extrinsic property definition.
+     Remember to talk about spatial vs temporal safety}
 
-Our approach is to give alternative formal
-definitions of local state encapsulation and well-bracketed control flow
-using the conceptual framework of language-based security.
+Our main contribution in this paper is an alternative formal presentation of
+local state encapsulation and well-bracketed control flow using the
+conceptual and technical framework of language-based security.
 %
-The underlying notion behind local state encapsulation is the
-intention to protect callers from callees: a callee should be not be
-able to access or overwrite a caller's private data. We formalize this
-intuition as a security property with both confidentiality and
-integrity components.
+The underlying notion behind local state encapsulation is the intention to
+protect callers from callees: a callee should be not be able to access or
+overwrite private data in the caller's stack frame. We formalize this
+intuition as a security property with both confidentiality and integrity
+components.
 %
 Intuitively, {\em stack confidentiality} promises that a callee's
 observable behavior is not affected by memory outside its stack frame
@@ -259,9 +274,6 @@ the call.  \bcp{We need to point out somewhere that we are only dealing with
 stack safety, though we discuss (somewhere) how our property can be combined
 with the heap safety property of [Azevedo et al]}
 
-\bcp{BCP idea: contrast intrinsic vs. extrinsic property definition
-     Remember to talk about spatial vs temporal safety}
-
 While integrity and confidentiality are standard security
 properties, applying them in the stack-safety setting raises a novel challenge:
 the notion of ``attacker'' changes during execution. Not only
@@ -271,7 +283,10 @@ We address this challenge by adjusting the integrity and confidentiality
 of different stack frames at each call or return transition between functions.\apt{connection to ``attacker'' still vague.}
 \rb{Mention to varying ``accessing power'' of the attacker?
   The notion of attacker changes on certain actions that are not externally
-  visible.}
+  visible.} \bcp{Maybe the best way is to grab the bull by the horns: ``If
+  we're going to phrase stack safety as a security property, we need to talk
+  about an attacker model, and this is where the technicalities get really
+  interesting...''}
 
 The underlying notion behind well-bracketed control flow is
 the need to protect the call structure itself: a callee should not be
@@ -285,7 +300,7 @@ just after their associated call in the standard nested call structure.
 
 To provide evidence that our definitions capture the inituitive notion of stack safety,
 we show that they rule out a wide \apt{really?} range of exploitable bad behaviors.\apt{``from the literature''??}
-To assess whether they are implementable, 
+To assess whether they are implementable,
 we compare them against the proposed capability-based enforcement
 mechanism of \citet{Skorstengaard+19} \apt{we really should} and the existing tag-based enforcement mechanism
 of \citet{DBLP:conf/sp/RoesslerD18}.
@@ -294,18 +309,27 @@ In summary, we offer the following contributions:
 \begin{itemize}
 \item
   % \leo{More? Extensional}\bcp{We might need to invent a word for   this---''quasi-extensional''?}
-  Abstract formal properties capturing the 
+  Abstract formal properties capturing the
   intuitive concepts of local state encapsulation and well-bracketed
   control flow~(\cref{sec:lse-and-wbcf}) in a very general setting. These properties
   rule out common examples of stack memory abuse.
 \item
   A case study of the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, based on hardware tags~(\cref{sec:enforcement}).
   This policy enforces our stack safety property, and also a (provably) stronger property that is easier to test.
-  \apt{If we have no testing, do we even want to talk about the testing property?}
+  \apt{If we have no testing, do we even want to talk about the testing
+    property?} \bcp{Not here; just in future work.  I guess we need to see
+    whether we wind up with any results at all about testing.}
 \item
-  A refinement of the case study that considers the more efficient Lazy Tagging and Clearing policy 
+  A refinement of the case study that considers the more efficient Lazy Tagging and Clearing policy
   of \citet{DBLP:conf/sp/RoesslerD18}~(\cref{sec:lazy}).  This policy does not enforce our property, but we give a
-  variant of the policy that does enforce a (provably) weaker variant of our property. \apt{Awkward, but the truth I fear.}
+  variant of the policy that does enforce a (provably) weaker variant of our
+  property.
+%
+  \apt{Awkward, but the truth I fear.} \bcp{I agree the phrasing is awkward,
+    but the point we can make is still strong: To make the property easier
+    to enforce, we can slightly weaken its guarantees; the weaker version is
+    a bit more complicated to state but still retains the pragmatic
+    protections of the original.}
 
   %\item As evidence that the property is not too strong\apt{But we add the lazy version because the strict version \emph{is} too strong, in some sense.}, we show that it is
 %  realizible by
@@ -328,22 +352,21 @@ technical preliminaries (\cref{sec:prelim}).
 \section{Stack Safety and Unsafety by Example}
 \label{sec:running-example}
 
-To help keep things concrete throughout the more technical sections
-that follow, we first introduce a running example. We will
-use it to demonstrate various potentially problematic
-behaviours in this section, and then show how our properties and
-enforcement mechanisms preclude them later on in the paper.
+We begin with a running example that will serve both to concretely
+demonstrate the ``stack-unsafe'' behaviours we intend to preclude and to
+ground and illustrate the formal properties and enforcement mechanisms in
+later sections.
 
 \subsection{Running Example}
 
-The program appears in \cref{fig:running-program}. It consists
-of a {\tt main} function that performs a call to some function {\tt
-  f}, which in turns makes a nested call to some function {\tt g}
-before returning, all while performing some simple arithmetic
+The example program appears in \Cref{fig:running-program}. It consists of a
+{\tt main} function, written in some C-like high-level language, that
+performs a call to some function {\tt f}, which in turns makes a nested call
+to some function {\tt g} before returning, performing some simple arithmetic
 in the process.
 
 \begin{figure}[b]
-  \begin{centering}
+\hfill
     \begin{minipage}{.3\textwidth}
 \begin{verbatim}
 main = {
@@ -371,8 +394,7 @@ h(v) = {
 
 \end{verbatim}
     \end{minipage}
-\end{centering}
-\caption{High-level Program with Simple Nested Calls}
+\caption{A High-level Program With Nested Calls}
 \label{fig:running-program}
 \end{figure}
 
@@ -422,8 +444,7 @@ $\cdots$
 % Starting Register File
 \summary{0}{0}{?}{100}{?}{?}
 \vspace*{0.2em}
-\bcp{Notation nit: in many assembly notations, square brackets mean
-  ``{\em indirect} through this location...''  And a very small nit: Change
+\bcp{A very small nit: Change
   $\rsp-2$ to $\rsp\mathord{-}2$}
 \[
   \begin{array}{c|c|c|c|c}
@@ -490,7 +511,7 @@ $\cdots$
         {Store 17 as the argument {\tt v}}
     \row{\sw ~ \rsp ~ r_0 ~ \negate 1}{[\rsp - 1] \leftarrow r_0}{[107] \leftarrow 0}
         {Zero out result}
-    \row{\jal ~ \rra ~ 40}{??}{PC \leftarrow 40; ~ \rra \leftarrow \thepcctr}
+    \row{\jal ~ \rra ~ 40}{??}{\PCname \leftarrow 40; ~ \rra \leftarrow \thepcctr}
         {Make the call to {\tt h}}
   \end{array}
   \]
@@ -583,11 +604,11 @@ $\cdots$
       {Load return address}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 1}{\rsp \leftarrow \rsp - 1}{\rsp \leftarrow 108}
       {Restore the stack pointer of {\tt g}}
-  \row{\jalr ~ \rra ~ \rra ~ 0}{??}{PC \leftarrow 31}
+  \row{\jalr ~ \rra ~ \rra ~ 0}{\leo{??}}{\PCname \leftarrow 31}
       {Return to {\tt g}}
   \end{array}
 \]
-  
+
 % After Return from H
 % Memory Layout
 \begin{center}
@@ -632,7 +653,7 @@ $\cdots$
   \row{\lw ~ r_5 ~ \rsp ~ \negate 6}{r_5 \leftarrow [\rsp - 6]}{r_5 \leftarrow 0}
       {Load argument {\tt z} $r_5$}
   \row{\sw ~ \rout ~ r_5 ~ 0}{[\rout] \leftarrow r_5}{[99] \leftarrow 0}
-      {Print {\tt z}}      
+      {Print {\tt z}}
   \row{\add ~ r_4 ~ r_4 ~ r_5}{r_4 \leftarrow r_4 + r_5}{r_4 \leftarrow 18}
       {Add $r_4$ and $r_5$}
   \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[103] \leftarrow 18}
@@ -718,7 +739,7 @@ To show a trace of the execution of this program, we need
 a low-level view of both the code and the machine it runs on. While
 our concrete implementation (Section~\leo{cite}) operates on a full
 conventional RISC-V architecture, we make a few simplifying
-assumptions here to ease the exposition. 
+assumptions here to ease the exposition.
 
 \bcp{We should also emphasize, again, that there is no heap (if there were,
 we might put it above the stack or between the instructions and the stack)}
@@ -767,7 +788,7 @@ English, so people don't have to read RISC-V opcodes.
 extend it with a bit more at the end so we can talk about the lazy policy
 with the same example, we should add
 in some bad variants (doing it here replaces the ``Examples'' from the
-Discussion section), and we should consider discussing the attacker model 
+Discussion section), and we should consider discussing the attacker model
 here (we need to discuss it someplace in any case!)
 \end{itemize}
 }
@@ -925,7 +946,7 @@ will require four generic operations on traces.
 
 The ``trace-of'' operator, written \(\hookrightarrow\), coinductively
 relates a machine state with the trace of machine states paired with
-observations produced by repeated application of step:  
+observations produced by repeated application of step:
 %
 \[\mach \hookrightarrow \machOT : \MACHS \rightarrow \MOTRACE\]%
 %
@@ -983,7 +1004,7 @@ element on which \(f\) holds, coinductively:
 \judgment{}
          {\(\PUT(f,\traceelem) = \traceelem\)}
          %
-\end{minipage}                  
+\end{minipage}
 \begin{minipage}{.3\textwidth}
 \judgmenttwo{\(\neg f\ \traceelem\)}{\(\PUT(f,\Trace) = \Trace'\)}
             {\(\PUT(f,\traceelem\Trace) = \traceelem\Trace'\)}
