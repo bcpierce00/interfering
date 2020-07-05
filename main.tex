@@ -166,9 +166,9 @@ Text of abstract \ldots.
 \maketitle
 
 \section{Introduction}
- 
+
 \newcommand*{\MemoryLabel}[3]{\raisebox{#2}{\makebox(0,0){\hspace{#1}#3}}}
- 
+
 %\begin{figure}
 %  \begin{minipage}{\textwidth}
 %    \begin{center}
@@ -207,7 +207,7 @@ Text of abstract \ldots.
 %      line does.}}
 %  \label{fig:stackunsafety}
 %\end{figure}
-% 
+%
 %\leo{I hate the writing here, but I wanted to make a start.}
 
 The call stack is a perennially popular target for attacks
@@ -259,8 +259,8 @@ the call.  \bcp{We need to point out somewhere that we are only dealing with
 stack safety, though we discuss (somewhere) how our property can be combined
 with the heap safety property of [Azevedo et al]}
 
-% BCP idea: contrast intrinsic vs. extrinsic property definition
-% Remember to talk about spatial vs temporal safety 
+\bcp{BCP idea: contrast intrinsic vs. extrinsic property definition
+     Remember to talk about spatial vs temporal safety}
 
 While integrity and confidentiality are standard security
 properties, applying them in the stack-safety setting raises a novel challenge:
@@ -269,6 +269,9 @@ does a caller need to be protected from its callee, but the callee
 itself needs to be protected from {\em its} callees.
 We address this challenge by adjusting the integrity and confidentiality
 of different stack frames at each call or return transition between functions.\apt{connection to ``attacker'' still vague.}
+\rb{Mention to varying ``accessing power'' of the attacker?
+  The notion of attacker changes on certain actions that are not externally
+  visible.}
 
 The underlying notion behind well-bracketed control flow is
 the need to protect the call structure itself: a callee should not be
@@ -322,7 +325,7 @@ We begin with a running example that we refer
 to throughout the paper (\cref{sec:running-example}) and some
 technical preliminaries (\cref{sec:prelim}).
 
-\section{Running Example}
+\section{Stack Safety and Unsafety by Example}
 \label{sec:running-example}
 
 To help keep things concrete throughout the more technical sections
@@ -330,6 +333,8 @@ that follow, we first introduce a running example. We will
 use it to demonstrate various potentially problematic
 behaviours in this section, and then show how our properties and
 enforcement mechanisms preclude them later on in the paper.
+
+\subsection{Running Example}
 
 The program appears in \cref{fig:running-program}. It consists
 of a {\tt main} function that performs a call to some function {\tt
@@ -396,7 +401,7 @@ h(v) = {
   \PCname = #1 & r_0 = #2 & \rra = #3 & \rsp = #4 & r_4 = #5 & r_5 = #6
 \end{array}
 \]
-}    
+}
 \newcommand{\negate}{\textrm{-}}
 
 \begin{figure}
@@ -417,6 +422,9 @@ $\cdots$
 % Starting Register File
 \summary{0}{0}{?}{100}{?}{?}
 \vspace*{0.2em}
+\bcp{Notation nit: in many assembly notations, square brackets mean
+  ``{\em indirect} through this location...''  And a very small nit: Change
+  $\rsp-2$ to $\rsp\mathord{-}2$}
 \[
   \begin{array}{c|c|c|c|c}
     PC & \mathit{Instruction} & \mathit{Description} & \mathit{Effect} & \\
@@ -777,6 +785,12 @@ formally and discussing enforcement techniques from the literature
 in later sections.
 
 \leo{TODO: Add citations of mitigation techniques}
+\rb{And for those techniques, explain how they reflect their motivating
+examples. What does each technique do for those examples? How are they
+connected to this work?}
+
+\rb{Intuition that the callee can do anything in principle, but the machine will
+halt if it does not follow the calling convention, etc.?}
 
 \paragraph*{Bad write}
 
@@ -812,16 +826,16 @@ outputs the contents of $r_5$ that would immediately be made public.
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
 
-To set the stage, we first describe our machine model. Our definition
-of stack safety is generic and this section discusses an abstract
-interface to our machine model and some kind of static or dynamic,
-software- or hardware-enforced security monitor.  For concreteness,
-our running examples will use a conventional machine architecture and
-a standard (RISC-V) instruction set; in \cref{sec:micropolicies} we
-will extend this model it with a dynamic policy enforcement mechanism
-based on \bcp{NickPaper,AndMaybeSomeOthers}.
+In this section we describe our machine model. Our definition of stack
+safety is generic and this section discusses an abstract interface to
+our machine model and some kind of static or dynamic, software- or
+hardware-enforced security monitor. We will refer back to the running
+example of the previous section for concreteness, and then,
+in~\Cref{sec:micropolicies}, extend this model with a dynamic policy
+enforcement mechanism in~\Cref{sec:micropolicies} based on
+\bcp{NickPaper,AndMaybeSomeOthers}.
 
-\paragraph*{Values, States, and Observations}
+\subsection{Values, States, and Observations}
 
 The basic building blocks of the machine are {\em values} and {\em
   addresses}. Both are drawn from some set of {\em words}
@@ -840,39 +854,30 @@ A machine state is a map from components to values:
 %
 \[\mach \in \MACHS = \COMPONENTS \rightarrow \WORDS\]
 
-The step function of the
-machine takes a machine state and produces a pair of a
-machine state and an {\em observation}, which may be either
-silent (written $\tau$) or a word of data that the machine communicates to
-the outside world (e.g., by writing to a DMA address):\leo{Needs more
-  exposition}\bcp{Like that?}
+The step function of the machine takes a machine state and produces a
+pair of a machine state and an {\em observation}, which may be either
+silent (written $\tau$) or a word of data that the machine
+communicates to the outside world (e.g., by writing to a DMA
+address):
 %
 \[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
 \[\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \]
 %
 
-\paragraph*{Running Example: RISC-V}
-
 Mapping a conventional architecture to this abstract interface is
-straightforward. To build up our running example, we are going to use
-a standard 64-bit RISC machine, just like the one we are using in our
-experiments later on \leo{Mention FORVIS?}. In this setting, $\WORDS$
-is the set of 64-bit integers, $\REGS$ is the set $\{r_0, \cdots,
-r_{31}\} \cup \{\PCname\}$, and $\SP = r_2$.
-% \leo{Mention We use the standard encoding of instructions to words?}
-% BCP: Nah.
+straightforward. For the running example of the previous section,
+$\WORDS$ is the set of 64-bit integers, $\REGS$ is the set $\{r_0,
+\cdots, r_{31}\} \cup \{\PCname\}$, and $\SP = r_2$. Observations are
+the writes to the special $\rout$ location: if during an execution
+step a word $w$ is written to $\rout$ then $\obs = w$, otherwise $\obs
+= \tau$.
 
-The first interesting choice is that of observations, as there are
-multiple reasonable options. At one extreme, we could choose to define
-observations as the value written at any component. However, that
-would pose problems later on when we treat some components as ``secret''
-when they correspond to a caller's private state. \leo{On the other extreme,
-we could pick a particular component and treat it as the ``output'' of
-our system. }  \bcp{But in this paragraph we are describing the particular
+\leo{Other choices for observations? Where should that be discussed?}
+\bcp{But in this paragraph we are describing the particular
 choise that we make for our running example, no?  But we certainly want to
 discuss this fully someplace!}
 
-\paragraph*{Policies}
+\subsection{Policies}
 
 \bcp{More explanation needed, plus examples.}A policy is a general model of an enforcement mechanism, consisting of
 a set of policy states \(\pol \in \POLS\), and a policy step function
@@ -900,31 +905,29 @@ enforcement mechanism and give as many names and citations as we can.}
 \leo{Policies of interest: null, micro, cherri, software-only}
 \leo{TODO: Write down carefully}
 
-\paragraph{Traces}
+\subsection{Traces}
 
-A trace over a type $A$ is a nonempty, finite or infinite
-sequence of $A$s. We will mostly be concerned with sequences of
-machines states, usually\bcp{not always?} denoted $\machT$, and with sequences of
-triples of (machine states, policy states, and observations), usually
-denoted $\MPT$.
-\rb{The way the definitions are set up, one may expect MPO, but\ldots}
-To continue\bcp{??}, we will require four generic operations
-on traces: a ``trace-of'' operation to construct the
-trace induced by a step relation and a machine state
-\rb{not an op on traces per se?}\bcp{+1};
-a ``split'', to break a
-trace into two components based on a predicate; a ``join'', the
-reverse of split; and a ``prefix'', as a shorthand to only keep the
-first component of a split.  \bcp{Not sure it's worth enumerating them
-  rather than just getting down to the actual definitions below.}
+\leo{Which of the machine, machine-observation, machine-policy,
+  and machine-policy-observation traces should we distinguish
+  in metavariables?}
+
+A trace over a type $A$ is a nonempty, finite or infinite sequence of
+$A$s. We will mostly be concerned with sequences of machines states,
+denoted $\machT$, and with sequences of triples of (machine states,
+policy states, and observations), usually denoted $\MPT$.  \rb{The way
+  the definitions are set up, one may expect MPO, but\ldots} We
+will require four generic operations on traces.
+
+\bcp{TODO: Let's also try to clean up the spacing a little -- many of these
+  sequences of rules can be typeset on fewer lines}
+
+\paragraph*{Trace-Of}
 
 The ``trace-of'' operator, written \(\hookrightarrow\), coinductively
 relates a machine state with the trace of machine states paired with
-observations produced by repeated application of step:  \bcp{above, we
-  showed operators applied to metavariables, not just the bare operator
-  symbol.}
+observations produced by repeated application of step:  
 %
-\[\hookrightarrow : \machT \rightarrow \MOTRACE\]%
+\[\mach \hookrightarrow \machOT : \MACHS \rightarrow \MOTRACE\]%
 %
 \judgmenttwo{\(\mach_0 \stepstoobs{\obs} \mach_1\)}{\(\mach_1 \hookrightarrow \machT\)}
             {\(\mach_0 \hookrightarrow (\mach_0,\obs) \machT\)}%
@@ -933,16 +936,21 @@ observations produced by repeated application of step:  \bcp{above, we
 Since the step function is total, if \(\mach \hookrightarrow \machT\),
 then \(\machT\) must be infinite.
 
-\leo{TODO: Add an example of a trace once I figure out the notations}
-\bcp{Let's also try to clean up the spacing a little -- many of these
-  sequences of rules can be typeset on fewer lines}
+In our running example in Figure~\Cref{fig:running-example-b} we can
+see a depiction of such a trace: starting from an initial machine
+state at the very top, each instruction constructs a new machine state
+(the diff of which compared to the previous one appears in the
+``Effect'' column) and the majority of observations are $\tau$ with
+the exception of instructions 31 and 13 which are writes to $\rout$
+and where the observations are $0$ and $60$ respectively.
 
-Similarly, we define \(\hookrightarrow_P\) to relate a machine-policy
-state pair to the trace of triples of machine states, policy states,
-and observations induced by by \(\stepstoobs{}_P\): \bcp{Observe that this
-  time the trace can be either finite or infinite.}
+In a similar fashion, we define \(\hookrightarrow_P\) to relate a
+machine-policy state pair to the trace of triples of machine states,
+policy states, and observations induced by by \(\stepstoobs{}_P\).
+Unlike the $\MOTRACE$ above, this trace can be finite as the
+policy can cause a fault:
 %
-\[\hookrightarrow_P : \MACHS \times \POLS \rightarrow \MPOTRACE \]
+\[(m,p) \hookrightarrow_P MP : \MACHS \times \POLS \rightarrow \MPOTRACE \]
 %
 \judgment{\(\neg \exists \pol_1 . \pol_0 \rightharpoonup \pol_1\)}
          {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}\)}
@@ -955,25 +963,32 @@ We will also use \(\pi_m\) to project the trace of machine states
 out of a trace, \(\pi_p\) to project the trace of policy states, and
 \(\pi_o\) to project the observations.  \bcp{I'm getting a little lost in
   all these.  E.g., do these traces include the final state of a finite
-  execution?  If so, what observation is it paired with?}
+  execution?  If so, what observation is it paired with?}\leo{The final
+  observation is a $\tau$ based on the rule in the inlined figure, so
+  it is essentially ignored. Point that out somehow?}
 
-% SNA: fixed
-%\leo{PUT is completely ambiguous as a choice of abbreviation. Just ``Pre''
-%  seems better}
-The {\it prefUpTo} operation \(\PUT(\Trace,f)\) \bcp{Why does it have two
-  different abbreviated names?  And wouldn't ``While'' be more mnemonic?}
-takes a trace \(T\)
-and a predicate on elements \(f\) and gives the prefix of \(T\)
-ending with the first element on which \(f\) holds, coinductively:
+\paragraph*{Prefix-Up-To}
+The ``prefix-up-to'' operation \(\PUT(\Trace,f)\) \bcp{Wouldn't
+  ``While'' be more mnemonic?}  takes a trace \(T\) and a predicate on
+elements \(f\) and gives the prefix of \(T\) ending with the first
+element on which \(f\) holds, coinductively:
 
+\begin{center}
+\begin{minipage}{.3\textwidth}
 \judgment{\(f\ \traceelem\)}
          {\(\PUT(f,\traceelem\Trace) = \traceelem\)}
+\end{minipage}
 %
+\begin{minipage}{.3\textwidth}
 \judgment{}
          {\(\PUT(f,\traceelem) = \traceelem\)}
-%
+         %
+\end{minipage}                  
+\begin{minipage}{.3\textwidth}
 \judgmenttwo{\(\neg f\ \traceelem\)}{\(\PUT(f,\Trace) = \Trace'\)}
             {\(\PUT(f,\traceelem\Trace) = \traceelem\Trace'\)}
+\end{minipage}
+\end{center}
 %
 Note that if the resulting trace is a strict prefix of the parameter, then the
 predicate must hold on its final element. If the predicate never holds,
@@ -995,8 +1010,11 @@ This can easily be implemented using \(\PUT\), and we provide special notation
 for convenience.
 %
 Let \(f\) be a predicate on machine states. Then we define \(\mach
-\hookrightarrow \machT | f\) (read ``\(\machT'\) is the prefix of
-running \(\mach\) up to \(f\)''): \bcp{M and M' should be swapped, I think.}
+\hookrightarrow \machT | f\) (read ``\(\machT\) is the prefix of
+running \(\mach\) up to \(f\)''): \bcp{M and M' should be swapped, I
+  think.}  \leo{There were inconsistencies which i fixed. I wanted the
+  metavariables defined to be consistent and the ``temporary''
+  variable which is the full trace to be primed. Should I swap those?}
 
 \judgmenttwo{\(\mach \hookrightarrow \machT'\)}
             {\(\PUT(\lambda (\mach',\obs).f\ \mach',\machT')
@@ -1005,9 +1023,9 @@ running \(\mach\) up to \(f\)''): \bcp{M and M' should be swapped, I think.}
 \noindent
 And similarly for traces with policies:
 
-\judgmenttwo{\(\mpstatename \hookrightarrow \MPT\)}
-            {\(\PUT(\lambda \mpostate{\mach}{\pol}{\obs}.f(\mach),\MPT) = \MPT'\)}
-         {\(\mpstatename \hookrightarrow \MPT' | f\)}
+\judgmenttwo{\(\mpstatename \hookrightarrow \MPT'\)}
+            {\(\PUT(\lambda \mpostate{\mach}{\pol}{\obs}.f(\mach),\MPT') = \MPT\)}
+         {\(\mpstatename \hookrightarrow \MPT | f\)}
 
 %    \COQ{this operation steps until it reaches a state on which \(f\) holds,
 %    and is infinite if it doesn't. It doesn't compute the observation of the step after the final,
@@ -1019,12 +1037,10 @@ And similarly for traces with policies:
 \paragraph*{Observational Equivalence}
 
 We say that a trace of observations $\obsT_1$ is a prefix of $\obsT_2$
-\leo{Benjamin suggested ``as far as an attacker is concerned'' in an
-  e-mail, but we haven't said anything about attackers yet.}\bcp{We don't
-  have to talk about attackers, just external observers.}, if the
-sequence of non-silent observations of $\obsT_1$ is a prefix of those
-of $\obsT_2$; that is we operate up to deletion of \(\tau\)
-observations, coinductively:
+as far as an external observer is concerned, if the sequence of
+non-silent observations of $\obsT_1$ is a prefix of those of
+$\obsT_2$; that is we operate up to deletion of \(\tau\) observations,
+coinductively:
 
 %\leo{TODO: We really need a better layout than centered paragraphs.}
 
@@ -1093,71 +1109,76 @@ some output.
 \label{sec:lse-and-wbcf}
 
 In this section we will describe stack safety as a formal property. We
-begin with introducing a running example that will help keep things
-concrete throughout this section, continue with our model of
-\leo{compiler-provided?} knowledge about the program structure, and
-then dive in to formal definitions local state encapsulation and
-well-bracketed control flow.
-
-
-
+begin with our model of \leo{compiler-provided?} knowledge about the
+program structure, and then dive in to formal definitions local state
+encapsulation and well-bracketed control flow.
 
 \subsection{Program Structure}
 
 Our properties and policies are parameterized by several types of
-annotations describing features of a program. A {\em code map}
-\leo{TODO: function map}
-identifies some addresses as code and assigns each to a function. A
-{\em call map} identifies addresses that complete a call sequence,
-abstracting away from any concrete calling convention. Likewise a {\em
-  return map} identifies addresses that complete a return sequence. An
-{\em entry map} identifies valid entry points to a function.
+annotations describing features of a program.
 
-Formally a code map\bcp{I'd love to change ``cdm'' to ``km''.  Should we
-  also call it a ``kode map'' in English?  Maybe that's a bit too far.} is a
+\paragraph*{Function Map}
+
+A {\em function map} identifies some addresses as code and assigns
+each to a function. Formally, a function map is a
 partial function from addresses to a function
 identifier drawn from the set \(\FUNIDS\).
   %
 \[\codemap \in \CODEMAPS = \WORDS \rightharpoonup \FUNIDS\]
 %
-In our running example, instructions 100-124 correspond to $f$,
-instructions 140-196 correspond to $g$, and instructions 200-228
-correspond to $h$.
+In our running example, instructions 1-13 correspond to {\tt main},
+instructions 20-36 correspond to {\tt g}, and instructions 40-47
+correspond to {\tt h}, which means that the function map would be:
+\[ \codemap = \{\texttt{main} \mapsto \{1\ldots13\}, \texttt{g} \mapsto \{20\ldots36\}, \texttt{h} \mapsto \{40\ldots47\}\}\]
 
-A call map is a partial function from addresses to a natural number,
-the number of arguments and return values of the call.
+\paragraph*{Call Map}
+
+A {\em call map} identifies addresses that complete a call sequence,
+abstracting away from any concrete calling convention. Formally, it is
+a partial function from addresses to a natural number, the number of
+arguments and return values of the call.
   %
 \[\callmap \in \CALLMAPS = \WORDS \rightharpoonup \mathbb{N}\]
 %
-In our running example, the callmap would contain (at least) two
-entries: the word 112 corresponding to the first $\jal$
-instruction to $g$, which would map to $2$ as the call has one
-argument; and the word 164 also mapping to $2$ corresponding
-to the call to $h$.
+In our running example, the callmap contains two entries: the word 7
+corresponding to the call to {\tt g} which has one argument and one
+return value; and the word 26 corresponding to the call to {\tt h},
+also with a single argument and return value:
+\[ \callmap = \{ 7 \mapsto 2, 26 \mapsto 2\}\]
 
 For concreteness, in a typical calling convention, a call map may be
-considered to identify the state just before the \(\JAL\), in which
+considered to identify the state just before the \jal, in which
 space for arguments is already allocated, but the mechanism is more
 general. A state in which a call map is defined on the program counter
 is referred to as a {\it call state}.
 
-A return map is simply a predicate on addresses and may be considered
-to identify the final jump of the return sequence. An entry map is
-likewise a predicate on addresses.
-  %
+\paragraph*{Return Map}
+Similarly, a {\em return map} identifies addresses that complete a
+return sequence. Formally, it is simply a set of components; each one
+is the final jump corresponding to a function:
+%
 \[\retmap \in \RETMAPS \subseteq \WORDS\]
-\[\entmap \in \ENTMAPS \subseteq \WORDS\]
 %
 In our running example, the return map identifies the $\jalr$
-instructions 196 and 224, while the entry map identifies
-instructions 140 and 200.
+instructions 36 and 47:
+\[ \retmap = \{36, 47\} \]
+
+\paragraph*{Entry Map}
+Finally, the entry map identifies valid entry points to a
+function and is also a set:
+\[\entmap \in \ENTMAPS \subseteq \WORDS\]
+%
+In our running example, the entry map contains the entry
+points of {\tt g} and {\tt h}:
+\[ \entmap = \{20, 40\} \]
 
 \paragraph*{What is a return?}
 
-We separately identify, for any call state, what is means for a state
+We separately identify, for any call state, what it means for a state
 to have correctly returned from a call. We consider the call to have
 returned the first time control returns to the instruction following
-the \(\JAL\) with the stack restored. Formally this is a relation
+the \jal with the stack restored. Formally this is a relation
 between the states:
 
 \[\begin{split}
@@ -1165,7 +1186,10 @@ between the states:
     \nextPC(\mach_c(\PCname)) \land \\ & \mach_r(\SP) = \mach_c(\SP)
 \end{split}\]
 
-\leo{Point to the trace. two return points}
+There are two such return points in our running example, both of which
+are depicted in the figure: the state before the execution of
+instruction 27 corresponding to the return from {\tt h} and the state
+before instruction 8 corresponding to the return from {\tt g}.
 
 \subsection{Local State Encapsulation}
 \label{sec:lse}
@@ -1947,6 +1971,25 @@ in real systems things are more complicated (because of objects, static
 variables in C, software compartmentalization, coroutines, ...).  What we've
 defined is a very ``pure'' variant of stack safety.  In future work, we
 should go further. :-)
+
+\rb{Notes from meeting:
+  \begin{itemize}
+  \item Explain how the theory applies to production compilers like GCC and
+    LLVM, which aspects are directly applicable, what are the effects of
+    alternative calling conventions. Other less charted waters: tail calls,
+    coroutines, jumps into supervisor mode.
+  \item CHERI and its operation, documentation and practical configurations and
+    operation.
+  \item Compare and contrast with StkTokens.
+  \item Under what circumstances can stack safety exist without an enforcement
+    mechanism?
+  \item Zeroing out of allocated space inside blessed sequences, eager vs lazy.
+    Possibility of blessed alloc and dealloc sequences, which also manipulate SP
+    and would not be legal without blessing. In such an extended setting, the
+    return sequence would check for matching addresses (it would be nice to have
+    testing for this!).
+  \end{itemize}
+}
 
 
 %% Acknowledgments
