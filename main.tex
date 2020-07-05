@@ -412,6 +412,18 @@ h(v) = {
 \newcommand*{\rra}{\textsc{ra}}
 \newcommand*{\rout}{\textsc{out}}
 
+\newcommand*{\tagInstr}{\textsc{instr}}
+\newcommand*{\tagCall}{\textsc{call}}
+\newcommand*{\tagHa}{\textsc{h1}}
+\newcommand*{\tagHb}{\textsc{h2}}
+\newcommand*{\tagRa}{\textsc{r1}}
+\newcommand*{\tagRb}{\textsc{r2}}
+\newcommand*{\tagRc}{\textsc{r3}}
+\newcommand*{\tagNoDepth}{\textsc{unused}}
+\newcommand*{\tagStackDepth}[1]{\textsc{stack} ~ #1}
+\newcommand*{\tagPCDepth}[1]{\textsc{pc} ~ #1}
+\newcommand*{\tagSP}{\textsc{sp}}
+
 \newcounter{pcctr}
 \setcounter{pcctr}{0}
 \newcommand*{\row}[4]{
@@ -1624,6 +1636,83 @@ enforced efficiently \rb{cite}.
 policies}
 
 \paragraph*{A conservative policy}
+%
+The first micropolicy we present for eager stack safety is very similar to the
+Depth Isolation policy presented by Roessler and DeHon \rb{cite}. Their policies
+tag the stack memory with ownership information associated to each stack frame
+(and to each separate object inside that frames, a more finely grained access
+control that we do not need to consider), and registers holding stack pointers
+with matching access permission information. Beyond those capabilities, the
+compiler generates designated sequences of instructions with special tags that
+grant them permission to manage the stack.
+
+Our micropolicy works as follows. We assume for ease of exposition that no
+arguments are passed on the stack \rb{Come back to this later?}. Initially, the
+entire stack is tagged as unused with $\tagNoDepth$ \rb{actually, the ``initial
+  frame'' should be tagged with its proper depth}, and the {\PCname} carries in
+its tag at all times the depth of the current activation, starting with
+$\tagPCDepth{0}$. The current activation depth needs to change exactly at those
+points in the program where the contour of the stack safety property changes:
+
+\begin{itemize}
+
+\item From caller to callee, when the machine executes an instruction tagged as
+  belonging to the call map with $\tagCall$. At this point, the {\PCname} depth
+  is incremented to, say $\tagPCDepth{n}$; on function entry, the locations of
+  the new frame is marked $\tagStackDepth{n}$.
+
+\item From callee back to caller, when execution reaches the instruction
+  immediately following the original call instruction and the $\SP$ is the same
+  as at the time of that call. At this point, the {\PCname} is decremented;
+  previously, the locations of the old frame are restored to $\tagNoDepth$.
+
+\end{itemize}
+
+To enforce this discipline, we define blessed header and return instruction
+sequences. These are specific sequences of tagged instructions that are intended
+to appear at the beginning and end of each function:
+
+\[
+  \begin{array}{c|c|c}
+    {\sw ~ \rsp ~ \rra ~ 1} & {\tagHa, \tagInstr} & \text{Store RA in stack} \\
+    {\addi ~ \rsp ~ \rsp ~ 2} & {\tagHb, \tagInstr} & \text{Increment SP by frame size}
+  \end{array}
+  \]
+
+\[
+  \begin{array}{c|c|c}
+    {\lw ~ \rra ~ \rsp ~ -1} & {\tagRa, \tagInstr} & \text{Load RA} \\
+    {\addi ~ \rsp ~ \rsp ~ -2} & {\tagRb, \tagInstr} & \text{Decrement SP by frame size} \\
+    {\jalr ~ \rra ~ \rra} & {\tagRc, \tagInstr} & \text{Jump back}
+  \end{array}
+\]
+
+\rb{Positioning of the above sequences, relation to running example. The tagging
+  of stack frames would be considered part of these sequences.}
+
+These sequences also enforce the $\SP$ discipline. When stack frames are of
+fixed size, it suffices to increment $\SP$ and give it with a special tag in the
+header sequence, which is later checked after decrementing $\SP$ during the exit
+sequence to authorize the return. The well-formedness of the blessed sequences
+can be checked statically. Only programs whose sequences are well-formed are
+protected by the micropolicy, although programs are still protected (by
+fail-stopping) even if the intended sequences are missing. By tracking the
+execution of the blessed sequences in the {\PCname} tag state, the micropolicy
+ensures that the entry sequence is executed correctly a declared call.
+
+% If anything overwrites the SP in between, the exit sequence will fail, which is safe.
+
+During normal execution, the {\PCname} uses the current activation depth in its
+tag $\tagPCDepth{n}$ to gate load and store operations, which are allowed to
+operate only on the corresponding stack frame, tagged $\tagStackDepth{n}$.
+\rb{Note that we have also considered and implemented more flexible schemes
+  based on allowing operations above the current activation depth. How do we put
+  these together?}
+\rb{Do we want to discuss variations involving frame pointers or more implicit
+  return addresses?}
+\rb{Where to talk about the role of the compiler?}
+
+\paragraph*{Testing the conservative policy}
 
 This conservative policy enforces our stack safety policy. Moreover, it enforces
 a provably stronger \emph{testing property}.
@@ -1639,7 +1728,11 @@ What is the strongest property enforced by the conservative policy?
 \rb{We have not proved that this policy guarantees our property, but we have
 tested it against a stronger property.}
 
-\paragraph*{Testing the conservative policy}
+\rb{The Static Authorities differs from the Depth Isolation policy in that frame
+  ids aren't true activation ids, but unique ids associated to all activations
+  of the same function. Discuss unique activation ids and compare with depth
+  later, possibly when discussing lazy policies, as the difference becomes
+  tangible there.}
 
 \paragraph*{End-to-end stack safety property}
 
