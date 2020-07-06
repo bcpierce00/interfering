@@ -957,6 +957,7 @@ enforcement mechanism and give as many names and citations as we can.}
 \leo{Which of the machine, machine-observation, machine-policy,
   and machine-policy-observation traces should we distinguish
   in metavariables?}
+\rb{Should we have notation for traces somewhere here?}
 
 A trace over a type $\TRACEELEMS$ is a nonempty, finite or infinite sequence of
 $\TRACEELEMS$s. We will mostly be concerned with sequences of pairs of machine states
@@ -1836,27 +1837,133 @@ operate only on the corresponding stack frame, tagged $\tagStackDepth{n}$.
   return addresses?}
 \rb{Where to talk about the role of the compiler?}
 
+%% Because the access rights of callers subsume those of callees, it is essential
+%% that the micropolicy change tags when the property thinks that a call occurs,
+%% but it is safe for the micropolicy to fail to reset to the caller's tag when the
+%% property thinks a return occurs. (Dually, it is safe for the micropolicy to
+%% change tags even without executing a call point, but not for it to reset tags to
+%% the caller when the property thinks execution is still in the caller).
+
+%% Because the property does not identify return sites, we have no way to require
+%% that ``intended returns'' are tagged correspondingly. Some unintended results
+%% might also be so tagged, but as long as the jump has the effect of a legal
+%% return, it is OK.
+
 \paragraph*{Testing the conservative policy}
-
-This conservative policy enforces our stack safety policy. Moreover, it enforces
-a provably stronger \emph{testing property}.
-
-The properties we give are indeed enforceable.
-
-Less conservative policies can be more efficient, but also harder to test.
-
-What is the strongest property enforced by the conservative policy?
 %
-\rb{Not too much focus on this}
+This conservative policy is can be shown to satisfy an eager \emph{testing
+property}, which enforces lockstep and performs integrity and confidentiality
+tests for a stack of running variants at each step.
 
-\rb{We have not proved that this policy guarantees our property, but we have
-tested it against a stronger property.}
+\definition{Eager integrity test}
+  Given two machines $\mach$ and $\mach'$ and a contour $\contour$, these
+  satisfy the \emph{eager integrity test} if their high-integrity components
+  match:
+  \[
+    \mathit{int}_T ~ \contour ~ \mach ~ \mach' \triangleq
+    \forall \component . ~
+    \contour(\component) = \HIGHINT \rightarrow
+    \mach(\contour) = \mach'(\contour)
+    \]
 
-\rb{The Static Authorities differs from the Depth Isolation policy in that frame
-  ids aren't true activation ids, but unique ids associated to all activations
-  of the same function. Discuss unique activation ids and compare with depth
-  later, possibly when discussing lazy policies, as the difference becomes
-  tangible there.}
+\definition{Eager confidentiality test}
+  Given two machine states $\mach_1$ and $\mach_2$ with stepping states and
+  observations $\mach_1 \stepstoobs{\obs_1} \mach_1'$ and $\mach_2
+  \stepstoobs{\obs_2} \mach_2'$ these satisfy the \emph{eager confidentiality
+  test} if their observations and changed components coincide:
+  \[
+    \mathit{conf}_T ~ \mach_1 ~ \obs_1 ~ \mach_1' ~ \mach_2 ~ \obs_2 ~ \mach_2' ~ \triangleq
+    \obs_1 = \obs_2 \wedge \forall \component . ~
+   (     \mach_1(\component) \neq \mach_1'(\component)
+    \vee \mach_2(\component) \neq \mach_2'(\component))
+    \rightarrow \mach_1' = \mach_2'
+  \]
+
+\rb{Fix notations, including for properties below.}
+\newcommand{\vse}{\mathit{vse}}
+\newcommand{\VSES}{\mathit{VSE}}
+\newcommand{\vs}{\mathit{vs}}
+\newcommand{\VSS}{\mathit{VS}}
+
+\definition{Variant stacks}
+  The testing property keeps track of execution information on a stack whose
+  elements record an initial machine, an initial and current variant of the
+  machine, a contour and a return map:
+  $$\vse \in \VSES ::= \MACHS \times \MACHS \times \MACHS \times \CONTOURS (\MACHS \rightarrow \mathcal{P})$$
+  $$\vse = (\mathit{init\_machine}(\vse), \mathit{init\_variant}(\vse), \mathit{curr\_variant}(\vse), \contour(\vse), \mathit{ret}(\vse))$$
+  $$\vs \in \VSS$$
+  Given the current machine state $\mach$, a stack $\vs$ is \emph{well-formed}
+  with respect to it if:
+  \begin{itemize}
+  \item The current variant is indeed a variant of the current state.
+  \item The stack is nonempty and the bottom return map is the false property.
+  \item The current state is in the trace of every initial machine.
+  \item The variant state is in the trace of its own initial variant.
+  \item The return function is in the return map if not the last element. \rb{TODO}
+  \item All contours have public registers.
+  \end{itemize}
+
+\definition{Eager testing property}
+  Let $\callmap$ a call map and $\codemap$ a code map. Given a state
+  $(\mach, \pol) \in \MPS$ that is well-formed w.r.t. a variant stack $\vs$, we
+  say that an MP-trace induced from $(\mach, \pol)$ satisfies the \emph{eager
+  testing property} at a given call depth if:
+
+  \begin{itemize}
+
+  \item If the machine fail-stops,
+    $(\mach, \pol) \hookrightarrow_P (\mach, \pol, \tau)$,
+    the property is safisfied for the singleton trace $(\mach, \pol)$ at any
+    depth up to the size of $\vs$.
+
+  \item If the top variant of the stack (and only the top variant) returns,
+    the property is safisfied for the singleton trace $(\mach, \pol)$ at depth
+    equal to the size of the stack. \rb{Avoid confusion with return below}
+
+  \item If the machine takes a step
+    $(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs)$,
+    that is neither a call nor a return, all
+    variants can also take a step $\vs \hookrightarrow \vs'$ \rb{notation for this}
+    while satisfying the eager integrity and confidentiality tests \rb{more formal?}
+    (these tests are required also for calls and returns, and omitted in those cases),
+    and the stepped $(\mach', \pol')$ and $\vs'$ satisfy the eager testing property
+    for a given depth $d$ \rb{omitting stack size condition?} and MP-trace $\MPT$,
+    then the property is also satisfied for the extension of the trace \rb{notation}
+    at depth $d$.
+
+  \item If the machine takes a call step
+    $(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs)$,
+    the contour $\contour$ is updated based on the top of the current machine.
+    For the property to hold for a trace $(\mach, \pol) \cdot \MPT$ at depth $d$
+    (and in addition to the general step conditions),
+    the eager integrity test must hold for $\contour$ at the call,
+    the eager confidentiality test must hold for all variants at the call,
+    including the new variant that is added to the top of the stack,
+    and the property recurses on an arbitrary variant at the new contour
+    at depth $d$ with trace $\MPT$.
+
+  \item If the machine takes a return step at the top of the variant stack
+    $(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs)$,
+    the property holds for a trace $(\mach, \pol) \cdot \MPT$ at depth $d$
+    if (in addition to the general step conditions)
+    the property recurses at depth $d$ with trace $\MPT$
+    after removing the returning top variant from the stack.
+
+  \item If the machine takes a return step that is also a call, the last two
+    cases are combined.
+
+  \end{itemize}
+
+By using property-based testing techniques, we can determine with a high degree
+of confidence that an implementation of the conservative micropolicy satisfies
+this eager testing property. Although we have not proved that the conservative
+policy guarantees the stack safety property, the testing property is provably
+stronger than the stack safety property \rb{theorem?} and, by this implication,
+we can conclude that the conservative policy also enforces stack safety.
+
+% The properties we give are indeed enforceable.
+
+\rb{What is the strongest property enforced by the conservative policy?}
 
 \paragraph*{End-to-end stack safety property}
 
@@ -1868,6 +1975,8 @@ In practice, this \emph{eager policy} is too slow to be of practical interest:
 what we really want in practice is a \emph{lazy policy} that can be efficiently
 implemented.
 
+Less conservative policies can be more efficient, but also harder to test.
+
 We can also test the lazy policy, even if less efficiently, and it should
 enforce an inductive property, which may be more amenable to proving.
 %
@@ -1876,6 +1985,12 @@ enforce an inductive property, which may be more amenable to proving.
 \rb{Implied by the property we started with?}
 
 \rb{Explain and compare what each policy enforces.}
+
+\rb{The Static Authorities differs from the Depth Isolation policy in that frame
+  ids aren't true activation ids, but unique ids associated to all activations
+  of the same function. Discuss unique activation ids and compare with depth
+  later, possibly when discussing lazy policies, as the difference becomes
+  tangible there.}
 
 \section{Lazy Stack Safety}
 \label{sec:lazy}
