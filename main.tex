@@ -980,6 +980,8 @@ a \(\tau\):
               {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \machOT\)}
               {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machOT\)}
 \end{minipage}
+\rb{Shouldn't the conclusion of the first judgment use $\hookrightarrow_P$?
+  And in the second judgment, wouldn't $MO$ be $MPO$, and the third premise $\hookrightarrow_P$?}
 
 We will also use \(\pi_m\) to project the trace of machine states
 out of a trace, \(\pi_p\) to project the trace of policy states, and
@@ -1967,6 +1969,12 @@ enforce an inductive property, which may be more amenable to proving.
 \section{Lazy Stack Safety}
 \label{sec:lazy}
 
+    \rb{Suggestion: name this ``observable \emph{trace? something else?}
+      integrity'' to avoid confusion with observable stack integrity (in fact,
+      it is called exactly this when discussing the example below). The rollback
+      may also be a definition of its own to match the granularity of
+      definitions in previous sections.}
+
     \definition{Observable Integrity}
       Observable integrity weakens eager integrity by allowing a returned state
       to differ from its call state at high integrity components, provided the
@@ -1992,6 +2000,7 @@ enforce an inductive property, which may be more amenable to proving.
       So the observable behavior that follows is the idealized behavior to
       which we compare the trace from \(\mach_r\), which must prefix it (to
       account for premature halts due to policy violations.)
+      \rb{Here, should the second premise use $\hookrightarrow_P$?}
       %
       \[\begin{split}
         \text{\sc ObsInt}_\contour ~ \MPT \triangleq
@@ -2015,7 +2024,7 @@ enforce an inductive property, which may be more amenable to proving.
     \(\mach_r\), with high integrity components in red and low integrity in
     green. Next is the rolled-back state, \(\mach_r' =
     \mathit{roll}(\contour,\mach_e,\mach_r)\), in which high integrity
-    components are restored to their value as of \(\mach_e\). Specifically,
+    components are restored to their values as of \(\mach_e\). Specifically,
     address 103 is restored to 0. When instruction 31 prints {\tt z} in the
     trace from \(\mach_r\), it prints 18, but in the trace from \(\mach_r'\)
     it prints 0. So observable trace integrity does not hold.
@@ -2025,12 +2034,12 @@ enforce an inductive property, which may be more amenable to proving.
 
     \definition{Observable Stack Integrity}
 
-      A system enjoys {\em observable integrity} with regard to \(\callmap\)
+      A system enjoys {\em observable \rb{stack?} integrity} with regard to \(\callmap\)
       and  \(\codemap\) if for any initial state \(\mach_0\) and each
       transition with entry state \(\mpostate{\mach_e}{\pol_e}{\obs_e}\) and
       contour \(\contour\) in the induced trace from
       \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), if
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_e}\),
+      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_e}\) \rb{$\hookrightarrow_P$?},
       then \(\text{\sc ObsInt}_\contour ~ \MPT\).
 
     \definition{Observable Trace Confidentiality}
@@ -2055,6 +2064,10 @@ enforce an inductive property, which may be more amenable to proving.
       \(\mach_r'\). We must first restore the varied values to their original
       state, while preserving differences that have occurred during
       execution.
+      \rb{To me, this reads like a prologue to the definitions properly
+        speaking---maybe the definition header above should be a paragraph and
+        a definition header appear next? I would also split it into two
+        definitions.}
 
 %      In \cref{fig:lazyex1}, the final states of the original and variant
 %      differ, because a written value (in black or white) depended on the value
@@ -2078,8 +2091,8 @@ enforce an inductive property, which may be more amenable to proving.
           \mach_r'(\component) & \text{else} \\
         \end{cases}\]
 
-      A pair of traces \(\MPT\) and \(\machOT\) starting from \(\mach_e\) and
-      \(\mach_e'\), respectively, with \(\mach_e \approx_\contour \mach_r'\),
+      A pair of traces \(\MPT\) and \(\machOT\) starting from \(\mach_e\) \rb{with what $\pol_e$?} and
+      \(\mach_e'\), respectively, with \(\mach_e \approx_\contour \mach_r'\) \rb{$\mach_e'$?},
       enjoy observable trace confidentiality with respect to \(\contour\) if
       two conditions hold:
 
@@ -2089,12 +2102,13 @@ enforce an inductive property, which may be more amenable to proving.
       If \(\MPT\) is finite and ends with the state
       \(\mpostate{\mach_r}{\pol_r}{\obs_r}\), then \(\machOT\) is finite. Let
       \(\mach_r'\) be the final state of \(\machOT\). Then the induced traces
-      \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT'\) and
+      \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT'\) \rb{$\hookrightarrow_P$?} and
       \(\mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r')
       \hookrightarrow \machOT'\) are observationally prefixed,
       \(\pi_o(\MPT') \lesssim \pi_o(\machOT')\).
 
       We write this \(\text{\sc ObsConf}_\contour ~ \MPT\).
+      \rb{What about $\machOT$? Ditto for use in the definition of observable stack confidentiality below.}
 
       \begin{figure}
         \confidentialitylazyexample
@@ -2104,7 +2118,7 @@ enforce an inductive property, which may be more amenable to proving.
 
       In our example, \cref{fig:conflex} shows how execution continues from
       \(\mach_r'\) and the restored \(\mach_r'' = \mathit{restore}(\contour,
-      \mach_e,\mach_e',\mach_r,\mach_r'\). Addresses 108 and 109, in pink, are
+      \mach_e,\mach_e',\mach_r,\mach_r')\). Addresses 108 and 109, in pink, are
       not restored; every address that was varied and not changed in one of the
       executions is. Since 108 contains a value that originates in the
       variation, values that depend on it might be anything; after returning
@@ -2126,8 +2140,8 @@ enforce an inductive property, which may be more amenable to proving.
 
     \definition{Observable Stack Safety}
       A system enjoys {\em observable stack safety} with regard to a call map
-      and a code map if it enjoys both observable integrity and observable
-      confidentiality with regard to them.
+      and a code map if it enjoys both observable \rb{stack?} integrity and observable
+      \rb{stack?} confidentiality with regard to them.
 
 
 \section{Related Work}
