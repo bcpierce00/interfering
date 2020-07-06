@@ -603,11 +603,11 @@ $\cdots$
 \begin{array}{c|c|c|c|c}
   \row{\sw ~ \rsp ~ r_4 ~ \negate 2}{[\rsp - 2] \leftarrow r_4}{[107] \leftarrow 18}
       {Store $r_4$ as the return value}
-  \row{\lw ~ \rra ~ \rsp ~ \negate 1}{\rra \leftarrow [\rsp - 1]}{\rra \leftarrow 31}
+  \row{\lw ~ \rra ~ \rsp ~ \negate 1}{\rra \leftarrow [\rsp - 1]}{\rra \leftarrow 27}
       {Load return address}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 1}{\rsp \leftarrow \rsp - 1}{\rsp \leftarrow 108}
       {Restore the stack pointer of {\tt g}}
-  \row{\jalr ~ \rra ~ \rra ~ 0}{\leo{??}}{\PCname \leftarrow 31}
+  \row{\jalr ~ \rra ~ \rra ~ 0}{\leo{??}}{\PCname \leftarrow 27}
       {Return to {\tt g}}
   \end{array}
 \]
@@ -798,6 +798,8 @@ here (we need to discuss it someplace in any case!)
 
 \subsection{Attacker Model + Unsafe Variations}
 
+\sna{Variations here collides with state variations. I propose substitutions.}
+
 \leo{TODO: Make attacker model more explicit} The execution trace
 shown in \cref{fig:running-trace-b} is an example of a
 ``stack-safe'' execution: each process interacts only with the
@@ -935,8 +937,8 @@ enforcement mechanism and give as many names and citations as we can.}
   and machine-policy-observation traces should we distinguish
   in metavariables?}
 
-A trace over a type $A$ is a nonempty, finite or infinite sequence of
-$A$s. We will mostly be concerned with sequences of pairs of machine states
+A trace over a type $\TRACEELEMS$ is a nonempty, finite or infinite sequence of
+$\TRACEELEMS$s. We will mostly be concerned with sequences of pairs of machine states
 and observations, called machine traces and denoted $\machOT \in \MOTRACE$,
 and with sequences of triples of a machine state, a policy state, and an
 observation, denoted $\MPT \in \MPOTRACE$ and referred to as MP-traces. 
@@ -947,12 +949,10 @@ observation, denoted $\MPT \in \MPOTRACE$ and referred to as MP-traces.
 
 \paragraph*{Trace-Of}
 
-The ``trace-of'' operator, written \(\hookrightarrow\), coinductively
-relates a machine state with the trace of machine states paired with
-observations produced by repeated application of step:
-%
-\[\mach \hookrightarrow \machOT : \MACHS \rightarrow \MOTRACE\]%
-%
+The ``trace-of'' operator, written \(\mach \hookrightarrow \machOT\),
+coinductively relates a machine state with the trace of machine states
+paired with observations produced by repeated application of step:
+
 \judgmenttwo{\(\mach_0 \stepstoobs{\obs} \mach_1\)}{\(\mach_1 \hookrightarrow \machOT\)}
             {\(\mach_0 \hookrightarrow (\mach_0,\obs) \machOT\)}%
 %
@@ -973,14 +973,18 @@ to relate a machine-policy state pair to the MP-trace
 induced by by \(\stepstoobs{}_P\). Unlike the $\MOTRACE$ above, this trace can
 be finite as the policy can cause a fault, in which case the final state is
 a \(\tau\):
-%
+
+\begin{minipage}{.4\textwidth}
 \judgment{\(\neg \exists \pol_1 . \pol_0 \rightharpoonup \pol_1\)}
          {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}\)}
-%
+\end{minipage}
+\begin{minipage}{.55\textwidth}
 \judgmentthree{\(\mach_0 \stepstoobs{\obs} \mach_1\)}
               {\(\pol_0 \rightharpoonup \pol_1\)}
               {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \machOT\)}
               {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machOT\)}
+\end{minipage}
+
 We will also use \(\pi_m\) to project the trace of machine states
 out of a trace, \(\pi_p\) to project the trace of policy states, and
 \(\pi_o\) to project the observations, with \(\pi_m\) and \(\pi_o\) overloaded
@@ -1051,14 +1055,14 @@ running \(\mach\) up to \(f\)''): \bcp{M and M' should be swapped, I
   variable which is the full trace to be primed. Should I swap those?}
 
 \judgmenttwo{\(\mach \hookrightarrow \machOT'\)}
-            {\(\PUT(\lambda (\mach',\obs).f\ \mach',\machOT')
+            {\(\PUT(f,\machOT')
               = \machOT\)}
             {\(\mach \hookrightarrow \machOT | f\)}
 \noindent
 And similarly for traces with policies:
 
 \judgmenttwo{\(\mpstatename \hookrightarrow \MPT'\)}
-            {\(\PUT(\lambda \mpostate{\mach}{\pol}{\obs}.f(\mach),\MPT') = \MPT\)}
+            {\(\PUT(\lambda \mpstate{\mach}{\pol}.f\ \mach,\MPT') = \MPT\)}
          {\(\mpstatename \hookrightarrow \MPT | f\)}
 
 %    \COQ{this operation steps until it reaches a state on which \(f\) holds,
@@ -1332,6 +1336,23 @@ and a weaker, lazy integrity property that only ensures that the
 locations that a caller accesses are preserved (a variation that allows
 for a more efficient enforcement mechanism).
 
+\begin{figure}
+  \integrityexample
+  \caption{Failing Trace Integrity}
+  \label{fig:intex}
+\end{figure}
+
+For an example see \cref{fig:intex}, representing the unsafe substitution
+\[
+  44: ~ \sw ~ \rsp ~ r_4 ~ -5
+\]
+This instruction is in {\tt h}, and instead of storing data to the return,
+it overwrites {\tt g}'s variable, {\tt z}. At the top of the figure high
+integrity memory is in red, while low integrity is in green; at the end of the
+trace address 103 should match the initial state, and does not. So trace
+integrity is violated.
+
+
 Trace integrity characterizes the trace corresponding to a single
 callee. We now lift this definition to an integrity property for a
 complete execution trace. We do this by requiring that trace integrity
@@ -1339,7 +1360,7 @@ holds for every transition between a caller and a callee $f$ for
 the entirety of the trace of $f$.
 
 \definition{Transition}
-Given a trace $MP$, a call map $\callmap$ and a code map $\codemap$,
+Given a trace $\MPT$, a call map $\callmap$ and a code map $\codemap$,
 an $n$-{\em transition} to a callee $f$ is a pair of machine-policy
 state pairs $(\mach_c, \pol_c)$ and $(\mach_e, \pol_e)$ in the trace
 such that:
@@ -1351,10 +1372,6 @@ such that:
 \item and $\mach_e$ is an entry point for $f$:
   $$\codemap(\mach_e(\PCname)) = f.$$
 \end{itemize}
-
-For an example see \cref{fig:intex}, in which {\tt h} writes its return
-value to {\tt g}'s return location the stack rather than its own. That address
-is high integrity (red), and so writing to it causes the property to fail.
 
 \definition{Stack Integrity}
 Let $\callmap$ be a call map and $\codemap$ a code map. We say that a
@@ -1420,48 +1437,57 @@ $$\forall \component. ~ \mach_e(\component) \not = \mach_r(\component)
   $$\pi_o(MP) \lesssim \pi_o(M)$$
 \end{itemize}
 
-\Cref{fig:confex2} shows the initial states \(\mach_e\), left,
-and \(\mach_e'\), right. Low confidentiality data in green is shared
-between them, while high confidentiality data in red and yellow may differ.
-After executing the code shown, the final states below have written different
-values to address 42, represented by the black and white components.
-It is allowed for address 40 to differ between the states due to the initial
-variation, but address 42 changed differently between the traces, representing
-a leak of data. %Meanwhile \ref{fig:lazyex2}, while high confidentiality data
+For example, consider the unsafe substitution:
+\[
+42 : ~ \sw ~ r_4 ~ \rsp 100
+\]
+Instead of reading the proper argument, {\tt h} reads directly from the
+secret value of {\tt x} that belongs to {\tt main}. \Cref{fig:confex}
+shows \(\mach_e\), the entry state of {\tt h}, with high confidentiality memory
+in red and low confidentiality in green. Below it, the variant state
+\(\mach_e'\) agrees on low confidentiality memory, but the rest might have
+any value, in yellow. After the last step, the return states \(\mach_r\) and
+\(\mach_r'\) should agree on every component that changed since \(\mach_e\) or
+\(\mach_e'\). Addresses 108 and 109 have changed, shown in pink, and while 109
+is consistent, 108 will not hold 43 in all variants, so the trace does not obey
+trace confidentiality.
+
+Meanwhile, the following unsafe substitution outputs the secret
+directly, violating the internal observation clause of confidentiality:
+\[
+30 : ~ \lw ~ r_5 ~ \rsp ~ \negate 6
+\]
+%\Cref{fig:confex2} shows the initial states \(\mach_e\), above,
+%and \(\mach_e'\), below. Low confidentiality data in green is shared
+%between them, while high confidentiality data in red and yellow may differ.
+%After executing the code shown, the final states below have written different
+%values to address 42, represented by the black and white components.
+%It is allowed for address 40 to differ between the states due to the initial
+%variation, but address 42 changed differently between the traces, representing
+%a leak of data. %Meanwhile \ref{fig:lazyex2}, while high confidentiality data
 %is read, it is overwritten before return, and the write at step 3 always writes
 %the same value. Yellow and red locations differ between variations only because
 %of the initial variation, and the rest are identical. So this example passes.
 
-\begin{figure}
-  \integrityexample
-  \caption{Failing Trace Integrity}
-  \label{fig:intex}
-\end{figure}
 
-\begin{figure}
-  \integritylazyexample
-  \caption{Rolling back from Figure \ref{fig:intex}}
-  \label{fig:intlex}
-\end{figure}
-
-\begin{figure}
-  \confidentialityduringexample
-  \caption{Failing Trace Confidentiality by Varying Observations}
-  \label{fig:confex1}
-\end{figure}
+%\begin{figure}
+%  \confidentialityduringexample
+%  \caption{Failing Trace Confidentiality by Varying Observations}
+%  \label{fig:confex1}
+%\end{figure}
 
 \begin{figure}
   \confidentialityendexample
-  \caption{Failing Trace Confidentiality at End State}
-  \label{fig:confex2}
+  \caption{Failing Trace Confidentiality}
+  \label{fig:confex}
 \end{figure}
 
-\Cref{fig:confex2} gives an example of a trace that fails trace
-confidentiality. At instruction 42, {\tt h} reads {\tt x} from {\tt main}.
-Since {\tt x}, at address 100, is high confidentiality (red) the variant
-may have a different value (yellow). So both \(r_4\) and address 107
-differ in the final state between the original trace and the variant one,
-failing the ending condition of trace confidentiality.
+%\Cref{fig:confex2} gives an example of a trace that fails trace
+%confidentiality. At instruction 42, {\tt h} reads {\tt x} from {\tt main}.
+%Since {\tt x}, at address 100, is high confidentiality (red) the variant
+%may have a different value (yellow). So both \(r_4\) and address 107
+%differ in the final state between the original trace and the variant one,
+%failing the ending condition of trace confidentiality.
 
 To lift trace confidentiality to a system property, we follow the same
 pattern as in stack integrity:
@@ -1705,6 +1731,27 @@ enforce an inductive property, which may be more amenable to proving.
         & \pi_o(\MPT') \lesssim_O \pi_o(\machOT')
       \end{split}\]
 
+    \begin{figure}
+      \integritylazyexample
+      \caption{Rolling back from Figure \ref{fig:intex}}
+      \label{fig:intlex}
+    \end{figure}
+
+    For out example, we return to the violation of trace integrity in
+    \cref{fig:intex}, in which {\tt h} has written to {\tt z} and returned.
+    Whether observable integrity holds depends on the continuing trace, shown
+    in \cref{fig:intlex}. Above, we have the final state of \(\MPT\),
+    \(\mach_r\), with high integrity components in red and low integrity in
+    green. Next is the rolled-back state, \(\mach_r' =
+    \mathit{roll}(\contour,\mach_e,\mach_r)\), in which high integrity
+    components are restored to their value as of \(\mach_e\). Specifically,
+    address 103 is restored to 0. When instruction 31 prints {\tt z} in the
+    trace from \(\mach_r\), it prints 18, but in the trace from \(\mach_r'\)
+    it prints 0. So observable trace integrity does not hold.
+
+    However, if {\tt g} had an additional instruction to overwrite {\tt z}
+    before printing, observable trace integrity would hold.
+
     \definition{Observable Stack Integrity}
 
       A system enjoys {\em observable integrity} with regard to \(\callmap\)
@@ -1731,14 +1778,21 @@ enforce an inductive property, which may be more amenable to proving.
       This requires restoring varied components to their original values,
       since after return they will once again be accessible legitimately.
 
-      In \cref{fig:lazyex1}, the final states of the original and variant
-      differ, because a written value (in black or white) depended on the value
-      of a high confidentiality location. So the resulting trace fails trace
-      confidentiality. For observable trace confidentiality, we ask whether the
-      differing values at address 42 cause any observable distinctions in
-      future behavior. To do so, we must undo the variation of formerly high
-      confidentiality locations, so that those in yellow match those in red,
-      while preserving the updated values where data may have been leaked.
+      To return to the example in \cref{fig:confex}, the varied final state
+      \(\mach_r'\) might do anything depending on the values of the variation,
+      so we cannot immediately compare traces from \(\mach_r\) and
+      \(\mach_r'\). We must first restore the varied values to their original
+      state, while preserving differences that have occurred during
+      execution.
+
+%      In \cref{fig:lazyex1}, the final states of the original and variant
+%      differ, because a written value (in black or white) depended on the value
+%      of a high confidentiality location. So the resulting trace fails trace
+%      confidentiality. For observable trace confidentiality, we ask whether the
+%      differing values at address 42 cause any observable distinctions in
+%      future behavior. To do so, we must undo the variation of formerly high
+%      confidentiality locations, so that those in yellow match those in red,
+%      while preserving the updated values where data may have been leaked.
 
       The \(\mathit{restore}\) function takes a contour and four states: the
       original call state, a variant call state, and corresponding return
@@ -1770,6 +1824,22 @@ enforce an inductive property, which may be more amenable to proving.
       \(\pi_o(\MPT') \lesssim \pi_o(\machOT')\).
 
       We write this \(\text{\sc ObsConf}_\contour ~ \MPT\).
+
+      \begin{figure}
+        \confidentialitylazyexample
+        \caption{Continuing from \cref{fig:confex}}
+        \label{fig:conflex}
+      \end{figure}
+
+      In our example, \cref{fig:conflex} shows how execution continues from
+      \(\mach_r'\) and the restored \(\mach_r'' = \mathit{restore}(\contour,
+      \mach_e,\mach_e',\mach_r,\mach_r'\). Addresses 108 and 109, in pink, are
+      not restored; every address that was varied and not changed in one of the
+      executions is. Since 108 contains a value that originates in the
+      variation, values that depend on it might be anything; after returning
+      from {\tt g}, {\tt main} prints 95 in the trace from \(\mach_r\) and
+      some undetermined value in the trace from \(\mach_r''\). So observable
+      trace confidentiality does not hold.
 
     \definition{Observable Stack Confidentiality}
 
