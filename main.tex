@@ -241,20 +241,27 @@ We are only aware of one, quite recent, attempt to frame a positive definition.
 the conjunction of two properties, {\em local state encapsulation} and {\em
   well-bracketed control flow}.
 They formalize these properties by defining an abstract capability-based machine
-that ``satisfies [stack safety] by construction.'' We believe there is still room
-to craft a more abstract and less intensional characterization of
-stack safety, and that is the goal of the present paper. \apt{still needs
-  tuning}\bcp{Yes, I think we need to go into a little more detail on what
-  their definition looks like in order to justify why an alternative
-  definition might be valuable.  What questions does their presentation not
-  answer? What uses does it not support? E.g., can it be enforced
-  efficiently? (I guess so, by capabilities, though I think their
-  capabilities are more powerful than what Cheri actually provides, while
-  our policies are exactly what Nick needs.)  Why would it be good to look
-  at stack safety through the lens of security?  (Because it is
-  fundamentally a security mechanism?)}
-\rb{BCP idea: contrast intrinsic vs. extrinsic property definition.
-     Remember to talk about spatial vs temporal safety}
+that ``satisfies [stack safety] by construction.''
+%
+While this is an important step in the right direction, we believe
+there is still room to craft a more abstract and less intensional
+characterization of stack safety, so that we are able to answer
+questions about other enforcement mechansims. That is the goal of this
+paper.
+\leo{I took a stab. I think it's still to dense, but captures the
+  feeling of today's discussion I think}
+\apt{still needs tuning}\bcp{Yes, I think we need to go into a
+  little more detail on what their definition looks like in order to
+  justify why an alternative definition might be valuable.  What
+  questions does their presentation not answer? What uses does it not
+  support? E.g., can it be enforced efficiently? (I guess so, by
+  capabilities, though I think their capabilities are more powerful
+  than what Cheri actually provides, while our policies are exactly
+  what Nick needs.)  Why would it be good to look at stack safety
+  through the lens of security?  (Because it is fundamentally a
+  security mechanism?)}  \rb{BCP idea: contrast intrinsic
+  vs. extrinsic property definition.  Remember to talk about spatial
+  vs temporal safety}
 
 Our main contribution in this paper is an alternative formal presentation of
 local state encapsulation and well-bracketed control flow using the
@@ -273,38 +280,48 @@ observable behavior is not affected by memory outside its stack frame
 stack data at the point of return will be identical to what it was before
 the call.  \bcp{We need to point out somewhere that we are only dealing with
 stack safety, though we discuss (somewhere) how our property can be combined
-with the heap safety property of [Azevedo et al]}
-
-While integrity and confidentiality are standard security
-properties, applying them in the stack-safety setting raises a novel challenge:
-the notion of ``attacker'' changes during execution. Not only
-does a caller need to be protected from its callee, but the callee
-itself needs to be protected from {\em its} callees.
-We address this challenge by adjusting the integrity and confidentiality
-of different stack frames at each call or return transition between functions.\apt{connection to ``attacker'' still vague.}
-\rb{Mention to varying ``accessing power'' of the attacker?
-  The notion of attacker changes on certain actions that are not externally
-  visible.} \bcp{Maybe the best way is to grab the bull by the horns: ``If
-  we're going to phrase stack safety as a security property, we need to talk
-  about an attacker model, and this is where the technicalities get really
-  interesting...''}
+with the heap safety property of [Azevedo et al]}\leo{Should this be
+  here or in the assumptions as presented in the running example?}
 
 The underlying notion behind well-bracketed control flow is
 the need to protect the call structure itself: a callee should not be
 allowed to jump to the middle of an arbitrary block of code either
 directly (via a jump instruction) or indirectly (by corrupting stack
-data and returning). Well-bracketed control flow establishes safety between
-functions: each instruction is uniquely owned by some function, and all jumps between functions
-are either calls that enter at a marked entry point or returns that re-enter
-just after their associated call in the standard nested call structure.
-\apt{clarify what we are contributing here.}
+data and returning). Well-bracketed control flow establishes safety
+between functions: each instruction is uniquely owned by some
+function, and all jumps between functions are either calls that enter
+at a marked entry point or returns that re-enter just after their
+associated call in the standard nested call structure.  \apt{clarify
+  what we are contributing here.}
 
-To provide evidence that our definitions capture the inituitive notion of stack safety,
-we show that they rule out a wide \apt{really?} range of exploitable bad behaviors.\apt{``from the literature''??}
-To assess whether they are implementable,
-we compare them against the proposed capability-based enforcement
-mechanism of \citet{Skorstengaard+19} \apt{we really should} and the existing tag-based enforcement mechanism
-of \citet{DBLP:conf/sp/RoesslerD18}.
+To phrase both aspects of stack safety as a security property requires
+an explicit attacker model which, for this paper, is quite strong: a
+callee can execute arbitrary code, and the enforcement mechanism
+should prevent any stack safety violations. Moreover, even though
+integrity and confidentiality are standard security properties,
+applying them in the stack-safety setting raises a novel challenge:
+the notion of ``attacker'' changes during execution. Not only does a
+caller need to be protected from its callee, but the callee itself
+needs to be protected from {\em its} callees. We address this
+challenge by adjusting the integrity and confidentiality of different
+stack frames at each call or return transition between
+functions.
+%\apt{connection to ``attacker'' still vague.}  \rb{Mention
+%  to varying ``accessing power'' of the attacker?  The notion of
+%  attacker changes on certain actions that are not externally
+%  visible.} \bcp{Maybe the best way is to grab the bull by the horns:
+%  ``If we're going to phrase stack safety as a security property, we
+%  need to talk about an attacker model, and this is where the
+%  technicalities get really interesting...''}
+
+To provide evidence that our definitions capture the inituitive notion
+of stack safety, we show that they rule out a range of exploitable bad
+behaviors.\apt{``from the literature''??}  To assess whether they are
+implementable, we compare them against the proposed capability-based
+enforcement mechanism of \citet{Skorstengaard+19} \apt{we really
+  should} and the existing tag-based enforcement mechanism of
+\citet{DBLP:conf/sp/RoesslerD18}.\leo{Is this where we would rephrase this
+  because we would only talk about it in related work?}
 
 In summary, we offer the following contributions:
 \begin{itemize}
@@ -312,7 +329,7 @@ In summary, we offer the following contributions:
   % \leo{More? Extensional}\bcp{We might need to invent a word for   this---''quasi-extensional''?}
   Abstract formal properties capturing the
   intuitive concepts of local state encapsulation and well-bracketed
-  control flow~(\cref{sec:lse-and-wbcf}) in a very general setting. These properties
+  control flow~(\cref{sec:lse-and-wbcf}) in a generic setting. These properties
   rule out common examples of stack memory abuse.
 \item
   A case study of the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, based on hardware tags~(\cref{sec:enforcement}).
