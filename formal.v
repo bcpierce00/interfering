@@ -171,23 +171,30 @@ Qed.
    So the second clause of the /\ follows from the first, and so this definition of ObsEqUpToHalt reduces to just <=_O. 
 *)
 
+Inductive RunUpTo {A} (f : A -> Prop) : TraceOf (A * Observation) -> TraceOf (A * Observation) -> Prop :=
+| FNowFinished : forall a o, RunUpTo f (finished (a,o)) (finished (a,Tau))
+| FNowNotFinished : forall a o T, f a -> RunUpTo f (notfinished (a,o) T) (finished (a,Tau))
+| FLater : forall a o T Tpre,
+    ~ f a ->
+    RunUpTo f T Tpre ->
+    RunUpTo f (notfinished (a,o) T) (notfinished (a,o) Tpre).
 
 Definition EagerStackConfidentiality (C : Contour) (mp : MPState) (justReturned : MachineState -> Prop) :=
   forall m' callMPO call'MO,
     variantOf (ms mp) m' C ->
-    PrefixUpTo (fun '(m,_,_) => justReturned m) (MPRunOf mp) callMPO ->
-    PrefixUpTo (fun '(m,_) => justReturned m) (RunOf m') call'MO ->
+    RunUpTo (fun mp => justReturned (ms mp)) (MPRunOf mp) callMPO ->
+    RunUpTo (fun m => justReturned m) (RunOf m') call'MO ->
     (forall mpret o, Last callMPO (mpret,o) ->
-                    exists m'ret o', Last call'MO (m'ret,o') /\
-                                  (ObsOfMP callMPO) ~=_O (ObsOfM call'MO) /\
-                                  forall k, 
-                                    (ms mp k <> ms mpret k \/ m' k <> m'ret k) ->
-                                    ms mpret k = m'ret k) /\
+                     exists m'ret o', Last call'MO (m'ret,o') /\
+                                      (ObsOfMP callMPO) ~=_O (ObsOfM call'MO) /\
+                                      forall k, 
+                                        (ms mp k <> ms mpret k \/ m' k <> m'ret k) ->
+                                        ms mpret k = m'ret k) /\
     (* Case 2: The call runs forever without returning *)
     (Infinite callMPO ->
      Infinite call'MO /\
      ObsOfMP callMPO ~=_O ObsOfM call'MO) /\
-    (* Case 3: The policy fail-stops before the call return *)
+    (* Case 3: The policy fail-stops before the call returns *)
     (forall mpohalt, Last callMPO mpohalt ->
                      ~ justReturned (ms (fst mpohalt)) ->
                      ObsOfMP callMPO <=_O ObsOfM call'MO)
@@ -3515,8 +3522,8 @@ Definition ObservableConfidentialityOld (C : Contour) (MP:MPTrace) (MPsuffO:opti
 Definition ObservableConfidentiality (C : Contour) (mp:MPState) (justReturned : MachineState -> Prop) : Prop :=
   forall m' callMPO call'MO,
     variantOf (ms mp) m' C ->
-    PrefixUpTo (fun '(m,_,_) => justReturned m) (MPRunOf mp) callMPO ->
-    PrefixUpTo (fun '(m,_) => justReturned m) (RunOf m') call'MO ->
+    RunUpTo (fun mp => justReturned (ms mp)) (MPRunOf mp) callMPO ->
+    RunUpTo (fun m => justReturned m) (RunOf m') call'MO ->
     (forall mpret (o:Observation),
         Last callMPO (mpret, o) ->
         (exists m'ret (o':Observation), Last call'MO (m'ret,o') /\
