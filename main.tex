@@ -927,8 +927,41 @@ by combining it with the regular step function for machine states.
 in more detail that the intention is to capture any kind of dynamic
 enforcement mechanism and give as many names and citations as we can.}
 
-\leo{Policies of interest: null, micro, cherri, software-only}
-\leo{TODO: Write down carefully}
+This model is flexible enough to capture any kind of mechanism used for dynamic
+enforcement of properties of interest, including the following representative
+families of policies.
+
+%% \leo{Policies of interest: null, micro, cherri, software-only}
+%% \leo{TODO: Write down carefully}
+
+\paragraph*{Null policy}
+%
+The simplest possible policy is the neutral policy that carries no information
+and does nothing. Its set of policy states $\POLS$ is the unit type, and its
+policy step function is the constant function that produces the unit, $\lambda
+\_ . \top$, thereby allowing all calls the machine step function. This
+corresponds to the lifting of our machine model to the policy setting.
+
+\paragraph*{Software-only policies}
+%
+\rb{TODO In a way, in these schemes the policy state is built in as part of the
+  program state and transparent to the hardware, although it could be simulated
+  by an overlay where enforcement is represented at the policy level.}
+
+\paragraph*{Capability machines}
+%
+\rb{TODO Here the policy is built into the hardware, although the extended ISA
+  could be split into a machine without capabilities and capabilities as the
+  policy.}
+
+\newcommand{\TAGS}{\mathcal{T}}
+\newcommand{\tagname}{t}
+\newcommand{\uP}{{\mu P}}
+
+\paragraph*{Micropolicies}
+%
+\rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
+  policy? }
 
 \subsection{Traces}
 
@@ -1144,6 +1177,9 @@ In this section we will describe stack safety as a formal property. We
 begin with our model of \leo{compiler-provided?} knowledge about the
 program structure, and then dive in to formal definitions local state
 encapsulation and well-bracketed control flow.
+
+\rb{Maybe provide a full definition of (eager) stack safety, here or at the end
+  of the section.}
 
 \subsection{Program Structure}
 
@@ -1388,6 +1424,8 @@ it overwrites {\tt g}'s variable, {\tt z}. At the top of the figure high
 integrity memory is in red, while low integrity is in green; at the end of the
 trace address 103 should match the initial state, and does not. So trace
 integrity is violated.
+\rb{There are some color name macros, but none for integrity yet? Use instead
+of hardcoded color names.}
 
 Trace integrity characterizes the trace corresponding to a single
 callee. Going back to our running example, such a trace would be, for
@@ -1497,6 +1535,7 @@ hold -5, in orange. After the last step, the return states \(\mach_r\) and
 \(\mach_e'\). Addresses 108 and 109 have changed, shown in gray, and while 109
 is consistent, 108 holds either 43 or -4, so the trace does not obey
 trace confidentiality.
+\rb{Color name macros}
 
 \sna{I like instantiating the variant, tomorrow I will extend it to the
      lazy example as well.}
@@ -1790,16 +1829,15 @@ property}, which enforces lockstep and performs integrity and confidentiality
 tests for a stack of running variants at each step.
 
 \definition{Eager integrity test}
-  Given two machines \apt{machine states?} $\mach$ and $\mach'$ and a contour $\contour$, these
+  Given two machine states $\mach$ and $\mach'$ and a contour $\contour$, these
   satisfy the \emph{eager integrity test} if their high-integrity components
   match:
   \[
     \mathit{int}_T ~ \contour ~ \mach ~ \mach' \triangleq
     \forall \component . ~
     \contour(\component) = \HIGHINT \rightarrow
-    \mach(\contour) = \mach'(\contour)
+    \mach(\component) = \mach'(\component)
     \]
-\apt{Shouldn't conclusion be $m(k) = m'(k)$ ? }
 
 \definition{Eager confidentiality test}
   Given two machine states $\mach_1$ and $\mach_2$ with stepping states and
@@ -1811,15 +1849,9 @@ tests for a stack of running variants at each step.
     \obs_1 = \obs_2 \wedge \forall \component . ~
    (     \mach_1(\component) \neq \mach_1'(\component)
     \vee \mach_2(\component) \neq \mach_2'(\component))
-    \rightarrow \mach_1' = \mach_2'
-  \]
-\apt{scoping of $\forall$ is ambiguous. Anyhow, shouldn't this be
-$
-\forall \component . ~
-   (     \mach_1(\component) \neq \mach_1'(\component)
-    \vee \mach_2(\component) \neq \mach_2'(\component))
     \rightarrow \mach_1'(\component) = \mach_2'(\component)
- $ ?}
+  \]
+\apt{scoping of $\forall$ is ambiguous.}
 \rb{Fix notations, including for properties below.}
 \newcommand{\vse}{\mathit{vse}}
 \newcommand{\VSES}{\mathit{VSE}}
@@ -1830,7 +1862,7 @@ $
   The testing property keeps track of execution information on a stack whose
   elements record an initial machine, an initial and current variant of the
   machine, a contour and a return map:
-  $$\vse \in \VSES ::= \MACHS \times \MACHS \times \MACHS \times \CONTOURS (\MACHS \rightarrow \mathcal{P})$$
+  $$\vse \in \VSES ::= \MACHS \times \MACHS \times \MACHS \times \CONTOURS \times 2^\MACHS)$$
   $$\vse = (\mathit{init\_machine}(\vse), \mathit{init\_variant}(\vse), \mathit{curr\_variant}(\vse), \contour(\vse), \mathit{ret}(\vse))$$
   $$\vs \in \VSS$$
   Given the current machine state $\mach$, a stack $\vs$ is \emph{well-formed}
@@ -1908,30 +1940,53 @@ we can conclude that the conservative policy also enforces stack safety.
 
 \paragraph*{End-to-end stack safety property}
 
+Integrity
+
+Confidentiality as a form of noninterference
+
 \paragraph*{Eager vs lazy testing}
 
-\rb{This part should probably be somewhere in the lazy section.}
-%
-In practice, this \emph{eager policy} is too slow to be of practical interest:
-what we really want in practice is a \emph{lazy policy} that can be efficiently
-implemented.
+The conservative policy we just described, while testable and enforceable, is
+too slow to be of practical use. What we want, instead, is a somewhat more
+permissive policy that moreover can be efficiently implemented. Most of the
+performance overhead incurred by this kind of \emph{eager policy} steps from the
+need to set stack activation tags as a frame is created and reset them as it is
+destructed, as \citet{DBLP:conf/sp/RoesslerD18} confirm in their evaluation. To
+mitigate those costs, they propose optimizations like Lazy Tagging and Lazy
+Clearing that relax and defer some of the checks of an eager policy, being more
+permissive in their allowed operations and catching violations if and when their
+effect becomes manifest.
+\rb{How much detail to go into? Refer to examples if we have the space?}
 
-Less conservative policies can be more efficient, but also harder to test.
+These \emph{lazy policies} admit more efficient implementations while being
+harder to test, given that potential violations may or may not materialize,
+requiring in turn additional bookkeeping. However, a critical observation is
+that the depth-based tagging scheme discussed so far with fail when combined
+with a lazy policy. The reason for this is that because tags are not set and
+cleared on function entry and exit points, stale tags may persist after a given
+call, and a subsequent call sharing the same depth as the old call may access
+memory contents tagged with the stale tags of a previous activation.
+\rb{Again, example?}
 
-We can also test the lazy policy, even if less efficiently, and it should
-enforce an inductive property, which may be more amenable to proving.
-%
-\rb{Would need careful phrasing.}
-%
+The lazy policy can be repaired if, instead of tagging each function activation
+with its depth in the stack, we generate a fresh activation identifier on each
+call, which allows the policy to identify stale tags from previous activations.
+Under this stricted tagging discipline, the eager policy behaves almost exactly
+like its lazy counterpart. A related mechanism was explored in the Static
+Authorities policy of \citet{DBLP:conf/sp/RoesslerD18}, which associates a
+unique activation identifier to each function, which is however shared by all
+activations of the same function in order to obtain good cacheability of tag
+rules.
+
+\rb{Parts of this discussion feel somewhat out of order...}
+
+\rb{We can also test the lazy policy, even if less efficiently, and it should
+  enforce an inductive property, which may be more amenable to proving --- this
+  should be the connection to the following section.}
+
 \rb{Implied by the property we started with?}
 
 \rb{Explain and compare what each policy enforces.}
-
-\rb{The Static Authorities differs from the Depth Isolation policy in that frame
-  ids aren't true activation ids, but unique ids associated to all activations
-  of the same function. Discuss unique activation ids and compare with depth
-  later, possibly when discussing lazy policies, as the difference becomes
-  tangible there.}
 
 \section{Lazy Stack Safety}
 \label{sec:lazy}
@@ -2007,6 +2062,7 @@ enforce an inductive property, which may be more amenable to proving.
     address 103 is restored to 0. When instruction 31 prints {\tt z} in the
     trace from \(\mach_r\), it prints 18, but in the trace from \(\mach_r'\)
     it prints 0. So observable trace integrity does not hold.
+    \rb{Color name macros}
 
     However, if {\tt g} had an additional instruction to overwrite {\tt z}
     before printing, observable trace integrity would hold.
@@ -2110,6 +2166,7 @@ enforce an inductive property, which may be more amenable to proving.
       from {\tt g}, {\tt main} prints 95 in the trace from \(\mach_r\) and
       some undetermined value in the trace from \(\mach_r''\). So observable
       trace confidentiality does not hold.
+      \rb{Color name macro}
 
     \definition{Observable Stack Confidentiality}
 
@@ -2130,6 +2187,19 @@ enforce an inductive property, which may be more amenable to proving.
 \section{Related Work}
 \label{sec:relwork}
 
+CHERI \rb{cite}
+
+\citet{Skorstengaard+19b} introduce a calling convention to preserve local state
+encapsulation and well-bracketed control flow by the use of local capabilities.
+Although the required hardware support is readily available in capability
+machines like CHERI, this technique incurs potentially prohibitive performance
+costs, because it requires the unused part of the stack to be cleared whenever a
+security boundary is crossed. In the discussion, ``while [the authors] claim
+that [their] calling convention enforces control-flow correctness, [they] do not
+prove a general theorem that shows this, because it is not clear what such a
+theorem should look like,'' noting that the correctness property enjoyed by
+their technique ``is not made very explicit.''
+
 StkTokens \citep{Skorstengaard+19} protects the stack by enforcing local state
 encapsulation and well-bracketed control flow. It does so by defining a calling
 convention that makes use of linear capabilities for stack and return pointers
@@ -2138,15 +2208,23 @@ avoid compromising their own security by following certain simple rules.
 Informally, local state encapsulation is defined by restricting accesses to the
 range of memory allocated to the current stack frame, and well-bracketed control
 flow by only allowing returns from the topmost frame to the immediately adjacent
-frame below. Formally, these properties are built into a capability machine
-defined by an overlay semantics, which is proven fully abstract with respect to
-a capability machine that replaces those abstract operations with their calling
-convention.
+frame below. Formally, it improves on \citet{Skorstengaard+19b} by building
+those properties into the semantics of a capability machine with a built-in call
+stack and call and return instructions, which is proven fully abstract with
+respect to a more concrete capability machine that replaces those
+pseudo-instructions with their calling convention.
+
+We are confident \rb{how strong a claim to make, with substantiation} that
+StkTokens satisfies the eager stack safety property, and even the stronger eager
+testing property \rb{refs}. The main limitation of StkTokens is its reliance on
+linear capabilities, as it is unclear now they could be added to practical
+capability machines, especially in terms of efficiency.
+%
+\rb{On the other hand, we know that these can be implemented as micropolicies,
+  cf. linear return capabilities in yannis-report (what about performance?)}
 
 \rb{There are quite a few parallels at various levels, although the definitions
-  are overall more implicit and not given formally. A limiting factor is the
-  lack of linear capabilities in existing models like CHERI---although these
-  could be implemented by a micropolicy.}
+  are overall more implicit and not given formally.}
 
 \section{Future Work}
   \label{sec:future}
