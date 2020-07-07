@@ -379,11 +379,11 @@ later sections.
 
 \subsection{Running Example}
 
-The example program appears in \Cref{fig:running-program}. It consists of a
-{\tt main} function, written in some C-like high-level language, that
-performs a call to some function {\tt f}, which in turns makes a nested call
-to some function {\tt g} before returning, performing some simple arithmetic
-in the process.
+The example program appears in \Cref{fig:running-program}. It consists
+of a {\tt main} function, written in some C-like high-level language,
+that performs a call to some function {\tt f}, which in turns makes a
+nested call to some function {\tt g} before returning, while
+performing some simple arithmetic operations in the process.
 
 \begin{figure}[b]
 \hfill
@@ -443,8 +443,9 @@ h(v) = {
 
 \newcounter{pcctr}
 \setcounter{pcctr}{0}
+%  \thepcctr & \stepcounter{pcctr} #1 & #2 & #3 & \text{#4}\\
 \newcommand*{\row}[4]{
-  \thepcctr & \stepcounter{pcctr} #1 & #2 & #3 & \text{#4}\\
+  \thepcctr & \stepcounter{pcctr} #2 & #3 & \text{#4}\\  
 }
 \newcommand*{\tracerow}[5]{
   #1 & #2 & #3 & #4 & \text{#5}\\
@@ -458,7 +459,9 @@ h(v) = {
 }
 \newcommand{\negate}{\textrm{-}}
 
-\newcommand{\instrc}{magenta}
+\colorlet{lgray}{gray!40}
+
+\newcommand{\instrc}{lgray}
 \newcommand{\outc}{white}
 \newcommand{\fprivc}{cyan}
 \newcommand{\fcallc}{green}
@@ -488,8 +491,8 @@ $\cdots$
 \bcp{A very small nit: Change
   $\rsp-2$ to $\rsp\mathord{-}2$}
 \[
-  \begin{array}{c|c|c|c|c}
-    PC & \mathit{Instruction} & \mathit{Description} & \mathit{Effect} & \\
+  \begin{array}{c|c|c|c}
+    PC & \mathit{Instruction} & \mathit{Effect} & \\
     \hline
     \row{\addi ~ \rsp ~ \rsp ~ 2}{\rsp \leftarrow \rsp + 2}{\rsp \leftarrow 102}
         {Allocate private {\tt main} data}
@@ -506,15 +509,15 @@ $\cdots$
     \row{\sw ~ \rsp ~ r_0 ~ \negate 1}{[\rsp-1] \leftarrow r_0}{[103] \leftarrow 0}
         {Zero out result\apt{why?}}
     \row{\jal ~ \rra ~ 20}{\rra \leftarrow \PCname + 1; ~ \PCname \leftarrow 20}{\rra \leftarrow \thepcctr; ~ \PCname \leftarrow 20}
-        {Make the call}
+        {Make the call (Jump and link)}
   \end{array}
   \]
   ~ \\
   ~\\
-  \apt{How's that description for last line?}
-  \apt{Where did these RISC-V insruction formats come from? I think some of them are just wrong, e.g.
-    $\jal$ takes a PC-relative argument, not an absolute one, and the proper way to code a return to $\rra$ is $\jalr  ~ \rra ~ r_0$.
-  But also the instruction operand ordering is awkward. Why not use standard AT\&T syntax?}
+%  \apt{How's that description for last line?}
+%  \apt{Where did these RISC-V insruction formats come from? I think some of them are just wrong, e.g.
+%    $\jal$ takes a PC-relative argument, not an absolute one, and the proper way to code a return to $\rra$ is $\jalr  ~ \rra ~ r_0$.
+%  But also the instruction operand ordering is awkward. Why not use standard AT\&T syntax?}
 % At Call to G
 % Memory Layout
 \begin{center}
@@ -542,7 +545,7 @@ $\cdots$
 % G - Body - 1
 \vspace*{0.2em}
   \[
-  \begin{array}{c|c|c|c|c}
+  \begin{array}{c|c|c|c}
     \row{\addi ~ \rsp ~ \rsp ~ 2}{\rsp \leftarrow \rsp + 2}{\rsp \leftarrow 106}
         {Allocate local {\tt g} state}
     \row{\sw ~ \rsp ~ \rra ~ \negate 2}{[\rsp - 2] \leftarrow \rra}{[104] \leftarrow 8}
@@ -556,8 +559,8 @@ $\cdots$
         {Store 17 as the argument {\tt v}}
     \row{\sw ~ \rsp ~ r_0 ~ \negate 1}{[\rsp - 1] \leftarrow r_0}{[107] \leftarrow 0}
         {Zero out result}
-    \row{\jal ~ \rra ~ 40}{??}{\PCname \leftarrow 40; ~ \rra \leftarrow \thepcctr}
-        {Make the call to {\tt h}}
+    \row{\jal ~ \rra ~ 40}{\jal ~ \rra ~ 40}{\PCname \leftarrow 40; ~ \rra \leftarrow \thepcctr}
+        {Make the call to {\tt h} (jump-and-link)}
   \end{array}
   \]
   ~ \\
@@ -594,7 +597,7 @@ $\cdots$
 \vspace*{0.2em}
 % H - Body
 \[
-\begin{array}{c|c|c|c|c}
+\begin{array}{c|c|c|c}
   \row{\addi ~ \rsp ~ \rsp ~ 1}{\rsp \leftarrow \rsp + 1}{\rsp \leftarrow 109}
       {Allocate for return address}
   \row{\sw ~ \rsp ~ \rra ~ \negate 1}{[\rsp - 1] \leftarrow \rra}{[108] \leftarrow 27}
@@ -642,7 +645,7 @@ $\cdots$
 
 \begin{figure}
 \[
-\begin{array}{c|c|c|c|c}
+\begin{array}{c|c|c|c}
   \row{\sw ~ \rsp ~ r_4 ~ \negate 2}{[\rsp - 2] \leftarrow r_4}{[107] \leftarrow 18}
       {Store $r_4$ as the return value}
   \row{\lw ~ \rra ~ \rsp ~ \negate 1}{\rra \leftarrow [\rsp - 1]}{\rra \leftarrow 27}
@@ -688,7 +691,7 @@ $\cdots$
 % H - Body
 \vspace*{0.2em}
 \[
-\begin{array}{c|c|c|c|c}
+\begin{array}{c|c|c|c}
   \row{\lw ~ r_4 ~ \rsp ~ 0}{r_4 \leftarrow [\rsp]}{r_4 \leftarrow 18}
       {Load return value to $r_4$}
   \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[105] \leftarrow 18}
@@ -736,7 +739,7 @@ $\cdots$
 %\vspace*{0.2em}
 \setcounter{pcctr}{8}
 \[
-\begin{array}{c|c|c|c|c}
+\begin{array}{c|c|c|c}
   \row{\lw ~ \rsp ~ r_4 ~ \negate 1}{r_4 \leftarrow [\rsp - 1]}{r_4 \leftarrow 18}
       {Load return value to $r_4$}
   \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[101] \leftarrow 18}
@@ -780,28 +783,29 @@ $\cdots$
 \label{fig:running-trace-b}
 \end{figure}
 
-To show a trace of the execution of this program, we need
-a low-level view of both the code and the machine it runs on. While
-our concrete implementation (Section~\leo{cite}) operates on a full
-conventional RISC-V architecture, we make a few simplifying
-assumptions here to ease the exposition.
+To show a trace of the execution of this program, we need a low-level
+view of both the code and the machine it runs on. While the concrete
+implementation of our enforcement mechanism (\Cref{sec:enforcement})
+operates on a full conventional RISC-V architecture (using the FORVIS
+simulator\leo{cite}), we make a few simplifying assumptions here to
+ease the exposition.
 
-\bcp{We should also emphasize, again, that there is no heap (if there were,
-we might put it above the stack or between the instructions and the stack)}
-First of all, we ignore the heap. We are mainly concerned
-with stack interactions so that will be the main focus. \leo{We're
-  going to come back to that at the end. Will we?} We also
-abstract away low-level details of memory layout and present a
+First of all, we ignore the heap. We are mainly concerned with stack
+interactions so that will be the main focus; integrating a heap in the
+style of \citet{AzevedoDeAmorim17} is a natural extension we discuss
+in~\Cref{sec:future}.
+%
+We also abstract away low-level details of memory layout and present a
 machine that is word-addressed, with instructions starting from
 location 0, a dedicated output at location 99, and lay the stack from
 location 100 upwards. \leo{Explain more? How to connect to realistic
   one? Observations? DMA? Interrupt handlers?}
 %
 A sketch of the memory layout at that point can be found in the top of
-\cref{fig:running-trace-b}: instructions for {\tt main} begin at
-0, the dedicated output is empty\apt{what does that mean? why not just uninitialized?}, while the (uninitialized) stack
-begins at 100. Directly below the layout, we summarize the parts of
-the register file that are relevant to the example.
+\cref{fig:running-trace-b}: instructions for {\tt main} begin at 0,
+the dedicated output is uninitialized, while the (also uninitialized)
+stack begins at 100. Directly below the layout, we summarize the parts
+of the register file that are relevant to the example.
 %
 The rest of \cref{fig:running-trace-b} details the execution of the
 program, showing the machine state at call and return points, as well
@@ -813,27 +817,32 @@ particular compilation style, calling sequences, etc. illustrated here.}
 
 \subsection{Attacker Model}
 
-\sna{Variations here collides with state variations. I propose substitutions.}
-
-\leo{TODO: Make attacker model more explicit} The execution trace
-shown in \cref{fig:running-trace-b} is an example of a
-``stack-safe'' execution: each process interacts only with the
-registers, its local stack space and its call frame. But what could go
-wrong if an attacker could hijack an arbitrary call and execute
-arbitrary code? In the rest of this section we'll go over examples of
-unsafe behaviors, before formally capturing what stack-safe means
-formally and discussing enforcement techniques from the literature
-in later sections.
+Stack safety is meant to protect a caller from a malicious callee's
+attempts to access private data or highjack its control flow. Our
+attacker model reflects this intention: we assume that the attacker
+can run arbitrary code as a caller and the enforcement mechanism
+should protect against that. Hardware and timing attacks are out of
+scope. \leo{Anything else to add here?}
+\leo{Maybe a good place to discuss calling conventions and that they
+  are essentially enforced by the policy or sth?}
+\rb{Intuition that the callee can do anything in principle, but the machine will
+halt if it does not follow the calling convention, etc.?}
 
 \subsection{Unsafe Variations}
+\sna{Variations here collides with state variations. I propose substitutions.}
+\leo{I agree there is a collision, not sure about ``substitutions''}
+
+The execution trace shown in \cref{fig:running-trace-b} is an example
+of a ``stack-safe'' execution: each process interacts only with the
+registers, its local stack space and its call frame. In the rest of
+this section we'll go over examples of unsafe behaviors, before
+formally capturing what stack-safe means formally and discussing
+enforcement techniques from the literature in later sections.
 
 \leo{TODO: Add citations of mitigation techniques}
 \rb{And for those techniques, explain how they reflect their motivating
 examples. What does each technique do for those examples? How are they
 connected to this work?}
-
-\rb{Intuition that the callee can do anything in principle, but the machine will
-halt if it does not follow the calling convention, etc.?}
 
 \paragraph*{Bad Write}
 
@@ -874,9 +883,9 @@ safety is generic and this section discusses an abstract interface to
 our machine model and some kind of static or dynamic, software- or
 hardware-enforced security monitor. We will refer back to the running
 example of the previous section for concreteness, and then,
-in~\cref{sec:micropolicies}, extend this model with a dynamic policy
-enforcement mechanism in~\cref{sec:micropolicies} based on
-\bcp{NickPaper,AndMaybeSomeOthers}.
+in~\cref{sec:enforcement}, extend this model with a dynamic policy
+enforcement mechanism based on
+\citet{DBLP:conf/sp/RoesslerD18}.
 
 \subsection{Values, States, and Observations}
 
@@ -907,19 +916,20 @@ address):
 \[\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \]
 %
 
-\leo{Other choices for observations? Where should that be discussed?}
-\bcp{But in this paragraph we are describing the particular
-choise that we make for our running example, no?  But we certainly want to
-discuss this fully someplace!}
-\leo{Here: Many observation choices. Next: Simplify:}
-Mapping a conventional architecture to this abstract interface is
-straightforward. For the running example of the previous section,
-$\WORDS$ is the set of 64-bit integers, $\REGS$ is the set $\{r_0,
-\cdots, r_{31}\} \cup \{\PCname\}$, and $\SP = r_2$. Observations are
-the writes to the special $\rout$ location: if during an execution
-step a word $w$ is written to $\rout$ then $\obs = w$, otherwise $\obs
-= \tau$.
-
+The choice of observations is an interesting one. A first approach
+would be to consider any change to the registers or memory observable.
+However, as some parts of the stack will be considered ``private''
+this choice won't work. A relaxation of this to consider all changes
+to ``non-private'' data observable could work in principle, but
+doesn't allow for an interesting weaker-but-more-efficient enforcement
+mechanism. We'll come back to this point in \Cref{sec:lazy}. On the
+other hand, we could use a particular location as an abstract output
+of our system (e.g. through DMA). This is the approach we chose for
+our running example to keep things simple. For that, $\WORDS$ is the
+set of 64-bit integers, $\REGS$ is the set $\{r_0, \cdots, r_{31}\}
+\cup \{\PCname\}$, and $\SP = r_2$. Observations are the writes to the
+special $\rout$ location: if during an execution step a word $w$ is
+written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
 
 \subsection{Policies}
 
@@ -984,17 +994,11 @@ corresponds to the lifting of our machine model to the policy setting.
 
 \subsection{Traces}
 
-\leo{Which of the machine, machine-observation, machine-policy,
-  and machine-policy-observation traces should we distinguish
-  in metavariables?}
-\rb{Should we have notation for traces somewhere here?}
-
 A trace over a type $\TRACEELEMS$ is a nonempty, finite or infinite sequence of
 $\TRACEELEMS$s. We will mostly be concerned with sequences of pairs of machine states
 and observations, called machine traces and denoted $\machT \in \MOTRACE$,
 and with sequences of triples of a machine state, a policy state, and an
 observation, denoted $\MPT \in \MPOTRACE$ and referred to as MP-traces. 
-\rb{The way the definitions are set up, one may expect MPO, but\ldots}
 
 \bcp{TODO: Let's also try to clean up the spacing a little -- many of these
   sequences of rules can be typeset on fewer lines}
@@ -1012,7 +1016,7 @@ paired with observations produced by repeated application of step:
 Since the step function is total, if \(\mach \hookrightarrow \machT\),
 then \(\machT\) must be infinite.
 
-In our running example in Figure~\cref{fig:running-example-b} we can
+In our running example in \Cref{fig:running-trace-b} we can
 see a depiction of such a trace: starting from an initial machine
 state at the very top, each instruction constructs a new machine state
 (the diff of which compared to the previous one appears in the
@@ -1028,16 +1032,14 @@ a \(\tau\):
 
 \begin{minipage}{.4\textwidth}
 \judgment{\(\neg \exists \pol_1 . \pol_0 \rightharpoonup \pol_1\)}
-         {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}\)}
+         {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_p \mpostate{\mach_0}{\pol_0}{\tau}\)}
 \end{minipage}
 \begin{minipage}{.55\textwidth}
 \judgmentthree{\(\mach_0 \stepstoobs{\obs} \mach_1\)}
               {\(\pol_0 \rightharpoonup \pol_1\)}
-              {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \machT\)}
-              {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \machT\)}
+              {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \MPT\)}
+              {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \MPT\)}
 \end{minipage}
-\rb{Shouldn't the conclusion of the first judgment use $\hookrightarrow_P$?
-  And in the second judgment, wouldn't $MO$ be $MPO$, and the third premise $\hookrightarrow_P$?}
 
 We will also use \(\pi_m\) to project the trace of machine states
 out of a trace, \(\pi_p\) to project the trace of policy states, and
@@ -1123,7 +1125,7 @@ And similarly for traces with policies:
 %      So its only the Eager implies Lazy direction that might need tweaking, but not the Test implies Eager one?}
 %    \leo{Also, it steps until it reaches an f-state or if the policy raises a fault}
 
-\paragraph*{Observational Equivalence}
+\paragraph*{Observational Similarity}
 
 We say that a trace of observations $\obsT_1$ is a prefix of $\obsT_2$
 as far as an external observer is concerned, if the sequence of
@@ -1161,18 +1163,18 @@ We then define similarity of observation traces as traces prefixing each other:
 \sna{Similarity seems less loaded?}
 \[\obsT_1 \simeq \obsT_2 \triangleq \obsT_1 \lesssim \obsT_2 \land \obsT_2 \lesssim \obsT_1\]
 
-\leo{Rephrase transition. I hate it:} There are two interesting things
-to note.  First, observation trace equivalence could alternatively be
-defined as the prefix relation but dropping the only assymetric rules
-\leo{2 + 3. TODO: name rules?}
+\leo{I still don't know how to do this transition. Maybe contrast
+with the ``perhaps surprisingly'' later?} Note that
+similarity of observation traces could alternatively be defined coinductively,
+just like the prefix relation, but by dropping the assymetric rules that allow
+for a finite trace ($\tau \lesssim \obsT$ or $w \lesssim w\obsT$)
 
-\leo{Also rephrase this.}
-Second, an infinite silent trace is a prefix of (and equivalent to)
-any other trace. While this might seem surprising at first, it makes
-sense in a timing-insensitive context: an external observer looking
-at two machine runs cannot (computably) distinguish between a machine that
-steps forever and a machine that steps for a long time before producing
-some output.
+In addition, perhaps surprisingly, an infinite silent trace is a
+prefix of (and equivalent to) any other trace. While this might seem
+surprising at first, it makes sense in a timing-insensitive context:
+an external observer looking at two machine runs cannot (computably)
+distinguish between a machine that steps forever and a machine that
+steps for a long time before producing some output.
 
 %Let the predicate \(\isinf(T)\) hold when the trace $T$ is infinite.
 %We then define {\em policy-sensitive observational equivalence}: a
@@ -1195,10 +1197,8 @@ some output.
 In this section we will describe stack safety as a formal property. We
 begin with our model of \leo{compiler-provided?} knowledge about the
 program structure, and then dive in to formal definitions local state
-encapsulation and well-bracketed control flow.
-
-\rb{Maybe provide a full definition of (eager) stack safety, here or at the end
-  of the section.}
+encapsulation and well-bracketed control flow that together constitute
+stack safety.
 
 \subsection{Program Structure}
 
@@ -1278,6 +1278,12 @@ are depicted in the figure: the state before the execution of
 instruction 27 corresponding to the return from {\tt h} and the state
 before instruction 8 corresponding to the return from {\tt g}.
 
+\medskip
+
+In the rest of this section we will implictly parameterize our
+definitions by a function map $\codemap$, a call map $\callmap$, a return
+map $\retmap$ and an entry map $\entmap$.
+
 \subsection{Local State Encapsulation}
 \label{sec:lse}
 
@@ -1329,8 +1335,7 @@ freely written into but should not be read.
 Special care is needed for the code memory corresponding to the
 callee: they are marked low confidentiality if they belong to the
 callee and high confidentiality otherwise; regardless they are always
-high integrity.\leo{That would mean we scramble some instructions, I
-  guess that makes sense.}
+high integrity.
 %
 Finally, registers and the frame of arguments to the callee are free
 for the callee to use, and are therefore tagged with low integrity and
@@ -1340,16 +1345,19 @@ low confidentiality.
   \begin{cases}
     (\LOWSEC,\HIGHINT) & \text{if } \component \in \WORDS
                          \text{ and for some } \funid, \codemap(\component) = \funid \\
-    (\HIGHSEC,\HIGHINT) & \text{else if } \component \in \WORDS
-                          \text{ and } \component \leq \mach(\SP) \negate  n \\
     (\HIGHSEC,\LOWINT) & \text{else if } \component \in \WORDS
                           \text{ and } \component \geq \mach(\SP)
                           \text{ or if } \component = \rout\\
+    (\HIGHSEC,\HIGHINT) & \text{else if } \component \in \WORDS
+                          \text{ and } \component \leq \mach(\SP) \negate  n \\
     (\LOWSEC,\LOWINT) & \text{else} \\
   \end{cases}\]
 
-Going back to our running example, recall the state of the machine
-at the call from {\tt main} to {\tt g}:
+Going back to our running example, recall the state of the machine at
+the call from {\tt main} to {\tt g}, annotated with their
+corresponding labels (not shown: the labels of the instructions
+corresponding to {\tt g} that are $(\LOWSEC, \HIGHINT)$ instead of
+$(\HIGHSEC, \HIGHINT)$):
 \vspace*{0.2em}
 % At Call to G
 % Memory Layout
@@ -1357,13 +1365,13 @@ at the call from {\tt main} to {\tt g}:
 \MemoryLabel{4em}{2em}{0}
 \MemoryLabel{21em}{2em}{99}
 \MemoryLabel{43.5em}{2em}{\SP}
-\memory{3}{\instrc}[{\makebox[0pt]{Instructions}}]%
+\memory{3}{\instrc}[{\makebox[0pt]{$(\HIGHSEC,\HIGHINT)$}}]%
 \hspace*{3pt}
 $\cdots$
-\memory{1}{white}[{\makebox[0pt]{Output}}]%
-\memory{2}{\fprivc}[{\makebox[0pt]{${\texttt{main}}_{\mathit{priv}}$}}]%
-\memory{2}{\fcallc}[{\makebox[0pt]{{\tt g}'s call frame }}]%
-\memory{6}{\unusedc}[{\makebox[0pt]{Uninitialized}}]
+\memory{1}{white}[{\makebox[0pt]{$(\HIGHSEC, \LOWINT)$}}]%
+\memory{2}{\fprivc}[{\makebox[0pt]{$(\HIGHSEC, \HIGHINT)$}}]%
+\memory{2}{\fcallc}[{\makebox[0pt]{$(\LOWSEC, \LOWINT)$}}]%
+\memory{6}{\unusedc}[{\makebox[0pt]{$(\HIGHSEC, \LOWINT)$}}]
 ~$\cdots$
 \MemoryLabel{-46.5em}{0.75em}{42}
 \MemoryLabel{-42.5em}{0.75em}{0}
@@ -1372,20 +1380,20 @@ $\cdots$
 \\
 \end{center}
 
-If $\mach$ is the state at this call, the corresponding contour would
-be:
-\[
-\mathit{Cof}(\mach,2) = \left \{
-\begin{array}{l}
-  0\ldots98\} \mapsto (\LOWSEC, \HIGHINT)\\
-  99 \mapsto (\HIGHSEC, \LOWINT)\\
-  100, 101 \mapsto (\HIGHSEC, \HIGHINT)\\
-  102, 103 \mapsto (\LOWSEC, \LOWINT)\\
-  104\ldots \mapsto (\HIGHSEC, \LOWINT)\\
-  r \mapsto (\LOWSEC, \LOWINT)\\
-\end{array}
-\right .
-\]
+%If $\mach$ is the state at this call, the corresponding contour would
+%be:
+%\[
+%\mathit{Cof}(\mach,2) = \left \{
+%\begin{array}{l}
+%  0\ldots98\} \mapsto (\LOWSEC, \HIGHINT)\\
+%  99 \mapsto (\HIGHSEC, \LOWINT)\\
+%  100, 101 \mapsto (\HIGHSEC, \HIGHINT)\\
+%  102, 103 \mapsto (\LOWSEC, \LOWINT)\\
+%  104\ldots \mapsto (\HIGHSEC, \LOWINT)\\
+%  r \mapsto (\LOWSEC, \LOWINT)\\
+%\end{array}
+%\right .
+%\]
 
 
 \paragraph*{Stack Integrity}
@@ -1398,8 +1406,8 @@ single call (from its entry point to its corresponding return), and
 then we will lift that to a property for every such subtrace of a
 callee.
 
-\definition{Trace Integrity}
-\label{def:trace-integrity}
+\definition
+
 Let $\contour$ be a contour and $\MPT$ be a (potentially infinite)
 $\MPOTRACE$. We will say $\MPT$ satisfies {\em trace integrity} with
 respect to $\contour$ if its final state (if any) agrees with its
@@ -1409,12 +1417,12 @@ initial one on all components marked $\HIGHSEC$ in $\contour$:
   \mathit{int} ~ \contour ~ \MPT \triangleq &
     \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \Rightarrow \\
   & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
-  & \forall \component. ~ \contour(\component) = \HIGHSEC \rightarrow
+  & \forall \component. ~ \contour(\component) = \HIGHSEC \Rightarrow
     \mach_e(\component) = \mach_r(\component) \\
 \end{split}\]
-\leo{TODO: DISCUSS: Figure out notation for first/last machine state in a trace}
-\sna{We could do it like this, with finiteness implicit in the existence of
-     a final state.}
+%\leo{TODO: DISCUSS: Figure out notation for first/last machine state in a trace}
+%\sna{We could do it like this, with finiteness implicit in the existence of
+%     a final state.}+1
 
 Intuitively, the caller expects to find their private data untouched
 after the callee returns. That means that if the callee never returns,
@@ -1484,7 +1492,7 @@ $(\mach_e, \pol_e)$ until the first return corresponding to $\mach_c$
 call:
 %
 $$\forall \MPT_{pre}. ~ \mpstate{\mach_e}{\pol_e} \hookrightarrow_P
-\MPT_{pre} ~ | ~ \ret{\mach_c} \rightarrow
+\MPT_{pre} ~ | ~ \ret{\mach_c} \Rightarrow
 \mathit{int}~\mathit{Cof}(\mach_c, n)~\MPT_{pre}$$
 
 \paragraph*{Stack Confidentiality}
@@ -1507,7 +1515,7 @@ confidentiality data:
 %
 \[
 \mach \approx_\contour \mach' \triangleq \forall \component .
-\contour(\component) = \LOWSEC \rightarrow \mach(\component) =
+\contour(\component) = \LOWSEC \Rightarrow \mach(\component) =
 \mach'(\component)
 \]
 %
@@ -1529,7 +1537,7 @@ a return predicate \(R \subset \MACHS\) if:
   then $\machT$ is also finite with some final state $\mach_r'$ and
   any changes from the initial states have changed in the same way:
 $$\forall \component. ~ \mach_e(\component) \not = \mach_r(\component)
-  \vee \mach_e'(\component) \not = \mach_r'(\component) \rightarrow
+  \vee \mach_e'(\component) \not = \mach_r'(\component) \Rightarrow
   \mach_r(\component) = \mach_r'(\component)$$
   In addition their observations must be equivalent:
   $$\pi_o(\MPT) \eqsim \pi_o(\machT)$$
@@ -1608,9 +1616,9 @@ For each variant state \(\mach_e' \approx_{\mathit{Cof}(\mach_c, f, n)}
 and \(R = \ret{\mach_c}\):
 
 $$\forall \MPT_{call} ~ \machT. ~
-\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT_{call} ~ | ~ \ret{\mach_c} \rightarrow$$
+\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT_{call} ~ | ~ \ret{\mach_c} \Rightarrow$$
 $$\forall \mach_e'. ~ \mach_e \approx_{\mathit{Cof}(\mach_c, f, n)} \mach_e' \wedge
-\mach_e' \hookrightarrow \machT ~ | ~ \ret{\mach_c} \rightarrow$$
+\mach_e' \hookrightarrow \machT ~ | ~ \ret{\mach_c} \Rightarrow$$
 $$\mathit{conf}~\mathit{Cof}(\mach_c, f, n) ~ (\ret{\mach_c}) ~ \MPT_{call} ~ \machT_{call}$$
 
 \subsection{Well-bracketed Control Flow}
@@ -1651,7 +1659,7 @@ trace from \(\mpstate{\mach_0}{\pol_0})\) whose current instruction
 belongs to different functions according to the function map,
 either $\mach_1$ is a valid call or a valid return:
 
-\[ \codemap(\mach_1(\PCname)) \not = \codemap(\mach_2(\PCname)) \rightarrow
+\[ \codemap(\mach_1(\PCname)) \not = \codemap(\mach_2(\PCname)) \Rightarrow
 \exists n. ~ \callmap(\mach_1(\PCname)) = n \vee
 \retmap(\mach_1) \]
 
@@ -1670,7 +1678,7 @@ A system enjoys {\em entry integrity} with regard to a call map
 \((\mach_0, \pol_0)\) and any n-transition \((\mach_c,\pol_c)\) and
 \((\mach_e, \pol_e)\) in the induced trace from
 \(\mpstate{\mach_0}{\pol_0}\), $\mach_e$ is a member of the entry map:
-\[\callmap(\mach_c(\PCname)) = n \rightarrow \entmap(\mach_e)\]
+\[\callmap(\mach_c(\PCname)) = n \Rightarrow \entmap(\mach_e)\]
 
 The same unsafe substitution violates entry integrity
 \[
