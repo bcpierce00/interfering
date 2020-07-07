@@ -211,10 +211,10 @@ Text of abstract \ldots.
 %
 %\leo{I hate the writing here, but I wanted to make a start.}
 
-The call stack is a perennially popular target for attacks
-exploiting memory safety vulnerabilities, with potential consequences
+The call stack is a perennial target for attacks
+based on memory safety vulnerabilities, with potential consequences
 ranging from leakage or corruption of private stack data to
-control-flow hijacking. To detect or prevent such attacks, many
+control-flow hijacking. To detect or prevent such attacks, a menagerie of
 software and hardware techniques for stack safety have been proposed,
 %
 including stack canaries~\citep{Cowan+98},
@@ -224,11 +224,13 @@ shadow stacks~\citep{Dang+15,Shanbhogue+19},
 capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b},
 and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \apt{Mostly from
   nick;there could be more}\bcp{How about static techniques??  We decided
-  these were also in-scope.}
+  these were also in-scope.}\bcp{... or are they?  I guess in any case we should
+list any that we know about.}
 
 But what {\em is} this ``stack safety'' of which we speak? Precise formal
-definitions are lacking in the literature; instead, the notion of safety
-is usually defined negatively, by enumerating the bad things that a safe system
+definitions are lacking in the literature; instead, the notion
+is usually defined negatively, by enumerating the bad things that a given
+enforcement mechanism
 prevents, such as corruption of return addresses, buffer overflows, or
 use of uninitialized variables.
 %with the notion usually being
@@ -236,18 +238,24 @@ use of uninitialized variables.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
-We are only aware of one, quite recent, attempt to frame a positive definition.
+Indeed, we are only aware of one---quite recent---attempt to frame a
+positive definition:
 \citet{Skorstengaard+19} define stack safety as
 the conjunction of two properties, {\em local state encapsulation} and {\em
   well-bracketed control flow}.
 They formalize these properties by defining an abstract capability-based machine
 that ``satisfies [stack safety] by construction.''
 %
-While this is an important step in the right direction, we believe
-there is still room to craft a more abstract and less intensional
-characterization of stack safety, so that we are able to answer
-questions about other enforcement mechansims. That is the goal of this
-paper.
+Although this represents an important step in the right direction, we believe
+there is still room to craft a more abstract, more generic characterization
+of stack safety that is independent of capabilities or any other specific
+enforcement
+technique.  In other words, we seek formal criteria that can be applied
+against \emph{any} stack-based system + enforcement mechanism to judge
+whether or not the combination is actually stack-safe.
+
+\iflater
+\apt{another stab.}
 \leo{I took a stab. I think it's still to dense, but captures the
   feeling of today's discussion I think}
 \apt{still needs tuning}\bcp{Yes, I think we need to go into a
@@ -262,30 +270,42 @@ paper.
   security mechanism?)}  \rb{BCP idea: contrast intrinsic
   vs. extrinsic property definition.  Remember to talk about spatial
   vs temporal safety}
+\fi
 
-Our main contribution in this paper is an alternative formal presentation of
+The key contribution of this paper is a novel\bcp{generic?} presentation of
 local state encapsulation and well-bracketed control flow using the
-conceptual and technical framework of language-based security.
+technical framework of language-based security.
+
+The intuition behind \citet{Skorstengaard+19}'s\iflater\bcp{I forget how to
+  remove the year and just have the author names here...}\fi use of the term {\em
+  local state encapsulation} is that callers should be protected from
+callees: a callee should be not be able to access or overwrite private data
+in the caller's stack frame. We formalize this intuition as a security
+property with both confidentiality and integrity components.
 %
-The underlying notion behind local state encapsulation is the intention to
-protect callers from callees: a callee should be not be able to access or
-overwrite private data in the caller's stack frame. We formalize this
-intuition as a security property with both confidentiality and integrity
-components.
-%
-Intuitively, {\em stack confidentiality} promises that a callee's
+We reflect this intuition in a formal
+{\em stack confidentiality} property, which promises that a callee's
 observable behavior is not affected by memory outside its stack frame
-(e.g. a caller's private data or uninitialized memory).  {\em Stack
-  integrity} guarantees that, if a function call ever returns, the caller's
+(e.g. a caller's private data or uninitialized memory).  Conversely, {\em stack
+  integrity} promises that, if a function call ever returns, the caller's
 stack data at the point of return will be identical to what it was before
-the call.  \bcp{We need to point out somewhere that we are only dealing with
+the call.
+
+\iflater
+\bcp{We need to point out somewhere that we are only dealing with
 stack safety, though we discuss (somewhere) how our property can be combined
 with the heap safety property of [Azevedo et al]}\leo{Should this be
-  here or in the assumptions as presented in the running example?}
+  here or in the assumptions as presented in the running
+  example?}\bcp{Probably better there.}
+\fi
 
-The underlying notion behind well-bracketed control flow is
-the need to protect the call structure itself: a callee should not be
-allowed to jump to the middle of an arbitrary block of code either
+The intuition behind \citet{Skorstengaard+19}'s {\em well-bracketed control
+  flow} is 
+the desire to protect the call graph itself: a callee should pass control
+back to the caller only by returning in the standard way (transferring
+control to the instruction following the call); it should 
+not be
+allowed to jump back into the caller's code at an arbitrary point, either
 directly (via a jump instruction) or indirectly (by corrupting stack
 data and returning). Well-bracketed control flow establishes safety
 between functions: each instruction is uniquely owned by some
@@ -294,18 +314,29 @@ at a marked entry point or returns that re-enter just after their
 associated call in the standard nested call structure.  \apt{clarify
   what we are contributing here.}
 
-To phrase both aspects of stack safety as a security property requires
-an explicit attacker model which, for this paper, is quite strong: a
-callee can execute arbitrary code, and the enforcement mechanism
-should prevent any stack safety violations. Moreover, even though
-integrity and confidentiality are standard security properties,
-applying them in the stack-safety setting raises a novel challenge:
+To phrase these two aspects of stack safety in terms of security properties
+requires an explicit attacker model. \bcp{This paragraph goes too fast: We
+  need to start by asking, informally, who is being protected and who is the
+attacker. Then we observe that real-world stack protection mechanisms tend
+to imagine attack scenarios where the callee gets confused by something it
+receives from the outside; to avoid getting into the details of how this
+happens, we simply assume that the callee can execute arbitrary code.}
+For simplicity, we choose one that is
+fairly strong: when stating the protections that a function can rely on when
+it makes a call, we assume that the callee can execute arbitrary
+instructions until it returns.
+
+\bcp{Again, here, a bigger transition, more setup, and a longer discussion
+  are needed.  This is really the crux of what we are doing!}
+Moreover, applying the standard language-based-security notions of
+integrity and confidentiality in the stack-safety setting raises a novel
+challenge:
 the notion of ``attacker'' changes during execution. Not only does a
 caller need to be protected from its callee, but the callee itself
 needs to be protected from {\em its} callees. We address this
 challenge by adjusting the integrity and confidentiality of different
 stack frames at each call or return transition between
-functions.
+functions.  \bcp{that's way too terse!}
 %\apt{connection to ``attacker'' still vague.}  \rb{Mention
 %  to varying ``accessing power'' of the attacker?  The notion of
 %  attacker changes on certain actions that are not externally
@@ -314,42 +345,50 @@ functions.
 %  need to talk about an attacker model, and this is where the
 %  technicalities get really interesting...''}
 
+\bcp{This little paragraph is our entire explanation of the second and third
+contributions!  Needs to be expanded considerably...}%
 To provide evidence that our definitions capture the inituitive notion
 of stack safety, we show that they rule out a range of exploitable bad
 behaviors.\apt{``from the literature''??}  To assess whether they are
-implementable, we compare them against the proposed capability-based
-enforcement mechanism of \citet{Skorstengaard+19} \apt{we really
-  should} and the existing tag-based enforcement mechanism of
-\citet{DBLP:conf/sp/RoesslerD18}.\leo{Is this where we would rephrase this
-  because we would only talk about it in related work?}
+implementable, we compare them against
+%proposed capability-based
+%enforcement mechanism of \citet{Skorstengaard+19} \apt{we really
+%  should} and
+the existing tag-based enforcement mechanism of
+\citet{DBLP:conf/sp/RoesslerD18}.
+%\leo{Is this where we would rephrase this because we would only talk about it in related work?}
 
-In summary, we offer the following contributions:
+In summary, we offer the following contributions:\bcp{I would still like to
+  see these points phrased in ``contribution normal form'': say exactly what
+  we did for each one (it's a bit vague---''considers,'' etc.), and
+  explicitly say why it is (a) useful, (b) challenging, and (c) novel.}
 \begin{itemize}
 \item
   % \leo{More? Extensional}\bcp{We might need to invent a word for   this---''quasi-extensional''?}
   Abstract formal properties capturing the
-  intuitive concepts of local state encapsulation and well-bracketed
+  intuitive concepts of strict local state encapsulation and well-bracketed
   control flow~(\cref{sec:lse-and-wbcf}) in a generic setting. These properties
   rule out common examples of stack memory abuse.
 \item
   A case study of the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, based on hardware tags~(\cref{sec:enforcement}).
-  This policy enforces our stack safety property, and also a (provably) stronger property that is easier to test.
+  This policy enforces our strict stack safety property, and also a (provably) stronger property that is easier to test.
   \apt{If we have no testing, do we even want to talk about the testing
     property?} \bcp{Not here; just in future work.  I guess we need to see
     whether we wind up with any results at all about testing.}
 \item
   A refinement of the case study that considers the more efficient Lazy Tagging and Clearing policy
-  of \citet{DBLP:conf/sp/RoesslerD18}~(\cref{sec:lazy}).  This policy does not enforce our property, but we give a
-  variant of the policy that does enforce a (provably) weaker variant of our
-  property.
+  of \citet{DBLP:conf/sp/RoesslerD18}~(\cref{sec:lazy}).  This policy does not enforce our strict
+  local state encapsulation property,
+  but a modified version of it using unique per-activation tags enforces
+  a (provably) weaker lazy variant of the property.
 %
-  \apt{Awkward, but the truth I fear.} \bcp{I agree the phrasing is awkward,
-    but the point we can make is still strong: To make the property easier
-    to enforce, we can slightly weaken its guarantees; the weaker version is
-    a bit more complicated to state but still retains the pragmatic
-    protections of the original.}\apt{To clarify: Nick's LT\&C policy uses
-    depth-based tags, which do not enforce even our lazy policy. So we need to
-    introduce a version of LT\&C that uses unique activation tags.}
+% \apt{Awkward, but the truth I fear.} \bcp{I agree the phrasing is awkward,
+%   but the point we can make is still strong: To make the property easier
+%   to enforce, we can slightly weaken its guarantees; the weaker version is
+%   a bit more complicated to state but still retains the pragmatic
+%%   protections of the original.}\apt{To clarify: Nick's LT\&C policy uses
+%   depth-based tags, which do not enforce even our lazy policy. So we need to
+%   introduce a version of LT\&C that uses unique activation tags.}
 
   %\item As evidence that the property is not too strong\apt{But we add the lazy version because the strict version \emph{is} too strong, in some sense.}, we show that it is
 %  realizible by
@@ -362,7 +401,7 @@ In summary, we offer the following contributions:
 %  of this property tuned for testing/verification.  We test the whole
 %  thing with a cool framework. \bcp{Which section?}
 \end{itemize}
-\Cref{sec:relwork} discusses related work, and
+\Cref{sec:relwork} discusses related work;
 \cref{sec:future} sketches directions for future work.
 %
 We begin with a running example that we refer
@@ -870,10 +909,10 @@ outputs the contents of $r_5$ that would immediately be made public.
 \paragraph*{Bad Control Flow}
 
 \[
-5 : \jalr ~ r_4 ~ \rra ~ 0 
+5 : \jalr ~ r_4 ~ \rra ~ 0
 \]
 If a jump instruction was added to {\tt main} with its target being
-the middle of the code block of {\tt h}. 
+the middle of the code block of {\tt h}.
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
@@ -999,6 +1038,7 @@ $\TRACEELEMS$s. We will mostly be concerned with sequences of pairs of machine s
 and observations, called machine traces and denoted $\machT \in \MOTRACE$,
 and with sequences of triples of a machine state, a policy state, and an
 observation, denoted $\MPT \in \MPOTRACE$ and referred to as MP-traces. 
+observation, denoted $\MPT \in \MPOTRACE$ and referred to as MP-traces.
 
 \bcp{TODO: Let's also try to clean up the spacing a little -- many of these
   sequences of rules can be typeset on fewer lines}
@@ -1105,7 +1145,7 @@ for convenience.
 %
 Let \(f\) be a predicate on machine states. Then we define \(\mach
 \hookrightarrow \machT | f\) (read ``\(\machT\) is the prefix of
-running \(\mach\) up to \(f\)''): 
+running \(\mach\) up to \(f\)''):
 
 \judgmenttwo{\(\mach \hookrightarrow \machT'\)}
             {\(\PUT(f,\machT')
@@ -1556,17 +1596,14 @@ For example, consider the unsafe substitution:
 Instead of reading the proper argument, {\tt h} reads directly from the
 secret value of {\tt x} that belongs to {\tt main}. \Cref{fig:confex}
 shows \(\mach_e\), the entry state of {\tt h}, with high confidentiality memory
-in magenta and low confidentiality in teal. Below it, the variant state
+in \high and low confidentiality in \low. Below it, the variant state
 \(\mach_e'\) agrees on low confidentiality memory, but all other addresses
 hold -5, in orange. After the last step, the return states \(\mach_r\) and
 \(\mach_r'\) should agree on every component that changed since \(\mach_e\) or
-\(\mach_e'\). Addresses 108 and 109 have changed, shown in gray, and while 109
+\(\mach_e'\). Addresses 108 and 109 have changed, shown in \tainted, and while 109
 is consistent, 108 holds either 43 or -4, so the trace does not obey
 trace confidentiality.
 \rb{Color name macros}
-
-\sna{I like instantiating the variant, tomorrow I will extend it to the
-     lazy example as well.}
 
 Meanwhile, the following unsafe substitution outputs the secret
 directly, violating the internal observation clause of confidentiality:
@@ -1629,7 +1666,7 @@ encapsulation concern themselves with the accessibility of data, and
 may hold on a wide range of programs that violate expected control
 flow. For example, if {\tt g} managed to jump in the middle of the
 code of {\tt h} with its call, confidentiality and integrity would
-still be satisfied. 
+still be satisfied.
 %
 However, that is still unwanted behavior: for example, a caller (or a
 callee) should not be able to bypass a password check by jumping (or
@@ -1722,7 +1759,7 @@ Formally:
 \item Finally, if a trace starts with the call, then we must discard the first
   unmatched return to get to the real one:
 
-  
+
   \judgmentbr{\(\callmap(\mach(\PCname)) = n \hspace{.5cm} \neg \retmap(\mach(\PCname)) \)}
              {\(\MPT = (m,p)\MPT_{\mathit{call}}\) \quad \(\Unmatched ~ \MPT_{\mathit{call}} ~ \MPT_{\mathit{matched}}\)}
              {\(\MPT_{\mathit{matched}} = \mpstate{\mach'}{\pol'} \MPT_{\mathit{tail}}\) \quad
@@ -2102,7 +2139,7 @@ rules.
         & \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \\
         & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
         & \mpstate{\mach_r}{\pol_r} \hookrightarrow_P \MPT' \Rightarrow \\
-        & \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT' 
+        & \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT'
           \Rightarrow \\
         & \pi_o(\MPT') \lesssim_O \pi_o(\machT')
       \end{split}\]
@@ -2117,14 +2154,12 @@ rules.
     \cref{fig:intex}, in which {\tt h} has written to {\tt z} and returned.
     Whether observable integrity holds depends on the continuing trace, shown
     in \cref{fig:intlex}. Above, we have the final state of \(\MPT\),
-    \(\mach_r\), with high integrity components in red and low integrity in
-    green. Next is the rolled-back state, \(\mach_r' =
+    \(\mach_r\), and the rolled-back state, \(\mach_r' =
     \mathit{roll}(\contour,\mach_e,\mach_r)\), in which high integrity
     components are restored to their values as of \(\mach_e\). Specifically,
     address 103 is restored to 0. When instruction 31 prints {\tt z} in the
     trace from \(\mach_r\), it prints 18, but in the trace from \(\mach_r'\)
     it prints 0. So observable trace integrity does not hold.
-    \rb{Color name macros}
 
     However, if {\tt g} had an additional instruction to overwrite {\tt z}
     before printing, observable trace integrity would hold.
@@ -2212,7 +2247,7 @@ rules.
       \(\pi_o(\MPT') \lesssim \pi_o(\machT')\).
 
       We write this \(\text{\sc ObsConf}_\contour ~ \MPT ~ \machT\).
-      
+
       \begin{figure}
         \confidentialitylazyexample
         \caption{Continuing from \cref{fig:confex}}
@@ -2223,12 +2258,13 @@ rules.
       \(\mach_r'\) and the restored \(\mach_r'' = \mathit{restore}(\contour,
       \mach_e,\mach_e',\mach_r,\mach_r')\). Addresses 108 and 109, in \tainted,
       are not restored; every address that was varied and not changed in one
-      of the executions is. Since 108 contains a value that originates in the
-      variation, values that depend on it might be anything; after returning
-      from {\tt g}, {\tt main} prints 95 in the trace from \(\mach_r\) and
-      some undetermined value in the trace from \(\mach_r''\). So observable
-      trace confidentiality does not hold.
-      \rb{Color name macro}
+      of the executions is. So 108 contains 43 in the trace from \(\mach_r\),
+      and after returning from {\tt g}, {\tt main} prints 85. But in the trace
+      from \(\mach_r''\), 108 contains -4, and ultimately 38 is printed.
+      So observable trace confidentiality does not hold. This example
+      illustrates the weakness of observable confidentiality as a testing
+      property; it takes until the very end of the program to determine whether
+      a tainted value actually influences observable behavior.
 
     \definition{Observable Stack Confidentiality}
 
@@ -2301,7 +2337,7 @@ capability machines, especially in terms of efficiency.
   these cases.
 
   \paragraph{Stack-derived Pointers}
-    
+
     Common programming idioms involve a caller passing a pointer to its local
     data into a callee. Using standard notions of pointer provenance [cite],
     we can extend our model to distinguish safe use of this idiom from true
