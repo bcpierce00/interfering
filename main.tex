@@ -1910,30 +1910,53 @@ we can conclude that the conservative policy also enforces stack safety.
 
 \paragraph*{End-to-end stack safety property}
 
+Integrity
+
+Confidentiality as a form of noninterference
+
 \paragraph*{Eager vs lazy testing}
 
-\rb{This part should probably be somewhere in the lazy section.}
-%
-In practice, this \emph{eager policy} is too slow to be of practical interest:
-what we really want in practice is a \emph{lazy policy} that can be efficiently
-implemented.
+The conservative policy we just described, while testable and enforceable, is
+too slow to be of practical use. What we want, instead, is a somewhat more
+permissive policy that moreover can be efficiently implemented. Most of the
+performance overhead incurred by this kind of \emph{eager policy} steps from the
+need to set stack activation tags as a frame is created and reset them as it is
+destructed, as \citet{DBLP:conf/sp/RoesslerD18} confirm in their evaluation. To
+mitigate those costs, they propose optimizations like Lazy Tagging and Lazy
+Clearing that relax and defer some of the checks of an eager policy, being more
+permissive in their allowed operations and catching violations if and when their
+effect becomes manifest.
+\rb{How much detail to go into? Refer to examples if we have the space?}
 
-Less conservative policies can be more efficient, but also harder to test.
+These \emph{lazy policies} admit more efficient implementations while being
+harder to test, given that potential violations may or may not materialize,
+requiring in turn additional bookkeeping. However, a critical observation is
+that the depth-based tagging scheme discussed so far with fail when combined
+with a lazy policy. The reason for this is that because tags are not set and
+cleared on function entry and exit points, stale tags may persist after a given
+call, and a subsequent call sharing the same depth as the old call may access
+memory contents tagged with the stale tags of a previous activation.
+\rb{Again, example?}
 
-We can also test the lazy policy, even if less efficiently, and it should
-enforce an inductive property, which may be more amenable to proving.
-%
-\rb{Would need careful phrasing.}
-%
+The lazy policy can be repaired if, instead of tagging each function activation
+with its depth in the stack, we generate a fresh activation identifier on each
+call, which allows the policy to identify stale tags from previous activations.
+Under this stricted tagging discipline, the eager policy behaves almost exactly
+like its lazy counterpart. A related mechanism was explored in the Static
+Authorities policy of \citet{DBLP:conf/sp/RoesslerD18}, which associates a
+unique activation identifier to each function, which is however shared by all
+activations of the same function in order to obtain good cacheability of tag
+rules.
+
+\rb{Parts of this discussion feel somewhat out of order...}
+
+\rb{We can also test the lazy policy, even if less efficiently, and it should
+  enforce an inductive property, which may be more amenable to proving --- this
+  should be the connection to the following section.}
+
 \rb{Implied by the property we started with?}
 
 \rb{Explain and compare what each policy enforces.}
-
-\rb{The Static Authorities differs from the Depth Isolation policy in that frame
-  ids aren't true activation ids, but unique ids associated to all activations
-  of the same function. Discuss unique activation ids and compare with depth
-  later, possibly when discussing lazy policies, as the difference becomes
-  tangible there.}
 
 \section{Lazy Stack Safety}
 \label{sec:lazy}
