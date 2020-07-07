@@ -1177,6 +1177,9 @@ begin with our model of \leo{compiler-provided?} knowledge about the
 program structure, and then dive in to formal definitions local state
 encapsulation and well-bracketed control flow.
 
+\rb{Maybe provide a full definition of (eager) stack safety, here or at the end
+  of the section.}
+
 \subsection{Program Structure}
 
 Our properties and policies are parameterized by several types of
@@ -2181,6 +2184,19 @@ rules.
 \section{Related Work}
 \label{sec:relwork}
 
+CHERI \rb{cite}
+
+\citet{Skorstengaard+19b} introduce a calling convention to preserve local state
+encapsulation and well-bracketed control flow by the use of local capabilities.
+Although the required hardware support is readily available in capability
+machines like CHERI, this technique incurs potentially prohibitive performance
+costs, because it requires the unused part of the stack to be cleared whenever a
+security boundary is crossed. In the discussion, ``while [the authors] claim
+that [their] calling convention enforces control-flow correctness, [they] do not
+prove a general theorem that shows this, because it is not clear what such a
+theorem should look like,'' noting that the correctness property enjoyed by
+their technique ``is not made very explicit.''
+
 StkTokens \citep{Skorstengaard+19} protects the stack by enforcing local state
 encapsulation and well-bracketed control flow. It does so by defining a calling
 convention that makes use of linear capabilities for stack and return pointers
@@ -2189,15 +2205,23 @@ avoid compromising their own security by following certain simple rules.
 Informally, local state encapsulation is defined by restricting accesses to the
 range of memory allocated to the current stack frame, and well-bracketed control
 flow by only allowing returns from the topmost frame to the immediately adjacent
-frame below. Formally, these properties are built into a capability machine
-defined by an overlay semantics, which is proven fully abstract with respect to
-a capability machine that replaces those abstract operations with their calling
-convention.
+frame below. Formally, it improves on \citet{Skorstengaard+19b} by building
+those properties into the semantics of a capability machine with a built-in call
+stack and call and return instructions, which is proven fully abstract with
+respect to a more concrete capability machine that replaces those
+pseudo-instructions with their calling convention.
+
+We are confident \rb{how strong a claim to make, with substantiation} that
+StkTokens satisfies the eager stack safety property, and even the stronger eager
+testing property \rb{refs}. The main limitation of StkTokens is its reliance on
+linear capabilities, as it is unclear now they could be added to practical
+capability machines, especially in terms of efficiency.
+%
+\rb{On the other hand, we know that these can be implemented as micropolicies,
+  cf. linear return capabilities in yannis-report (what about performance?)}
 
 \rb{There are quite a few parallels at various levels, although the definitions
-  are overall more implicit and not given formally. A limiting factor is the
-  lack of linear capabilities in existing models like CHERI---although these
-  could be implemented by a micropolicy.}
+  are overall more implicit and not given formally.}
 
 \section{Future Work}
   \label{sec:future}
