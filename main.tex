@@ -488,12 +488,16 @@ $\cdots$
         {Set argument to 0}
     \row{\sw ~ \rsp ~ r_0 ~ \negate 1}{[\rsp-1] \leftarrow r_0}{[103] \leftarrow 0}
         {Zero out result\apt{why?}}
-    \row{\jal ~ \rra ~ 20}{??}{\PCname \leftarrow 20; ~ \rra \leftarrow \thepcctr}
+    \row{\jal ~ \rra ~ 20}{\rra \leftarrow \PCname + 1; ~ \PCname \leftarrow 20}{\rra \leftarrow \thepcctr; ~ \PCname \leftarrow 20}
         {Make the call}
   \end{array}
   \]
   ~ \\
   ~\\
+  \apt{How's that description for last line?}
+  \apt{Where did these RISC-V insruction formats come from? I think some of them are just wrong, e.g.
+    $\jal$ takes a PC-relative argument, not an absolute one, and the proper way to code a return to $\rra$ is $\jalr  ~ \rra ~ r_0$.
+  But also the instruction operand ordering is awkward. Why not use standard AT\&T syntax?}
 % At Call to G
 % Memory Layout
 \begin{center}
@@ -778,7 +782,7 @@ location 100 upwards. \leo{Explain more? How to connect to realistic
 %
 A sketch of the memory layout at that point can be found in the top of
 \cref{fig:running-trace-b}: instructions for {\tt main} begin at
-0, the dedicated output is empty, while the (uninitialized) stack
+0, the dedicated output is empty\apt{what does that mean? why not just uninitialized?}, while the (uninitialized) stack
 begins at 100. Directly below the layout, we summarize the parts of
 the register file that are relevant to the example.
 %
@@ -1548,106 +1552,102 @@ $$\mathit{conf}~\mathit{Cof}(\mach_c, f, n) ~ \MPT_{pre} ~ \machT_{pre}$$
 \subsection{Well-bracketed Control Flow}
 \label{sec:wbcf}
 
-Our integrity and confidentiality properties concern themselves with
-data, and may hold on a wide range of programs that violate expected
-control flow.  But well-bracketed control flow prevents this style of
-attack by guaranteeing that every jump between functions is either a
-call or a return, and each return jumps to the instruction after a
+Both the integrity and confidentiality components of local state
+encapsulation concern themselves with the accessibility of data, and
+may hold on a wide range of programs that violate expected control
+flow. For example, if {\tt g} managed to jump in the middle of the
+code of {\tt h} with its call, confidentiality and integrity would
+still be satisfied. 
+%
+However, that is still unwanted behavior: for example, a caller (or a
+callee) should not be able to bypass a password check by jumping (or
+returning) in the middle of a block of code - even if such an execution
+would ostensibly satisfy local state encapsulation.
+%
+Stack safety is traditionally associated with preventing such unwanted
+flows: every jump between functions should either be a call or a
+return, and each return should to the instruction after its
 corresponding call.
 
-\leo{Also dumping in relevant wbcf discussion part. TODO: merge}
-    Some forms of security rely on protected control flow. In a classic
-    example, a system call that launches a missile might be gated behind code
-    that checks a password. A piece of malicious code can jump into the middle
-    of the sequence and execute the system call without the appropriate password,
-    and still obey integrity if the malicious code never returns to its caller.
-    Integrity here protects data, not privileges. But such a jump does violate
-    eager stack confidentiality if the attacker jumps beyond its own function's
-    instructions without performing a designated call or returning to an
-    appropriate site.
-
-    A jump to a function's own code does not violate either, even if done using
-    nefarious means such as return-oriented programming (ROP). Our model would
-    permit such a jump within the function, so privilege is not elevated by
-    permitting ROP in this case.
-
-    But, our policies do enforce orthogonal control flow properties that
-    protect from calls that enter outside of valid entry points and from all
-    invalid returns, even if they would not escalate privilege. Most notably
-    {\em well-bracketed control flow}, below.
+To formally capture this aspect of stack safety, we introduce three
+security properties that rely on the underlying knowledge of the
+program structure (code maps, function maps, return maps, and entry
+maps): {\em control separation} ensures the validity of transition
+sources between functions, {\em entry integrity} ensures the validity
+of call targets, and {\tt return integrity} ensures the validity of
+return targets.
 
 \definition{Control Separation}
-A system enjoys {\em control separation} with regard to a code map
-\(\codemap\), a call map \(\callmap\), and a return map \(\retmap\) if
-for any initial state \(\mach_0\) and any adjacent pair of states
-\(\mach_1\) and \(\mach_2\) in the induced trace from
-\(\mpstate{\mach_0}{\pinit(\mach_0)}\), if
-\(\codemap(\mach_1(\PCname)) \not = \codemap(\mach_2)\), then either
-\(\callmap(\mach_1(\PCname)) = n\) for some \(n\), or
-\(\retmap(\mach_1)\).
+
+A system enjoys {\em control separation} with regard to a function map
+\(\codemap\), a call map \(\callmap\), and a return map \(\retmap\),
+if for any initial state \((\mach_0, \pol_0)\) and any adjacent pair
+of states \((\mach_1,\pol_1)\) and \((\mach_2,\pol_2)\) in the induced
+trace from \(\mpstate{\mach_0}{\pol_0})\) whose current instruction
+belongs to different functions according to the function map,
+either $\mach_1$ is a valid call or a valid return:
+
+\[ \codemap(\mach_1(\PCname)) \not = \codemap(\mach_2(\PCname)) \rightarrow
+\exists n. ~ \callmap(\mach_1(\PCname)) = n \vee
+\retmap(\mach_1) \]
 
 \definition{Entry Integrity}
+
 A system enjoys {\em entry integrity} with regard to a call map
 \(\callmap\) and entry map \(\entmap\) if for any initial state
-\(\mach_0\) and any adjacent pair of states \(\mach_c\) and
-\(\mach_e\) in the induced trace from
-\(\mpstate{\mach_0}{\pinit(\mach_0)}\), if
-\(\callmap(\mach_c(\PCname)) = n\) then \(\entmap(\mach_e)\).
+\((\mach_0, \pol_0)\) and any n-transition \((\mach_c,\pol_c)\) and
+\((\mach_e, \pol_e)\) in the induced trace from
+\(\mpstate{\mach_0}{\pol_0}\), $\mach_e$ is a member of the entry map:
+\[\callmap(\mach_c(\PCname)) = n \rightarrow \entmap(\mach_e)\]
 
 \definition{Return Integrity}
-Return integrity captures the expected behavior of marked returns with
-regard to their call points. We begin by defining a coinductive
-relation \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT_1
-\MPT_2\). Given a call map \(\callmap\) and return map \(\retmap\),
-\(\MPT\) is related to \(\MPT'\) if \(\MPT'\) is a suffix of \(\MPT\)
-whose head is the first unmatched return in \(\MPT\). So if \(\MPT\)
-starts with a return, it is related to itself:
 
-  \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
-           {\(\retmap(\mach(\PCname))\)}
-      {\(\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\
-        \mpstate{\mach}{\pol}\)}
+\newcommand*{\Unmatched}{\mathit{Unmatched}}
+
+Return integrity captures the expected behavior of marked returns with
+regard to their call points. Given a call map $\callmap$ and a return
+map $\retmap$, we begin by defining a coinductive relation
+$\Unmatched$ over two $\MPOTRACE$ $\MPT$ and $\MPT'$, if $\MPT'$ is a
+suffix of $\MPT$ whose head is the first unmatched return in $\MPT$.
+
+Formally:
+\begin{itemize}
+\item A trace that starts with a return is related to itself:
+
   \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
               {\(\retmap(\mach(\PCname))\)}
-      {\(\mathit{Unmatched}\ \callmap\ \retmap\ \mpstate{\mach}{\pol}\MPT\
-              \mpstate{\mach}{\pol}\MPT\)}
+              {\(\Unmatched ~ \mpstate{\mach}{\pol} ~ \mpstate{\mach}{\pol}\)}
+  \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
+              {\(\retmap(\mach(\PCname))\)}
+              {\(\Unmatched ~ \mpstate{\mach}{\pol}\MPT ~ \mpstate{\mach}{\pol}\MPT\)}
 
-If \(\MPT\) starts with a non-call, non-return state, its unmatched
-return must come later:
+\item If a trace \(\MPT\) starts with a non-call, non-return state,
+  its unmatched return must come later:
 
   \judgment{\(\callmap(\mach(\PCname)) = \bot
               \hspace{.5cm} \neg \retmap(\mach(\PCname))
+              \Unmatched ~ \MPT ~ \MPT'\)}
+           {\(\Unmatched ~ \mpstate{\mach}{\pol}\MPT ~ \MPT'\)}
 
-              \mathit{Unmatched}\ \callmap\ \retmap\ \MPT\ \MPT'\)}
-           {\(\mathit{Unmatched}\ \callmap\ \retmap\
-            \mpstate{\mach}{\pol}\MPT\ \MPT'\)}
+\item Finally, if a trace starts with the call, then we must discard the first
+  unmatched return to get to the real one:
 
-And most intricately, if \(\MPT\) starts with a call, we must find the
-return that matches it, which will be the unmatched return once we
-step past the call. Then the first unmatched return beyond it is the
-true unmatched return.
-
-    \judgment{\(\callmap(\mach(\PCname)) = n
-              \hspace{.5cm} \neg \retmap(\mach(\PCname))\)
-
-              \(\MPT = \mpstate{\mach}{\pol} \MPT_{\mathit{call}}\)
-
-              \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT_{\mathit{call}}\ \MPT_{\mathit{matched}}\)
-
-              \(\MPT_{\mathit{matched}} = \mpstate{\mach'}{\pol'} \MPT_{\mathit{tail}}\)
-
-              \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT_{\mathit{tail}}\ \MPT_{\mathit{unmatched}}\)}
-            {\(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT\ \MPT_{\mathit{unmatched}}\)}
-
+  
+  \judgmentbr{\(\callmap(\mach(\PCname)) = n \hspace{.5cm} \neg \retmap(\mach(\PCname)) \)}
+             {\(\MPT = (m,p)\MPT_{\mathit{call}}\) \quad \(\Unmatched ~ \MPT_{\mathit{call}} ~ \MPT_{\mathit{matched}}\)}
+             {\(\MPT_{\mathit{matched}} = \mpstate{\mach'}{\pol'} \MPT_{\mathit{tail}}\) \quad
+              \(\Unmatched ~ \MPT_{\mathit{tail}} ~ \MPT_{\mathit{unmatched}}\)}
+            {\(\Unmatched ~ \MPT ~ \MPT_{\mathit{unmatched}}\)}
+\end{itemize}
 A system enjoys {\em return integrity} with regard to a call map
-\(\callmap\) and return map \(\retmap\) if for any initial state
-\(\mach_0\) and any call state and policy state \(\mach_c\) and
-\(\pol_c\) in the induced trace from
-\(\mpstate{\mach_0}{\pinit(\mach_0)}\), if \(\mpstate{\mach_c}{\pol_c}
-\hookrightarrow_P \MPT\) and \(\mach_r\) is the first unmatched
-return, with \(\mathit{Unmatched}\ \callmap\ \retmap\ \MPT \ \MPT'\)
-and \(\mach_r\) the first machine state of \(\MPT'\), then
-\(\ret{\mach_c}\ \mach_r\).
+\(\callmap\) and return map \(\retmap\) if for any initial state pair
+\((\mach_0, \pol_0)\) and any state pair \((\mach_c, \pol_c)\)
+corresponding to a call in its induced trace, if
+\(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P \MPT\) and \(\mach_r\)
+is the first unmatched return such that for some $\pol_r$
+\[ \Unmatched ~ \MPT ~ (m_r,p_r)\MPT',\]
+then $\mach_r$ corresponds to a return state for $\mach_c$:
+\[\ret{\mach_c}\ \mach_r\]
 
 \definition{Well Bracketed Control Flow}
 The above properties are somewhat orthogonal, but together they
