@@ -992,6 +992,12 @@ out of a trace, \(\pi_p\) to project the trace of policy states, and
 \(\pi_o\) to project the observations, with \(\pi_m\) and \(\pi_o\) overloaded
 for machine traces and MP-traces.
 
+\paragraph*{Head and Last}
+
+We take the first element of a trace with \(\head(\Trace)\), which is a total
+function since traces are non-empty, and the final element (if one exists) with
+\(\last(\Trace)\), which is partial.
+
 \paragraph*{Until}
 The ``Until'' operation \(\PUT(\Trace,f)\)
 %\bcp{Wouldn't
@@ -1073,8 +1079,6 @@ non-silent observations of $\obsT_1$ is a prefix of those of
 $\obsT_2$; that is we operate up to deletion of \(\tau\) observations,
 coinductively:
 
-%\leo{TODO: We really need a better layout than centered paragraphs.}
-
 \begin{minipage}{.3\textwidth}
   \judgment{}{\(\obsT \lesssim \obsT\)}
 \end{minipage}
@@ -1097,9 +1101,6 @@ coinductively:
 \judgment{\(\obsT_1 \lesssim \obsT_2\)}
          {\(w\obsT_1 \lesssim w\obsT_2\)}
 \end{minipage}
-
-% Fixed by Andrew:
-%\COQ{This is the same as the coq version minus a redundant case.}
 
 We then define similarity of observation traces as traces prefixing each other:
 
@@ -1349,15 +1350,16 @@ $\MPOTRACE$. We will say $\MPT$ satisfies {\em trace integrity} with
 respect to $\contour$ if its final state (if any) agrees with its
 initial one on all components marked $\HIGHSEC$ in $\contour$:
 %
-\[
-\mathit{int} ~ \contour ~ \MPT \triangleq
-\left \{ \begin{array}{ll}
-  \mathit{True}, & \text{if $\MPT$ is infinite}\\
-  \forall \component. ~ \contour(\component) = \HIGHSEC \rightarrow m_0(\component) = m_f(\component), & \text{otherwise} \\
-\end{array}
-\right .
-\]
+\[\begin{split}
+  \mathit{int} ~ \contour ~ \MPT \triangleq &
+    \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \Rightarrow \\
+  & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
+  & \forall \component. ~ \contour(\component) = \HIGHSEC \rightarrow
+    \mach_e(\component) = \mach_r(\component) \\
+\end{split}\]
 \leo{TODO: DISCUSS: Figure out notation for first/last machine state in a trace}
+\sna{We could do it like this, with finiteness implicit in the existence of
+     a final state.}
 
 Intuitively, the caller expects to find their private data untouched
 after the callee returns. That means that if the callee never returns,
@@ -1387,18 +1389,14 @@ integrity memory is in red, while low integrity is in green; at the end of the
 trace address 103 should match the initial state, and does not. So trace
 integrity is violated.
 
-
 Trace integrity characterizes the trace corresponding to a single
 callee. Going back to our running example, such a trace would be, for
 instance, the entire trace of {\tt h} from instruction 40 to
-instruction 47. This trace is repeated in \Cref{fig:intex}, and
-recolored: \leo{Explain colors here - not sure I agree with the
-  current choice}
-\leo{Old relevant text:
-For an example see \cref{fig:intex}, in which {\tt h} writes its return
-value to {\tt g}'s return location the stack rather than its own. That address
-is high integrity (red), and so writing to it causes the property to fail.
-}
+instruction 47. This trace is repeated in \Cref{fig:intex}, with the initial
+and final states colored to show the contour; high confidentiality
+components in magenta, low in teal. At the end of the trace addresses 103
+and 108 have both changed; since 103 was high confidentiality, the trace
+does not enjoy trace integrity.
 
 We now lift this definition to an integrity property for a complete
 execution trace. We do this by requiring that trace integrity holds
@@ -1492,13 +1490,16 @@ For example, consider the unsafe substitution:
 Instead of reading the proper argument, {\tt h} reads directly from the
 secret value of {\tt x} that belongs to {\tt main}. \Cref{fig:confex}
 shows \(\mach_e\), the entry state of {\tt h}, with high confidentiality memory
-in red and low confidentiality in green. Below it, the variant state
-\(\mach_e'\) agrees on low confidentiality memory, but the rest might have
-any value, in yellow. After the last step, the return states \(\mach_r\) and
+in magenta and low confidentiality in teal. Below it, the variant state
+\(\mach_e'\) agrees on low confidentiality memory, but all other addresses
+hold -5, in orange. After the last step, the return states \(\mach_r\) and
 \(\mach_r'\) should agree on every component that changed since \(\mach_e\) or
-\(\mach_e'\). Addresses 108 and 109 have changed, shown in pink, and while 109
-is consistent, 108 will not hold 43 in all variants, so the trace does not obey
+\(\mach_e'\). Addresses 108 and 109 have changed, shown in gray, and while 109
+is consistent, 108 holds either 43 or -4, so the trace does not obey
 trace confidentiality.
+
+\sna{I like instantiating the variant, tomorrow I will extend it to the
+     lazy example as well.}
 
 Meanwhile, the following unsafe substitution outputs the secret
 directly, violating the internal observation clause of confidentiality:
@@ -1940,6 +1941,8 @@ enforce an inductive property, which may be more amenable to proving.
       it is called exactly this when discussing the example below). The rollback
       may also be a definition of its own to match the granularity of
       definitions in previous sections.}
+
+    \sna{Use the \(n\)-transition language above in all of these.}
 
     \paragraph{Rolling Back to Idealized State}
       Observable integrity will weaken eager integrity by allowing a returned
