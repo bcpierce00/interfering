@@ -794,7 +794,7 @@ as describing the full effect of each instruction in detail.
 \apt{Need to clarify to what extent our properties depend on the
 particular compilation style, calling sequences, etc. illustrated here.}
 
-\subsection{Attacker Model + Unsafe Variations}
+\subsection{Attacker Model}
 
 \sna{Variations here collides with state variations. I propose substitutions.}
 
@@ -808,6 +808,8 @@ unsafe behaviors, before formally capturing what stack-safe means
 formally and discussing enforcement techniques from the literature
 in later sections.
 
+\subsection{Unsafe Variations}
+
 \leo{TODO: Add citations of mitigation techniques}
 \rb{And for those techniques, explain how they reflect their motivating
 examples. What does each technique do for those examples? How are they
@@ -816,7 +818,7 @@ connected to this work?}
 \rb{Intuition that the callee can do anything in principle, but the machine will
 halt if it does not follow the calling convention, etc.?}
 
-\paragraph*{Bad write}
+\paragraph*{Bad Write}
 
 \[
 44 : ~ \sw ~ \rsp ~ r_4 ~ \negate 5
@@ -827,7 +829,7 @@ effect of storing the contents of $r_4$ as the result of {\tt h}. If
 instead it wrote to location $[\rsp - 5]$ then it would be overriding
 private data (the return address) belonging to {\tt g}.
 
-\paragraph*{Bad read}
+\paragraph*{Bad Read}
 
 \[
 30 : ~ \lw ~ r_5 ~ \rsp ~ \negate 8
@@ -839,13 +841,13 @@ loaded the contents of location $[\rsp - 8]$, it would obtain access
 to {\tt main}'s private information. Worse, since the next instruction
 outputs the contents of $r_5$ that would immediately be made public.
 
-\paragraph*{Control flow}
+\paragraph*{Bad Control Flow}
 
-\leo{What should we do here? Overwrite our own ra and return?}
-
-\paragraph*{Reusing call frames}
-
-\leo{TODO}
+\[
+5 : \jalr ~ r_4 ~ \rra ~ 0 
+\]
+If a jump instruction was added to {\tt main} with its target being
+the middle of the code block of {\tt h}. 
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
@@ -1631,6 +1633,14 @@ either $\mach_1$ is a valid call or a valid return:
 \exists n. ~ \callmap(\mach_1(\PCname)) = n \vee
 \retmap(\mach_1) \]
 
+For example, consider the unsafe substitution:
+\[
+5 : ~ \jalr ~ r_4 ~ \rra ~ 0
+\]
+This violates control separation as the instruction that causes a
+function switch is not a valid call (or a return) according to the
+call map.
+
 \definition{Entry Integrity}
 
 A system enjoys {\em entry integrity} with regard to a call map
@@ -1639,6 +1649,16 @@ A system enjoys {\em entry integrity} with regard to a call map
 \((\mach_e, \pol_e)\) in the induced trace from
 \(\mpstate{\mach_0}{\pol_0}\), $\mach_e$ is a member of the entry map:
 \[\callmap(\mach_c(\PCname)) = n \rightarrow \entmap(\mach_e)\]
+
+The same unsafe substitution violates entry integrity
+\[
+5 : ~ \jalr ~ r_4 ~ \rra ~ 0
+\]
+as its target (instruction 42) is not an established entry point for
+{\tt h} according to the entry map.
+
+\leo{Note something about not enforcing control flow integrity
+  with allowing a call from {\tt main} to {\tt h}?}
 
 \definition{Return Integrity}
 
@@ -1689,7 +1709,19 @@ is the first unmatched return such that for some $\pol_r$
 then $\mach_r$ corresponds to a return state for $\mach_c$:
 \[\ret{\mach_c}\ \mach_r\]
 
+For example, if we added an instruction between 45 and 46:
+\[
+45.5: ~ \addi ~ \rra ~ r_0 ~ \negate 19
+\]
+This would cause the return from {\tt h} to go to instruction 8 and
+return to {\tt main} instead of {\tt g}. While the instruction that
+causes the return would still be a valid return (satisfying control
+separation), the state after the return would not correspond to an
+$\Unmatched$ return for {\tt g}'s call to {\tt h}, violating return
+integrity.
+
 \definition{Well Bracketed Control Flow}
+
 The above properties are somewhat orthogonal, but together they
 capture a standard notion of control flow for a stack: functions keep
 their code separate outside of calls and returns, calls respect
