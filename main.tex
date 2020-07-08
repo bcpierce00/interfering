@@ -1848,21 +1848,21 @@ To control this monitor, we use a programming model that allows fine-grained
 manipulation of metadata tags to encode so-called \emph{micropolicies}
 \rb{cite}.
 
-In such a system, all memory addresses, registers and the program counter are
-enriched with an abstract metadata tag, which can point to the representation of
-an arbitrary data structure. A micropolicy is thus defined by a collection of
-rules to be checked as each instruction executes and together define the
-transfer function of the security policy. Each rule inspects the tags associated
-to the inputs of an instruction (PC, registers, memory) as well as the
-instruction opcode itself, and produces one of two outcomes: either the
-instruction is allowed to execute (and tags for the new PC and its result are
-produced and assigned to those), or the machine fail-stops with a policy
+In such a system, all memory addresses and registers (including the program
+counter) are enriched with an abstract metadata tag, which can point to the
+representation of an arbitrary data structure. A micropolicy is thus defined by
+a collection of rules to be checked as each instruction executes and together
+define the transfer function of the security policy. Each rule inspects the tags
+associated to the inputs of an instruction (PC, registers, memory) as well as
+the instruction opcode itself, and produces one of two outcomes: either the
+instruction is allowed to execute (and generates and assigns tags for the new PC
+and the result of the operation), or the machine fail-stops with a policy
 violation.
 
 Efficient execution of these micropolicies relies on hardware implementations
 such as the PUMP architecture \rb{cite}, which include a monitor rule cache that
 maps tag inputs to outputs and a mechanism to trap misses to software handlers
-and thereby computes the transfer function of the software-defined policy.
+and thereby compute the transfer function of the software-defined policy.
 Previous work has shown that a wide range of micropolicies can be defined and
 enforced efficiently \rb{cite}.
 %
@@ -1871,34 +1871,38 @@ policies}
 
 \paragraph*{A conservative policy}
 %
-The first micropolicy we present for eager stack safety is very similar to the
-Depth Isolation policy presented by Roessler and DeHon \rb{cite}. Their policies
-tag the stack memory with ownership information associated to each stack frame
-(and to each separate object inside that frames, a more finely grained access
-control that we do not need to consider), and registers holding stack pointers
-with matching access permission information. Beyond those capabilities, the
-compiler generates designated sequences of instructions with special tags that
-grant them permission to manage the stack.
+The first micropolicy we present to enforce the definition of stack safety
+developed in \cref{sec:lse-and-wbcf} is very similar to the Depth Isolation
+policy presented by \citet{DBLP:conf/sp/RoesslerD18}. Their policy tags the
+stack memory with ownership information associated to each stack frame (and to
+each separate object inside that frames, a more finely grained access control
+that we do not need to consider here), and registers holding stack pointers with
+matching access permission information. Beyond those capabilities, the compiler
+generates designated sequences of instructions with special tags that grant them
+permission to manage the stack, say during calls and returns. \rb{Conceivably on
+alloc operations, etc., which we have not yet mentioned.}
 
 Our micropolicy works as follows. We assume for ease of exposition that no
 arguments are passed on the stack \rb{Come back to this later?}. Initially, the
-entire stack is tagged as unused with $\tagNoDepth$ \rb{actually, the ``initial
-  frame'' should be tagged with its proper depth}, and the {\PCname} carries in
-its tag at all times the depth of the current activation, starting with
-$\tagPCDepth{0}$. The current activation depth needs to change exactly at those
-points in the program where the contour of the stack safety property changes:
+entire stack is tagged as unused with an $\tagNoDepth$ tag \rb{actually, the
+``initial frame'' should be tagged with its proper depth}, and the {\PCname}
+carries in its tag at all times the depth of the current activation, starting
+with a $\tagPCDepth{0}$ tag. The current activation depth needs to change
+exactly at those points in the program where the contour of the stack safety
+property changes:
 
 \begin{itemize}
 
-\item From caller to callee, when the machine executes an instruction tagged as
-  belonging to the call map with $\tagCall$. At this point, the {\PCname} depth
-  is incremented to, say $\tagPCDepth{n}$; on function entry, the locations of
-  the new frame is marked $\tagStackDepth{n}$.
+\item From caller to callee, when the machine executes an instruction tagged
+  with $\tagCall$ as belonging to the call map. At this point, the current
+  {\PCname} depth $n$ is incremented to $\tagPCDepth{n + 1}$; on function entry,
+  the locations of the new frame is marked $\tagStackDepth{n + 1}$.
 
-\item From callee back to caller, when execution reaches the instruction
-  immediately following the original call instruction and the $\SP$ is the same
-  as at the time of that call. At this point, the {\PCname} is decremented;
-  previously, the locations of the old frame are restored to $\tagNoDepth$.
+\item From callee back to caller, when execution reaches the corresponding
+  return instruction for the call instruction, as defined by
+  $\ret{\mach_c}\ \mach_r$. At this point, the {\PCname} tag is decremented.
+  Prior to this point, the locations of the old frame have been restored to
+  $\tagNoDepth$.
 
 \end{itemize}
 
@@ -1925,14 +1929,15 @@ to appear at the beginning and end of each function:
   of stack frames would be considered part of these sequences.}
 
 These sequences also enforce the $\SP$ discipline. When stack frames are of
-fixed size, it suffices to increment $\SP$ and give it with a special tag in the
-header sequence, which is later checked after decrementing $\SP$ during the exit
-sequence to authorize the return. The well-formedness of the blessed sequences
-can be checked statically. Only programs whose sequences are well-formed are
-protected by the micropolicy, although programs are still protected (by
-fail-stopping) even if the intended sequences are missing. By tracking the
-execution of the blessed sequences in the {\PCname} tag state, the micropolicy
-ensures that the entry sequence is executed correctly a declared call.
+fixed size, it suffices to increment $\SP$ and tag it with a dedicated tag in
+the header sequence, which is later checked after decrementing $\SP$ during the
+exit sequence to authorize the return. The well-formedness of the blessed
+sequences can be checked statically. Only programs whose sequences are
+well-formed are protected by the micropolicy, although programs are still
+protected (by fail-stopping) even if the intended sequences are missing. By
+tracking the execution of the blessed sequences in the tag state of the
+{\PCname} register, the micropolicy ensures that the entry sequences of calls
+declared in the call map are executed correctly.
 
 % If anything overwrites the SP in between, the exit sequence will fail, which is safe.
 
@@ -1960,57 +1965,78 @@ operate only on the corresponding stack frame, tagged $\tagStackDepth{n}$.
 
 \paragraph*{Testing the conservative policy}
 %
-This conservative policy is can be shown to satisfy an eager \emph{testing
-property}, which enforces lockstep and performs integrity and confidentiality
-tests for a stack of running variants at each step.
+This conservative policy can be shown to satisfy an eager \emph{testing
+property}, which at each step of the computation performs integrity and
+confidentiality tests for a stack of running variants, which are kept in
+lockstep with the original machine.
 
-\definition{Eager integrity test}
+\definition{Stack integrity test}
   Given two machine states $\mach$ and $\mach'$ and a contour $\contour$, these
-  satisfy the \emph{eager integrity test} if their high-integrity components
+  satisfy the \emph{stack integrity test} if their high-integrity components
   match:
   \[
     \mathit{int}_T ~ \contour ~ \mach ~ \mach' \triangleq
     \forall \component . ~
     \contour(\component) = \HIGHINT \rightarrow
     \mach(\component) = \mach'(\component)
-    \]
+  \]
 
-\definition{Eager confidentiality test}
-  Given two machine states $\mach_1$ and $\mach_2$ with stepping states and
-  observations $\mach_1 \stepstoobs{\obs_1} \mach_1'$ and $\mach_2
-  \stepstoobs{\obs_2} \mach_2'$ these satisfy the \emph{eager confidentiality
-  test} if their observations and changed components coincide:
+\definition{Stack confidentiality test}
+  Given two machine states $\mach_1$ and $\mach_2$ with stepping machine states
+  and observations $\mach_1 \stepstoobs{\obs_1} \mach_1'$ and $\mach_2
+  \stepstoobs{\obs_2} \mach_2'$, all these satisfy the \emph{stack
+    confidentiality test} if their observations and changed components coincide:
   \[
-    \mathit{conf}_T ~ \mach_1 ~ \obs_1 ~ \mach_1' ~ \mach_2 ~ \obs_2 ~ \mach_2' ~ \triangleq
+    \mathit{conf}_T ~ \mach_1 ~ \mach_2 ~ \obs_1 ~ \obs_2 ~ \mach_1' ~ \mach_2' ~ \triangleq
     \obs_1 = \obs_2 \wedge \forall \component . ~
    (     \mach_1(\component) \neq \mach_1'(\component)
     \vee \mach_2(\component) \neq \mach_2'(\component))
     \rightarrow \mach_1'(\component) = \mach_2'(\component)
   \]
 \apt{scoping of $\forall$ is ambiguous.}
-\rb{Fix notations, including for properties below.}
+\rb{Fix notations, including for properties below.
+  In particular, note that the last four arguments could be computed from the
+  first two and it may be clearer to elide them.}
 \newcommand{\vse}{\mathit{vse}}
 \newcommand{\VSES}{\mathit{VSE}}
 \newcommand{\vs}{\mathit{vs}}
 \newcommand{\VSS}{\mathit{VS}}
 
 \definition{Variant stacks}
-  The testing property keeps track of execution information on a stack whose
-  elements record an initial machine, an initial and current variant of the
-  machine, a contour and a return map:
+  The testing property keeps track of relevant information on a stack whose
+  elements represent variants of the machine by recording an initial machine
+  state, an initial and current variant of the machine, a contour and a return
+  map:
+%
   $$\vse \in \VSES ::= \MACHS \times \MACHS \times \MACHS \times \CONTOURS \times \RETMAPS$$
   $$\vse = (\mathit{init\_machine}(\vse), \mathit{init\_variant}(\vse), \mathit{curr\_variant}(\vse), \contour(\vse), \mathit{ret}(\vse))$$
   $$\vs \in \VSS$$
-  Given the current machine state $\mach$, a stack $\vs$ is \emph{well-formed}
-  with respect to it if:
+%
+  Given a machine state $\mach$, a stack $\vs$ is \emph{well-formed} with
+  respect to it if the stack is nonempty, the return map of the bottom element
+  is the false property, and for each element $\vse \in \vs$:
   \begin{itemize}
-  \item The current variant is indeed a variant of the current state.
-  \item The stack is nonempty and the bottom return map is the false property.
-  \item The current state is in the trace of every initial machine.
-  \item The variant state is in the trace of its own initial variant.
+  \item $\mathit{curr\_variant}(\vse)$ is a variant of $\mach$.
+  \item $\mach$ is in the trace $\machT$ of its initial machine,
+    $\mathit{init\_machine}(\vse) \hookrightarrow \machT$.
+  \item Its variant state $\mathit{curr\_variant}(\vse)$
+    is in the trace of its initial variant,
+    $\mathit{init\_variant}(\vse) \hookrightarrow \machT$.
   \item The return function is in the return map if not the last element. \rb{TODO}
-  \item All contours have public registers.
+  \item The registers of its contour $\contour(\vse)$ are public.
   \end{itemize}
+
+\definition{Variant stack test}
+%
+  Our testing property extends the basic tests above to whole variant stacks.
+  Given a machine that steps $(\mach, \pol) \hookrightarrow_P (\mach', \pol',
+  \obs)$, say that a variant stack $\vs$ that is well-formed with respect to
+  $\mach$ safisfies the \emph{variant stack test} if for each variant element
+  $\vse$, the element can take a step $\mathit{curr\_variant}(\vse)
+  \stepstoobs{\obs} \mach'$ while satisfying the stack integrity test
+  $\mathit{int}_T ~ \contour(\vse) ~ \mach ~ \mach'$ and stack confidentiality
+  test $\mathit{conf}_T ~ \mach ~ \mach'$ with regard to the original machine
+  state. We write this $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$.
 
 \definition{Eager testing property}
   Let $\callmap$ a call map and $\codemap$ a code map. Given a state
@@ -2020,24 +2046,24 @@ tests for a stack of running variants at each step.
 
   \begin{itemize}
 
-  \item If the machine fail-stops,
+  \item If the machine fail-stops, i.e.,
     $(\mach, \pol) \hookrightarrow_P (\mach, \pol, \tau)$,
-    the property is safisfied for the singleton trace $(\mach, \pol)$ at any
+    the property is safisfied for the singleton trace $[(\mach, \pol)]$ at any
     depth up to the size of $\vs$.
 
   \item If the top variant of the stack (and only the top variant) returns,
-    the property is safisfied for the singleton trace $(\mach, \pol)$ at depth
+    the property is safisfied for the singleton trace $[(\mach, \pol)]$ at depth
     equal to the size of the stack. \rb{Avoid confusion with return below}
 
-  \item If the machine takes a step
+  \item If (1) the machine takes a step,
     $(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs)$,
-    that is neither a call nor a return, all
+    that is neither a call nor a return, (2) all
     variants can also take a step $\vs \hookrightarrow \vs'$ \rb{notation for this}
     while satisfying the eager integrity and confidentiality tests \rb{more formal?}
     (these tests are required also for calls and returns, and omitted in those cases),
-    and the stepped $(\mach', \pol')$ and $\vs'$ satisfy the eager testing property
-    for a given depth $d$ \rb{omitting stack size condition?} and MP-trace $\MPT$,
-    then the property is also satisfied for the extension of the trace \rb{notation}
+    and (3) the post-step state $(\mach', \pol')$ and stack $\vs'$ satisfy the eager testing property
+    for a given depth $d$ \rb{omitting stack size condition} and MP-trace $\MPT$,
+    then the property is also satisfied for trace $(\mach, \pol) : \MPT$
     at depth $d$.
 
   \item If the machine takes a call step
