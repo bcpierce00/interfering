@@ -1986,12 +1986,23 @@ computation performs integrity and confidentiality tests for a stack
 of running variants, which are kept in lockstep with the original
 machine.
 
+\newcommand{\vse}{\mathit{vse}}
+\newcommand{\VSES}{\mathit{VSE}}
+\newcommand{\vs}{\mathit{vs}}
+\newcommand{\VSS}{\mathit{VS}}
+
+\newcommand*{\vm}[1]{\ensuremath{\mathit{vm}_{#1}}}
+\newcommand*{\testInt}[3]{\ensuremath{\mathit{int}_T ~ #1 ~ #2 ~ #3}}
+\newcommand*{\testConf}[2]{\ensuremath{\mathit{conf}_T ~ #1 ~ #2}}
+\newcommand*{\testVS}[2]{\ensuremath{\mathit{\vs}_T ~ #1 ~ #2}}
+\newcommand*{\testProp}[3]{\ensuremath{\mathit{stack}_T ~ #1 ~ #2 ~ #3}}
+
 \definition
   Given two machine states $\mach$ and $\mach'$ and a contour $\contour$, these
   satisfy the \emph{stack integrity test} if their high-integrity components
   match:
   \[
-    \mathit{int}_T ~ \contour ~ \mach ~ \mach' \triangleq
+    \testInt{\contour}{\mach}{\mach'} \triangleq
     \forall \component . ~
     \contour(\component) = \HIGHINT \rightarrow
     \mach(\component) = \mach'(\component)
@@ -2013,12 +2024,6 @@ machine.
 \rb{Fix notations, including for properties below.
   In particular, note that the last four arguments could be computed from the
   first two and it may be clearer to elide them.}
-\newcommand{\vse}{\mathit{vse}}
-\newcommand{\VSES}{\mathit{VSE}}
-\newcommand{\vs}{\mathit{vs}}
-\newcommand{\VSS}{\mathit{VS}}
-
-\newcommand*{\vm}[1]{\ensuremath{\mathit{vm}_{#1}}}
 
 \definition The testing property keeps track of relevant information
 on a {\em variant stack}: a list of machine states, each element of
@@ -2060,10 +2065,10 @@ according to a contour $C$.
   \emph{variant stack test} if for each variant element $\vm{C}$
   (which is a variation of $\mach$ for $C$), $\vm{C}$ can take a step,
   denoted $\vm{C} \stepstoobs{\obs} \mach'$, while
-  satisfying the stack integrity test $\mathit{int}_T ~ C
-  ~ \mach ~ \mach'$ and stack confidentiality test $\mathit{conf}_T ~
-  \mach ~ \mach'$ with regard to the original machine state. We write
-  this $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$.
+  satisfying the stack integrity test $\testInt{C}{\mach}{\mach'}$
+  and stack confidentiality test $\testConf{\mach}{\mach'}$
+  with regard to the original machine state. We write
+  this $\testVS{(\mach, \pol)}{\vs}$.
 
 \definition{Eager testing property}
   Let $\callmap$ a call map and $\codemap$ a function map. Given a state
@@ -2086,32 +2091,33 @@ according to a contour $C$.
 
   \item If the machine \emph{fail-stops}, i.e., $(\mach, \pol) \hookrightarrow_P
     (\mach, \pol, \tau)$, the property is safisfied for the singleton trace:
-    $\mathit{stack}_T ~ d ~ [(\mach, \pol)] ~ \vs$, for any $d$ up to the size of
+    $\testProp{d}{[(\mach, \pol)]}{\vs}$, for any $d$ up to the size of
     $\vs$. (That is, a violation was detected $d$ levels into the stack.
     Elements are created and pushed to the variant stack on calls and popped
     from it on returns, so its size always reflects the depth of the program
     stack.)
 
   \item If the top variant of the stack (and only the top variant) returns,
-    i.e., $\mathit{ret}(\head(\vs), \mach)$ holds, the property is safisfied for
+    %i.e., $\mathit{ret}(\head(\vs), \mach)$ holds,
+    the property is safisfied for
     the singleton trace $[(\mach, \pol)]$ at depth equal to the size of the
-    stack: $\mathit{stack}_T ~ |\vs| ~ [(\mach, \pol)] ~ \vs$. \rb{Explain the
+    stack: $\testProp{|\vs|}{[(\mach, \pol)]}{\vs}$. \rb{Explain the
     use of this vs the return case below.}
 
   \item If
 %
     (1) the machine takes a \emph{non-call, non-return step},
 %
-    (2) the variant stack test $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$ is
+    (2) the variant stack test $\testVS{(\mach, \pol)}{\vs}$ is
     satisfied, and
 %
-    (3) the stack safety test $\mathit{stack}_T ~ d ~ ((\mach', \pol') : \MPT) ~
-    \vs'$ is coinductively satisfied % at depth $d$
+    (3) the stack safety test $\testProp{d}{((\mach', \pol') : \MPT)}{\vs'}$
+    is coinductively satisfied % at depth $d$
     %% and for a trace starting continuing after the step, $\head(\MPT) = (\mach',
     %% \pol')$,
 %
-    {\em then} we conclude $\mathit{stack}_T ~ d ~ ((\mach, \pol) : (\mach',
-    \pol') : \MPT) ~ vs$.
+    {\em then} we conclude $\testProp{d}{((\mach, \pol) : (\mach', \pol') :
+    \MPT)}{vs}$.
     %% \rb{omitting stack size condition}
 
   \item
@@ -2119,20 +2125,20 @@ according to a contour $C$.
     If (1) the machine takes a \emph{call step} and $\contour$ is the contour at
     the call,
 %
-    (2) the variant stack test $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$ is
+    (2) the variant stack test $\testVS{(\mach, \pol)}{\vs}$ is
     satisfied,
 %
-    (3) the stack integrity test $\mathit{int}_T ~ \contour ~ \mach ~ \mach'$ is
-    satisfied and the stack confidentiality test $\mathit{conf}_T ~ \mach ~
-    \vm{\contour}$ is satisfied with regard to an arbitrary $\contour$-variant
+    (3) the stack integrity test $\testInt{\contour}{\mach}{\mach'}$ is
+    satisfied and the stack confidentiality test $\testConf{\mach}{\vm{\contour}}$
+    is satisfied with regard to an arbitrary $\contour$-variant
     of $\mach$,
 %
-    and (4) the stack safety test $\mathit{stack}_T ~ d ~ ((\mach', \pol') :
-    \MPT) ~ (\vm{\contour} : \vs')$ is coinductively satisfied, for an arbitrary
+    and (4) the stack safety test $\testProp{d}{((\mach', \pol') :
+    \MPT)}{(\vm{\contour} : \vs')}$ is coinductively satisfied, for an arbitrary
     $\contour$-variant of the machine,
 %
-    {\em then} we conclude $\mathit{stack}_T ~ d ~ ((\mach, \pol) : (\mach',
-    \pol') : \MPT) ~ vs$.
+    {\em then} we conclude $\testProp{d}{((\mach, \pol) : (\mach',
+    \pol') : \MPT)}{vs}$.
 
     %% the contour $\contour$ is updated based on the top of the current machine.
     %% For the property to hold for a trace $(\mach, \pol) \cdot \MPT$ at depth $d$
@@ -2144,17 +2150,17 @@ according to a contour $C$.
 
   \item
 %
-    If (1) the machine takes a \emph{return step} at the top of the variant
-    stack (and only the top variant),
+    If (1) the machine takes a \emph{return step}, so the top of the variant
+    stack (and only the top variant) returns,
 %
-    (2) the variant stack test $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$ is
+    (2) the variant stack test $\testVS{(\mach, \pol)}{\vs}$ is
     satisfied,
 %
-    (3) the stack safety test $\mathit{stack}_T ~ d ~ ((\mach', \pol') : \MPT) ~
-    \mathit{tail}(\vs)$ is coinductively satisfied
+    (3) the stack safety test $\testProp{d}{((\mach', \pol') :
+    \MPT)}{\mathit{tail}(\vs)}$ is coinductively satisfied
 %
-    {\em then} we conclude $\mathit{stack}_T ~ d ~ ((\mach, \pol) : (\mach',
-    \pol') : \MPT) ~ vs$.
+    {\em then} we conclude $\testProp{d}{((\mach, \pol) : (\mach',
+    \pol') : \MPT)}{vs}$.
 
   \item If the machine takes \emph{simultaneous return-call step}, that is, the
     instruction to which execution returns immediately after completing a call
@@ -2167,7 +2173,7 @@ according to a contour $C$.
 %
   A trace $\MPT$ satisfies our \emph{top-level stack testing property} if it
   satisfies the eager testing property at depth 1 with regard to the initial
-  variant, $\mathit{stack}_T ~ 1 ~ \MPT ~ \vm{\contour_0}$.
+  variant, $\testProp{1}{\MPT}{\vm{\contour_0}}$.
 %
   \rb{I don't think the initial variant has been defined, but it's
     straightforward.}
