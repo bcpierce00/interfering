@@ -845,6 +845,7 @@ Register $r_0$ is hardwired to zero. \leo{Expand upon this?}
 particular compilation style, calling sequences, etc. illustrated here.}
 
 \section{Threat Model}
+\label{sec:threat}
 
 \leo{Needs high level signposting, transitions}
 
@@ -859,31 +860,7 @@ scope. \leo{Anything else to add here?}
 \rb{Intuition that the callee can do anything in principle, but the machine will
 halt if it does not follow the calling convention, etc.?}
 
-\bcp{More explanation needed, plus examples.}
-A policy is a general model of an enforcement mechanism, consisting of a
-set of policy states \(\pol \in \POLS\), a policy step function
-\((\mach, \pol) \stepstopol \pol' : \MACHS \times \POLS
-\rightharpoonup \POLS\), and a initializer \(\pinit : \MACHS \rightharpoonup
-\POLS\). The initializer establishes the initial policy state for a given
-machine state, but is partial to reflect that some policies are only defined
-on states that are well-formed in some way.
-
-We write $\MPS$ for the set of all pairs of machine states and policy
-states.
-%
-\[\MPS = \MACHS \times \POLS\]
-%
-We lift the policy step function to operate on such pairs
-by combining it with the regular step function for machine states.
-
-\judgmenttwo{\(\mach_1 \stepstoobs{\obs} \mach_2\)}{\((\mach_1, \pol_1)
-               \polstep \pol_2\)}
-            {\(\mpstate{\mach_1}{\pol_1} \stepstopol{\obs}
-               \mpstate{\mach_2}{\pol_2}\)}
-
-\leo{TODO: Forward pointer to policies right?}\bcp{Yes.  But also we can say
-in more detail that the intention is to capture any kind of dynamic
-enforcement mechanism and give as many names and citations as we can.}
+\apt{Informal definition of policies as auxiliary state here.}
 
 This model is flexible enough to capture any kind of mechanism used for dynamic
 enforcement of properties of interest, including the following representative
@@ -1000,7 +977,7 @@ hardware-enforced security monitor. We will refer back to the running
 example of the previous section for concreteness, and then,
 in~\cref{sec:enforcement}, extend this model with a dynamic policy
 enforcement mechanism based on
-\citet{DBLP:conf/sp/RoesslerD18}.
+\citet{DBLP:conf/sp/RoesslerD18}.\apt{needs a relook}
 
 \subsection{Values, States, and Observations}
 
@@ -1009,7 +986,7 @@ The basic building blocks of the machine are {\em values} and {\em
 $\WORDS$, ranged over by $\word$.
 %
 Our machine states are composed of {\em components} $k$, addressed either by
-words (memory addresses) or by by register names ($r$) drawn from some set
+words (memory addresses) or by register names ($r$) drawn from some set
 $\REGS$.
 %
     \[\component \in \COMPONENTS = \WORDS + \REGS \]
@@ -1024,36 +1001,68 @@ A machine state is a map from components to values:
 The step function of the machine takes a machine state and produces a
 pair of a machine state and an {\em observation}, which may be either
 silent (written $\tau$) or a word of data that the machine
-communicates to the outside world (e.g., by writing to a DMA
-address):
+communicates to the outside world:
 %
 \[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
 \[\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \]
 %
 
-The choice of observations is an interesting one. A first approach
-would be to consider any change to the registers or memory as observable.
-However, as some parts of the stack will be considered ``private''
-this choice won't work. A relaxation of this to consider all changes
-to ``non-private'' data as observable could work in principle, but
-does not allow for an interesting weaker-but-more-efficient enforcement
-mechanism. We will come back to this point in \Cref{sec:lazy}. On the
-other hand, we could use a particular location as an abstract output
-of our system (e.g., through DMA). This is the approach we chose for
-our running example to keep things simple. For that, $\WORDS$ is the
-set of 64-bit integers, $\REGS$ is the set $\{r_0, \cdots, r_{31}\}
-\cup \{\PCname\}$, and $\SP = r_2$. Observations are the writes to the
-special $\rout$ location: if during an execution step a word $w$ is
+Notice that we choose to model observations explicitly, rather than simply treating
+a subset of registers or memory as being observable.  This choice gives
+us the flexibility to treat programs as observationally equivalent even when
+their internal states may differ.
+%The choice of modelling observations is an interesting one. A first approach
+%would be to consider any change to the registers or memory as observable.
+%However, as some parts of the stack will be considered ``private''
+%this choice won't work. A relaxation of this to consider all changes
+%to ``non-private'' data as observable could work in principle, but
+%does not allow for an interesting weaker-but-more-efficient enforcement
+%mechanism. We will come back to this point in \Cref{sec:lazy}.
+
+In the running example of \Cref{sec:running-example}, 
+$\WORDS$ is the
+set of 64-bit integers and $\REGS$ is the set $\{r_0, \cdots, r_{31}\}
+\cup \{\PCname,\SP\}$. Observations are the writes to the
+  special $\rout$ location, which can be thought of as a memory-mapped
+  output port: if during an execution step a word $w$ is
 written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
 
+\subsection{Policies}
+
+A policy is a general model of an enforcement mechanism, consisting of a
+set of policy states \(\pol \in \POLS\), a policy step function
+\((\mach, \pol) \polstep \pol' : \MACHS \times \POLS
+\rightharpoonup \POLS\), and an initializer \(\pinit : \MACHS \rightharpoonup
+\POLS\). The initializer establishes the initial policy state for a given
+machine state, but is partial to reflect that some policies are only defined
+on states that are well-formed in some way.\apt{Is this our current thinking?}
+
+We write $\MPS$ for the set of all pairs of machine states and policy
+states.
+%
+\[\MPS = \MACHS \times \POLS\]
+%
+We lift the policy step function to operate on such pairs
+by combining it with the regular step function for machine states.
+
+\judgmenttwo{\(\mach_1 \stepstoobs{\obs} \mach_2\)}{\((\mach_1, \pol_1)
+               \polstep \pol_2\)}
+            {\(\mpstate{\mach_1}{\pol_1} \stepstopol{\obs}
+               \mpstate{\mach_2}{\pol_2}\)}
+
+\apt{TODO: relate back to \Cref{sec:threat} and forward to \Cref{sec:enforcement}.}
+%\leo{TODO: Forward pointer to policies right?}\bcp{Yes.  But also we can say
+%in more detail that the intention is to capture any kind of dynamic
+%enforcement mechanism and give as many names and citations as we can.}
 
 \paragraph*{Machine Termination}
 
 In our model, the machine step function is total -- a program does not halt
 on its own, but may instead enter a silent terminal loop. Runs are only cut
 short by the policy step function. This means that software-only policies that
-can catch errors must be modeled as reaching an error state, not outright
-halting.
+can catch errors must be modeled as reaching an error state\apt{??}, not 
+halting outright.\apt{Is this our current thinking?}
+
 
 \subsection{Traces}
 
@@ -1087,23 +1096,23 @@ state at the very top, each instruction constructs a new machine state
 the exception of instructions 31 and 13 which are writes to $\rout$
 and where the observations are $0$ and $60$ respectively.
 
-In a similar fashion, we define \(\mpstatename \hookrightarrow_P \MPT\)
+In a similar fashion, we define \(\mpstatename \hookrightarrow \MPT\)
 to relate a machine-policy state pair to the MP-trace
-induced by \(\stepstopol{}\). Unlike the $\MOTRACE$ above, this trace can
-be finite as the policy can cause a fault, in which case the final state is
+induced by the step function on $\MPS$. Unlike the $\MOTRACE$ above, this trace can
+be finite as the policy can cause a fault, in which case the final observation is
 a \(\tau\):
 \rb{This $\hookrightarrow_P$ is often enough written just $\hookrightarrow$.
-Overload everywhere?}
+  Overload everywhere?}\apt{Done, and for $\rightharpoonup$ too.}
 
 \begin{minipage}{.4\textwidth}
-\judgment{\(\neg \exists \pol_1 . \pol_0 \rightharpoonup \pol_1\)}
-         {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_p \mpostate{\mach_0}{\pol_0}{\tau}\)}
+\judgment{\(\neg \exists \pol_1 . \mpstate{\mach_0}{\pol_0} \polstep \pol_1\)}
+         {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}\)}
 \end{minipage}
 \begin{minipage}{.55\textwidth}
-  \judgmenttwo{\(\mpstate{\mach_0}{\pol_o} \stepstoobs{\obs}
+  \judgmenttwo{\(\mpstate{\mach_0}{\pol_o} \stepstopol{\obs}
                  \mpstate{\mach_1}{\pol_1}\)}
-              {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow_P \MPT\)}
-              {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P
+              {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \MPT\)}
+              {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow
                  \mpostate{\mach_0}{\pol_0}{\obs} \MPT\)}
 \end{minipage}
 
@@ -1119,7 +1128,7 @@ function since traces are non-empty, and the final element (if one exists) with
 \(\last(\Trace)\), which is partial.
 
 \paragraph*{Until}
-The ``Until'' operation \(\PUT(\Trace,f)\)
+The operation \(\PUT~(\Trace,f)\)
 %\bcp{Wouldn't
 %``While'' be more mnemonic?} \sna{Appealing, but it's more of a
 %``while-not''? Trying out ``until''. In any case... moving away
@@ -1136,17 +1145,17 @@ we must replace the final observation with a \(\tau\).
   \begin{center}
   \begin{minipage}{.3\textwidth}
     \judgment{\(f\ \traceelem\)}
-             {\(\PUT(f,(\traceelem,\obs)\Trace) = (\traceelem,\tau)\)}
+             {\(\PUT~(f,(\traceelem,\obs)\Trace) = (\traceelem,\tau)\)}
   \end{minipage}
 %
   \begin{minipage}{.3\textwidth}
   \judgment{}
-           {\(\PUT(f,(\traceelem,\obs)) = (\traceelem,\tau)\)}
+           {\(\PUT~(f,(\traceelem,\obs)) = (\traceelem,\tau)\)}
 %
   \end{minipage}
   \begin{minipage}{.3\textwidth}
-  \judgmenttwo{\(\neg f\ \traceelem\)}{\(\PUT(f,\Trace) = \Trace'\)}
-              {\(\PUT(f,(\traceelem,\obs)\Trace) = (\traceelem,\obs)\Trace'\)}
+  \judgmenttwo{\(\neg f\ \traceelem\)}{\(\PUT~(f,\Trace) = \Trace'\)}
+              {\(\PUT~(f,(\traceelem,\obs)\Trace) = (\traceelem,\obs)\Trace'\)}
   \end{minipage}
   \end{center}
 %
@@ -1174,14 +1183,14 @@ Let \(f\) be a predicate on machine states. Then we define \(\mach
 running \(\mach\) up to \(f\)''):
 
 \judgmenttwo{\(\mach \hookrightarrow \machT'\)}
-            {\(\PUT(f,\machT')
+            {\(\PUT~(f,\machT')
               = \machT\)}
             {\(\mach \hookrightarrow \machT | f\)}
 \noindent
 And similarly for traces with policies:
 
 \judgmenttwo{\(\mpstatename \hookrightarrow \MPT'\)}
-            {\(\PUT(\lambda \mpstate{\mach}{\pol}.f\ \mach,\MPT') = \MPT\)}
+            {\(\PUT~(\lambda \mpstate{\mach}{\pol}.f\ \mach,\MPT') = \MPT\)}
          {\(\mpstatename \hookrightarrow \MPT | f\)}
 
 %    \COQ{this operation steps until it reaches a state on which \(f\) holds,
@@ -1196,7 +1205,7 @@ And similarly for traces with policies:
 We say that a trace of observations $\obsT_1$ is a prefix of $\obsT_2$
 as far as an external observer is concerned, if the sequence of
 non-silent observations of $\obsT_1$ is a prefix of those of
-$\obsT_2$; that is we operate up to deletion of \(\tau\) observations,
+$\obsT_2$; that is, we operate up to deletion of \(\tau\) observations,
 coinductively:
 
 \begin{minipage}{.3\textwidth}
@@ -1232,10 +1241,10 @@ We then define similarity of observation traces as traces prefixing each other:
 \leo{I still don't know how to do this transition. Maybe contrast
 with the ``perhaps surprisingly'' later?} Note that
 similarity of observation traces could alternatively be defined coinductively,
-just like the prefix relation, but by dropping the assymetric rules that allow
-for a finite trace ($\tau \lesssim \obsT$ or $w \lesssim w\obsT$)
+just like the prefix relation, but by dropping the asymmetric rules that allow
+for a finite trace ($\tau \lesssim \obsT$ or $w \lesssim w\obsT$).\apt{Is this immportant?}
 
-In addition, perhaps surprisingly, an infinite silent trace is a
+Note that an infinite silent trace is a
 prefix of (and equivalent to) any other trace. While this might seem
 surprising at first, it makes sense in a timing-insensitive context:
 an external observer looking at two machine runs cannot (computably)
