@@ -2033,50 +2033,91 @@ lockstep with the original machine.
   say that an MP-trace induced from $(\mach, \pol)$ satisfies the \emph{eager
   testing property} at a given call depth if:
 
+%  Let $\callmap$ a call map and $\codemap$ a code map. Given a state $(\mach,
+%  \pol) \in \MPS$ that is well-formed w.r.t. a variant stack $\vs$ and induces
+%  an MP-trace $(\mach, \pol) \hookrightarrow \MPT$, we say that the \emph{stack
+%  testing property} is satisfied at call depth $d$, and write
+%  $\mathit{stack}_T ~ d ~ \MPT ~ \vs$, as follows:
+
   \begin{itemize}
 
-  \item If the machine fail-stops, i.e.,
-    $(\mach, \pol) \hookrightarrow_P (\mach, \pol, \tau)$,
-    the property is safisfied for the singleton trace $[(\mach, \pol)]$ at any
-    depth up to the size of $\vs$.
+  \item If the machine \emph{fail-stops}, i.e., $(\mach, \pol) \hookrightarrow_P
+    (\mach, \pol, \tau)$, the property is safisfied for the singleton trace:
+    $\mathit{stack}_T ~ d ~ [(\mach, \pol)] ~ \vs$, for any $d$ up to the size of
+    $\vs$. (That is, a violation was detected $d$ levels into the stack.
+    Elements are created and pushed to the variant stack on calls and popped
+    from it on returns, so its size always reflects the depth of the program
+    stack.)
 
   \item If the top variant of the stack (and only the top variant) returns,
-    the property is safisfied for the singleton trace $[(\mach, \pol)]$ at depth
-    equal to the size of the stack. \rb{Avoid confusion with return below}
+    i.e., $\mathit{ret}(\head(\vs), \mach)$ holds, the property is safisfied for
+    the singleton trace $[(\mach, \pol)]$ at depth equal to the size of the
+    stack: $\mathit{stack}_T ~ |\vs| ~ [(\mach, \pol)] ~ \vs$. \rb{Explain the
+    use of this vs the return case below.}
 
-  \item If (1) the machine takes a step,
-    $(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs)$,
-    that is neither a call nor a return, (2) all
-    variants can also take a step $\vs \hookrightarrow \vs'$ \rb{notation for this}
-    while satisfying the eager integrity and confidentiality tests \rb{more formal?}
-    (these tests are required also for calls and returns, and omitted in those cases),
-    and (3) the post-step state $(\mach', \pol')$ and stack $\vs'$ satisfy the eager testing property
-    for a given depth $d$ \rb{omitting stack size condition} and MP-trace $\MPT$,
-    then the property is also satisfied for trace $(\mach, \pol) : \MPT$
-    at depth $d$.
+  \item If
+    %
+    (1) the machine takes a \emph{non-call, non-return step} $(\mach,
+    \pol) \hookrightarrow_P (\mach', \pol', \obs)$ and the variant stack steps
+    to $\vs \hookrightarrow \vs'$,
+    %
+    (2) the variant stack test $\mathit{\vs}_T ~
+    (\mach, \pol) ~ \vs$ is satisfied, and
+    %
+    (3) the stack safety test
+    $\mathit{stack}_T ~ d ~ \MPT ~ \vs'$ is coinductively satisfied at depth $d$
+    and for a trace starting continuing after the step, $\head(\MPT) = (\mach',
+    \pol')$,
+    %
+    {\em then} we conclude $\mathit{stack}_T d ~ ((\mach, \pol) : \MPT) ~ vs$.
+    \rb{omitting stack size condition}
 
-  \item If the machine takes a call step
-    $(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs)$,
-    the contour $\contour$ is updated based on the top of the current machine.
-    For the property to hold for a trace $(\mach, \pol) \cdot \MPT$ at depth $d$
-    (and in addition to the general step conditions),
-    the eager integrity test must hold for $\contour$ at the call,
-    the eager confidentiality test must hold for all variants at the call,
-    including the new variant that is added to the top of the stack,
-    and the property recurses on an arbitrary variant at the new contour
-    at depth $d$ with trace $\MPT$.
+  \item
+%
+    If (1) the machine takes a \emph{call step} $(\mach, \pol) \hookrightarrow_P
+    (\mach', \pol', \obs)$ and the variant stack steps to $\vs \hookrightarrow
+    \vs'$,
+%
+    (2) $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$,
+%
+    (3) for the new contour at the call, $\contour$, \rb{definition?} the
+    machine satisfies the stack integrity test $\mathit{int}_T ~ \contour ~
+    \mach ~ \mach'$ and the stack confidentiality test with regard to any
+    variant $\mathit{variant} ~ C ~ \mach ~ \mach_{\mathit{var}}$,
+    $\mathit{conf}_T ~ \mach ~ \mach_{\mathit{var}}$ \rb{definition?},
+%
+    and (4) the stack safety test is coinductively satisfied at depth $d$ for a
+    continuing trace $\MPT$ where $\head(\MPT) = (\mach', \pol')$ after an
+    arbitrary variant machine derived from $\contour$ has been added to the top
+    of the stack, $\mathit{stack}_T ~ d ~ \MPT ~ (\vse : \vs')$, \rb{define
+      $\vse$}
+%
+    {\em then} we conclude $\mathit{stack}_T ~ d ~ ((\mach, \pol) : \MPT) ~ vs$.
 
-  \item If the machine takes a return step at the top of the variant stack
+    %% the contour $\contour$ is updated based on the top of the current machine.
+    %% For the property to hold for a trace $(\mach, \pol) \cdot \MPT$ at depth $d$
+    %% the eager integrity test must hold for $\contour$ at the call,
+    %% the eager confidentiality test must hold for all variants at the call,
+    %% including the new variant that is added to the top of the stack,
+    %% and the property recurses on an arbitrary variant at the new contour
+    %% at depth $d$ with trace $\MPT$.
+
+  \item If the machine takes a \emph{return step} at the top of the variant stack
     $(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs)$,
     the property holds for a trace $(\mach, \pol) \cdot \MPT$ at depth $d$
     if (in addition to the general step conditions)
     the property recurses at depth $d$ with trace $\MPT$
     after removing the returning top variant from the stack.
 
-  \item If the machine takes a return step that is also a call, the last two
-    cases are combined.
+  \item If the machine takes \emph{simultaneous return-call step}, that is, the
+    instruction to which execution returns immediately after completing a call
+    is itself a call instruction, the last two cases are combined.
 
   \end{itemize}
+
+\definition{Top-level stack testing property}
+%
+  \ldots wrap the coinductive stack testing property
 
 By using property-based testing techniques, we can determine with a high degree
 of confidence that an implementation of the conservative micropolicy satisfies
