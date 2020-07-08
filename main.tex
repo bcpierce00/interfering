@@ -501,14 +501,15 @@ h(v) = {
 \colorlet{lgray}{gray!40}
 
 \newcommand{\instrc}{lgray}
-\newcommand{\outc}{white}
 \newcommand{\fprivc}{cyan}
 \newcommand{\fcallc}{green}
 \newcommand{\gprivc}{yellow}
 \newcommand{\gcallc}{orange}
 \newcommand{\hprivc}{red}
 \newcommand{\unusedc}{gray}
-
+\newcommand{\emptyoutc}{white} % or gray for consistency with unusedc ? 
+\newcommand{\fulloutc}{white}
+  
 \begin{figure}
 
 %Starting Memory Layout
@@ -519,7 +520,7 @@ h(v) = {
 \memory{3}{\instrc}[{\makebox[0pt]{Instructions}}]%
 \hspace*{3pt}
 $\cdots$
-\memory{1}{\outc}[{\makebox[0pt]{Output}}]%
+\memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
 \memory{10}{\unusedc}[{\makebox[0pt]{Uninitialized}}]
 ~$\cdots$
 \\
@@ -528,7 +529,7 @@ $\cdots$
 \summary{0}{0}{?}{100}{?}{?}
 \vspace*{0.2em}
 \bcp{A very small nit: Change
-  $\rsp-2$ to $\rsp\mathord{-}2$}
+  $\rsp-2$ to $\rsp\mathord{-}2$}\apt{??}
 \[
   \begin{array}{c|c|c|c}
     PC & \mathit{Instruction} & \mathit{Effect} & \\
@@ -548,7 +549,7 @@ $\cdots$
     \row{\sw ~ \rsp ~ r_0 ~ \negate 1}{[\rsp-1] \leftarrow r_0}{[103] \leftarrow 0}
         {Zero out result\apt{why?}}
     \row{\jal ~ \rra ~ 20}{\rra \leftarrow \PCname + 1; ~ \PCname \leftarrow 20}{\rra \leftarrow \thepcctr; ~ \PCname \leftarrow 20}
-        {Make the call (Jump and link)}
+        {Call to {\tt g} ($\jal$)}
   \end{array}
   \]
   ~ \\
@@ -566,7 +567,7 @@ $\cdots$
 \memory{3}{\instrc}[{\makebox[0pt]{Instructions}}]%
 \hspace*{3pt}
 $\cdots$
-\memory{1}{white}[{\makebox[0pt]{Output}}]%
+\memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
 \memory{2}{\fprivc}[{\makebox[0pt]{${\texttt{main}}_{\mathit{priv}}$}}]%
 \memory{2}{\fcallc}[{\makebox[0pt]{{\tt g}'s call frame }}]%
 \memory{6}{\unusedc}%[{\makebox[0pt]{Uninitialized}}]
@@ -597,9 +598,9 @@ $\cdots$
     \row{\sw ~ \rsp ~ r_4 ~ \negate 2}{[\rsp - 2] \leftarrow r_4}{[106] \leftarrow 17}
         {Store 17 as the argument {\tt v}}
     \row{\sw ~ \rsp ~ r_0 ~ \negate 1}{[\rsp - 1] \leftarrow r_0}{[107] \leftarrow 0}
-        {Zero out result}
-    \row{\jal ~ \rra ~ 40}{\jal ~ \rra ~ 40}{\PCname \leftarrow 40; ~ \rra \leftarrow \thepcctr}
-        {Make the call to {\tt h} (jump-and-link)}
+        {Zero out result \apt{why?}}
+    \row{\jal ~ \rra ~ 40}{\rra \leftarrow \PCname + 1 ; ~ \PCname \leftarrow 40}{\rra \leftarrow \thepcctr; ~ \PCname \leftarrow 40}
+        {Call to {\tt h} ($\jal$)}
   \end{array}
   \]
   ~ \\
@@ -613,7 +614,7 @@ $\cdots$
 \memory{3}{\instrc}[{\makebox[0pt]{Instructions}}]%
 \hspace*{3pt}
 $\cdots$
-\memory{1}{white}[{\makebox[0pt]{Output}}]%
+\memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
 \memory{2}{\fprivc}[{\makebox[0pt]{${\texttt{main}}_{\mathit{priv}}$}}]%
 \memory{2}{\fcallc}[{\makebox[0pt]{{\tt g}'s call frame }}]%
 \memory{2}{\gprivc}[{\makebox[0pt]{${\texttt g}_{\mathit{priv}}$}}]%
@@ -657,7 +658,7 @@ $\cdots$
 \memory{3}{\instrc}[{\makebox[0pt]{Instructions}}]%
 \hspace*{3pt}
 $\cdots$
-\memory{1}{white}[{\makebox[0pt]{Output}}]%
+\memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
 \memory{2}{\fprivc}[{\makebox[0pt]{${\texttt{main}}_{\mathit{priv}}$}}]%
 \memory{2}{\fcallc}[{\makebox[0pt]{{\tt g}'s call frame }}]%
 \memory{2}{\gprivc}[{\makebox[0pt]{${\texttt g}_{\mathit{priv}}$}}]%
@@ -691,8 +692,8 @@ $\cdots$
       {Load return address}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 1}{\rsp \leftarrow \rsp - 1}{\rsp \leftarrow 108}
       {Restore the stack pointer of {\tt g}}
-  \row{\jalr ~ \rra ~ \rra ~ 0}{\leo{??}}{\PCname \leftarrow 27}
-      {Return to {\tt g}}
+  \row{\jalr ~ \rra ~ \rra ~ 0\apt{wrong}}{\PCname \leftarrow \rra}{\PCname \leftarrow 27}
+      {Return to {\tt g} ($\jalr$)}
   \end{array}
 \]
 
@@ -702,10 +703,10 @@ $\cdots$
 \MemoryLabel{4em}{2em}{0}
 \MemoryLabel{21em}{2em}{99}
 \MemoryLabel{61.5em}{2em}{\SP}
-\memory{3}{\outc}[{\makebox[0pt]{Instructions}}]%
+\memory{3}{\emptyoutc}[{\makebox[0pt]{Instructions}}]%
 \hspace*{3pt}
 $\cdots$
-\memory{1}{white}[{\makebox[0pt]{Output}}]%
+\memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
 \memory{2}{\fprivc}[{\makebox[0pt]{${\texttt{main}}_{\mathit{priv}}$}}]%
 \memory{2}{\fcallc}[{\makebox[0pt]{{\tt g}'s call frame }}]%
 \memory{2}{orange}[{\makebox[0pt]{${\texttt g}_{\mathit{priv}}$}}]%
@@ -738,18 +739,18 @@ $\cdots$
   \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\rsp \leftarrow 106}
       {Deallocate {\tt h}'s call frame}
   \row{\lw ~ r_5 ~ \rsp ~ \negate 4}{r_5 \leftarrow [\rsp - 4]}{r_5 \leftarrow 0}
-      {Load argument {\tt z} $r_5$}
+      {Load argument {\tt z} to $r_5$}
   \row{\sw ~ \rout ~ r_5 ~ 0}{[\rout] \leftarrow r_5}{[99] \leftarrow 0}
       {Print {\tt z}}
   \row{\add ~ r_4 ~ r_4 ~ r_5}{r_4 \leftarrow r_4 + r_5}{r_4 \leftarrow 18}
       {Add $r_4$ and $r_5$}
   \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[103] \leftarrow 18}
-      {Store $r_4$ as ther return of {\tt g}}
+      {Store $r_4$ as the return value}
   \row{\lw ~ \rra ~ \rsp ~ \negate 2}{\rra \leftarrow [\rsp - 2]}{\rra \leftarrow 8}
       {Load return address}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\rsp \leftarrow 104}
       {Deallocate {\tt g}'s local state}
-  \row{\jalr ~ \rra ~ \rra ~ 0}{??}{PC \leftarrow 8}{Return to {\tt main}}
+  \row{\jalr ~ \rra ~ \rra ~ 0\apt{wrong}}{\PCname \leftarrow \rra}{\PCname \leftarrow 8}{Return to {\tt main} ($\jalr$)}
 \end{array}
 \]
 % Return to main
@@ -761,7 +762,7 @@ $\cdots$
 \memory{3}{\instrc}[{\makebox[0pt]{Instructions}}]%
 \hspace*{3pt}
 $\cdots$
-\memory{1}{white}[{\makebox[0pt]{Output}}]%
+\memory{1}{\fulloutc}[{\makebox[0pt]{Output}}]%
 \memory{2}{\fprivc}[{\makebox[0pt]{${\texttt{main}}_{\mathit{priv}}$}}]%
 \memory{2}{\fcallc}[{\makebox[0pt]{{\tt g}'s call frame }}]%
 \memory{6}{\unusedc}%[{\makebox[0pt]{Uninitialized}}]
@@ -803,7 +804,7 @@ $\cdots$
 \memory{3}{\instrc}[{\makebox[0pt]{Instructions}}]%
 \hspace*{3pt}
 $\cdots$
-\memory{1}{white}[{\makebox[0pt]{Output}}]%
+\memory{1}{\fulloutc}[{\makebox[0pt]{Output}}]%
 \memory{2}{\fprivc}[{\makebox[0pt]{${\texttt{main}}_{\mathit{priv}}$}}]%
 \memory{8}{\unusedc}%[{\makebox[0pt]{Uninitialized}}]
 ~$\cdots$
@@ -815,41 +816,48 @@ $\cdots$
 % Starting Register File
 \summary{\thepcctr}{0}{37}{102}{60}{42}
 \caption{Detailed Execution Trace
-  \rb{A suggestion for the description of $\jal$ and $\jalr$:
-    call(function label) [if labels are added next to the entrypoints]
-    or call(address of entrypoint) and return()?}
+%  \rb{A suggestion for the description of $\jal$ and $\jalr$:
+%    call(function label) [if labels are added next to the entrypoints]
+%    or call(address of entrypoint) and return()?}
 }
 \label{fig:running-trace-b}
 \end{figure}
 
 To show a trace of the execution of this program, we need a low-level
 view of both the code and the machine it runs on. While the concrete
-implementation of our enforcement mechanism (\Cref{sec:enforcement})
+implementation of our enforcement mechanism (\Cref{sec:enforcement})\apt{Is it ``ours'' in this context?}
 operates on a full conventional RISC-V architecture (using the FORVIS
-simulator\leo{cite}), we make a few simplifying assumptions here to
+simulator\leo{cite}\apt{why mention this here?}), we make a few simplifying assumptions here to
 ease the exposition.
 
 First of all, we ignore the heap. We are mainly concerned with stack
-interactions so that will be the main focus; integrating a heap in the
+interactions so that will be the main focus; integrating a safety
+propety for the heap in the 
 style of \citet{AzevedoDeAmorim17} is a natural extension we discuss
 in~\Cref{sec:future}.
 %
 We also abstract away low-level details of memory layout and present a
 machine that is word-addressed, with instructions starting from
-location 0, a dedicated output at location 99, and lay the stack from
-location 100 upwards. \leo{Explain more? How to connect to realistic
+location 0, a dedicated memory-mapped output port at location 99, and
+the stack beginning at location 100 and growing upwards with increasing
+addresses.  \leo{Explain more? How to connect to realistic
   one? Observations? DMA? Interrupt handlers?}
 %
-A sketch of the memory layout at that point can be found in the top of
+A sketch of the initial memory layout can be found in the top of
 \cref{fig:running-trace-b}: instructions for {\tt main} begin at 0,
 the dedicated output is uninitialized, while the (also uninitialized)
 stack begins at 100. Directly below the layout, we summarize the parts
 of the register file that are relevant to the example.
 %
-The rest of \cref{fig:running-trace-b} details the execution of the
-program, showing the machine state at call and return points, as well
-as describing the full effect of each instruction in detail.
-\leo{Expand upon this?}
+The rest of \cref{fig:running-trace-b} traces the execution of the
+program, showing the machine state at call and return points.
+Instructions are intended to
+be similar to RISC-V, but are described in an ad-hoc notation
+rather than using assembler syntax. The $\jal$ (jump-and-link)
+instruction used for calls atomically saves the return address in a register
+and jumps to a specified new $\PCname$; the $\jalr$ (jump-and-link-via-register)
+instruction used for returns jumps to the address stored in a register.
+Register $r_0$ is hardwired to zero. \leo{Expand upon this?}
 
 \apt{Need to clarify to what extent our properties depend on the
 particular compilation style, calling sequences, etc. illustrated here.}
@@ -886,33 +894,42 @@ connected to this work?}
 \paragraph*{Bad Write}
 
 \[
-44 : ~ \sw ~ \rsp ~ r_4 ~ \negate 5
+44 : [\rsp - 5] \leftarrow r_4
+%44 : ~ \sw ~ \rsp ~ r_4 ~ \negate 5
 \]
 
-Instruction 44 currently is $\sw ~ \rsp ~ r_4 ~ \negate 2$, with the
+Instruction 44 currently is
+$ [\rsp - 2] \leftarrow r_4$,
+%$\sw ~ \rsp ~ r_4 ~ \negate 2$,
+with the
 effect of storing the contents of $r_4$ as the result of {\tt h}. If
-instead it wrote to location $[\rsp - 5]$ then it would be overriding
+instead it wrote to location $\rsp - 5$ then it would be overwriting
 private data (the return address) belonging to {\tt g}.
 
 \paragraph*{Bad Read}
 
 \[
-30 : ~ \lw ~ r_5 ~ \rsp ~ \negate 8
+30 : r_5  \leftarrow [\rsp - 6]
+%30 : ~ \lw ~ r_5 ~ \rsp ~ \negate 6
 \]
 
-Instruction 30 currently is $\lw ~ r_5 ~ \rsp ~ \negate 6$, with the
-effect of loading the argument of {\tt g} to $r_4$. If instead it
-loaded the contents of location $[\rsp - 8]$, it would obtain access
-to {\tt main}'s private information. Worse, since the next instruction
-outputs the contents of $r_5$ that would immediately be made public.
+Instruction 30 currently is
+$ r_5 \leftarrow [\rsp - 4]$,
+%$\lw ~ r_5 ~ \rsp ~ \negate 4$,
+with the
+effect of loading the argument of {\tt g} to $r_5$. If instead it
+loaded the contents of location $\rsp - 6$, it would obtain access
+to the value of {\tt main}'s local variable {\tt x}. Worse, since the next instruction
+outputs the contents of $r_5$, that value would immediately be made public.
 
 \paragraph*{Bad Control Flow}
 
 \[
-5 : \jalr ~ r_4 ~ \rra ~ 0
+5  : \rra \leftarrow \PCname + 1 ; ~ \PCname \leftarrow r_4
+%5 : \jalr ~ r_4 ~ \rra ~ 0
 \]
-If a jump instruction was added to {\tt main} with its target being
-the middle of the code block of {\tt h}.
+If a {\jalr} instruction was added to {\tt main} with its target being
+the middle of the code block of {\tt h}.\apt{describe result of this?}
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
@@ -1408,7 +1425,7 @@ $(\HIGHSEC, \HIGHINT)$):
 \memory{3}{\instrc}[{\makebox[0pt]{$(\HIGHSEC,\HIGHINT)$}}]%
 \hspace*{3pt}
 $\cdots$
-\memory{1}{white}[{\makebox[0pt]{$(\HIGHSEC, \LOWINT)$}}]%
+\memory{1}{\emptyoutc}[{\makebox[0pt]{$(\HIGHSEC, \LOWINT)$}}]%
 \memory{2}{\fprivc}[{\makebox[0pt]{$(\HIGHSEC, \HIGHINT)$}}]%
 \memory{2}{\fcallc}[{\makebox[0pt]{$(\LOWSEC, \LOWINT)$}}]%
 \memory{6}{\unusedc}[{\makebox[0pt]{$(\HIGHSEC, \LOWINT)$}}]
