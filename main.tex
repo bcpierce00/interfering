@@ -386,18 +386,19 @@ In summary, we offer the following contributions:\bcp{I would still like to
 \Cref{sec:relwork} discusses related work;
 \cref{sec:future} sketches directions for future work.
 %
-We begin with a running example that we refer
-to throughout the paper (\cref{sec:running-example}) and some
-technical preliminaries (\cref{sec:prelim}).
+We begin with a running example that we refer to throughout the paper
+(\cref{sec:running-example}), a description of our threat model
+(\cref{sec:threat}) and some technical preliminaries
+(\cref{sec:prelim}).
 
-\section{Stack {\underline{Un}}safety by Example}
+\section{Running Example}
 \label{sec:running-example}
 
-We begin with a running example that will serve both to demonstrate several
-``stack-unsafe'' behaviors that our stack safety property should prohibit
-and to ground the technical presentation in later sections.
-
-\subsection{Running Example}
+\leo{We've said this literally in the previous sentence. What should this intro
+  be in the new reorg?}
+%We begin with a running example that will serve both to demonstrate several
+%``stack-unsafe'' behaviors that our stack safety property should prohibit
+%and to ground the technical presentation in later sections.
 
 The example program appears in \Cref{fig:running-program}. It consists
 of a {\tt main} function, written in some C-like high-level language,
@@ -843,7 +844,9 @@ Register $r_0$ is hardwired to zero. \leo{Expand upon this?}
 \apt{Need to clarify to what extent our properties depend on the
 particular compilation style, calling sequences, etc. illustrated here.}
 
-\subsection{Attacker Model}
+\section{Threat Model}
+
+\leo{Needs high level signposting, transitions}
 
 Stack safety is meant to protect a caller from a malicious callee's
 attempts to access private data or highjack its control flow. Our
@@ -855,124 +858,6 @@ scope. \leo{Anything else to add here?}
   are essentially enforced by the policy or sth?}
 \rb{Intuition that the callee can do anything in principle, but the machine will
 halt if it does not follow the calling convention, etc.?}
-
-\subsection{Unsafe Variations}
-\sna{Variations here collides with state variations. I propose substitutions.}
-\leo{I agree there is a collision, not sure about ``substitutions''}
-\sna{Mutations, drawing from the randomized testing literature?}
-
-The execution trace shown in \cref{fig:running-trace-b} is an example
-of a ``stack-safe'' execution: each process interacts only with the
-registers, its local stack space and its call frame. In the rest of
-this section we will go over examples of unsafe behaviors, before
-formally capturing what stack-safe means formally and discussing
-enforcement techniques from the literature in later sections. Throughout
-the paper examples will be localized modifications of the example, by
-substituting an instruction at a given PC, written:
-\[\PCname :\mathit{inst}\]
-
-\leo{TODO: Add citations of mitigation techniques}
-\rb{And for those techniques, explain how they reflect their motivating
-examples. What does each technique do for those examples? How are they
-connected to this work?}
-
-\paragraph*{Bad Write}
-
-\[
-44 : [\rsp - 5] \leftarrow r_4
-%44 : ~ \sw ~ \rsp ~ r_4 ~ \negate 5
-\]
-
-Instruction 44 currently is
-$ [\rsp - 2] \leftarrow r_4$,
-%$\sw ~ \rsp ~ r_4 ~ \negate 2$,
-with the
-effect of storing the contents of $r_4$ as the result of {\tt h}. If
-instead it wrote to location $\rsp - 5$ then it would be overwriting
-private data (the return address) belonging to {\tt g}.
-
-\paragraph*{Bad Read}
-
-\[
-30 : r_5  \leftarrow [\rsp - 6]
-%30 : ~ \lw ~ r_5 ~ \rsp ~ \negate 6
-\]
-
-Instruction 30 currently is
-$ r_5 \leftarrow [\rsp - 4]$,
-%$\lw ~ r_5 ~ \rsp ~ \negate 4$,
-with the
-effect of loading the argument of {\tt g} to $r_5$. If instead it
-loaded the contents of location $\rsp - 6$, it would obtain access
-to the value of {\tt main}'s local variable {\tt x}. Worse, since the next instruction
-outputs the contents of $r_5$, that value would immediately be made public.
-
-\paragraph*{Bad Control Flow}
-
-\[
-5  : \rra \leftarrow \PCname + 1 ; ~ \PCname \leftarrow r_4
-%5 : \jalr ~ r_4 ~ \rra ~ 0
-\]
-If a {\jalr} instruction was added to {\tt main} with its target being
-the middle of the code block of {\tt h}.\apt{describe result of this?}
-
-\section{Machines, Traces, and Observations}
-\label{sec:prelim}
-
-In this section we describe our machine model. Our definition of stack
-safety is generic and this section discusses an abstract interface to
-our machine model and some kind of static or dynamic, software- or
-hardware-enforced security monitor. We will refer back to the running
-example of the previous section for concreteness, and then,
-in~\cref{sec:enforcement}, extend this model with a dynamic policy
-enforcement mechanism based on
-\citet{DBLP:conf/sp/RoesslerD18}.
-
-\subsection{Values, States, and Observations}
-
-The basic building blocks of the machine are {\em values} and {\em
-  addresses}. Both are drawn from some set of {\em words}
-$\WORDS$, ranged over by $\word$.
-%
-Our machine states are composed of {\em components} $k$, addressed either by
-words (memory addresses) or by by register names ($r$) drawn from some set
-$\REGS$.
-%
-    \[\component \in \COMPONENTS = \WORDS + \REGS \]
-%
-The register names are assumed to include two special purpose registers: the
-program counter {\PCname} and the stack pointer \SP.
-
-A machine state is a map from components to values:
-%
-\[\mach \in \MACHS = \COMPONENTS \rightarrow \WORDS\]
-
-The step function of the machine takes a machine state and produces a
-pair of a machine state and an {\em observation}, which may be either
-silent (written $\tau$) or a word of data that the machine
-communicates to the outside world (e.g., by writing to a DMA
-address):
-%
-\[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
-\[\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \]
-%
-
-The choice of observations is an interesting one. A first approach
-would be to consider any change to the registers or memory as observable.
-However, as some parts of the stack will be considered ``private''
-this choice won't work. A relaxation of this to consider all changes
-to ``non-private'' data as observable could work in principle, but
-does not allow for an interesting weaker-but-more-efficient enforcement
-mechanism. We will come back to this point in \Cref{sec:lazy}. On the
-other hand, we could use a particular location as an abstract output
-of our system (e.g., through DMA). This is the approach we chose for
-our running example to keep things simple. For that, $\WORDS$ is the
-set of 64-bit integers, $\REGS$ is the set $\{r_0, \cdots, r_{31}\}
-\cup \{\PCname\}$, and $\SP = r_2$. Observations are the writes to the
-special $\rout$ location: if during an execution step a word $w$ is
-written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
-
-\subsection{Policies}
 
 \bcp{More explanation needed, plus examples.}
 A policy is a general model of an enforcement mechanism, consisting of a
@@ -1057,6 +942,110 @@ to separate tags for clarity. This also distinguishes a hardware fail-stop from
 a software fail state.
 \rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
   policy? }
+
+
+% 
+%\leo{TODO: Add citations of mitigation techniques}
+%\rb{And for those techniques, explain how they reflect their motivating
+%examples. What does each technique do for those examples? How are they
+%connected to this work?}
+% 
+%\paragraph*{Bad Write}
+% 
+%\[
+%44 : [\rsp - 5] \leftarrow r_4
+%%44 : ~ \sw ~ \rsp ~ r_4 ~ \negate 5
+%\]
+% 
+%Instruction 44 currently is
+%$ [\rsp - 2] \leftarrow r_4$,
+%%$\sw ~ \rsp ~ r_4 ~ \negate 2$,
+%with the
+%effect of storing the contents of $r_4$ as the result of {\tt h}. If
+%instead it wrote to location $\rsp - 5$ then it would be overwriting
+%private data (the return address) belonging to {\tt g}.
+% 
+%\paragraph*{Bad Read}
+% 
+%\[
+%30 : r_5  \leftarrow [\rsp - 6]
+%%30 : ~ \lw ~ r_5 ~ \rsp ~ \negate 6
+%\]
+% 
+%Instruction 30 currently is
+%$ r_5 \leftarrow [\rsp - 4]$,
+%%$\lw ~ r_5 ~ \rsp ~ \negate 4$,
+%with the
+%effect of loading the argument of {\tt g} to $r_5$. If instead it
+%loaded the contents of location $\rsp - 6$, it would obtain access
+%to the value of {\tt main}'s local variable {\tt x}. Worse, since the next instruction
+%outputs the contents of $r_5$, that value would immediately be made public.
+% 
+%\paragraph*{Bad Control Flow}
+% 
+%\[
+%5  : \rra \leftarrow \PCname + 1 ; ~ \PCname \leftarrow r_4
+%%5 : \jalr ~ r_4 ~ \rra ~ 0
+%\]
+%If a {\jalr} instruction was added to {\tt main} with its target being
+%the middle of the code block of {\tt h}.\apt{describe result of this?}
+
+\section{Machines, Traces, and Observations}
+\label{sec:prelim}
+
+In this section we describe our machine model. Our definition of stack
+safety is generic and this section discusses an abstract interface to
+our machine model and some kind of static or dynamic, software- or
+hardware-enforced security monitor. We will refer back to the running
+example of the previous section for concreteness, and then,
+in~\cref{sec:enforcement}, extend this model with a dynamic policy
+enforcement mechanism based on
+\citet{DBLP:conf/sp/RoesslerD18}.
+
+\subsection{Values, States, and Observations}
+
+The basic building blocks of the machine are {\em values} and {\em
+  addresses}. Both are drawn from some set of {\em words}
+$\WORDS$, ranged over by $\word$.
+%
+Our machine states are composed of {\em components} $k$, addressed either by
+words (memory addresses) or by by register names ($r$) drawn from some set
+$\REGS$.
+%
+    \[\component \in \COMPONENTS = \WORDS + \REGS \]
+%
+The register names are assumed to include two special purpose registers: the
+program counter {\PCname} and the stack pointer \SP.
+
+A machine state is a map from components to values:
+%
+\[\mach \in \MACHS = \COMPONENTS \rightarrow \WORDS\]
+
+The step function of the machine takes a machine state and produces a
+pair of a machine state and an {\em observation}, which may be either
+silent (written $\tau$) or a word of data that the machine
+communicates to the outside world (e.g., by writing to a DMA
+address):
+%
+\[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
+\[\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \]
+%
+
+The choice of observations is an interesting one. A first approach
+would be to consider any change to the registers or memory as observable.
+However, as some parts of the stack will be considered ``private''
+this choice won't work. A relaxation of this to consider all changes
+to ``non-private'' data as observable could work in principle, but
+does not allow for an interesting weaker-but-more-efficient enforcement
+mechanism. We will come back to this point in \Cref{sec:lazy}. On the
+other hand, we could use a particular location as an abstract output
+of our system (e.g., through DMA). This is the approach we chose for
+our running example to keep things simple. For that, $\WORDS$ is the
+set of 64-bit integers, $\REGS$ is the set $\{r_0, \cdots, r_{31}\}
+\cup \{\PCname\}$, and $\SP = r_2$. Observations are the writes to the
+special $\rout$ location: if during an execution step a word $w$ is
+written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
+
 
 \paragraph*{Machine Termination}
 
