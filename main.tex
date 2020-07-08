@@ -2069,7 +2069,12 @@ according to a contour $C$.
   Let $\callmap$ a call map and $\codemap$ a function map. Given a state
   $(\mach, \pol) \in \MPS$ that is well-formed w.r.t. a variant stack $\vs$, we
   say that an MP-trace induced from $(\mach, \pol)$ satisfies the \emph{eager
-  testing property} at a given call depth if:
+  testing property} at a given call depth as follows.
+% Refactor repetitive notation before case split
+  In all cases that assume a machine step, $(\mach, \pol) \hookrightarrow_P
+  (\mach', \pol', \obs)$, assume also (unless the step is a return) that the
+  variant stack can step, $\vs \hookrightarrow \vs'$, i.e., all its variant
+  machines can step.
 
 %  Let $\callmap$ a call map and $\codemap$ a code map. Given a state $(\mach,
 %  \pol) \in \MPS$ that is well-formed w.r.t. a variant stack $\vs$ and induces
@@ -2094,43 +2099,40 @@ according to a contour $C$.
     use of this vs the return case below.}
 
   \item If
-    %
-    (1) the machine takes a \emph{non-call, non-return step} $(\mach,
-    \pol) \hookrightarrow_P (\mach', \pol', \obs)$ and the variant stack steps
-    to $\vs \hookrightarrow \vs'$,
-    %
-    (2) the variant stack test $\mathit{\vs}_T ~
-    (\mach, \pol) ~ \vs$ is satisfied, and
-    %
-    (3) the stack safety test
-    $\mathit{stack}_T ~ d ~ \MPT ~ \vs'$ is coinductively satisfied at depth $d$
-    and for a trace starting continuing after the step, $\head(\MPT) = (\mach',
-    \pol')$,
-    %
-    {\em then} we conclude $\mathit{stack}_T d ~ ((\mach, \pol) : \MPT) ~ vs$.
-    \rb{omitting stack size condition}
+%
+    (1) the machine takes a \emph{non-call, non-return step},
+%
+    (2) the variant stack test $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$ is
+    satisfied, and
+%
+    (3) the stack safety test $\mathit{stack}_T ~ d ~ ((\mach', \pol') : \MPT) ~
+    \vs'$ is coinductively satisfied % at depth $d$
+    %% and for a trace starting continuing after the step, $\head(\MPT) = (\mach',
+    %% \pol')$,
+%
+    {\em then} we conclude $\mathit{stack}_T ~ d ~ ((\mach, \pol) : (\mach',
+    \pol') : \MPT) ~ vs$.
+    %% \rb{omitting stack size condition}
 
   \item
 %
-    If (1) the machine takes a \emph{call step} $(\mach, \pol) \hookrightarrow_P
-    (\mach', \pol', \obs)$ and the variant stack steps to $\vs \hookrightarrow
-    \vs'$,
+    If (1) the machine takes a \emph{call step} and $\contour$ is the contour at
+    the call,
 %
-    (2) $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$,
+    (2) the variant stack test $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$ is
+    satisfied,
 %
-    (3) for the new contour at the call, $\contour$, \rb{definition?} the
-    machine satisfies the stack integrity test $\mathit{int}_T ~ \contour ~
-    \mach ~ \mach'$ and the stack confidentiality test with regard to any
-    variant $\mathit{variant} ~ C ~ \mach ~ \mach_{\mathit{var}}$,
-    $\mathit{conf}_T ~ \mach ~ \mach_{\mathit{var}}$ \rb{definition?},
+    (3) the stack integrity test $\mathit{int}_T ~ \contour ~ \mach ~ \mach'$ is
+    satisfied and the stack confidentiality test $\mathit{conf}_T ~ \mach ~
+    \vm{\contour}$ is satisfied with regard to an arbitrary $\contour$-variant
+    of $\mach$,
 %
-    and (4) the stack safety test is coinductively satisfied at depth $d$ for a
-    continuing trace $\MPT$ where $\head(\MPT) = (\mach', \pol')$ after an
-    arbitrary variant machine derived from $\contour$ has been added to the top
-    of the stack, $\mathit{stack}_T ~ d ~ \MPT ~ (\vse : \vs')$, \rb{define
-      $\vse$}
+    and (4) the stack safety test $\mathit{stack}_T ~ d ~ ((\mach', \pol') :
+    \MPT) ~ (\vm{\contour} : \vs')$ is coinductively satisfied, for an arbitrary
+    $\contour$-variant of the machine,
 %
-    {\em then} we conclude $\mathit{stack}_T ~ d ~ ((\mach, \pol) : \MPT) ~ vs$.
+    {\em then} we conclude $\mathit{stack}_T ~ d ~ ((\mach, \pol) : (\mach',
+    \pol') : \MPT) ~ vs$.
 
     %% the contour $\contour$ is updated based on the top of the current machine.
     %% For the property to hold for a trace $(\mach, \pol) \cdot \MPT$ at depth $d$
@@ -2140,16 +2142,24 @@ according to a contour $C$.
     %% and the property recurses on an arbitrary variant at the new contour
     %% at depth $d$ with trace $\MPT$.
 
-  \item If the machine takes a \emph{return step} at the top of the variant stack
-    $(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs)$,
-    the property holds for a trace $(\mach, \pol) \cdot \MPT$ at depth $d$
-    if (in addition to the general step conditions)
-    the property recurses at depth $d$ with trace $\MPT$
-    after removing the returning top variant from the stack.
+  \item
+%
+    If (1) the machine takes a \emph{return step} at the top of the variant
+    stack (and only the top variant),
+%
+    (2) the variant stack test $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$ is
+    satisfied,
+%
+    (3) the stack safety test $\mathit{stack}_T ~ d ~ ((\mach', \pol') : \MPT) ~
+    \mathit{tail}(\vs)$ is coinductively satisfied
+%
+    {\em then} we conclude $\mathit{stack}_T ~ d ~ ((\mach, \pol) : (\mach',
+    \pol') : \MPT) ~ vs$.
 
   \item If the machine takes \emph{simultaneous return-call step}, that is, the
     instruction to which execution returns immediately after completing a call
-    is itself a call instruction, the last two cases are combined.
+    is itself a call instruction, the \emph{call step} and \emph{return step}
+    cases are combined.
 
   \end{itemize}
 
