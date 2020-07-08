@@ -1843,32 +1843,39 @@ a code, a call, a return, and an entry map is said to enjoy
 \section{Enforcement}
 \label{sec:enforcement}
 
-\rb{Better section name and headings, references.}
+In this section we are going to see how an existing enforcement mechanism,
+Depth Isolation from \citet{DBLP:conf/sp/RoesslerD18}, can implement
+the formal stack safety property described in the previous section: it in
+fact enforces a stronger, inductive version of it that strengthens the
+local state encapsulation component by checking for integrity and
+confidentiality violations at every step of the callee's execution trace.
 
 \paragraph*{Micropolicies}
 %
-In order to enforce a given security policy on a system dynamically, we resort
-to a programmable, tag-based reference monitor that runs alongside the program.
-To control this monitor, we use a programming model that allows fine-grained
-manipulation of metadata tags to encode so-called \emph{micropolicies}
-\rb{cite}.
+The enforcement policy of \citeauthor{DBLP:conf/sp/RoesslerD18} relies
+on programmable, tag-based reference monitor that runs alongside the
+program.  To control this monitor, they use a programming model that
+allows fine-grained manipulation of metadata tags to encode so-called
+\emph{micropolicies}~\citep{pump_oakland15}.
 
-In such a system, all memory addresses and registers (including the program
-counter) are enriched with an abstract metadata tag, which can point to the
-representation of an arbitrary data structure. A micropolicy is thus defined by
-a collection of rules to be checked as each instruction executes and together
-define the transfer function of the security policy. Each rule inspects the tags
-associated to the inputs of an instruction (PC, registers, memory) as well as
-the instruction opcode itself, and produces one of two outcomes: either the
-instruction is allowed to execute (and generates and assigns tags for the new PC
-and the result of the operation), or the machine fail-stops with a policy
-violation.
+In such a system, all memory addresses and registers (including the
+program counter) are enriched with an abstract metadata tag, which can
+point to the representation of an arbitrary data structure. A
+micropolicy is thus defined by a collection of rules to be checked as
+each instruction executes and together define the transfer function of
+the security policy. Each rule inspects the tags associated to the
+inputs of an instruction (PC, registers, memory) as well as the
+instruction opcode itself, and produces one of two outcomes: either
+the instruction is allowed to execute (and generates and assigns tags
+for the new PC and the result of the operation), or the machine
+fail-stops with a policy violation.
 
-Efficient execution of these micropolicies relies on hardware implementations
-such as the PUMP architecture \rb{cite}, which include a monitor rule cache that
-maps tag inputs to outputs and a mechanism to trap misses to software handlers
-and thereby compute the transfer function of the software-defined policy.
-Previous work has shown that a wide range of micropolicies can be defined and
+Efficient execution of these micropolicies relies on hardware
+implementations, such as the PUMP architecture~\citep{pump_oakland15},
+which include a monitor rule cache that maps tag inputs to outputs and
+a mechanism to trap misses to software handlers and thereby compute
+the transfer function of the software-defined policy.  Previous work
+has shown that a wide range of micropolicies can be defined and
 enforced efficiently \rb{cite}.
 %
 \rb{Maybe go into more detail, examples later\ldots or try to segue into stack
@@ -1876,16 +1883,18 @@ policies}
 
 \paragraph*{A conservative policy}
 %
-The first micropolicy we present to enforce the definition of stack safety
-developed in \cref{sec:lse-and-wbcf} is very similar to the Depth Isolation
-policy presented by \citet{DBLP:conf/sp/RoesslerD18}. Their policy tags the
-stack memory with ownership information associated to each stack frame (and to
-each separate object inside that frames, a more finely grained access control
-that we do not need to consider here), and registers holding stack pointers with
-matching access permission information. Beyond those capabilities, the compiler
-generates designated sequences of instructions with special tags that grant them
-permission to manage the stack, say during calls and returns. \rb{Conceivably on
-alloc operations, etc., which we have not yet mentioned.}
+The first micropolicy we present to enforce the definition of stack
+safety developed in \cref{sec:lse-and-wbcf} is \leo{a small variation
+  of?}  the Depth Isolation policy presented by
+\citet{DBLP:conf/sp/RoesslerD18}. Their policy tags the stack memory
+with ownership information associated to each stack frame (and to each
+separate object inside that frames, a more finely grained access
+control that we do not need to consider here), and registers holding
+stack pointers with matching access permission information. Beyond
+those capabilities, the compiler generates designated sequences of
+instructions with special tags that grant them permission to manage
+the stack, say during calls and returns. \rb{Conceivably on alloc
+  operations, etc., which we have not yet mentioned.}
 
 Our micropolicy works as follows. We assume for ease of exposition that no
 arguments are passed on the stack \rb{Come back to this later?}. Initially, the
@@ -1933,28 +1942,29 @@ to appear at the beginning and end of each function:
 \rb{Positioning of the above sequences, relation to running example. The tagging
   of stack frames would be considered part of these sequences.}
 
-These sequences also enforce the $\SP$ discipline. When stack frames are of
-fixed size, it suffices to increment $\SP$ and tag it with a dedicated tag in
-the header sequence, which is later checked after decrementing $\SP$ during the
-exit sequence to authorize the return. The well-formedness of the blessed
-sequences can be checked statically. Only programs whose sequences are
-well-formed are protected by the micropolicy, although programs are still
-protected (by fail-stopping) even if the intended sequences are missing. By
-tracking the execution of the blessed sequences in the tag state of the
-{\PCname} register, the micropolicy ensures that the entry sequences of calls
-declared in the call map are executed correctly.
+These sequences also enforce the $\SP$ discipline. When stack frames
+are of fixed size, it suffices to increment $\SP$ and tag it with a
+dedicated tag in the header sequence, which is later checked after
+decrementing $\SP$ during the exit sequence to authorize the
+return. The well-formedness of the blessed sequences can be checked
+statically. Only programs whose sequences are well-formed are
+protected by the micropolicy, although programs are still protected
+(by fail-stopping) even if the intended sequences are missing. By
+tracking the execution of the blessed sequences in the tag state of
+the {\PCname} register, the micropolicy ensures that the entry
+sequences of calls declared in the call map are executed correctly.
 
 % If anything overwrites the SP in between, the exit sequence will fail, which is safe.
 
-During normal execution, the {\PCname} uses the current activation depth in its
-tag $\tagPCDepth{n}$ to gate load and store operations, which are allowed to
-operate only on the corresponding stack frame, tagged $\tagStackDepth{n}$.
-\rb{Note that we have also considered and implemented more flexible schemes
-  based on allowing operations above the current activation depth. How do we put
-  these together?}
-\rb{Do we want to discuss variations involving frame pointers or more implicit
-  return addresses?}
-\rb{Where to talk about the role of the compiler?}
+During normal execution, the {\PCname} uses the current activation
+depth in its tag $\tagPCDepth{n}$ to gate load and store operations,
+which are allowed to operate only on the corresponding stack frame,
+tagged $\tagStackDepth{n}$.  \rb{Note that we have also considered and
+  implemented more flexible schemes based on allowing operations above
+  the current activation depth. How do we put these together?}  \rb{Do
+  we want to discuss variations involving frame pointers or more
+  implicit return addresses?}  \rb{Where to talk about the role of the
+  compiler?}
 
 %% Because the access rights of callers subsume those of callees, it is essential
 %% that the micropolicy change tags when the property thinks that a call occurs,
