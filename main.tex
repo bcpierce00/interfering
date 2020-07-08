@@ -50,7 +50,6 @@
                         %% http://ctan.org/pkg/booktabs
 \usepackage{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
-
 \input{macros}
 \input{examples}
 
@@ -878,13 +877,17 @@ halt if it does not follow the calling convention, etc.?}
 \subsection{Unsafe Variations}
 \sna{Variations here collides with state variations. I propose substitutions.}
 \leo{I agree there is a collision, not sure about ``substitutions''}
+\sna{Mutations, drawing from the randomized testing literature?}
 
 The execution trace shown in \cref{fig:running-trace-b} is an example
 of a ``stack-safe'' execution: each process interacts only with the
 registers, its local stack space and its call frame. In the rest of
 this section we'll go over examples of unsafe behaviors, before
 formally capturing what stack-safe means formally and discussing
-enforcement techniques from the literature in later sections.
+enforcement techniques from the literature in later sections. Throughout
+the paper examples will be localize modifications of the example, by
+substituting an instruction at a given PC, written:
+\[\PCname :\mathit{inst}\]
 
 \leo{TODO: Add citations of mitigation techniques}
 \rb{And for those techniques, explain how they reflect their motivating
@@ -989,10 +992,14 @@ written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
 
 \subsection{Policies}
 
-\bcp{More explanation needed, plus examples.}A policy is a general model of an enforcement mechanism, consisting of
-a set of policy states \(\pol \in \POLS\), and a policy step function
+\bcp{More explanation needed, plus examples.}
+A policy is a general model of an enforcement mechanism, consisting of a
+set of policy states \(\pol \in \POLS\), a policy step function
 \((\mach, \pol) \stepstopol \pol' : \MACHS \times \POLS
-\rightharpoonup \POLS\).
+\rightharpoonup \POLS\), and a initializer \(\pinit : \MACHS \rightharpoonup
+\POLS\). The initializer establishes the initial policy state for a given
+machine state, but is partial to reflect that some policies are only defined
+on states that are well-formed in some way.
 
 We write $\MPS$ for the set of all pairs of machine states and policy
 states.
@@ -1002,11 +1009,10 @@ states.
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
 
-\judgmenttwo{\(\mach_1 \stepstoobs{\obs} \mach_2\)}{\((\mach_1, \pol_1) \stepstopol \pol_2\)}
-            {\(\mpstate{\mach_1}{\pol_1} \stepstoobs{\obs}_P \mpstate{\mach_2}{\pol_2}\)}
-
-\leo{Notation: Should $\stepstoobs{}$ use harpoon for the lifted
-  step?}\bcp{Yes.}
+\judgmenttwo{\(\mach_1 \stepstoobs{\obs} \mach_2\)}{\((\mach_1, \pol_1)
+               \polstep \pol_2\)}
+            {\(\mpstate{\mach_1}{\pol_1} \stepstopol{\obs}
+               \mpstate{\mach_2}{\pol_2}\)}
 
 \leo{TODO: Forward pointer to policies right?}\bcp{Yes.  But also we can say
 in more detail that the intention is to capture any kind of dynamic
@@ -1024,11 +1030,23 @@ families of policies.
 The simplest possible policy is the neutral policy that carries no information
 and does nothing. Its set of policy states $\POLS$ is the unit type, and its
 policy step function is the constant function that produces the unit, $\lambda
-\_ . \top$, thereby allowing all calls the machine step function. This
-corresponds to the lifting of our machine model to the policy setting.
+\_ . \top$, thereby allowing all calls the machine step function. Its
+initialization function is defined on all states. This corresponds to the
+lifting of our machine model to the policy setting. Machines that fulfill a
+property by construction will also fulfill that property with the null
+policy..
 
 \paragraph*{Software-only policies}
 %
+Some policies are implemented in software, by modifying code in the compiler
+to (e.g.) perform bounds checking \citep{NagarakatteZMZ09} or to insert stack
+canaries \citep{Cowan+98}. These approaches are represented as policies that
+accept only initial machine states that are well-formed for the policy (due
+to being produced by the compiler.) The set of policy states \(\POLS\) is again
+the unit type and the step function constant. Property enforcement comes from
+the fact that only ill-formed states can induce a trace that violates the
+property.
+
 \rb{TODO In a way, in these schemes the policy state is built in as part of the
   program state and transparent to the hardware, although it could be simulated
   by an overlay where enforcement is represented at the policy level.}
@@ -1045,8 +1063,26 @@ corresponds to the lifting of our machine model to the policy setting.
 
 \paragraph*{Micropolicies}
 %
+Micropolicies are another major family of policies \citep{pump_oakland2015},
+which are applied to stack safety in \citep{DBLP:conf/sp/RoesslerD18}.
+Here the machine state is extended with tags paired with all components of the
+system, and a monitor checks for each operation that the tags on the operands
+obey a set of rules. One could treat tags directly as part of the machine
+state, and build the rules into the step function. But local state
+encapsulation properties as we frame them are not intuitive in their
+interaction with tags or other additional enforcement state, so it is helpful
+to separate tags for clarity. This also distinguishes a hardware fail-stop from
+a software fail state.
 \rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
   policy? }
+
+\paragraph*{Machine Termination}
+
+In our model, the machine step function is total -- a program does not halt
+on its own, but may instead enter a silent terminal loop. Runs are only cut
+short by the policy step function. This means that software-only policies that
+can catch errors must be modeled as reaching an error state, not outright
+halting.
 
 \subsection{Traces}
 
@@ -1083,7 +1119,7 @@ and where the observations are $0$ and $60$ respectively.
 
 In a similar fashion, we define \(\mpstatename \hookrightarrow_P \MPT\)
 to relate a machine-policy state pair to the MP-trace
-induced by by \(\stepstoobs{}_P\). Unlike the $\MOTRACE$ above, this trace can
+induced by \(\stepstopol{}\). Unlike the $\MOTRACE$ above, this trace can
 be finite as the policy can cause a fault, in which case the final state is
 a \(\tau\):
 
@@ -1092,10 +1128,11 @@ a \(\tau\):
          {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_p \mpostate{\mach_0}{\pol_0}{\tau}\)}
 \end{minipage}
 \begin{minipage}{.55\textwidth}
-\judgmentthree{\(\mach_0 \stepstoobs{\obs} \mach_1\)}
-              {\(\pol_0 \rightharpoonup \pol_1\)}
-              {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \MPT\)}
-              {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P \mpostate{\mach_0}{\pol_0}{\obs} \MPT\)}
+  \judgmenttwo{\(\mpstate{\mach_0}{\pol_o} \stepstoobs{\obs}
+                 \mpstate{\mach_1}{\pol_1}\)}
+              {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow_P \MPT\)}
+              {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow_P
+                 \mpostate{\mach_0}{\pol_0}{\obs} \MPT\)}
 \end{minipage}
 
 We will also use \(\pi_m\) to project the trace of machine states
@@ -1531,7 +1568,7 @@ machine-policy state pairs $(\mach_c, \pol_c)$ and $(\mach_e, \pol_e)$
 in the trace such that:
 \begin{itemize}
 \item one state pair steps to the other:
-  $$\exists \obs. ~ (\mach_c, \pol_c) \stepstoobs{\obs}_P (\mach_e, \pol_e),$$
+  $$\exists \obs. ~ (\mach_c, \pol_c) \stepstopol{\obs} (\mach_e, \pol_e),$$
 \item $\mach_c$ is a valid call with $n$ arguments:
   $$\callmap(\mach_c(\PCname)) = n,$$
 \item and $\mach_e$ is an entry point for $f$:
