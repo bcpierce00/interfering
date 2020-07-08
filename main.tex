@@ -1971,14 +1971,15 @@ tagged $\tagStackDepth{n}$.  \rb{Note that we have also considered and
 %% might also be so tagged, but as long as the jump has the effect of a legal
 %% return, it is OK.
 
-\paragraph*{Testing the conservative policy}
+\paragraph*{Strong Stack Safety}
 %
-This conservative policy can be shown to satisfy an eager \emph{testing
-property}, which at each step of the computation performs integrity and
-confidentiality tests for a stack of running variants, which are kept in
-lockstep with the original machine.
+This conservative policy does not only satisfy the stack safety above,
+but also a provably stronger one, which at each step of the
+computation performs integrity and confidentiality tests for a stack
+of running variants, which are kept in lockstep with the original
+machine.
 
-\definition{Stack integrity test}
+\definition
   Given two machine states $\mach$ and $\mach'$ and a contour $\contour$, these
   satisfy the \emph{stack integrity test} if their high-integrity components
   match:
@@ -1989,7 +1990,7 @@ lockstep with the original machine.
     \mach(\component) = \mach'(\component)
   \]
 
-\definition{Stack confidentiality test}
+\definition
   Given two machine states $\mach_1$ and $\mach_2$ with stepping machine states
   and observations $\mach_1 \stepstoobs{\obs_1} \mach_1'$ and $\mach_2
   \stepstoobs{\obs_2} \mach_2'$, all these satisfy the \emph{stack
@@ -2010,16 +2011,24 @@ lockstep with the original machine.
 \newcommand{\vs}{\mathit{vs}}
 \newcommand{\VSS}{\mathit{VS}}
 
-\definition{Variant stacks}
-  The testing property keeps track of relevant information on a stack whose
-  elements represent variants of the machine by recording an initial machine
-  state, an initial and current variant of the machine, a contour and a return
-  map:
+\newcommand*{\vm}[1]{\ensuremath{\mathit{vm}_{#1}}}
+
+\definition The testing property keeps track of relevant information
+on a {\em variant stack}: a list of machine states, each element of
+which (denoted $\vm{C}$) of which is a variation of the actual machine
+according to a contour $C$.
 %
-  $$\vse \in \VSES ::= \MACHS \times \MACHS \times \MACHS \times \CONTOURS \times \RETMAPS$$
-  $$\vse = (\mathit{init\_machine}(\vse), \mathit{init\_variant}(\vse), \mathit{curr\_variant}(\vse), \contour(\vse), \mathit{ret}(\vse))$$
-  $$\vs \in \VSS$$
-%
+\footnote{The full formal definition in Coq also records additional
+  information (the initial machine state at the call, its initial
+  variation, the contour, and a return predicate) which we elide
+  here for simplicity of exposition.}
+%%
+%  $$\vse \in \VSES ::= \MACHS \times \MACHS \times \MACHS \times \CONTOURS \times \RETMAPS$$
+%  $$\vse = (\mathit{init\_machine}(\vse), \mathit{init\_variant}(\vse), \mathit{curr\_variant}(\vse), \contour(\vse), \mathit{ret}(\vse))$$
+%  $$\vs \in \VSS$$
+%%
+\iflater
+\leo{This can be elided}
   Given a machine state $\mach$, a stack $\vs$ is \emph{well-formed} with
   respect to it if the stack is nonempty, the return map of the bottom element
   is the false property, and for each element $\vse \in \vs$:
@@ -2033,18 +2042,21 @@ lockstep with the original machine.
   \item The return function is in the return map if not the last element. \rb{TODO}
   \item The registers of its contour $\contour(\vse)$ are public.
   \end{itemize}
-
-\definition{Variant stack test}
+  \fi
+  
+\definition
 %
-  Our testing property extends the basic tests above to whole variant stacks.
-  Given a machine that steps $(\mach, \pol) \hookrightarrow_P (\mach', \pol',
-  \obs)$, say that a variant stack $\vs$ that is well-formed with respect to
-  $\mach$ safisfies the \emph{variant stack test} if for each variant element
-  $\vse$, the element can take a step $\mathit{curr\_variant}(\vse)
-  \stepstoobs{\obs} \mach'$ while satisfying the stack integrity test
-  $\mathit{int}_T ~ \contour(\vse) ~ \mach ~ \mach'$ and stack confidentiality
-  test $\mathit{conf}_T ~ \mach ~ \mach'$ with regard to the original machine
-  state. We write this $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$.
+  Our testing property extends the basic tests above to whole variant
+  stacks.  Given a machine that steps $(\mach, \pol) \hookrightarrow_P
+  (\mach', \pol', \obs)$, say that a variant stack $\vs$ \iflater that
+  is well-formed with respect to $\mach$\fi safisfies the
+  \emph{variant stack test} if for each variant element $\vm{C}$
+  (which is a variation of $\mach$ for $C$), $\vm{C}$ can take a step
+  $\mathit{curr\_variant}(\vse) \stepstoobs{\obs} \mach'$ while
+  satisfying the stack integrity test $\mathit{int}_T ~ \contour(\vse)
+  ~ \mach ~ \mach'$ and stack confidentiality test $\mathit{conf}_T ~
+  \mach ~ \mach'$ with regard to the original machine state. We write
+  this $\mathit{\vs}_T ~ (\mach, \pol) ~ \vs$.
 
 \definition{Eager testing property}
   Let $\callmap$ a call map and $\codemap$ a function map. Given a state
