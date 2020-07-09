@@ -1,10 +1,11 @@
-\newcommand{\high}{red}
+\newcommand{\high}{cyan}
 \newcommand{\low}{green}
-\newcommand{\varied}{orange}
-\newcommand{\tainted}{gray}
+\newcommand{\varied}{magenta}
 
 \colorlet{taintH}{\high!40}
 \colorlet{taintL}{\low!40}
+
+\newcommand{\vardata}[2]{\bf {\color{\high} #1}/{\color{\varied} #2}}
 
 \newcommand{\integrityexample}{
 % At Call to H
@@ -43,13 +44,13 @@
   \row{\addi ~ r_4 ~ r_4 ~ 1}{r_4 \leftarrow r_4 + 1}{r_4 \leftarrow 18}
       {Increment $r_4$ by 1}
   \row{\sw ~ \rsp ~ r_4 ~ \negate 5}{[\rsp - 5] \leftarrow r_4}{[103] \leftarrow 18}
-      {Store $r_4$ to {\tt z}}
+      {Store $r_4$ to {\tt z} (oops!)}
   \row{\lw ~ \rra ~ \rsp ~ \negate 1}{\rra \leftarrow [\rsp - 1]}{\rra \leftarrow 27}
       {Load return address}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 1}{\rsp \leftarrow \rsp - 1}{\rsp \leftarrow 108}
       {Restore the stack pointer of {\tt g}}
-  \row{\jalr ~ \rra ~ \rra ~ 0}{??}{PC \leftarrow 27}
-      {Return to {\tt g}}
+  \row{\jalr ~ \rra ~ \rra ~ 0}{\PCname \leftarrow \rra}{\PCname \leftarrow 27}
+      {Return to {\tt g} ($\jalr$)}
   \end{array}
 \]
 \begin{center}
@@ -72,7 +73,7 @@
 \MemoryLabel{-26.5em}{0.75em}{}
 \MemoryLabel{-22.5em}{0.75em}{17}
 \MemoryLabel{-18.5em}{0.75em}{0}
-\MemoryLabel{-14.5em}{0.75em}{108}
+\MemoryLabel{-16em}{0.75em}{108}
 \\
 \end{center}
 }
@@ -84,7 +85,7 @@
   \(\mach_r\) :
   \memory{1}{\emptyoutc}%
   \memory{3}{\high}%
-  \memory{1}{\tainted}%
+  \memory{1}{taintH}%
   \memory{2}{\high}%
   \memory{4}{\low}%
 ~$\cdots$
@@ -105,7 +106,7 @@
   \(\mach_r'\) :
   \memory{1}{\emptyoutc}%
   \memory{3}{\high}%
-  \memory{1}{\tainted}%
+  \memory{1}{taintH}%
   \memory{2}{\high}%
   \memory{4}{\low}%
 ~$\cdots$
@@ -136,94 +137,13 @@
       {Set {\tt w} to 18}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\rsp \leftarrow 106}
       {Deallocate {\tt h}'s call frame}
-  \row{\lw ~ r_5 ~ \rsp ~ \negate 4}{r_5 \leftarrow [\rsp - 4]}{r_5 \leftarrow 18/0}
-      {Load argument {\tt z} $r_5$}
-  \row{\sw ~ \rout ~ r_5 ~ 0}{[\rout] \leftarrow r_5}{[99] \leftarrow 18/0}
+  \row{\lw ~ r_5 ~ \rsp ~ \negate 4}{r_5 \leftarrow [\rsp - 4]}
+      {r_5 \leftarrow \vardata{18}{0}}{Load argument {\tt z} $r_5$}
+  \row{\sw ~ \rout ~ r_5 ~ 0}{[\rout] \leftarrow r_5}{[99] \leftarrow \vardata{18}{0}}
       {Print {\tt z}}      
 \end{array}
 \]
 \[\pi_o(\MPT) \not \eqsim \pi_o(\machT')\]
-}
-
-\newcommand{\confidentialityduringexample}{
-% After Return from H
-% Memory Layout
-\begin{center}
-\MemoryLabel{4em}{2em}{0}
-\MemoryLabel{21em}{2em}{99}
-\MemoryLabel{53em}{2em}{\SP}
-\memory{3}{\unusedc}[{\makebox[0pt]{Instructions}}]%
-\hspace*{3pt}
-$\cdots$
-\memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
-\memory{2}{\high}[{\makebox[0pt]{\HIGHSEC}}]%
-\memory{4}{\low}[{\makebox[0pt]{\(\LOWSEC\)}}]%
-\memory{4}{\high}[{\makebox[0pt]{\(\HIGHSEC\)}}]%
-~$\cdots$
-\MemoryLabel{-46.5em}{0.75em}{42}
-\MemoryLabel{-42.5em}{0.75em}{0}
-\MemoryLabel{-38.5em}{0.75em}{0}
-\MemoryLabel{-34.5em}{0.75em}{0}
-\MemoryLabel{-30.5em}{0.75em}{8}
-\MemoryLabel{-26.5em}{0.75em}{18}
-\MemoryLabel{-22.5em}{0.75em}{17}
-\MemoryLabel{-18.5em}{0.75em}{18}
-\MemoryLabel{-16em}{0.75em}{108}
-\\
-\end{center}
-\begin{center}
-\MemoryLabel{4em}{2em}{0}
-\MemoryLabel{21em}{2em}{99}
-\MemoryLabel{53em}{2em}{\SP}
-\memory{3}{gray}[{\makebox[0pt]{Instructions}}]%
-\hspace*{3pt}
-$\cdots$
-\memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
-\memory{2}{\varied}[{\makebox[0pt]{Varied}}]%
-\memory{4}{\low}%
-\memory{3}{\tainted}[{\makebox[0pt]{Set by {\tt h}}}]%
-\memory{1}{\varied}%
-~$\cdots$
-\MemoryLabel{-46.5em}{0.75em}{?}
-\MemoryLabel{-42.5em}{0.75em}{?}
-\MemoryLabel{-38.5em}{0.75em}{0}
-\MemoryLabel{-34.5em}{0.75em}{0}
-\MemoryLabel{-30.5em}{0.75em}{8}
-\MemoryLabel{-26.5em}{0.75em}{18}
-\MemoryLabel{-22.5em}{0.75em}{17}
-\MemoryLabel{-18.5em}{0.75em}{18}
-\MemoryLabel{-16em}{0.75em}{108}
-\\
-\end{center}
-
-% Starting Register File
-\summary{30}{0}{\thepcctr}{106}{18}{?}
-\vspace*{0.2em}
-
-\setcounter{pcctr}{30}
-% G - Body
-\vspace*{0.2em}
-\[
-\begin{array}{c|c|c|c|c}
-  \row{\lw ~ r_5 ~ \rsp ~ \negate 6}{r_5 \leftarrow [\rsp - 6]}{r_5 \leftarrow 42/?}
-      {Load {\tt main}'s secret, {\tt x} to $r_5$}
-  \row{\sw ~ \rout ~ r_5 ~ 0}{[\rout] \leftarrow r_5}{[99] \leftarrow 42?}
-      {Print {\tt x}}
-  \row{\lw ~ r_5 ~ \rsp ~ \negate 4}{r_5 \leftarrow [\rsp - 4]}{r_5 \leftarrow 0}
-      {Load argument {\tt z} to $r_5$}
-  \row{\add ~ r_4 ~ r_4 ~ r_5}{r_4 \leftarrow r_4 + r_5}{r_4 \leftarrow 18}
-      {Add $r_4$ and $r_5$}
-  \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[103] \leftarrow 18}
-      {Store $r_4$ as the return of {\tt g}}
-  \row{\lw ~ \rra ~ \rsp ~ \negate 2}{\rra \leftarrow [\rsp - 2]}{\rra \leftarrow 8}
-      {Load return address}
-  \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\rsp \leftarrow 104}
-      {Deallocate {\tt g}'s local state}
-  \row{\jalr ~ \rra ~ \rra ~ 0}{??}{PC \leftarrow 8}{Return to {\tt main}}
-\end{array}
-\]
-
-  \[\pi_o(\MPT) \not \eqsim \pi_o(\machT') \text{ when } ? \not = 42\]
 }
 
 \newcommand{\confidentialityendexample}{
@@ -281,18 +201,18 @@ $\cdots$
       {Allocate for return address}
   \row{\sw ~ \rsp ~ \rra ~ \negate 1}{[\rsp - 1] \leftarrow \rra}{[108] \leftarrow 27}
       {Store return address}
-  \row{\lw ~ r_4 ~ 100}{r_4 \leftarrow 100}{r_4 \leftarrow 42/-5}
-      {Load {\tt main}'s secret {\tt x} to $r_4$}
-  \row{\addi ~ r_4 ~ r_4 ~ 1}{r_4 \leftarrow r_4 + 1}{r_4 \leftarrow 43/-4}
+  \row{\lw ~ r_4 ~ 100}{r_4 \leftarrow 100}{r_4 \leftarrow \vardata{42}{-5}}
+      {Load {\tt main}'s secret {\tt x} to $r_4$ (oops!)}
+  \row{\addi ~ r_4 ~ r_4 ~ 1}{r_4 \leftarrow r_4 + 1}{r_4 \leftarrow \vardata{43}{-4}}
       {Increment $r_4$ by 1}
-  \row{\sw ~ \rsp ~ r_4 ~ \negate 2}{[\rsp - 2] \leftarrow r_4}{[107] \leftarrow 43/-4}
+  \row{\sw ~ \rsp ~ r_4 ~ \negate 2}{[\rsp - 2] \leftarrow r_4}{[107] \leftarrow \vardata{43}{-4}}
       {Store $r_4$ as the return value}
   \row{\lw ~ \rra ~ \rsp ~ \negate 1}{\rra \leftarrow [\rsp - 1]}{\rra \leftarrow 27}
       {Load return address}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 1}{\rsp \leftarrow \rsp - 1}{\rsp \leftarrow 108}
       {Restore the stack pointer of {\tt g}}
-  \row{\jalr ~ \rra ~ \rra ~ 0}{??}{PC \leftarrow 27}
-      {Return to {\tt g}}
+  \row{\jalr ~ \rra ~ \rra ~ 0}{\PCname \leftarrow \rra}{\PCname \leftarrow 27}
+      {Return to {\tt g} ($\jalr$) }
   \end{array}
 \]
 
@@ -313,7 +233,7 @@ $\cdots$
 \MemoryLabel{-26.5em}{0.75em}{}
 \MemoryLabel{-22.5em}{0.75em}{17}
 \MemoryLabel{-18.5em}{0.75em}{43}
-\MemoryLabel{-14.5em}{0.75em}{108}
+\MemoryLabel{-16em}{0.75em}{108}
 \\
 \end{center}
 
@@ -335,7 +255,7 @@ $\cdots$
 \MemoryLabel{-26.5em}{0.75em}{-5}
 \MemoryLabel{-22.5em}{0.75em}{17}
 \MemoryLabel{-18.5em}{0.75em}{-4}
-\MemoryLabel{-14.5em}{0.75em}{108}
+\MemoryLabel{-16em}{0.75em}{108}
 %\MemoryLabel{-11.5em}{0.75em}{-5}
 \\
 \end{center}
@@ -350,7 +270,8 @@ $\cdots$
   \memory{1}{\emptyoutc}%
   \memory{6}{\high}%
   \memory{1}{\low}%
-  \memory{2}{\tainted}%
+  \memory{1}{taintL}%
+  \memory{1}{taintH}%
   \memory{1}{\high}%[{\makebox[0pt]{Uninitialized}}]
 ~$\cdots$
 \MemoryLabel{-46.5em}{0.75em}{42}
@@ -366,11 +287,13 @@ $\cdots$
 \end{center}
 
 \begin{center}
+  \ \ \ 
   \(\mach_r'\) :
   \memory{1}{\emptyoutc}%
   \memory{6}{\varied}%
   \memory{1}{\low}%
-  \memory{2}{\tainted}%
+  \memory{1}{taintL}%
+  \memory{1}{taintH}%
 \memory{1}{\varied}%[{\makebox[0pt]{Uninitialized}}]
 ~$\cdots$
 \MemoryLabel{-46.5em}{0.75em}{-5}
@@ -393,7 +316,8 @@ $\cdots$
   \memory{1}{\emptyoutc}%
   \memory{6}{\varied}%
   \memory{1}{\low}%
-  \memory{2}{\tainted}%
+  \memory{1}{taintL}%
+  \memory{1}{taintH}%
 \memory{1}{\varied}%[{\makebox[0pt]{Uninitialized}}]
 ~$\cdots$
 \MemoryLabel{-46.5em}{0.75em}{42}
@@ -417,9 +341,9 @@ $\cdots$
 \vspace*{0.2em}
 \[
 \begin{array}{c|c|c|c|c}
-  \row{\lw ~ r_4 ~ \rsp ~ 0}{r_4 \leftarrow [\rsp]}{r_4 \leftarrow 43/-4}
+  \row{\lw ~ r_4 ~ \rsp ~ 0}{r_4 \leftarrow [\rsp]}{r_4 \leftarrow \vardata{43}{-4}}
       {Load return value to $r_4$}
-  \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[105] \leftarrow 43/?}
+  \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[105] \leftarrow \vardata{43}{-4}}
       {Set {\tt w} to returned value}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\rsp \leftarrow 106}
       {Deallocate {\tt h}'s call frame}
@@ -427,31 +351,31 @@ $\cdots$
       {Load argument {\tt z} $r_5$}
   \row{\sw ~ \rout ~ r_5 ~ 0}{[\rout] \leftarrow r_5}{[99] \leftarrow 0}
       {Print {\tt z}}
-  \row{\add ~ r_4 ~ r_4 ~ r_5}{r_4 \leftarrow r_4 + r_5}{r_4 \leftarrow 43/-4}
+  \row{\add ~ r_4 ~ r_4 ~ r_5}{r_4 \leftarrow r_4 + r_5}{r_4 \leftarrow \vardata{43}{-4}}
       {Add $r_4$ and $r_5$}
-  \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[103] \leftarrow 43/-4}
+  \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[103] \leftarrow \vardata{43}{-4}}
       {Store $r_4$ as ther return of {\tt g}}
   \row{\lw ~ \rra ~ \rsp ~ \negate 2}{\rra \leftarrow [\rsp - 2]}{\rra \leftarrow 8}
       {Load return address}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\rsp \leftarrow 104}
       {Deallocate {\tt g}'s local state}
-  \row{\jalr ~ \rra ~ \rra ~ 0}{??}{PC \leftarrow 8}{Return to {\tt main}}
+  \row{\jalr ~ \rra ~ \rra ~ 0}{\PCname \leftarrow \rra}{\PCname \leftarrow 8}{Return to {\tt main} ($\jalr$)}
 \end{array}
 \]
 \setcounter{pcctr}{8}
 \[
 \begin{array}{c|c|c|c|c}
-  \row{\lw ~ \rsp ~ r_4 ~ \negate 1}{r_4 \leftarrow [\rsp - 1]}{r_4 \leftarrow 43/-4}
+  \row{\lw ~ \rsp ~ r_4 ~ \negate 1}{r_4 \leftarrow [\rsp - 1]}{r_4 \leftarrow \vardata{43}{-4}}
       {Load return value to $r_4$}
-  \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[101] \leftarrow 43/-4}
+  \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[101] \leftarrow \vardata{43}{-4}}
       {Set {\tt y} to the result}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 4}{\rsp \leftarrow \rsp - 2}{\rsp \leftarrow 102}
       {Deallocate {\tt g}'s call frame}
   \row{\lw ~ \rsp ~ r_5 ~ \negate 2}{r_5 \leftarrow [\rsp - 2]}{r_5 \leftarrow 42}
       {Load {\tt x} to $r_5$}
-  \row{\add ~ r_4 ~ r_4 ~ r_5}{r_4 \leftarrow r_4 + r_5}{r_4 \leftarrow 85/38}
+  \row{\add ~ r_4 ~ r_4 ~ r_5}{r_4 \leftarrow r_4 + r_5}{r_4 \leftarrow \vardata{85}{38}}
       {Add {\tt x} and {\tt y}}
-  \row{\sw ~ \rout ~ r_4 ~ 0}{[\rout] \leftarrow r_4}{[99] \leftarrow 85/38}
+  \row{\sw ~ \rout ~ r_4 ~ 0}{[\rout] \leftarrow r_4}{[99] \leftarrow \vardata{85}{38}}
       {Print {\tt x + y}}
 \end{array}
 \]
