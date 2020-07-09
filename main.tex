@@ -128,7 +128,23 @@
 %% Note: \begin{abstract}...\end{abstract} environment must come
 %% before \maketitle command
 \begin{abstract}
-\bcp{Hey, we should have an abstract \ldots}
+What is stack safety? Numerous mechanisms have been proposed to guard
+against attacks that corrupt the call stacks of running programs, and many
+others rely on a protected stack as an assumption to provide higher level
+guarantees\bcp{this is a good point, but we don't pick it up anywhere in the
+  paper, do we?}, a clear and precise definition of stack safety is missing
+from the literature.
+
+We propose a formal definition of stack safety phrased in the technical
+terminology of language-based security---as a combination of a
+confidentiality property (callees should not be able to read their caller's
+stack frames) and an integrity property (callees should not corrupt their
+caller's stack frames or control state).
+  %
+We show how these properties are enforced or approximated by a range of
+existing stack protection mechanisms\bcp{that is not exactly what we do,
+  though.  Let's (re)write the contributions first.} and discuss some useful
+stronger and weaker variants.  \bcp{should we mention stktokens here?}
 \end{abstract}
 
 
@@ -2553,7 +2569,7 @@ characterize what alternative property these policies ought to implement.
     observable integrity and confidentiality without violating the policy.
     This can be fixed by generating distinct tags per-activation.
 
-    The lazy policy can be repaired if, instead of tagging each function 
+    The lazy policy can be repaired if, instead of tagging each function
     activation with its depth in the stack, we generate a fresh activation
     identifier on each call, which prevents a program from exploiting stale
     tags from previous activations. A related mechanism was explored in the
@@ -2578,50 +2594,76 @@ characterize what alternative property these policies ought to implement.
 \section{Related Work}
 \label{sec:relwork}
 
-CHERI \rb{cite}
+%% CHERI \rb{cite}
 
-\citet{Skorstengaard+19b} introduce a calling convention to preserve local state
-encapsulation and well-bracketed control flow by the use of local capabilities.
-Although the required hardware support is readily available in capability
-machines like CHERI, this technique incurs potentially prohibitive performance
-costs, because it requires the unused part of the stack to be cleared whenever a
-security boundary is crossed. In the discussion, ``while [the authors] claim
-that [their] calling convention enforces control-flow correctness, [they] do not
-prove a general theorem that shows this, because it is not clear what such a
-theorem should look like,'' noting that the correctness property enjoyed by
-their technique ``is not made very explicit.''
-
-StkTokens \citep{Skorstengaard+19} protects the stack by enforcing local state
-encapsulation and well-bracketed control flow. It does so by defining a calling
-convention that makes use of linear capabilities for stack and return pointers
-operating on a single shared stack, and by requiring that protected components
-avoid compromising their own security by following certain simple rules.
-Informally, local state encapsulation is defined by restricting accesses to the
-range of memory allocated to the current stack frame, and well-bracketed control
-flow by only allowing returns from the topmost frame to the immediately adjacent
-frame below. Formally, it improves on \citet{Skorstengaard+19b} by building
-those properties into the semantics of a capability machine with a built-in call
-stack and call and return instructions, which is proven fully abstract with
-respect to a more concrete capability machine that replaces those
-pseudo-instructions with their calling convention.
-
-\rb{As far as I can tell, while their notion of components and interfaces seems
-  standard, observable behavior appears to be limited to cotermination. The
-  previous paper makes explicit that (at least at that point) they are not
-  interested in externally observable side effects like console output or memory
-  access traces.}
-
-We are confident \rb{how strong a claim to make, with substantiation} that
-StkTokens satisfies the eager stack safety property, and even the stronger eager
-testing property \rb{refs}. The main limitation of StkTokens is its reliance on
-linear capabilities, as it is unclear now they could be added to practical
-capability machines, especially in terms of efficiency.
+\paragraph{Formal Stack Safety on Capability Machines}
 %
-\rb{On the other hand, we know that these can be implemented as micropolicies,
-  cf. linear return capabilities in yannis-report (what about performance?)}
+To our knowledge, the first and only line of work that has attempted to furnish
+a positive and formal characterization of the meaning of stack safety was
+inaugurated by \citet{Skorstengaard+19b}, who introduce a calling convention
+that uses local capabilities to preserve local state encapsulation and
+well-bracketed control flow, using a logical relation to reason about the stack
+safety of concrete programs. Although the required hardware support is readily
+available in capability machines like CHERI, this technique incurs potentially
+prohibitive performance costs, because it requires the entire unused part of the
+stack to be cleared whenever a security boundary is crossed. Their logical
+relation captures capability safety without ``externally observable side-effects
+(like console output or memory access traces).'' In the discussion, ``while [the
+authors] claim that [their] calling convention enforces control-flow
+correctness, [they] do not prove a general theorem that shows this, because it
+is not clear what such a theorem should look like,'' noting that the correctness
+property enjoyed by their technique ``is not made very explicit.''
 
-\rb{There are quite a few parallels at various levels, although the definitions
-  are overall more implicit and not given formally.}
+StkTokens \citep{Skorstengaard+19} is a natural continuation of that work. Like
+its predecessor, it aims to protect the stack by enforcing local state
+encapsulation and well-bracketed control flow. It does so by defining a new
+calling convention that makes use of linear capabilities for stack and return
+pointers. The convention operates on a single shared stack and requires that
+protected components avoid compromising their own security by following certain
+simple rules---like avoiding to leak their private capability seals. More
+precisely but still informally, local state encapsulation is defined as
+restricting accesses to the range of memory allocated to the current stack
+frame, and well-bracketed control flow as only allowing returns from the topmost
+frame to the immediately adjacent frame below. Formally, it improves on
+\citet{Skorstengaard+19b} by building those properties into the semantics of a
+capability machine with a built-in call stack and call and return instructions,
+which is proven fully abstract with respect to a more concrete capability
+machine that replaces those pseudo-instructions with their calling convention.
+Their proof of full abstraction uses a standard notion of components, which
+import and export functions through their interfaces; their model of
+observations is limited to cotermination.
+
+We are confident that the linear capability machines introduced by
+\citep{Skorstengaard+19}, in combination with the StkTokens calling convention,
+can be modeled in our framework and satisfy our definition of stack safety in
+\cref{sec:lse-and-wbcf}. Further, we expect them to satisfy the even stronger
+property developed in \cref{sec:enforcement}. Proving these conjectures would
+involve materializing their definitions of local state encapsulation and
+well-bracketed control flow, which exist only in enmeshed form as part of the
+semantics of the capability machines. The main practical limitation of StkTokens
+is its reliance on linear capabilities, as it is unclear now they could be added
+to practical capability machines, especially in terms of efficiency---previous
+work on micropolicies \citep{yannis-report} has shown how to use that framework
+to implement linear return capabilities.
+
+\paragraph{Protecting the Stack with Micropolicies}
+%
+\citet{DBLP:conf/sp/RoesslerD18} consider a standard attacker model where all
+attacks against stack data are in scope (but not side channels or hardware
+attacks), and study the protection of stack data through three families of
+micropolicies that tag stack objects with a pair of frame and object identifiers
+used to validate accesses to the stack: Return Address Protection (which
+prevents an adversary from overwriting designated return addresses), Static
+Authorities (which only allows the code of a function to access the stack frames
+of its own dynamic instances), and Depth Isolation (described in
+\cref{sec:enforcement}). All these policies exploit various kinds of spatial and
+temporal locality of stack memory and local call graphs, as well as information
+generated by the compilation toolchain, to strike various balances between
+precision and cacheability, evaluated through benchmarks that demonstrate
+limited performance overhead. In addition to the baseline ``eager'' policies,
+they propose a number of lazy optimizations, notably Lazy Tagging and Lazy
+Clearing, discussed in \cref{sec:lazy}, with associated improvements in
+performance.
 
   \paragraph{Heap Safety as a Security Property}
 \bcp{Talk about the relation.}
@@ -2642,7 +2684,7 @@ capability machines, especially in terms of efficiency.
   \label{sec:future}
 
   We have presented a pure notion of stack safety that omits many complicating
-  factors common to real system. In particular, our model as presented exploits
+  factors common to real systems. In particular, our model as presented exploits
   the simplifying assumption that privilege never increases during a function
   call, and that therefore a contour computed once on the entry to a function
   describes its privilege throughout. Our future plans are to extend the model
