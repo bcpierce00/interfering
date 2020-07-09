@@ -132,7 +132,7 @@ What is stack safety? Numerous mechanisms have been proposed to guard
 against attacks that corrupt the call stacks of running programs, and many
 others rely on a protected stack as an assumption to provide higher level
 guarantees\bcp{this is a good point, but we don't pick it up anywhere in the
-  paper, do we?}, a clear and precise definition of stack safety is missing
+  paper, do we?}\leo{No, should we delete this? it still makes sense in flow}, a clear and precise definition of stack safety is missing
 from the literature.
 
 We propose a formal definition of stack safety phrased in the technical
@@ -144,6 +144,7 @@ caller's stack frames or control state).
 We discuss how these properties are enforced or approximated by  
 existing stack protection mechanisms and describe some useful
 provably stronger and weaker variants.  \bcp{should we mention stktokens here?}
+\leo{Not sure. We almost never cite stuff in the abstract, do we?}
 \end{abstract}
 
 
@@ -225,11 +226,13 @@ provably stronger and weaker variants.  \bcp{should we mention stktokens here?}
 %
 %\leo{I hate the writing here, but I wanted to make a start.}
 
-\bcp{We don't actually say very clearly anywhere that we are interested in
-  low-level enforcement mechanisms for machine-code programs (because this
-  is where stack attacks occur, and because at higher levels of abstraction
-  the stack is a built-in concept, not something that can be attacked even
-  in principle).  This could cause confusion.\apt{not so worried}}
+%\bcp{We don't actually say very clearly anywhere that we are interested in
+%  low-level enforcement mechanisms for machine-code programs (because this
+%  is where stack attacks occur, and because at higher levels of abstraction
+%  the stack is a built-in concept, not something that can be attacked even
+%  in principle).  This could cause confusion.\apt{not so worried}}
+%\leo{I agree. I've clarified the writing in the top of the running example
+%  a bit to make sure though}
 
 The call stack is a perennial target for attacks
 based on memory safety vulnerabilities, with potential consequences
@@ -243,15 +246,15 @@ split stacks~\citep{Kuznetsov+14},
 shadow stacks~\citep{Dang+15,Shanbhogue+19},
 capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b},
 and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \iflater\apt{Mostly from
-  nick; there could be more}\fi
+  nick; there could be more}\leo{Do we want to hunt for more refs here?}\fi
 
 But what {\em is} this stack safety of which people speak? Precise formal
 definitions are mostly lacking: rather, the notion
 is commonly defined in a negative way, by enumerating the bad things that a
 given enforcement mechanism
 prevents, such as corruption of return addresses, buffer overflows, or
-use of uninitialized variables\bcp{Does use of unitialized variables lead to
-stack safety attacks?\apt{sure, via buffer overflow}}.
+use of uninitialized variables.
+%\bcp{Does use of unitialized variables lead to stack safety attacks?\apt{sure, via buffer overflow}}
 %with the notion usually being
 %defined negatively: through examples of stack-based exploits
 %\rb{usually though not always; as noted below there are other
@@ -273,7 +276,7 @@ technique.  In other words, we seek formal criteria that can be applied
 to \emph{any} mechanism for protecting stack-based low-level programs to judge
 whether or not it actually ``guarantees stack safety.''
 %
-Our key contribution is a novel, generic presentation of
+Our key contribution is such a novel and generic presentation of
 local state encapsulation and well-bracketed control flow using the
 technical framework of language-based security.
 
@@ -290,37 +293,31 @@ which promises that, if a function call ever returns, the caller's stack
 data at the point of return will be identical to what it was before the
 call.
 
-\iflater
-\bcp{We need to point out somewhere that we are only dealing with
-stack safety, though we discuss (somewhere) how our property can be combined
-with the heap safety property of [Azevedo et al]}\leo{Should this be
-  here or in the assumptions as presented in the running
-  example?}\bcp{Probably better there.}
-\fi
+The intuition behind \citeauthor{Skorstengaard+19}'s {\em
+  well-bracketed control flow} is the need to protect the call graph
+itself: a callee should pass control back to the caller only by
+returning in the standard way (transferring control to the instruction
+following the call); it should not be allowed to jump back into the
+caller's code at an arbitrary point, either directly (via a jump
+instruction) or indirectly (by corrupting stack data and
+returning). Well-bracketed control flow establishes safety between
+functions: each instruction is uniquely owned by some function, and
+all jumps between functions are either calls that enter at a marked
+entry point or returns that re-enter just after their associated call
+in the standard nested call structure.  \apt{clarify what we are
+  contributing here. We are not trying to phrase this as a security
+  property.}\leo{Better now? Should this be fixed two paragraphs above too?}
 
-The intuition behind \citeauthor{Skorstengaard+19}'s {\em well-bracketed control
-  flow} is
-the need to protect the call graph itself: a callee should pass control
-back to the caller only by returning in the standard way (transferring
-control to the instruction following the call); it should
-not be
-allowed to jump back into the caller's code at an arbitrary point, either
-directly (via a jump instruction) or indirectly (by corrupting stack
-data and returning). Well-bracketed control flow establishes safety
-between functions: each instruction is uniquely owned by some
-function, and all jumps between functions are either calls that enter
-at a marked entry point or returns that re-enter just after their
-associated call in the standard nested call structure.  \apt{clarify
-  what we are contributing here. We are not trying to phrase this as a security property.}
-
-To phrase these two \apt{which two? Not WBCF!} aspects of stack safety as security properties requires
-an explicit attacker model: a clear understanding of who is being protected
-and from what. Most existing stack protection mechanisms envisage scenarios
-where a callee is influenced by external inputs to corrupt the stack in some
-way. To avoid getting into the details of exactly how this happens when
-formalizing our properties, we use an even stronger model: when we state the
-protections that a function can rely on when it makes a call, we assume that
-the callee can execute arbitrary instructions until it returns.
+To phrase stack safety, and especially local state encapsulation, as a
+security property requires an explicit attacker model: a clear
+understanding of who is being protected and from what. Most existing
+stack protection mechanisms envisage scenarios where a callee is
+influenced by external inputs to corrupt the stack in some way. To
+avoid getting into the details of exactly how this happens when
+formalizing our properties, we use an even stronger model: when we
+state the protections that a function can rely on when it makes a
+call, we assume that the callee can execute arbitrary instructions
+until it returns.
 
 A key challenge in adapting the concepts of language-based security to this
 setting is that stack safety is a ``nested'' property: not only does a given
@@ -332,32 +329,33 @@ the different components of the machine state and adjusting the integrity
 and confidentiality levels of different stack locations and registers at
 every transition (call or return) between functions.
 
-\leo{Took a stab. Needs rewriting}%
-
 After formally defining stack safety, we show that our definition is
 enforceable using an existing tag-based enforcement
 mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider their
-conservative Depth Isolation policy, which enforces the
-our basic stack safety property. It also enforces an alternative
-lockstep property that requires integrity and confidentiality at every step of
-an execution trace, which fails faster and thus is more efficient to test;
-we prove (in Coq) that the lockstep property is stronger 
-than our basic property,
-However, at the same time the
-conservative enforcement mechanism is expensive to implement. In the
-same work, \citeauthor{DBLP:conf/sp/RoesslerD18} propose a different
-mechanism that is more efficient by virtue of being lazy in its
-enforcement. At a high level, instead of guaranteeing integrity and
-confidentiality when a callee returns, this policy checks it when the caller
-actually makes use of (potentially compromised) data. The lazy policy
-does not enforce our basic propety, but an enhanced version of it does
-enforce a proveably weaker property that still protects
-from unsafe callees, but is less intuitive.
+conservative Depth Isolation policy, which not only enforces our basic
+stack safety property, but also an alternative lockstep property that
+checks for integrity and confidentiality violations at every step of
+an execution trace. Thus, this property fails faster and can lead to
+more efficient testing. We prove (in Coq) that this lockstep property
+implies our basic definition of stack safety.
 
-In summary, we offer the following contributions:\bcp{I would still like to
-  see these points phrased in ``contribution normal form'': say exactly what
-  we did for each one (it's a bit vague---''considers,'' etc.), and
-  explicitly say why it is (a) useful, (b) challenging, and (c) novel.}
+However, at the same time the conservative enforcement mechanism is
+expensive to implement. In the same work,
+\citeauthor{DBLP:conf/sp/RoesslerD18} propose a different mechanism
+that is more efficient by virtue of being lazy in its enforcement. At
+a high level, instead of guaranteeing integrity and confidentiality
+when a callee returns, this policy checks for violations when the
+caller actually makes use of (potentially compromised) data. The lazy
+policy does not enforce our basic propety, but an enhanced version of
+it does enforce a proveably weaker property that still protects from
+unsafe callees, but is less intuitive.
+
+In summary, we offer the following contributions:
+%\bcp{I would still like to
+%  see these points phrased in ``contribution normal form'': say exactly what
+%  we did for each one (it's a bit vague---''considers,'' etc.), and
+%  explicitly say why it is (a) useful, (b) challenging, and (c) novel.}
+% +1 on Andrew's rewrite
 \begin{itemize}
 \item
   % \leo{More? Extensional}\bcp{We might need to invent a word for   this---''quasi-extensional''?}
@@ -435,11 +433,11 @@ loads, stores, and (direct or indirect) jumps; other details of the machine's IS
 
 To make our stack safety definitions precise, we make some simple assumptions about
 memory layout; our definitions could easily be changed to be parametric over
-these assumptions, at the cost of slightly greater complexity.  Memory 
+these assumptions, at the cost of greater complexity.  Memory 
 consists of an instruction region and a stack that grows upwards; for simplicity,
 we omit a heap. (Integrating a memory safety property for the heap in the style of
 \citet{DBLP:conf/post/AmorimHP18} is a natural extension that we discuss
-in~\Cref{sec:related}.)  The stack has a conventional structure, with
+in~\Cref{sec:relwork}.)  The stack has a conventional structure, with
 contiguously allocated per-function frames.
 The boundary between the frames of a caller and callee is given by the $\rsp$ register
 at the time of the call.  The stack can be used to
@@ -471,7 +469,7 @@ We model ordinary program state and policy enforcement state separately to make 
 easier to use well-established concepts from language-based security.  
 In particular, confidentiality has an elegant extensional characterization in terms of
 \emph{noninterference}: a program preserves the confidentiality of certain data if
-\emph{varying} that data would not change the program's observable behavior~\citep{??}.
+\emph{varying} that data would not change the program's observable behavior.\leo{What citation should go here? Not the hyperproperties one?}
 In applying this idea to a system that incorporates policy enforcement, only
 ordinary program data should be varied, whereas any associated policy enforcement
 state should be left alone; our model makes this distinction obvious.
@@ -526,7 +524,8 @@ the stack protection policies of
 (ordinary data) with base and bounds information (policy data),
 and their use requires rewriting source code (e.g. to use capabilities in place
 of ordinary pointers), so separating ordinary machine state from policy
-state is delicate. \apt{But we conjecture it can be done...?}\leo{Just say that?}
+state is delicate, but we conjecture it can be done with some effort.
+%\apt{But we conjecture it can be done...?}\leo{Just say that?}
 
 %% Mapping the underlying protection
 %% mechanisms to policy states and step function would be a delicate operation, as
@@ -1014,7 +1013,10 @@ $\cdots$
 \end{figure}
 
 \bcp{We really want readers to understand this trace.  I think we should
-  spend a few more words walking through it in detail.}
+  spend a few more words walking through it in detail.}\leo{Not sure
+  exactly what you mean here. It would take roughly a page to go through
+  each instruction in detail - that's what the last column is for in my mind.
+  Or do you have something else in mind?}
 
 \Cref{fig:running-program} shows a high-level view of our running example,
 written in C-like pseudo-code.  It consists of a {\tt main} function that
@@ -1033,7 +1035,7 @@ memory.
 First, since our goal is to formalize stack safety, we ignore the heap
 and assume that all variables are stack allocated. As noted in the
 previous section, the extension to account for memory safety is
-discussed in~\Cref{sec:related}.
+discussed in~\Cref{sec:relwork}.
 %
 We also assume that the machine is word- (not byte-) addressed, that program
 instructions start from location 0, that the machine communicates with the
