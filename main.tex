@@ -1087,8 +1087,7 @@ our machine model and some kind of static or dynamic, software- or
 hardware-enforced security monitor. We will refer back to the running
 example of \cref{sec:running-example} for concreteness, and then,
 in~\cref{sec:enforcement}, extend this model with a dynamic policy
-enforcement mechanism based on
-\citet{DBLP:conf/sp/RoesslerD18}.\apt{needs a relook}
+enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
 
 \subsection{Values, States, and Observations}
 
@@ -1117,6 +1116,8 @@ communicates to the outside world:
 \[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
 \[\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \]
 %
+This step function is total---execution traces are infinite unless cut
+short externally (e.g. by a policy as we'll see below).
 
 Notice that we choose to model observations explicitly, rather than simply treating
 a subset of registers or memory as being observable.  This choice gives
@@ -1147,7 +1148,13 @@ set of policy states \(\pol \in \POLS\), a policy step function
 \rightharpoonup \POLS\), and an initializer \(\pinit : \MACHS \rightharpoonup
 \POLS\). The initializer establishes the initial policy state for a given
 machine state, but is partial to reflect that some policies are only defined
-on states that are well-formed in some way.\apt{Is this our current thinking?}
+on states that are well-formed in some way.
+%
+\apt{Is this our current thinking?}
+\leo{I thought this was what we settled on in the last two days' discussions}
+%
+A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be given in
+\Cref{sec:enforcement}.
 
 We write $\MPS$ for the set of all pairs of machine states and policy
 states.
@@ -1161,27 +1168,6 @@ by combining it with the regular step function for machine states.
                \polstep \pol_2\)}
             {\(\mpstate{\mach_1}{\pol_1} \stepstopol{\obs}
                \mpstate{\mach_2}{\pol_2}\)}
-
-A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be given in
-\Cref{sec:enforcement}.
-
-\apt{TODO: relate back to \Cref{sec:threat} and forward to \Cref{sec:enforcement}.}
-\rb{Added some quick pointers, although one might expect to see Nick's policy
-as a more formal instance of this framework, which at the moment it is not.}
-
-%\leo{TODO: Forward pointer to policies right?}\bcp{Yes.  But also we can say
-%in more detail that the intention is to capture any kind of dynamic
-%enforcement mechanism and give as many names and citations as we can.}
-
-\paragraph*{Machine Termination}
-
-In our model, the machine step function is total---a program does not halt
-on its own, but may instead enter a silent terminal loop. Runs are only cut
-short by the policy step function. This means that software-only policies that
-can catch errors must be modeled as reaching an error state\apt{??}, not
-halting outright.\apt{Is this our current thinking?}
-\rb{And if so, should the running example loop at the end, or do we assume
-that is exactly what happens after main is done?}
 
 
 \subsection{Traces}
@@ -1243,7 +1229,7 @@ function since traces are non-empty, and the final element (if one exists) with
 \(\last(\Trace)\), which is partial.
 
 \paragraph*{Until}
-The operation \(\PUT~(\Trace,f)\)
+The operation \(\PUT~(f,\Trace)\)
 %\bcp{Wouldn't
 %``While'' be more mnemonic?} \sna{Appealing, but it's more of a
 %``while-not''? Trying out ``until''. In any case... moving away
@@ -1274,7 +1260,7 @@ we must replace the final observation with a \(\tau\).
   \end{minipage}
   \end{center}
 %
-Note that if the resulting trace is a strict prefix of the parameter, then the
+If the resulting trace is a strict prefix of the parameter, then the
 predicate must hold on its final element. If the predicate never holds,
 \(\PUT\) is the identity function.
 
@@ -1348,16 +1334,13 @@ coinductively:
 
 We then define similarity of observation traces as traces prefixing each other:
 
-\bcp{Can we please call it something else?  An
-  ``equivalence'' should always be transitive.}
-\sna{Similarity seems less loaded?}
 \[\obsT_1 \simeq \obsT_2 \triangleq \obsT_1 \lesssim \obsT_2 \land \obsT_2 \lesssim \obsT_1\]
-
-\leo{I still don't know how to do this transition. Maybe contrast
-with the ``perhaps surprisingly'' later?} Note that
-similarity of observation traces could alternatively be defined coinductively,
-just like the prefix relation, but by dropping the asymmetric rules that allow
-for a finite trace ($\tau \lesssim \obsT$ or $w \lesssim w\obsT$).\apt{Is this immportant?}
+% 
+%\leo{I still don't know how to do this transition. Maybe contrast
+%with the ``perhaps surprisingly'' later?} Note that
+%similarity of observation traces could alternatively be defined coinductively,
+%just like the prefix relation, but by dropping the asymmetric rules that allow
+%for a finite trace ($\tau \lesssim \obsT$ or $w \lesssim w\obsT$).\apt{Is this immportant?}\leo{I agree. Probably not}
 
 Note that an infinite silent trace is a
 prefix of (and equivalent to) any other trace. While this might seem
@@ -1369,11 +1352,10 @@ steps for a long time before producing some output.
 \section{Stack Safety, Formally}
 \label{sec:lse-and-wbcf}
 
-In this section we formalize our definition of stack safety. We
-begin with our model of \leo{compiler-provided?} knowledge about the
-program structure, and then dive into the formal definitions of local state
-encapsulation and well-bracketed control flow that together constitute
-stack safety.
+In this section we formalize our definition of stack safety. We begin
+by describing our model of knowledge about the program structure, and
+then dive into the formal definitions of local state encapsulation and
+well-bracketed control flow that together constitute stack safety.
 
 \subsection{Program Structure}
 
@@ -1606,7 +1588,7 @@ of locations that subsequently affect the caller's observable actions
 
 \begin{figure}
   \integrityexample
-  \caption{Failing Trace Integrity\bcp{the ``108'' is not placed right}}
+  \caption{Failing Trace Integrity}
   \label{fig:intex}
 \end{figure}
 
@@ -1624,9 +1606,6 @@ and final states colored to show the contour; high
 integrity memory is in \high, while low integrity is in \low.
 At the end of the trace high integrity address 103 should match the initial
 state, and does not. So trace integrity is violated.
-\rb{There are some color name macros, but none for integrity yet? Use instead
-  of hardcoded color names.}\apt{I don't understand what's going on with the colors.
-  I thought we agreed to use the same coloring scheme throughout?}
 
 We now lift this definition to an integrity property for a complete
 execution trace. We do this by requiring that trace integrity holds
@@ -1640,10 +1619,6 @@ machine-policy state pairs \(\mpstate{\mach_c}{\pol_c}\) and
 \(\mach_c\) is a valid call with \(n\) arguments, and
 \(\mpstate{\mach_c}{\pol_c}\) steps to \(\mpstate{\mach_e}{\pol_e}\).
 
-\apt{or is in some function?? and why do we need either??}:
-\sna{I think Andrew is right that we don't need to know the function
-     here, or that the entry point is valid; that's part of WBCF.}
-\rb{Agreed, removed $f$}
 %and \(\mach_e\) is an entry point for some function \(f\):
 
   \[\begin{split}
@@ -1656,20 +1631,30 @@ machine-policy state pairs \(\mpstate{\mach_c}{\pol_c}\) and
 
 \definition
 
-{\em Stack integrity} is a property of a system with respect to a call map
-\(\callmap\) that holds when every \(n\)-transition \(\mpstate{\mach_c}{\pol_c}\)
-and \(\mpstate{\mach_e}{\pol_e}\) in every legal trace exhibits trace integrity
-on the prefix up to its return, if any. For any initial state \(\mach_0\)
-we take the induced trace \(\mpstate{\mach_0}{\pinit(\mach_0)} \hookrightarrow
-\MPT\). For each \(n\)-transition \(\mathit{Tr}_n ~ \MPT ~
-\mpstate{\mach_c}{\pol_c} ~ \mpstate{\mach_e}{\pol_e}\) we take the prefix of
-the call up to its return, \(\mpstate{\mach_e}{\pol_e} \hookrightarrow
-\MPT_{call} | \ret{\mach_c}\). If for any such call trace \(\MPT_{call}\),
-\(\propdef{TraceInt} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{call}\), then the
-system as a whole enjoys stack integrity with respect to \(\callmap\).
+We say that a system enjoys {\em stack integrity} if for every initial
+state $\mach_0$ and its corresponding induced trace $\MPT$ (with
+$\mpstate{\mach_0}{\pinit(\mach_0)} \hookrightarrow \MPT$), for every
+$n$-transition from $\mpstate{\mach_c}{\pol_c}$ to
+$\mpstate{\mach_e}{\pol_e}$ in $\MPT$, if we take the prefix of the
+call until its corresponding return $\mpstate{\mach_e}{\pol_e}
+\hookrightarrow \MPT_{call} ~ | ~ \ret{\mach_c}$, then $\MPT_{call}$ must
+satisfy trace integrity:
+\[\propdef{TraceInt} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{call}\]
 
-\apt{Some more words needed here to smooth the technicalities.}
-\sna{Attempt...}
+
+%{\em Stack integrity} is a property of a system with respect to a call map
+%\(\callmap\) that holds when every \(n\)-transition  in every legal trace exhibits trace integrity
+%on the prefix up to its return, if any. For any initial state \(\mach_0\)
+%we take the induced trace. For each \(n\)-transition \(\mathit{Tr}_n ~ \MPT ~
+%\mpstate{\mach_c}{\pol_c} ~ \mpstate{\mach_e}{\pol_e}\) we take the prefix of
+%the call up to its return, \(\mpstate{\mach_e}{\pol_e} \hookrightarrow
+%\MPT_{call} | \ret{\mach_c}\). If for any such call trace \(\MPT_{call}\),
+%\(\propdef{TraceInt} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{call}\), then the
+%system as a whole enjoys stack integrity with respect to \(\callmap\).
+% 
+%\apt{Some more words needed here to smooth the technicalities.}
+%\sna{Attempt...}
+%Rewrote for clarity
 
 \subsubsection{Stack Confidentiality}
 
@@ -1702,12 +1687,16 @@ would behave if it were started from a variant initial machine state.
 %
 As an example of variations, consider the top of \Cref{fig:confex}
 which shows a snapshot of the state as in the running example (top
-memory layout) and a variation of it (bottom). \leo{Finalize
-  contents, describe}
+memory layout) and a variation of it (bottom). 
 %
 The ``Effect'' column shows differences between the two runs by writing values
 in the original run in {\high} and values in the variant run in {\varied}
 separated by a slash.
+%
+This example will end up a violation of confidentiality, as a
+difference in a confidential location (\textcolor{cyan}{42} vs
+\textcolor{magenta}{5} in location 100) leads to a visible
+difference in return value.
 
 \definition
 
@@ -1718,8 +1707,8 @@ reflects the states that are considered to have returned. We abstract over
 \(f\) was called. There are three cases in which \(\MPT\) and \(\machT\)
 enjoy trace confidentiality with respect to \(R\).
 
-\sna{Interestingly, split out like this, we don't need to talk about
-     contour here -- they are varied in the next property.}
+%\sna{Interestingly, split out like this, we don't need to talk about
+%     contour here -- they are varied in the next property.}+1
 \begin{itemize}
   \item If \(\MPT\) has a final state \(\last(\MPT) = \mpostate{\mach_r}
     {\pol_r}{\obs_r}\) and \(R\ \mach_r\), then \(\machT\) is also finite with
@@ -1780,14 +1769,15 @@ hold -5, in {\varied}.  After the last step, the return states \(\mach_r\) and
 \(\mach_r'\) should agree on every component that changed since \(\mach_e\) or
 \(\mach_e'\). Addresses 108 and 109 have changed, shown in light {\low}, and while 109
 had changed in a consistent way (independent of the variation), 108 holds either 43 or -4, so the trace does not obey trace confidentiality.
-\rb{Color name macros}
-\apt{Explain slash notation in effects column.}
-\rb{Wrote some words to explain after def. 5.4 (variations).}
+%\rb{Color name macros}
+%\apt{Explain slash notation in effects column.}
+%\rb{Wrote some words to explain after def. 5.4 (variations).}
 
-As another example,
-changing line 30 of the running example to $r_5  \leftarrow [\rsp - 6]$ would cause
-{\tt g} to read the value of {\tt main}'s local variable {\tt x} and then immediately
-output it, violating the internal observation clause of the confidentiality definition.
+As another example, changing instruction 30 of the running example to
+$r_5 \leftarrow [\rsp - 6]$ would cause {\tt g} to read the value of
+{\tt main}'s local variable {\tt x} and then immediately output it,
+violating the internal observation clause of the confidentiality
+definition.
 
 \begin{figure}
   \confidentialityendexample
@@ -1801,27 +1791,28 @@ pattern as in stack integrity:
 
 \definition%{Stack Confidentiality}
 %Let $\callmap$ be a call map and $\codemap$ a function map.
-We will say that a system satisfies {\em stack confidentiality} with respect to
-\(\callmap\) in a similar way to stack integrity. For every initial state
-\(\mach_0\), we take the induced trace \(\mpstate{\mach_0}{\pinit(\mach_0)}
-\hookrightarrow \MPT\). Then for any \(n\)-transition
-\(\mathit{Tr}_n ~ \MPT ~ \mpstate{\mach_c}{\pol_c} ~
-\mpstate{\mach_e}{\pol_e}\), we take the prefix trace until return:
+For every initial state \(\mach_0\), we take the induced trace
+\(\mpstate{\mach_0}{\pinit(\mach_0)} \hookrightarrow \MPT\). Then for
+any \(n\)-transition from $\mpstate{\mach_c}{\pol_c}$ to
+$\mpstate{\mach_e}{\pol_e}$ in $\MPT$, we take the prefix of the trace
+from the entry point until its corresponding return:
 %
-\[\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} | \ret{\mach_c}\]
-
+\[\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} ~ | ~ \ret{\mach_c}\]
+%
 We also take the corresponding trace from any variant \(\mach_e'
 \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\):
 %
-\[\mach_e' \hookrightarrow \machT_{\mathit{call}} | \ret{\mach_c}\]
+\[\mach_e' \hookrightarrow \machT_{\mathit{call}} ~ | ~ \ret{\mach_c}\]
+%
+If trace confidentiality holds for all such pairs of traces,
+\(\propdef{TraceConf} ~ \ret{\mach_c} ~ \MPT ~ \machT\), then the
+system as a whole enjoys {\em stack confidentiality} with respect to
+\(\callmap\).
 
-If, for all such pairs of traces, \(\propdef{TraceConf} ~
-\ret{\mach_c} ~ \MPT ~ \machT\), then the system as a whole enjoys
-stack confidentiality with respect to \(\callmap\).
-
-\apt{oy. still needs work to make this intelligible}
-\sna{Attempted. There's a tension between introducing all the variables
-     and keeping a good flow that I'm not sure I'm managing here though.}
+%\apt{oy. still needs work to make this intelligible}
+%\sna{Attempted. There's a tension between introducing all the variables
+%     and keeping a good flow that I'm not sure I'm managing here though.}
+%Added even more
 
 \subsection{Well-bracketed Control Flow}
 \label{sec:wbcf}
@@ -1874,7 +1865,7 @@ A system enjoys {\em entry integrity}
 %with respect to a call map
 %\(\callmap\) and entry map \(\entmap\)
 if, for any initial state \(\mach_0\)
-and any n-transition \((\mach_c,\pol_c)\) and
+and any n-transition from \((\mach_c,\pol_c)\) to
 \((\mach_e, \pol_e)\) in the induced trace from
 \(\mpstate{\mach_0}{\pinit(\mach_0)}\), $\mach_e$ is a valid entry:
 \[\callmap(\mach_c(\PCname)) = n \Rightarrow \entmap(\mach_e)\]
