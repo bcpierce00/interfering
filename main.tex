@@ -857,79 +857,93 @@ instruction used for returns jumps to the address stored in a register.
 Register $r_0$ is hardwired to zero (so that, e.g., instruction 3 stores $0$
 into address 101.).
 
-\apt{Need to clarify to what extent our properties depend on the
-particular compilation style, calling sequences, etc. illustrated here.}
+%\apt{Need to clarify to what extent our properties depend on the
+%particular compilation style, calling sequences, etc. illustrated here.}
 
-\section{Threat Model}
+\section{Threat Model and Assumptions}
 \label{sec:threat}
 
 \leo{Needs high level signposting, transitions}
 
 Stack safety is meant to protect a caller from a confused or malicious callee's
-attempts to access private data or highjack its control flow. Our
+attempts to access private data or hijack its control flow. Our
 attacker model reflects this intention by assuming that the attacker
-can run arbitrary code to try to access or overwrite its caller's stack data
-or disrupt its control state. Hardware and timing attacks are out of
-scope. \leo{Anything else to add here?}
-\leo{Maybe a good place to discuss calling conventions and that they
-  are essentially enforced by the policy or sth?}
-\rb{Intuition that the callee can do anything in principle, but the machine will
-halt if it does not follow the calling convention, etc.?}
+can run arbitrary machine code to try to access or overwrite its caller's stack data
+or disrupt its control state.  Hardware and timing attacks are out of
+scope.
+%\leo{Anything else to add here?}
+%\leo{Maybe a good place to discuss calling conventions and that they
+%  are essentially enforced by the policy or sth?}
+%\rb{Intuition that the callee can do anything in principle, but the machine will
+%halt if it does not follow the calling convention, etc.?}
 
-\apt{Informal definition of policies as auxiliary state here.}
+We assume we are given a machine language program, together with certain auxiliary declarations
+about its structure: the code footprint of each function and the locations of instructions
+representing calls, returns, and function entry points.
+Although this information would typically come from a compiler, we do not
+assume anything about the provenance of the machine
+code. We assume that the machine has a program counter $\PCname$
+and stack pointer $\rsp$ and can perform the usual
+loads, stores, and (direct or indirect) jumps; other details of the machine's ISA are unimportant.
+
+To make our stack safety definitions precise, we make some simple assumptions about
+memory layout; our definitions could easily be changed to be parametric over
+these assumptions, at the cost of slightly greater complexity.  Memory 
+consists of an instruction region and a stack that grows upwards; for simplicity,
+we omit a heap. (Integrating a memory safety property for the heap in the style of
+\citet{AzevedoDeAmorim17} is a natural extension that we discuss
+in~\Cref{sec:future}.)  The stack has a conventional structure, with
+contiguously allocated per-function frames.
+The boundary between the frames of a caller and callee is given by the $\rsp$ register
+at the time of the call.  The stack can be used to
+pass arguments or return results in the usual way, by placing them
+at the top of the caller's frame. Functions can also communicate via registers; indeed, our 
+definitions say nothing at all about registers (except $\PCname$ and $\rsp$). 
+
+Our stack safety concepts depend critically on the notions of ``call'' and ``return,''
+which are not fully explicit in machine code.  We define a call to be
+any instruction declared as such in the program.
+If a call occurs at $\PCname = a$ and $\rsp = s$, then the \emph{corresponding
+  return} has occurred when $\PCname = \nextPC(a)$ and $\rsp = s$. (Our definition
+of well-bracketed control flow relates this definition of return to the program's
+declared set of return points.)
+Our property definitions make no other detailed assumptions about call or return sequences, although 
+some of the enforcement mechanisms we consider do.
 
 Enforcement mechanisms are modeled as {\em policies} that add some auxiliary
 policy state to the ordinary machine state\bcp{This may be surprising to
-  people who are not thinking about micropolicies.} and a partial policy
-step function that
+people who are not thinking about micropolicies.\apt{added para below}} and a partial policy
+step function that 
 refines the machine step function by allowing or disallowing a step to be taken
-based on its auxiliary state. This model will be made more precise in
-\cref{sec:prelim}. It is flexible enough to capture any kind of mechanism used
-for dynamic enforcement of properties of interest, including the following
-representative families of policies.
+based on its auxiliary state.   Enforcement works by halting the program before
+it can perform an action that would violate the security property; our properties
+are naturally therefore \emph{termination insensitive.}
+This model will be made more precise in \cref{sec:prelim}.
+
+We model ordinary program state and policy enforcement state separately to make it 
+easier to use well-established concepts from language-based security.  
+In particular, confidentiality has an elegant extensional characterization in terms of
+\emph{noninterference}: a program preserves the confidentiality of certain data if
+\emph{varying} that data would not change the program's observable behavior~\citep{??}.
+In applying this idea to a system that incorporates policy enforcement, only
+ordinary program data should be varied, whereas any associated policy enforcement
+state should be left alone; our model makes this distinction obvious.
+%That is, we compare the actual execution of the program with a \emph{hypothetical}
+%execution where data has been varied. 
+We also introduce a notion of observational integrity that relies on the idea of
+\emph{rolling back} program state; again, our model makes it easy to describe
+rollback of ordinary program data while leaving policy enforcement data unchanged.
 
 %% \leo{Policies of interest: null, micro, cherri, software-only}
 %% \leo{TODO: Write down carefully}
 
-\paragraph*{Null policy}
-%
-The simplest possible policy is the neutral policy that carries no information
-and does nothing. Its set of policy states is the unit type, and its policy step
-function is the constant unit function, thereby allowing all calls to the machine
-step function. Its initialization function is defined on all states. This
-corresponds to the lifting of our machine model to the policy setting. Machines
-that fulfill a property by construction will also fulfill that property with the
-null policy.
-
-\paragraph*{Software-only policies}
-%
-Some policies are implemented in software, by modifying code in the compiler to
-(e.g.) perform bounds checking \citep{NagarakatteZMZ09} or to insert stack
-canaries \citep{Cowan+98}. These approaches are represented as policies that
-accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
-being produced by the compiler.) The set of policy states is again the unit type
-and the step function constant. Property enforcement comes from the fact that
-only ill-formed states can induce a trace that violates the property.
-
-\rb{TODO In a way, in these schemes the policy state is built in as part of the
-  program state and transparent to the hardware, although it could be simulated
-  by an overlay where enforcement is represented at the policy level.}
-
-\paragraph*{Capability machines}
-%
-Other policies are implemented in hardware or built on hardware mechanisms.
-Capability machines like CHERI \citep{Woodruff+14} extend conventional
-architectures to support efficient and fine-grained control over memory
-accesses, which can be used to implement security policies involving, for
-example, compartmentalization or the stack protection policies of
-\citet{Skorstengaard+19,Skorstengaard+19b}. Mapping the underlying protection
-mechanisms to policy states and step function would be a delicate operation, as
-those are tightly coupled to the hardware design. However, separating the
-enforcement aspects of a concrete policy (such as StkTokens, where policy state
-would encompass details like the abstract call stack, the capability sealing
-scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
-the machine would be relatively straightforward.  \bcp{Not sure that any of
-  this is comprehensible... :-(}
+This enforcement model is flexible enough to capture any kind of mechanism used
+for dynamic enforcement of properties of interest, including the following
+representative families of policies.
+\apt{I don't really buy this, because we really depend on the ability to define
+  variation and rollback. I think we should back off and say: this
+  works well for micropolicies, and we conjecture that we can make it work
+  for code-altering appraoches (pure software or capability).}
 
 \newcommand{\TAGS}{\mathcal{T}}
 \newcommand{\tagname}{t}
@@ -937,19 +951,73 @@ the machine would be relatively straightforward.  \bcp{Not sure that any of
 
 \paragraph*{Micropolicies}
 %
-Micropolicies are another major family of policies \citep{pump_oakland2015},
-which are applied to stack safety in \citep{DBLP:conf/sp/RoesslerD18}.
-Here the machine state is extended with tags paired with all components of the
-system, and a monitor checks for each operation that the tags on the operands
-obey a set of rules. One could treat tags directly as part of the machine
-state, and build the rules into the step function. But local state
-encapsulation properties as we frame them are not intuitive in their
-interaction with tags or other additional enforcement state, so it is helpful
-to separate tags for clarity. This also distinguishes a hardware fail-stop from
-a software fail state.
-\rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
-  policy? }
+Micropolicies~\citep{pump_oakland2015} are a hardware-assisted tag-based
+reference monitoring mechanism, which have been applied to stack safety by 
+\citet{DBLP:conf/sp/RoesslerD18}.
+Here the policy state consists of metadata tags (e.g., identifying stack frames)
+attached to each value in memory or registers, and the policy step function
+checks that each machine operation obeys a set of rules on tags
+(e.g., that the current $\PCname$ tag matches the tag on the stack
+location being accessed), and halts the machine if not.  Distinguishing
+ordinary machine state and policy state is very natural in this setting.
+%% Here the machine state is extended with tags paired with all components of the
+%% system, and a monitor checks for each operation that the tags on the operands
+%% obey a set of rules. One could treat tags directly as part of the machine
+%% state, and build the rules into the step function. But local state
+%% encapsulation properties as we frame them are not intuitive in their
+%% interaction with tags or other additional enforcement state, so it is helpful
+%% to separate tags for clarity. This also distinguishes a hardware fail-stop from
+%% a software fail state.
+%% \rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
+%%   policy? }
 
+\paragraph*{Capability machines}
+%
+%Other policies are implemented in hardware or built on hardware mechanisms.
+Capability machines like CHERI \citep{Woodruff+14} extend conventional
+architectures to support efficient and fine-grained control over memory
+accesses, which can be used to implement security policies, including 
+the stack protection policies of
+\citet{Skorstengaard+19,Skorstengaard+19b}.  Capabilities tightly package pointers
+(ordinary data) with base and bounds information (policy data),
+and their use requires rewriting source code (e.g. to use capabilities in place
+of ordinary pointers), so separating ordinary machine state from policy
+state is delicate. \apt{But we conjecture it can be done...?}
+
+%% Mapping the underlying protection
+%% mechanisms to policy states and step function would be a delicate operation, as
+%% those are tightly coupled to the hardware design. However, separating the
+%% enforcement aspects of a concrete policy (such as StkTokens, where policy state
+%% would encompass details like the abstract call stack, the capability sealing
+%% scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
+%% the machine would be relatively straightforward.  \bcp{Not sure that any of
+%%   this is comprehensible... :-(}
+
+\paragraph*{Software-only policies}
+%
+Some policies are implemented in software, by modifying code in the compiler to
+(e.g.) perform bounds checking~\citep{NagarakatteZMZ09} or to insert stack
+canaries~\citep{Cowan+98}. \apt{not sure what to say here}
+%These approaches are represented as policies that
+%accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
+%being produced by the compiler.) The set of policy states is again the unit type
+%and the step function constant. Property enforcement comes from the fact that
+%only ill-formed states can induce a trace that violates the property.
+
+\rb{TODO In a way, in these schemes the policy state is built in as part of the
+  program state and transparent to the hardware, although it could be simulated
+  by an overlay where enforcement is represented at the policy level.}
+
+
+%% \Paragraph*{Null policy}
+%% %
+%% The simplest possible policy is the neutral policy that carries no information
+%% and does nothing. Its set of policy states is the unit type, and its policy step
+%% function is the constant unit function, thereby allowing all calls to the machine
+%% step function. Its initialization function is defined on all states. This
+%% corresponds to the lifting of our machine model to the policy setting. Machines
+%% that fulfill a property by construction will also fulfill that property with the
+%% null policy.
 
 %
 %\leo{TODO: Add citations of mitigation techniques}
@@ -1877,8 +1945,6 @@ and entry map) is said to enjoy
 \section{Enforcement}
 \label{sec:enforcement}
 
-\rb{Wondering if we should use sub-sections here, too.}
-
 In this section we are going to see how an existing enforcement mechanism,
 Depth Isolation from \citet{DBLP:conf/sp/RoesslerD18}, can implement
 the formal stack safety property described in the previous section: it in
@@ -1892,7 +1958,7 @@ The enforcement policy of \citeauthor{DBLP:conf/sp/RoesslerD18} relies
 on a programmable, tag-based reference monitor that runs alongside the
 program.  To control this monitor, they use a programming model that
 allows fine-grained manipulation of metadata tags to encode so-called
-\emph{micropolicies}~\citep{pump_oakland15}.
+\emph{micropolicies}~\citep{pump_oakland2015}.
 
 In such a system, all memory addresses and registers (including the program
 counter) are enriched with an abstract metadata tag, which can represent an
@@ -1906,40 +1972,41 @@ fail-stops with a policy violation. During program execution, micropolicy rules
 are checked before each machine step.
 
 Efficient execution of these micropolicies relies on hardware implementations,
-such as the PUMP architecture~\citep{pump_oakland15}. This hardware incorporates
-a monitor rule cache to allow quick retrieval of transfer function outputs for
-mapped inputs. Cache misses are detected and trapped to software handlers that
-use the software rules of the policy to compute the relevant parts of the
-transfer function. Previous work has shown that a wide range of micropolicies
-can be defined and enforced efficiently in these machines
-\citep{pump_oakland2015}.
-%
-\rb{Maybe go into more detail, examples later\ldots or try to segue into stack
-policies}
+such as the PUMP architecture. This hardware incorporates a monitor rule cache
+to allow quick retrieval of transfer function outputs for mapped inputs. Cache
+misses are detected and trapped to software handlers that use the software rules
+of the policy to compute the relevant parts of the transfer function.
+\citeauthor{pump_oakland2015} have shown that a wide range of micropolicies can
+be defined and enforced efficiently in these machines.
+%% %
+%% \rb{Maybe go into more detail, examples later\ldots or try to segue into stack
+%% policies}
 
 \subsection{A Conservative Policy}
 %
 The first micropolicy we present to enforce the definition of stack
-safety developed in \cref{sec:lse-and-wbcf} is \leo{a small variation
-  of?}  the Depth Isolation policy presented by
+safety developed in \cref{sec:lse-and-wbcf} is a small variation
+on the Depth Isolation policy presented by
 \citet{DBLP:conf/sp/RoesslerD18}. Their policy tags the stack memory
 with ownership information associated to each stack frame (and to each
 separate object inside that frame, a more finely grained access
-control that we do not need to consider here), and registers holding
-stack pointers with matching access permission information. Beyond
+control that we do not need to consider here), and tags registers containing
+stack pointers with access permission information. Beyond
 those capabilities, the compiler generates designated sequences of
 instructions with special tags that grant them permission to manage
-the stack, say during calls and returns. \rb{Conceivably on alloc
-  operations, etc., which we have not yet mentioned.}
+the stack, say during calls and returns.
+%% \rb{Conceivably on alloc
+%%   operations, etc., which we have not yet mentioned.}
 
 Our micropolicy works as follows. We assume for ease of exposition that no
-arguments are passed on the stack \rb{Come back to this later?}. Initially, the
-entire stack is tagged as unused with an $\tagNoDepth$ tag \rb{actually, the
-``initial frame'' should be tagged with its proper depth}, and the {\PCname}
-carries in its tag the depth of the current activation at all times, starting
-with a $\tagPCDepth{0}$ tag. The current activation depth needs to change
-exactly at those points in the program where the contour of the stack safety
-property changes:
+arguments are passed on the stack.
+%% \rb{Come back to this later?}.
+Initially, the entire stack is tagged as unused with an $\tagNoDepth$ tag
+\rb{actually, the ``initial frame'' should be tagged with its proper depth}, and
+the {\PCname} carries in its tag the depth of the current activation at all
+times, starting with a $\tagPCDepth{0}$ tag. The current activation depth needs
+to change exactly at those points in the program where the contour of the stack
+safety property changes:
 
 \begin{itemize}
 
@@ -1989,8 +2056,8 @@ And the return sequence:
   \end{array}
 \]
 
-\rb{Positioning of the above sequences, relation to running example. The tagging
-  of stack frames would be considered part of these sequences.}
+%% \rb{Positioning of the above sequences, relation to running example. The tagging
+%%   of stack frames would be considered part of these sequences.}
 
 These sequences also enforce the $\SP$ discipline. When stack frames
 are of fixed size, it suffices to increment $\SP$ and tag it with a
@@ -2009,12 +2076,13 @@ sequences of calls declared in the call map are executed correctly.
 During normal execution, the {\PCname} uses the current activation
 depth in its tag $\tagPCDepth{n}$ to gate load and store operations,
 which are allowed to operate only on the corresponding stack frame,
-tagged $\tagStackDepth{n}$.  \rb{Note that we have also considered and
-  implemented more flexible schemes based on allowing operations above
-  the current activation depth. How do we put these together?}  \rb{Do
-  we want to discuss variations involving frame pointers or more
-  implicit return addresses?}  \rb{Where to talk about the role of the
-  compiler?}
+tagged $\tagStackDepth{n}$.
+\rb{Note that we have also considered and implemented more flexible schemes
+  based on allowing operations above the current activation depth. How do we put
+  these together?}
+\rb{Do we want to discuss variations involving frame pointers or more implicit
+  return addresses, argument passing on the stack, alloc/dealloc, etc.?}
+\rb{Where to talk about the role of the compiler?}
 
 %% Because the access rights of callers subsume those of callees, it is essential
 %% that the micropolicy change tags when the property thinks that a call occurs,
@@ -2028,9 +2096,9 @@ tagged $\tagStackDepth{n}$.  \rb{Note that we have also considered and
 %% might also be so tagged, but as long as the jump has the effect of a legal
 %% return, it is OK.
 
-\subsection{A Stronger Stack Safety Property}
+\subsection{A Stronger Lockstep Stack Safety Property}
 
-\leo{Maybe lockstep?}
+%% \leo{Maybe lockstep?}
 
 This conservative policy satisfies not only the stack safety above,
 but also a provably (in Coq) stronger one that enforces local state
@@ -2050,7 +2118,7 @@ for stack confidentiality taking the prefix of the transition trace
 until its return).
 
 We start by defining the integrity and confidentiality tests, as well
-as the variant stack, before giving the full definition of strong
+as the variant stack, before giving the full definition of lockstep
 stack safety.
 
 \newcommand{\vse}{\mathit{vse}}
@@ -2159,7 +2227,7 @@ according to a contour $C$.
 %% =======
 We also need two auxilliary notations that relate to variant stacks.
 %
-First, strong safety will check that the basic tests above hold for every
+First, lockstep stack safety will check that the basic tests above hold for every
 machine in the variant stack.  Given a machine that steps $(\mach,
 \pol) \stepstopol{\obs} (\mach', \pol')$, say that a variant
 stack $\vs$ safisfies the \emph{variant stack test} if for each
@@ -2175,12 +2243,12 @@ Second, we will write $\vs \stepsto \vs'$ if every variant machine
 in $\vs$ steps to the corresponding machine in $\vs'$.
 %
 
-We are now ready to define strong stack safety coinductively.
+We are now ready to define lockstep stack safety coinductively.
 
 \definition Given a state $(\mach, \pol) \in \MPS$ and a variant stack
 $\vs$ in which every element $\vm{\contour}$ is a variation of $\mach$
 with respect to its contour, we say that an MP-trace induced from
-$(\mach, \pol)$ satisfies the \emph{trace strong stack safety}, and write
+$(\mach, \pol)$ satisfies the \emph{trace lockstep stack safety}, and write
 $\testProp{}{\MPT}{\vs}$, if:
 
 \begin{itemize}
@@ -2190,15 +2258,16 @@ $\testProp{}{\MPT}{\vs}$, if:
   \[(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs)\MPT,\]
   then the variant stack test must be satisfied:
   \[\testVS{(\mach, \pol)}{\vs},\]
-  and trace strong stack safety must be coinductively satisfied for
+  and trace lockstep stack safety must be coinductively satisfied for
   the remainder of the trace and the variant stack $vs'$ that
   steps to ($\vs \stepsto \vs'$):
   \[ \testProp{}{((\mach',\pol',\obs)\MPT)}{\vs'}\]
 
 \item
   If the machine takes a \emph{call step} and $\contour$ is the contour at
-  the call \rb{Corrected the step function here, or should it be
-  $\hookrightarrow$ and give the rest of the induced trace?}
+  the call
+  %% \rb{Corrected the step function here, or should it be
+  %% $\hookrightarrow$ and give the rest of the induced trace?}
   \[(\mach, \pol) \stepstopol{\obs} (\mach', \pol') \wedge \callmap(\mach) = n,\]
 %
   then the variant stack test $\testVS{(\mach, \pol)}{\vs}$ must be
@@ -2210,7 +2279,7 @@ $\testProp{}{\MPT}{\vs}$, if:
 %    is satisfied with regard to an arbitrary $\contour$-variant
 %    of $\mach$,
 %
-  and trace strong stack safety must be coinductively satisfied
+  and trace lockstep stack safety must be coinductively satisfied
   for the remainder of the trace and for every variant stack
   that is the result of adding a variation of $\mach'$ with
   respect to $C$ at the top of the stack $\vs'$ that $\vs$ steps
@@ -2226,7 +2295,7 @@ $\testProp{}{\MPT}{\vs}$, if:
   the tail of $\vs$ satisfies the stack safety test
   \[\testVS{(\mach, \pol)}{\mathit{tail}(\vs)},\]
   %
-  and trace strong stack safety must be coinductively satisfied for
+  and trace lockstep stack safety must be coinductively satisfied for
   the remainder of the trace and for the tail of the varant stack
   that $\vs$ steps to:
   \[\testProp{}{((\mach', \pol', \obs)\MPT)}{(\mathit{tail}(\vs'))}\]
@@ -2244,15 +2313,15 @@ $\testProp{}{\MPT}{\vs}$, if:
 
 \definition
 %
-A system satisfies {\em strong stack safety} if for every initial machine $\mach$,
-the trace induced from $(\mach, \pinit{\mach})$ satisfies trace strong stack safety with
+A system satisfies {\em lockstep stack safety} if for every initial machine $\mach$,
+the trace induced from $(\mach, \pinit{\mach})$ satisfies trace lockstep stack safety with
 respect to the empty stack.
 
 \theorem
-Strong stack safety implies stack safety.
+Lockstep stack safety implies stack safety.
 
 \proof
-By coinduction on trace strong stack safety.
+By coinduction on trace lockstep stack safety.
 \leo{3000 lines Coq?}
 \leo{I can write a TON about this proof, but I'm not sure how much is interesting/how much space we have}.
 
