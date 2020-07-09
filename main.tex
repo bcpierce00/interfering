@@ -1967,20 +1967,34 @@ property changes:
 
 To enforce this discipline, we define blessed header and return instruction
 sequences. These are specific sequences of tagged instructions that are intended
-to appear at the beginning and end of each function:
-
+to appear at the beginning and end of each function. This is the header
+sequence:
+%
+\setcounter{pcctr}{1}
 \[
-  \begin{array}{c|c|c}
-    {\sw ~ \rsp ~ \rra ~ 1} & {\tagHa, \tagInstr} & \text{Store RA in stack} \\
-    {\addi ~ \rsp ~ \rsp ~ 2} & {\tagHb, \tagInstr} & \text{Increment SP by frame size}
+  \begin{array}{l|l|l|l}
+     & \mathit{Instruction} & \mathit{Tags} & \\
+    \hline
+    \row{\sw ~ \rsp ~ \tta ~ 1}{[\rsp+1] \leftarrow \rra}{\tagHa, \tagInstr}
+        {Store return address in stack}
+    \row{\addi ~ \rsp ~ \rsp ~ 2}{\rsp \leftarrow \rsp + 2}{\tagHb, \tagInstr}
+        {Increment stack pointer by frame size}
   \end{array}
-  \]
-
+\]
+%
+And the return sequence:
+%
+\setcounter{pcctr}{1}
 \[
-  \begin{array}{c|c|c}
-    {\lw ~ \rra ~ \rsp ~ -1} & {\tagRa, \tagInstr} & \text{Load RA} \\
-    {\addi ~ \rsp ~ \rsp ~ -2} & {\tagRb, \tagInstr} & \text{Decrement SP by frame size} \\
-    {\jalr ~ \rra ~ \rra} & {\tagRc, \tagInstr} & \text{Jump back}
+  \begin{array}{l|l|l|l}
+     & \mathit{Instruction} & \mathit{Tags} & \\
+    \hline
+    \row{\lw ~ \rra ~ \rsp ~ \negate 1}{\rra \leftarrow [\rsp - 1]}{\tagRa, \tagInstr}
+        {Load return address}
+    \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\tagRb, \tagInstr}
+        {Decrement stack pointer by frame size}
+    \row{\jalr ~ \rra ~ \rra ~ 0\apt{wrong}}{\PCname \leftarrow \rra}{\tagRc, \tagInstr}
+        {Return to caller ($\jalr$)}
   \end{array}
 \]
 
