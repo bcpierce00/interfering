@@ -2256,47 +2256,42 @@ By coinduction on trace strong stack safety.
 \leo{3000 lines Coq?}
 \leo{I can write a TON about this proof, but I'm not sure how much is interesting/how much space we have}.
 
-\paragraph*{Eager vs Lazy Policies}
-
-The conservative policy we just described, while testable and enforceable, is
-too slow to be of practical use. What we want, instead, is a somewhat more
-permissive policy that moreover can be efficiently implemented. Most of the
-performance overhead incurred by this kind of \emph{eager policy} steps from the
-need to set stack activation tags as a frame is created and reset them as it is
-destructed, as \citet{DBLP:conf/sp/RoesslerD18} confirm in their evaluation. To
-mitigate those costs, they propose optimizations like Lazy Tagging and Lazy
-Clearing that relax and defer some of the checks of an eager policy, being more
-permissive in their allowed operations and catching violations if and when their
-effect becomes manifest.
-
-These \emph{lazy policies} admit more efficient implementations, but they
-deliberately allow violations of stack integrity. So it becomes important to
-characterize what alternative property these policies ought to implement.
-
-\sna{moved a lot of discussion to after property, along with Rob's
-     comments on it}
-
 \section{Stack Safety Properties for Lazy Enforcement}
 \label{sec:lazy}
 
-  A lazy policy permits some violations of integrity or confidentiality,
-  justified because a truly harmful violation will be caught later.
-  The natural question is, how do we characterize the protections provided
-  by these policies once stack safety is broken? How does a harmful violation
-  that must be caught later differ from a harmless one? The properties in this
-  section use the observation model to draw this distinction.
+The conservative policy described in the previous section, while
+testable and enforceable, is rather slow to be of practical use. What
+we want, instead, is a somewhat more permissive policy that can also
+be efficiently implemented. Most of the performance overhead incurred
+stems from the need to set stack activation tags as a frame is created
+and reset them as it is destructed, as
+\citet{DBLP:conf/sp/RoesslerD18} confirm in their evaluation. To
+mitigate those costs, they propose optimizations like Lazy Tagging and
+Lazy Clearing that relax and defer some of the checks of an eager
+policy, being more permissive in their allowed operations and catching
+violations if and when their effect becomes manifest.
+%
+These \emph{lazy policies} admit more efficient implementations, but
+they deliberately allow violations of stack integrity temporarily,
+with the checks deferred until the point a violation truly becomes
+harmful. The natural question then is, how do we characterize the
+protections provided by these policies once stack safety is broken?
+How does a harmful violation that must be caught later differ from a
+harmless one? The properties in this section rely on our notion of
+observations to draw this distinction.
 
-  \subsection{Observable Integrity}
+\subsection{Observable Integrity}
 
-    \paragraph{Rolling Back to Idealized State}
-      Observable integrity weakens eager integrity by allowing a returned
-      state to differ from its call state at high integrity components,
-      provided that the differences do not change the observable behavior
-      of the rest of the program. It is not immediately clear what constitutes
-      changing behavior; we construct an idealized return state that contains
-      only the changes that the caller was allowed to make, and use the trace
-      from that state as a baseline against which the real trace will be
-      compared.
+\paragraph{Rolling Back to Idealized State}
+
+Observable integrity weakens eager integrity by allowing a returned
+state to differ from its call state at high integrity components,
+provided that the differences do not change the observable behavior of
+the rest of the program. It is not immediately clear what constitutes
+changing behavior: we construct an idealized return state that
+contains only the changes that the caller was allowed to make, and use
+the trace from that state as a baseline against which the real trace
+will be compared.
 
       \definition
 
@@ -2331,7 +2326,7 @@ characterize what alternative property these policies ought to implement.
 
       \[\begin{split}
         \propdef{ObsTraceInt} ~ \contour ~ \MPT \triangleq
-        & \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \\
+        & \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \Rightarrow \\
         & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
         & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' \Rightarrow \\
         & \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT'
@@ -2387,15 +2382,17 @@ characterize what alternative property these policies ought to implement.
       return, considering only whether they are observationally similar
       or prefixes.
 
-      This requires restoring varied components to their original values
-      in the trace from the variant state, since after return they will
-      once again be legitimately accessible. To return to the example in
-      \cref{fig:confex}, the varied final state \(\mach_r'\) still has
-      -5 as a return address for {\tt g}, so the trace after that return will
-      behave oddly in a way that doesn't reflect a confidentiality violation.
-      So we cannot immediately compare traces from \(\mach_r\) and
-      \(\mach_r'\). We must restore the varied values while preserving
-      differences that have occurred during execution.
+      This requires restoring varied components to their original
+      values in the trace from the variant state, since after return
+      they will once again be legitimately accessible. To return to
+      the example in \cref{fig:confex}, the varied final state
+      \(\mach_r'\) still has -5 as a return address for {\tt g}, so
+      the trace after that return will behave oddly in a way that
+      doesn't reflect a confidentiality violation.  That means we
+      cannot immediately compare traces from \(\mach_r\) and
+      \(\mach_r'\), but rather that we must restore the varied values
+      while preserving differences that have occurred during
+      execution.
 
       \definition
 
@@ -2437,13 +2434,14 @@ characterize what alternative property these policies ought to implement.
       observational prefix of the induced trace from \(\mach_r'\),
       reflecting the possibility of a fail-stop after return.
 
+      \leo{This is starting to be too spread out as a definition. Pack a bit?}
       \[\begin{split}
         \mathit{ObsReturnCase} ~ R ~ \MPT ~ \machT \triangleq
         & \head(\MPT) = \mpostate{\mach_e}{\pol_e}{\obs_e} \Rightarrow \\
         & \head(\machT) = (\mach_e',\obs_e') \Rightarrow \\
         & \last(\MPT) = \mpostate{\mach_r}{\pol_r}{\obs_r} \Rightarrow \\
         & \last(\machT) = (\mach_r',\obs_r') \Rightarrow \\
-        & \mach_r'' = \mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r') \\
+        & \mach_r'' = \mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r') \Rightarrow\\
         & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' \Rightarrow \\
         & \mach_r'' \hookrightarrow \machT' \Rightarrow \\
         & \pi_o(\MPT) \eqsim \pi_o(\machT) \land \\
@@ -2491,8 +2489,8 @@ characterize what alternative property these policies ought to implement.
 
       {\em Observable stack confidentiality} is structured like stack
       confidentiality. Let \(\callmap\) be a callmap; for each initial
-      state and \(n\)-transition consisting of \(\mpstate{\mach_c}{\pol_c}\)
-      and \(\mpstate{\mach_e}{\pol_e}\), take any variation \(\mach_e'
+      state and \(n\)-transition from \(\mpstate{\mach_c}{\pol_c}\)
+      to \(\mpstate{\mach_e}{\pol_e}\), take any variation \(\mach_e'
       \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\). Let
       \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_c}\)
       and \(\mach_e' \hookrightarrow \machT | \ret{\mach_c}\). A system
@@ -2506,6 +2504,11 @@ characterize what alternative property these policies ought to implement.
     if it enjoys both observable stack integrity and
       observable stack confidentiality with respect to them.
 
+      \theorem Stack safety implies observable stack safety.
+
+      \proof \leo{TODO: Whatever we say about the previous proof
+        we have to say similar things here}
+      
     \paragraph{Connection to Policies}
 
     Observable properties allow us defer enforcement until a property
@@ -2514,14 +2517,13 @@ characterize what alternative property these policies ought to implement.
     miss violations that can become visible. The basic lazy tag policy from
     \citet{DBLP:conf/sp/RoesslerD18} tags written memory with the depth in the
     stack at which it was written, and enforces that it must be read from the
-    same depth. This allows violations of observable stack safety!
+    same depth. However, this allows violations of observable stack safety!
     Say we have functions {\tt foo}, {\tt bar} and {\tt baz}, where {\tt foo}
     calls {\tt bar}, and then after {\tt bar} returns {\tt foo} calls
     {\tt baz}. Since {\tt bar} and {\tt baz} are at the same stack depth, if
     {\tt bar} writes to {\tt foo}'s frame, {\tt baz} can then read the tainted
     write and use it to create an observable difference that violates both
     observable integrity and confidentiality without violating the policy.
-    This can be fixed by generating distinct tags per-activation.
 
     The lazy policy can be repaired if, instead of tagging each function
     activation with its depth in the stack, we generate a fresh activation
@@ -2535,15 +2537,6 @@ characterize what alternative property these policies ought to implement.
     if {\tt bar} and {\tt baz} were merged into a single function that tracked
     whether it had been called previously and changed its behavior accordingly.
 
-  \paragraph{Relation to Stack Safety}
-
-\rb{Implied by the property we started with?}
-
-\rb{We can also test the lazy policy, even if less efficiently, and it should
-  enforce an inductive property, which may be more amenable to proving --- this
-  should be the connection to the following section.}
-
-\rb{Explain and compare what each policy enforces.}
 
 \section{Related Work}
 \label{sec:relwork}
