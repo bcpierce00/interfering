@@ -230,7 +230,7 @@ stronger and weaker variants.  \bcp{should we mention stktokens here?}
   low-level enforcement mechanisms for machine-code programs (because this
   is where stack attacks occur, and because at higher levels of abstraction
   the stack is a built-in concept, not something that can be attacked even
-  in principle).  This could cause confusion.}
+  in principle).  This could cause confusion.\apt{not so worried}}
 
 The call stack is a perennial target for attacks
 based on memory safety vulnerabilities, with potential consequences
@@ -252,7 +252,7 @@ is commonly defined in a negative way, by enumerating the bad things that a
 given enforcement mechanism
 prevents, such as corruption of return addresses, buffer overflows, or
 use of uninitialized variables\bcp{Does use of unitialized variables lead to
-stack safety attacks?}.
+stack safety attacks?\apt{sure, via buffer overflow}}.
 %with the notion usually being
 %defined negatively: through examples of stack-based exploits
 %\rb{usually though not always; as noted below there are other
@@ -312,9 +312,9 @@ between functions: each instruction is uniquely owned by some
 function, and all jumps between functions are either calls that enter
 at a marked entry point or returns that re-enter just after their
 associated call in the standard nested call structure.  \apt{clarify
-  what we are contributing here.}
+  what we are contributing here. We are not trying to phrase this as a security property.}
 
-To phrase these two aspects of stack safety as security properties requires
+To phrase these two \apt{which two? Not WBCF!} aspects of stack safety as security properties requires
 an explicit attacker model: a clear understanding of who is being protected
 and from what. Most existing stack protection mechanisms envisage scenarios
 where a callee is influenced by external inputs to corrupt the stack in some
@@ -338,20 +338,22 @@ every transition (call or return) between functions.
 After formally defining stack safety, we show that our definition is
 enforceable using an existing tag-based enforcement
 mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider their
-conservative Depth Isolation policy, which not only enforces the
-our formal definition of stack safety, but also a much stronger
-property that requires integrity and confidentiality at every step of
-an execution trace. This property is provably (in Coq)\leo{How to
-  mention this?} stronger and stemmed out of the need to more
-efficiently test stack safety. However, at the same time the
+conservative Depth Isolation policy, which enforces the
+our basic stack safety property. It also enforces an alternative
+lockstep property that requires integrity and confidentiality at every step of
+an execution trace, which fails faster and thus is more efficient to test;
+we prove (in Coq) that the lockstep property is stronger 
+than our basic property,
+However, at the same time the
 conservative enforcement mechanism is expensive to implement. In the
 same work, \citeauthor{DBLP:conf/sp/RoesslerD18} propose a different
 mechanism that is more efficient by virtue of being lazy in its
 enforcement. At a high level, instead of guaranteeing integrity and
-confidentiality when a callee returns, they check it when the caller
-actually makes use of (potentially compromised) data. Thus, they
-enforce a (also provably in Coq) weaker property that still protects
-from unsafe callees, but is much less intuitive.
+confidentiality when a callee returns, this policy checks it when the caller
+actually makes use of (potentially compromised) data. The lazy policy
+does not enforce our basic propety, but an enhanced version of it does
+enforce a proveably weaker property that still protects
+from unsafe callees, but is less intuitive.
 
 In summary, we offer the following contributions:\bcp{I would still like to
   see these points phrased in ``contribution normal form'': say exactly what
@@ -360,23 +362,24 @@ In summary, we offer the following contributions:\bcp{I would still like to
 \begin{itemize}
 \item
   % \leo{More? Extensional}\bcp{We might need to invent a word for   this---''quasi-extensional''?}
-  Abstract formal properties capturing the
+  A novel formal stack safety property capturing the
   intuitive concepts of strict local state encapsulation and well-bracketed
-  control flow~(\cref{sec:lse-and-wbcf}) in a generic setting. These properties
-  rule out common examples of stack memory abuse.
+  control flow~(\cref{sec:lse-and-wbcf}) in terms of security concepts.
+  % These properties   rule out common examples of stack memory abuse.
+  This property is enforced by 
+  the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, based on hardware tags~(\cref{sec:conservative}).
 \item
-  A case study of the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, based on hardware tags~(\cref{sec:enforcement}).
-  This policy enforces our strict stack safety property, and also a (provably in Coq) stronger property that is easier to test.
-  \apt{If we have no testing, do we even want to talk about the testing
-    property?} \bcp{Not here; just in future work.  I guess we need to see
-    whether we wind up with any results at all about testing.}
+  A lockstep stack safety property that is also enforced by the Depth Isolation policy,
+  and is more efficient to test, which we prove (in Coq) is stronger than the basic property(~\cref{sec:lockstep}).
 \item
-  A refinement of the case study that considers the more efficient Lazy Tagging and Clearing policy
-  of \citet{DBLP:conf/sp/RoesslerD18}~(\cref{sec:lazy}).  This policy does not enforce our strict
-  local state encapsulation property,
-  but a modified version of it using unique per-activation tags enforces
-  an (also provably) weaker lazy variant of the property, which still prohibits
-  the same intuitively stack unsafe behaviors.
+  A novel lazy stack safety property that is enforced by the more efficient
+  Lazy Tagging and Clearing policy
+  of \citet{DBLP:conf/sp/RoesslerD18}, which we prove (in Coq) is weaker than the basic property~(\cref{sec:lazy}).
+%  This policy does not enforce our strict
+%  local state encapsulation property,
+%  but a modified version of it using unique per-activation tags enforces
+%  an (also provably) weaker lazy variant of the property, which still prohibits
+%  the same intuitively stack unsafe behaviors.
 %
 % \apt{Awkward, but the truth I fear.} \bcp{I agree the phrasing is awkward,
 %   but the point we can make is still strong: To make the property easier
@@ -400,9 +403,9 @@ In summary, we offer the following contributions:\bcp{I would still like to
 \Cref{sec:relwork} discusses related work;
 \cref{sec:future} sketches directions for future work.
 %
-We begin with a running example that we refer to throughout the paper
-(\cref{sec:running-example}), a description of our threat model
-(\cref{sec:threat}) and some technical preliminaries
+We begin with a description of our threat model
+(\cref{sec:threat}), a running example that we refer to throughout the paper
+(\cref{sec:running-example}),  and some technical preliminaries
 (\cref{sec:prelim}).
 
 \section{Threat Model and Assumptions}
@@ -1986,6 +1989,7 @@ be defined and enforced efficiently in these machines.
 %% policies}
 
 \subsection{A Conservative Policy}
+\label{sec:conservative}
 %
 The first micropolicy we present to enforce the definition of stack
 safety developed in \cref{sec:lse-and-wbcf} is a small variation
@@ -2100,6 +2104,7 @@ tagged $\tagStackDepth{n}$.
 %% return, it is OK.
 
 \subsection{A Stronger Lockstep Stack Safety Property}
+\label{sec:lockstep}
 
 %% \leo{Maybe lockstep?}
 
