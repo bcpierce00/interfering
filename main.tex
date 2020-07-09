@@ -841,36 +841,68 @@ instruction used for returns jumps to the address stored in a register.
 Register $r_0$ is hardwired to zero (so that, e.g., instruction 3 stores $0$
 into address 101.).
 
-\apt{Need to clarify to what extent our properties depend on the
-particular compilation style, calling sequences, etc. illustrated here.}
+%\apt{Need to clarify to what extent our properties depend on the
+%particular compilation style, calling sequences, etc. illustrated here.}
 
-\section{Threat Model}
+\section{Threat Model and Assumptions}
 \label{sec:threat}
 
 \leo{Needs high level signposting, transitions}
 
 Stack safety is meant to protect a caller from a confused or malicious callee's
-attempts to access private data or highjack its control flow. Our
+attempts to access private data or hijack its control flow. Our
 attacker model reflects this intention by assuming that the attacker
-can run arbitrary code to try to access or overwrite its caller's stack data
-or disrupt its control state. Hardware and timing attacks are out of
-scope. \leo{Anything else to add here?}
-\leo{Maybe a good place to discuss calling conventions and that they
-  are essentially enforced by the policy or sth?}
-\rb{Intuition that the callee can do anything in principle, but the machine will
-halt if it does not follow the calling convention, etc.?}
+can run arbitrary machine code to try to access or overwrite its caller's stack data
+or disrupt its control state.  Hardware and timing attacks are out of
+scope.
+%\leo{Anything else to add here?}
+%\leo{Maybe a good place to discuss calling conventions and that they
+%  are essentially enforced by the policy or sth?}
+%\rb{Intuition that the callee can do anything in principle, but the machine will
+%halt if it does not follow the calling convention, etc.?}
 
-\apt{Informal definition of policies as auxiliary state here.}
+We assume we are given a machine language program, together with certain auxiliary declarations
+about its structure: the code footprint of each function and the locations of instructions
+representing calls, returns, and function entry points.
+Although this information would typically come from a compiler, we do not
+assume anything about the provenance of the machine
+code. We assume that the machine has a program counter $\PCname$
+and stack pointer $\rsp$ and can perform the usual
+loads, stores, and (direct or indirect) jumps; other details of the machine's ISA are unimportant.
+
+To make our stack safety definitions precise, we make some simple assumptions about
+memory layout; our definitions could easily be changed to be parametric over
+these assumptions, at the cost of slightly greater complexity.  Memory 
+consists of an instruction region and a stack that grows upwards; for simplicity,
+we omit a heap. (Integrating a memory safety property for the heap in the style of
+\citet{AzevedoDeAmorim17} is a natural extension that we discuss
+in~\Cref{sec:future}.)  The stack has a conventional structure, with
+contiguously allocated per-function frames.
+The boundary between the frames of a caller and callee is given by the $\rsp$ register
+at the time of the call.  The stack can be used to
+pass arguments or return results in the usual way, by placing them
+at the top of the caller's frame. Functions can also communicate via registers; indeed, our 
+definitions say nothing at all about registers (except $\PCname$ and $\rsp$). 
+
+Our stack safety concepts depend critically on the notions of ``call'' and ``return,''
+which are not fully explicit in machine code.  We define a call to be
+any instruction declared as such in the program.
+If a call occurs at $\PCname = a$ and $\rsp = s$, then the \emph{corresponding
+  return} has occurred when $\PCname = \nextPC(a)$ and $\rsp = s$. (Our definition
+of well-bracketed control flow relates this definition of return to the program's
+declared set of return points.)
+Our property definitions make no other detailed assumptions about call or return sequences, although 
+some of the enforcement mechanisms we consider do.
 
 Enforcement mechanisms are modeled as {\em policies} that add some auxiliary
 policy state to the ordinary machine state\bcp{This may be surprising to
-  people who are not thinking about micropolicies.\apt{added para below}} and a partial policy
-step function that
+people who are not thinking about micropolicies.\apt{added para below}} and a partial policy
+step function that 
 refines the machine step function by allowing or disallowing a step to be taken
-based on its auxiliary state. This model will be made more precise in
-\cref{sec:prelim}. It is flexible enough to capture any kind of mechanism used
-for dynamic enforcement of properties of interest, including the following
-representative families of policies.
+based on its auxiliary state.   Enforcement works by halting the program before
+it can perform an action that would violate the security property; our properties
+are naturally therefore \emph{termination insensitive.}
+This model will be made more precise in \cref{sec:prelim}.
 
 We model ordinary program state and policy enforcement state separately to make it 
 easier to use well-established concepts from language-based security.  
@@ -889,6 +921,11 @@ rollback of ordinary program data while leaving policy enforcement data unchange
 %% \leo{Policies of interest: null, micro, cherri, software-only}
 %% \leo{TODO: Write down carefully}
 
+This enforcement model is flexible enough to capture any kind of mechanism used
+for dynamic enforcement of properties of interest, including the following
+representative families of policies.
+
+\apt{rest of this section still needs rethink}
 \paragraph*{Null policy}
 %
 The simplest possible policy is the neutral policy that carries no information
