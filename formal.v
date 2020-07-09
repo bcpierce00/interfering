@@ -4604,3 +4604,140 @@ Definition ObsTrace (ct : CTrace) : OTrace :=
 
 
 *)
+
+Section PaperVersions.
+
+  (* This section contains simplified versions of the properties as presented in the paper
+     (though using the more complex machinery we've used elsewhere. *)
+  (* Translating to the larger development: in general, these definitions correspond to
+     those named XOld, but factored for easier explanation. But the older definitions
+     use MTraces that are just machine states and MPTraces that are just machine*policy pairs,
+     with observations extracted separately.
+     
+     MPTrace is Trace (MachineState * PolicyState. MPTrace' is the paper-style
+     Trace (MachineState * PolicyState * Observation). MTrace' is the paper-style
+     Trace (MachineState * Observation). *)
+  
+  (* So if MP is a Trace (MachineState * PolicyState) and MPO is a
+     Trace (MachineState * PolicyState * Observation), and MP was created by MPTraceOf,
+     ObsTraceOf MP = ObsOfMP MPO
+     And in paper terms, ObsOfMP is directly equivalent to pi_o(MPO)
+     The same relation exists between ObsTraceOfM and ObsOfM on machine traces *)
+
+  
+  Variable cm : CallMap.
+  Variable cdm : CodeMap.
+  Variable em : EntryMap.
+  Variable rm : RetMap.
+
+  Definition pm := (cm,rm,em,cdm).
+
+  (* This property is the one that holds on the trace in EagerStackIntegrityEnd,
+     but taking the trace as an argument instead. *)
+  Definition TraceIntegrityPaper (C:Contour) (MP:MPTrace') : Prop :=
+    forall mp1 mp2,
+      (head MP) = mp1 ->
+      Last MP mp2 ->
+      (forall k, integrityOf (C k) = HI -> (ms (fst mp1)) k = (ms (fst mp2)) k).
+
+  (* Then the part where we find calls is the same as in StackSafetyOld, but split out
+     for StackIntegrity. Since we don't actually care about the observations, we can use
+     MPTraceOf instead of MPRunOf to find the calls. Then we take the induced trace from the
+     entry state (a step from the call state found by FindCallMP) and use trace integrity. *)
+  Definition StackIntegrityPaper : Prop :=
+    forall m p MPcall,
+      initPolicyState m pm = Some p ->
+      (forall (mpc : MPState) me pe oe C,
+          FindCallMP cm cdm (MPTraceOf (m,p)) C (MPTraceOf mpc) -> (* Find call*)
+          mpstep mpc = Some (me,pe,oe) ->
+          RunUpTo (fun mp => justRet m (ms mp)) (MPRunOf (me,pe)) MPcall ->
+          TraceIntegrityPaper C MPcall).
+
+  (* The cases of TraceConfidentiality are the same as in EagerStackConfidentialityOld,
+     but with the variation and construction of the trace factored out. *)
+  Definition ReturnCase (R:MachineState -> Prop) (MP:MPTrace') (M:MTrace') : Prop :=
+    forall m p o,
+      Last MP (m,p,o) ->
+      R m ->
+      exists m' o',
+        Last M (m',o') /\
+        R m' /\
+        ObsOfMP MP ~=_O ObsOfM M /\
+        forall k, ((ms (fst (head MP))) k <> m k \/ (fst (head M)) k <> m' k) -> m k = m' k.
+
+  (* Unlike EagerStackConfidentialityOld, we use the infinite predicate, which is equivalent to
+     forall a, ~ Last T a *)
+  Definition InfCase (MP:MPTrace') (M:MTrace') : Prop :=
+    Infinite MP ->
+    Infinite M ->
+    ObsOfMP MP ~=_O ObsOfM M.
+
+  Definition FailCase (R:MachineState -> Prop) (MP:MPTrace') (M:MTrace') : Prop :=
+    forall mpo,
+      Last MP mpo ->
+      ~ R (ms (fst mpo)) ->
+      ObsOfMP MP <=_O ObsOfM M.
+
+  Definition TraceConfidentialityPaper (R:MachineState -> Prop) (MP:MPTrace') (M:MTrace') : Prop :=
+    ReturnCase R MP M /\ InfCase MP M /\ FailCase R MP M.
+
+  Definition StackConfidentialityPaper : Prop :=
+    forall m m' p,
+      let initC := makeContour cdm 0 m in
+      initPolicyState m pm = Some p ->
+      variantOf m m' initC ->
+      (* we've omitted this from the paper... should put it back *)
+      (TraceConfidentialityPaper (fun _ => False) (MPRunOf (m,p)) (RunOf m')) /\
+      (forall (mp : MPState) m' C MPcall Mcall,
+          FindCallMP cm cdm (MPTraceOf (m,p)) C (MPTraceOf mp) -> (* Find call*)
+          variantOf (ms mp) m' C ->
+          RunUpTo (fun mp' => justRet (ms mp) (ms mp')) (MPRunOf mp) MPcall ->
+          RunUpTo (justRet (ms mp)) (RunOf m') Mcall ->
+          TraceConfidentialityPaper (justRet (ms mp)) MPcall Mcall).
+
+  Definition StackSafetyPaper :=
+    StackIntegrityPaper /\ StackConfidentialityPaper.
+
+  Definition LazyTraceIntPaper (C:Contour) (MP:MPTrace') : Prop :=
+    forall mp1 mp2,
+      (head MP) = mp1 ->
+      Last MP mp2 ->
+      ObsOfMP (MPRunOf (fst mp2)) <=_O ObsOfM (RunOf (RollbackInt C (ms (fst mp1)) (ms (fst mp2)))).
+
+  Definition LazyStackIntPaper : Prop :=
+    forall m p MPcall,
+      initPolicyState m pm = Some p ->
+      (forall (mp : MPState) C,
+          FindCallMP cm cdm (MPTraceOf (m,p)) C (MPTraceOf mp) -> (* Find call*)
+          RunUpTo (fun mp => justRet m (ms mp)) (MPRunOf mp) MPcall ->
+          LazyTraceIntPaper C MPcall).
+
+  Definition ReturnCaseLazy (R:MachineState -> Prop) (MP:MPTrace') (M:MTrace') : Prop :=
+    forall m p o,
+      Last MP (m,p,o) ->
+      R m ->
+      exists m' o',
+        Last M (m',o') /\
+        R m' /\
+        ObsOfMP MP ~=_O ObsOfM M /\
+        ObsOfMP (MPRunOf (m,p)) <=_O ObsOfM (RunOf (RollbackConf (ms (fst (head MP))) (fst (head M)) m m')).
+
+  Definition LazyTraceConfPaper (R:MachineState -> Prop) (MP:MPTrace') (M:MTrace') : Prop :=
+    ReturnCaseLazy R MP M /\ InfCase MP M /\ FailCase R MP M.
+
+  Definition LazyStackConfPaper : Prop :=
+    forall m m' p,
+      let initC := makeContour cdm 0 m in
+      initPolicyState m pm = Some p ->
+      variantOf m m' initC ->
+      (* we've omitted this from the paper... should put it back *)
+      (LazyTraceConfPaper (fun _ => False) (MPRunOf (m,p)) (RunOf m')) /\
+      (forall (mp : MPState) m' C MPcall Mcall,
+          FindCallMP cm cdm (MPTraceOf (m,p)) C (MPTraceOf mp) -> (* Find call*)
+          variantOf (ms mp) m' C ->
+          RunUpTo (fun mp' => justRet (ms mp) (ms mp')) (MPRunOf mp) MPcall ->
+          RunUpTo (justRet (ms mp)) (RunOf m') Mcall ->
+          LazyTraceConfPaper (justRet (ms mp)) MPcall Mcall).
+
+  Definition LazyStackSafetyPaper : Prop :=
+    LazyStackIntPaper /\ LazyStackConfPaper.
