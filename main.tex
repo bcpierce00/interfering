@@ -405,6 +405,213 @@ We begin with a running example that we refer to throughout the paper
 (\cref{sec:threat}) and some technical preliminaries
 (\cref{sec:prelim}).
 
+\section{Threat Model and Assumptions}
+\label{sec:threat}
+
+\leo{Needs high level signposting, transitions}
+
+Stack safety is meant to protect a caller from a confused or malicious callee's
+attempts to access private data or hijack its control flow. Our
+attacker model reflects this intention by assuming that the attacker
+can run arbitrary machine code to try to access or overwrite its caller's stack data
+or disrupt its control state.  Hardware and timing attacks are out of
+scope.
+%\leo{Anything else to add here?}
+%\leo{Maybe a good place to discuss calling conventions and that they
+%  are essentially enforced by the policy or sth?}
+%\rb{Intuition that the callee can do anything in principle, but the machine will
+%halt if it does not follow the calling convention, etc.?}
+
+\newcommand*{\rsp}{\textsc{sp}}
+
+We assume we are given a machine language program, together with certain auxiliary declarations
+about its structure: the code footprint of each function and the locations of instructions
+representing calls, returns, and function entry points.
+Although this information would typically come from a compiler, we do not
+assume anything about the provenance of the machine
+code. We assume that the machine has a program counter $\PCname$
+and stack pointer $\rsp$ and can perform the usual
+loads, stores, and (direct or indirect) jumps; other details of the machine's ISA are unimportant.
+
+To make our stack safety definitions precise, we make some simple assumptions about
+memory layout; our definitions could easily be changed to be parametric over
+these assumptions, at the cost of slightly greater complexity.  Memory 
+consists of an instruction region and a stack that grows upwards; for simplicity,
+we omit a heap. (Integrating a memory safety property for the heap in the style of
+\citet{AzevedoDeAmorim17} is a natural extension that we discuss
+in~\Cref{sec:future}.)  The stack has a conventional structure, with
+contiguously allocated per-function frames.
+The boundary between the frames of a caller and callee is given by the $\rsp$ register
+at the time of the call.  The stack can be used to
+pass arguments or return results in the usual way, by placing them
+at the top of the caller's frame. Functions can also communicate via registers; indeed, our 
+definitions say nothing at all about registers (except $\PCname$ and $\rsp$). 
+
+Our stack safety concepts depend critically on the notions of ``call'' and ``return,''
+which are not fully explicit in machine code.  We define a call to be
+any instruction declared as such in the program.
+If a call occurs at $\PCname = a$ and $\rsp = s$, then the \emph{corresponding
+  return} has occurred when $\PCname = \nextPC(a)$ and $\rsp = s$. (Our definition
+of well-bracketed control flow relates this definition of return to the program's
+declared set of return points.)
+Our property definitions make no other detailed assumptions about call or return sequences, although 
+some of the enforcement mechanisms we consider do.
+
+Enforcement mechanisms are modeled as {\em policies} that add some auxiliary
+policy state to the ordinary machine state\bcp{This may be surprising to
+people who are not thinking about micropolicies.\apt{added para below}} and a partial policy
+step function that 
+refines the machine step function by allowing or disallowing a step to be taken
+based on its auxiliary state.   Enforcement works by halting the program before
+it can perform an action that would violate the security property; our properties
+are naturally therefore \emph{termination insensitive.}
+This model will be made more precise in \cref{sec:prelim}.
+
+We model ordinary program state and policy enforcement state separately to make it 
+easier to use well-established concepts from language-based security.  
+In particular, confidentiality has an elegant extensional characterization in terms of
+\emph{noninterference}: a program preserves the confidentiality of certain data if
+\emph{varying} that data would not change the program's observable behavior~\citep{??}.
+In applying this idea to a system that incorporates policy enforcement, only
+ordinary program data should be varied, whereas any associated policy enforcement
+state should be left alone; our model makes this distinction obvious.
+%That is, we compare the actual execution of the program with a \emph{hypothetical}
+%execution where data has been varied. 
+We also introduce a notion of observational integrity that relies on the idea of
+\emph{rolling back} program state; again, our model makes it easy to describe
+rollback of ordinary program data while leaving policy enforcement data unchanged.
+
+%% \leo{Policies of interest: null, micro, cherri, software-only}
+%% \leo{TODO: Write down carefully}
+
+This enforcement model is flexible enough to capture any kind of mechanism used
+for dynamic enforcement of properties of interest, including the following
+representative families of policies.
+\apt{I don't really buy this, because we really depend on the ability to define
+  variation and rollback. I think we should back off and say: this
+  works well for micropolicies, and we conjecture that we can make it work
+  for code-altering appraoches (pure software or capability).}
+
+\newcommand{\TAGS}{\mathcal{T}}
+\newcommand{\tagname}{t}
+\newcommand{\uP}{{\mu P}}
+
+\paragraph*{Micropolicies}
+%
+Micropolicies~\citep{pump_oakland2015} are a hardware-assisted tag-based
+reference monitoring mechanism, which have been applied to stack safety by 
+\citet{DBLP:conf/sp/RoesslerD18}.
+Here the policy state consists of metadata tags (e.g., identifying stack frames)
+attached to each value in memory or registers, and the policy step function
+checks that each machine operation obeys a set of rules on tags
+(e.g., that the current $\PCname$ tag matches the tag on the stack
+location being accessed), and halts the machine if not.  Distinguishing
+ordinary machine state and policy state is very natural in this setting.
+%% Here the machine state is extended with tags paired with all components of the
+%% system, and a monitor checks for each operation that the tags on the operands
+%% obey a set of rules. One could treat tags directly as part of the machine
+%% state, and build the rules into the step function. But local state
+%% encapsulation properties as we frame them are not intuitive in their
+%% interaction with tags or other additional enforcement state, so it is helpful
+%% to separate tags for clarity. This also distinguishes a hardware fail-stop from
+%% a software fail state.
+%% \rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
+%%   policy? }
+
+\paragraph*{Capability machines}
+%
+%Other policies are implemented in hardware or built on hardware mechanisms.
+Capability machines like CHERI \citep{Woodruff+14} extend conventional
+architectures to support efficient and fine-grained control over memory
+accesses, which can be used to implement security policies, including 
+the stack protection policies of
+\citet{Skorstengaard+19,Skorstengaard+19b}.  Capabilities tightly package pointers
+(ordinary data) with base and bounds information (policy data),
+and their use requires rewriting source code (e.g. to use capabilities in place
+of ordinary pointers), so separating ordinary machine state from policy
+state is delicate. \apt{But we conjecture it can be done...?}
+
+%% Mapping the underlying protection
+%% mechanisms to policy states and step function would be a delicate operation, as
+%% those are tightly coupled to the hardware design. However, separating the
+%% enforcement aspects of a concrete policy (such as StkTokens, where policy state
+%% would encompass details like the abstract call stack, the capability sealing
+%% scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
+%% the machine would be relatively straightforward.  \bcp{Not sure that any of
+%%   this is comprehensible... :-(}
+
+\paragraph*{Software-only policies}
+%
+Some policies are implemented in software, by modifying code in the compiler to
+(e.g.) perform bounds checking~\citep{NagarakatteZMZ09} or to insert stack
+canaries~\citep{Cowan+98}. \apt{not sure what to say here}
+%These approaches are represented as policies that
+%accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
+%being produced by the compiler.) The set of policy states is again the unit type
+%and the step function constant. Property enforcement comes from the fact that
+%only ill-formed states can induce a trace that violates the property.
+
+\rb{TODO In a way, in these schemes the policy state is built in as part of the
+  program state and transparent to the hardware, although it could be simulated
+  by an overlay where enforcement is represented at the policy level.}
+
+
+%% \Paragraph*{Null policy}
+%% %
+%% The simplest possible policy is the neutral policy that carries no information
+%% and does nothing. Its set of policy states is the unit type, and its policy step
+%% function is the constant unit function, thereby allowing all calls to the machine
+%% step function. Its initialization function is defined on all states. This
+%% corresponds to the lifting of our machine model to the policy setting. Machines
+%% that fulfill a property by construction will also fulfill that property with the
+%% null policy.
+
+%
+%\leo{TODO: Add citations of mitigation techniques}
+%\rb{And for those techniques, explain how they reflect their motivating
+%examples. What does each technique do for those examples? How are they
+%connected to this work?}
+%
+%\paragraph*{Bad Write}
+%
+%\[
+%44 : [\rsp - 5] \leftarrow r_4
+%%44 : ~ \sw ~ \rsp ~ r_4 ~ \negate 5
+%\]
+%
+%Instruction 44 currently is
+%$ [\rsp - 2] \leftarrow r_4$,
+%%$\sw ~ \rsp ~ r_4 ~ \negate 2$,
+%with the
+%effect of storing the contents of $r_4$ as the result of {\tt h}. If
+%instead it wrote to location $\rsp - 5$ then it would be overwriting
+%private data (the return address) belonging to {\tt g}.
+%
+%\paragraph*{Bad Read}
+%
+%\[
+%30 : r_5  \leftarrow [\rsp - 6]
+%%30 : ~ \lw ~ r_5 ~ \rsp ~ \negate 6
+%\]
+%
+%Instruction 30 currently is
+%$ r_5 \leftarrow [\rsp - 4]$,
+%%$\lw ~ r_5 ~ \rsp ~ \negate 4$,
+%with the
+%effect of loading the argument of {\tt g} to $r_5$. If instead it
+%loaded the contents of location $\rsp - 6$, it would obtain access
+%to the value of {\tt main}'s local variable {\tt x}. Worse, since the next instruction
+%outputs the contents of $r_5$, that value would immediately be made public.
+%
+%\paragraph*{Bad Control Flow}
+%
+%\[
+%5  : \rra \leftarrow \PCname + 1 ; ~ \PCname \leftarrow r_4
+%%5 : \jalr ~ r_4 ~ \rra ~ 0
+%\]
+%If a {\jalr} instruction was added to {\tt main} with its target being
+%the middle of the code block of {\tt h}.\apt{describe result of this?}
+
 \section{Running Example}
 \label{sec:running-example}
 
@@ -448,7 +655,7 @@ h(v) = {
 \newcommand*{\lw}{\textsc{lw}}
 \newcommand*{\jal}{\textsc{jal}}
 \newcommand*{\jalr}{\textsc{jalr}}
-\newcommand*{\rsp}{\textsc{sp}}
+%\newcommand*{\rsp}{\textsc{sp}}
 \newcommand*{\rra}{\textsc{ra}}
 \newcommand*{\rout}{\textsc{out}}
 
@@ -860,210 +1067,6 @@ into address 101.).
 %\apt{Need to clarify to what extent our properties depend on the
 %particular compilation style, calling sequences, etc. illustrated here.}
 
-\section{Threat Model and Assumptions}
-\label{sec:threat}
-
-\leo{Needs high level signposting, transitions}
-
-Stack safety is meant to protect a caller from a confused or malicious callee's
-attempts to access private data or hijack its control flow. Our
-attacker model reflects this intention by assuming that the attacker
-can run arbitrary machine code to try to access or overwrite its caller's stack data
-or disrupt its control state.  Hardware and timing attacks are out of
-scope.
-%\leo{Anything else to add here?}
-%\leo{Maybe a good place to discuss calling conventions and that they
-%  are essentially enforced by the policy or sth?}
-%\rb{Intuition that the callee can do anything in principle, but the machine will
-%halt if it does not follow the calling convention, etc.?}
-
-We assume we are given a machine language program, together with certain auxiliary declarations
-about its structure: the code footprint of each function and the locations of instructions
-representing calls, returns, and function entry points.
-Although this information would typically come from a compiler, we do not
-assume anything about the provenance of the machine
-code. We assume that the machine has a program counter $\PCname$
-and stack pointer $\rsp$ and can perform the usual
-loads, stores, and (direct or indirect) jumps; other details of the machine's ISA are unimportant.
-
-To make our stack safety definitions precise, we make some simple assumptions about
-memory layout; our definitions could easily be changed to be parametric over
-these assumptions, at the cost of slightly greater complexity.  Memory 
-consists of an instruction region and a stack that grows upwards; for simplicity,
-we omit a heap. (Integrating a memory safety property for the heap in the style of
-\citet{AzevedoDeAmorim17} is a natural extension that we discuss
-in~\Cref{sec:future}.)  The stack has a conventional structure, with
-contiguously allocated per-function frames.
-The boundary between the frames of a caller and callee is given by the $\rsp$ register
-at the time of the call.  The stack can be used to
-pass arguments or return results in the usual way, by placing them
-at the top of the caller's frame. Functions can also communicate via registers; indeed, our 
-definitions say nothing at all about registers (except $\PCname$ and $\rsp$). 
-
-Our stack safety concepts depend critically on the notions of ``call'' and ``return,''
-which are not fully explicit in machine code.  We define a call to be
-any instruction declared as such in the program.
-If a call occurs at $\PCname = a$ and $\rsp = s$, then the \emph{corresponding
-  return} has occurred when $\PCname = \nextPC(a)$ and $\rsp = s$. (Our definition
-of well-bracketed control flow relates this definition of return to the program's
-declared set of return points.)
-Our property definitions make no other detailed assumptions about call or return sequences, although 
-some of the enforcement mechanisms we consider do.
-
-Enforcement mechanisms are modeled as {\em policies} that add some auxiliary
-policy state to the ordinary machine state\bcp{This may be surprising to
-people who are not thinking about micropolicies.\apt{added para below}} and a partial policy
-step function that 
-refines the machine step function by allowing or disallowing a step to be taken
-based on its auxiliary state.   Enforcement works by halting the program before
-it can perform an action that would violate the security property; our properties
-are naturally therefore \emph{termination insensitive.}
-This model will be made more precise in \cref{sec:prelim}.
-
-We model ordinary program state and policy enforcement state separately to make it 
-easier to use well-established concepts from language-based security.  
-In particular, confidentiality has an elegant extensional characterization in terms of
-\emph{noninterference}: a program preserves the confidentiality of certain data if
-\emph{varying} that data would not change the program's observable behavior~\citep{??}.
-In applying this idea to a system that incorporates policy enforcement, only
-ordinary program data should be varied, whereas any associated policy enforcement
-state should be left alone; our model makes this distinction obvious.
-%That is, we compare the actual execution of the program with a \emph{hypothetical}
-%execution where data has been varied. 
-We also introduce a notion of observational integrity that relies on the idea of
-\emph{rolling back} program state; again, our model makes it easy to describe
-rollback of ordinary program data while leaving policy enforcement data unchanged.
-
-%% \leo{Policies of interest: null, micro, cherri, software-only}
-%% \leo{TODO: Write down carefully}
-
-This enforcement model is flexible enough to capture any kind of mechanism used
-for dynamic enforcement of properties of interest, including the following
-representative families of policies.
-\apt{I don't really buy this, because we really depend on the ability to define
-  variation and rollback. I think we should back off and say: this
-  works well for micropolicies, and we conjecture that we can make it work
-  for code-altering appraoches (pure software or capability).}
-
-\newcommand{\TAGS}{\mathcal{T}}
-\newcommand{\tagname}{t}
-\newcommand{\uP}{{\mu P}}
-
-\paragraph*{Micropolicies}
-%
-Micropolicies~\citep{pump_oakland2015} are a hardware-assisted tag-based
-reference monitoring mechanism, which have been applied to stack safety by 
-\citet{DBLP:conf/sp/RoesslerD18}.
-Here the policy state consists of metadata tags (e.g., identifying stack frames)
-attached to each value in memory or registers, and the policy step function
-checks that each machine operation obeys a set of rules on tags
-(e.g., that the current $\PCname$ tag matches the tag on the stack
-location being accessed), and halts the machine if not.  Distinguishing
-ordinary machine state and policy state is very natural in this setting.
-%% Here the machine state is extended with tags paired with all components of the
-%% system, and a monitor checks for each operation that the tags on the operands
-%% obey a set of rules. One could treat tags directly as part of the machine
-%% state, and build the rules into the step function. But local state
-%% encapsulation properties as we frame them are not intuitive in their
-%% interaction with tags or other additional enforcement state, so it is helpful
-%% to separate tags for clarity. This also distinguishes a hardware fail-stop from
-%% a software fail state.
-%% \rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
-%%   policy? }
-
-\paragraph*{Capability machines}
-%
-%Other policies are implemented in hardware or built on hardware mechanisms.
-Capability machines like CHERI \citep{Woodruff+14} extend conventional
-architectures to support efficient and fine-grained control over memory
-accesses, which can be used to implement security policies, including 
-the stack protection policies of
-\citet{Skorstengaard+19,Skorstengaard+19b}.  Capabilities tightly package pointers
-(ordinary data) with base and bounds information (policy data),
-and their use requires rewriting source code (e.g. to use capabilities in place
-of ordinary pointers), so separating ordinary machine state from policy
-state is delicate. \apt{But we conjecture it can be done...?}
-
-%% Mapping the underlying protection
-%% mechanisms to policy states and step function would be a delicate operation, as
-%% those are tightly coupled to the hardware design. However, separating the
-%% enforcement aspects of a concrete policy (such as StkTokens, where policy state
-%% would encompass details like the abstract call stack, the capability sealing
-%% scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
-%% the machine would be relatively straightforward.  \bcp{Not sure that any of
-%%   this is comprehensible... :-(}
-
-\paragraph*{Software-only policies}
-%
-Some policies are implemented in software, by modifying code in the compiler to
-(e.g.) perform bounds checking~\citep{NagarakatteZMZ09} or to insert stack
-canaries~\citep{Cowan+98}. \apt{not sure what to say here}
-%These approaches are represented as policies that
-%accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
-%being produced by the compiler.) The set of policy states is again the unit type
-%and the step function constant. Property enforcement comes from the fact that
-%only ill-formed states can induce a trace that violates the property.
-
-\rb{TODO In a way, in these schemes the policy state is built in as part of the
-  program state and transparent to the hardware, although it could be simulated
-  by an overlay where enforcement is represented at the policy level.}
-
-
-%% \Paragraph*{Null policy}
-%% %
-%% The simplest possible policy is the neutral policy that carries no information
-%% and does nothing. Its set of policy states is the unit type, and its policy step
-%% function is the constant unit function, thereby allowing all calls to the machine
-%% step function. Its initialization function is defined on all states. This
-%% corresponds to the lifting of our machine model to the policy setting. Machines
-%% that fulfill a property by construction will also fulfill that property with the
-%% null policy.
-
-%
-%\leo{TODO: Add citations of mitigation techniques}
-%\rb{And for those techniques, explain how they reflect their motivating
-%examples. What does each technique do for those examples? How are they
-%connected to this work?}
-%
-%\paragraph*{Bad Write}
-%
-%\[
-%44 : [\rsp - 5] \leftarrow r_4
-%%44 : ~ \sw ~ \rsp ~ r_4 ~ \negate 5
-%\]
-%
-%Instruction 44 currently is
-%$ [\rsp - 2] \leftarrow r_4$,
-%%$\sw ~ \rsp ~ r_4 ~ \negate 2$,
-%with the
-%effect of storing the contents of $r_4$ as the result of {\tt h}. If
-%instead it wrote to location $\rsp - 5$ then it would be overwriting
-%private data (the return address) belonging to {\tt g}.
-%
-%\paragraph*{Bad Read}
-%
-%\[
-%30 : r_5  \leftarrow [\rsp - 6]
-%%30 : ~ \lw ~ r_5 ~ \rsp ~ \negate 6
-%\]
-%
-%Instruction 30 currently is
-%$ r_5 \leftarrow [\rsp - 4]$,
-%%$\lw ~ r_5 ~ \rsp ~ \negate 4$,
-%with the
-%effect of loading the argument of {\tt g} to $r_5$. If instead it
-%loaded the contents of location $\rsp - 6$, it would obtain access
-%to the value of {\tt main}'s local variable {\tt x}. Worse, since the next instruction
-%outputs the contents of $r_5$, that value would immediately be made public.
-%
-%\paragraph*{Bad Control Flow}
-%
-%\[
-%5  : \rra \leftarrow \PCname + 1 ; ~ \PCname \leftarrow r_4
-%%5 : \jalr ~ r_4 ~ \rra ~ 0
-%\]
-%If a {\jalr} instruction was added to {\tt main} with its target being
-%the middle of the code block of {\tt h}.\apt{describe result of this?}
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
