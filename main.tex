@@ -317,18 +317,25 @@ the different components of the machine state and adjusting the integrity
 and confidentiality levels of different stack locations and registers at
 every transition (call or return) between functions.
 
-\bcp{This little paragraph is our entire explanation of the second and third
-contributions!  Needs to be expanded considerably...}%
-To provide evidence that our definitions capture the inituitive notion
-of stack safety, we show that they rule out a range of exploitable bad
-behaviors.\apt{``from the literature''??}  To assess whether they are
-implementable, we compare them against
-%proposed capability-based
-%enforcement mechanism of \citet{Skorstengaard+19} \apt{we really
-%  should} and
-the existing tag-based enforcement mechanism of
-\citet{DBLP:conf/sp/RoesslerD18}.
-%\leo{Is this where we would rephrase this because we would only talk about it in related work?}
+\leo{Took a stab. Needs rewriting}%
+
+After formally defining stack safety, we show that our definition is
+enforceable using an existing tag-based enforcement
+mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider their
+conservative Depth Isolation policy, which not only enforces the
+our formal definition of stack safety, but also a much stronger
+property that requires integrity and confidentiality at every step of
+an execution trace. This property is provably (in Coq)\leo{How to
+  mention this?} stronger and stemmed out of the need to more
+efficiently test stack safety. However, at the same time the
+conservative enforcement mechanism is expensive to implement. In the
+same work, \citeauthor{DBLP:conf/sp/RoesslerD18} propose a different
+mechanism that is more efficient by virtue of being lazy in its
+enforcement. At a high level, instead of guaranteeing integrity and
+confidentiality when a callee returns, they check it when the caller
+actually makes use of (potentially compromised) data. Thus, they
+enforce a (also provably in Coq) weaker property that still protects
+from unsafe callees, but is much less intuitive.
 
 In summary, we offer the following contributions:\bcp{I would still like to
   see these points phrased in ``contribution normal form'': say exactly what
@@ -343,7 +350,7 @@ In summary, we offer the following contributions:\bcp{I would still like to
   rule out common examples of stack memory abuse.
 \item
   A case study of the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, based on hardware tags~(\cref{sec:enforcement}).
-  This policy enforces our strict stack safety property, and also a (provably) stronger property that is easier to test.
+  This policy enforces our strict stack safety property, and also a (provably in Coq) stronger property that is easier to test.
   \apt{If we have no testing, do we even want to talk about the testing
     property?} \bcp{Not here; just in future work.  I guess we need to see
     whether we wind up with any results at all about testing.}
@@ -352,7 +359,8 @@ In summary, we offer the following contributions:\bcp{I would still like to
   of \citet{DBLP:conf/sp/RoesslerD18}~(\cref{sec:lazy}).  This policy does not enforce our strict
   local state encapsulation property,
   but a modified version of it using unique per-activation tags enforces
-  a (provably) weaker lazy variant of the property.
+  an (also provably) weaker lazy variant of the property, which still prohibits
+  the same intuitively stack unsafe behaviors.
 %
 % \apt{Awkward, but the truth I fear.} \bcp{I agree the phrasing is awkward,
 %   but the point we can make is still strong: To make the property easier
@@ -2241,7 +2249,7 @@ By coinduction on trace strong stack safety.
 \leo{3000 lines Coq?}
 \leo{I can write a TON about this proof, but I'm not sure how much is interesting/how much space we have}.
 
-\paragraph*{Eager vs Lazy Stack Safety}
+\paragraph*{Eager vs Lazy Policies}
 
 The conservative policy we just described, while testable and enforceable, is
 too slow to be of practical use. What we want, instead, is a somewhat more
@@ -2254,56 +2262,22 @@ Clearing that relax and defer some of the checks of an eager policy, being more
 permissive in their allowed operations and catching violations if and when their
 effect becomes manifest.
 
-\leo{Not sure how much of the following could go after the lazy stack safety property}
-These \emph{lazy policies} admit more efficient implementations while being
-harder to test, given that potential violations may or may not materialize,
-requiring in turn additional bookkeeping. However, a critical observation is
-that the depth-based tagging scheme discussed so far with fail when combined
-with a lazy policy. The reason for this is that because tags are not set and
-cleared on function entry and exit points, stale tags may persist after a given
-call, and a subsequent call sharing the same depth as the old call may access
-memory contents tagged with the stale tags of a previous activation.
-\rb{Again, example?}
+These \emph{lazy policies} admit more efficient implementations, but they
+deliberately allow violations of stack integrity. So it becomes important to
+characterize what alternative property these policies ought to implement.
 
-The lazy policy can be repaired if, instead of tagging each function activation
-with its depth in the stack, we generate a fresh activation identifier on each
-call, which allows the policy to identify stale tags from previous activations.
-Under this stricted tagging discipline, the eager policy behaves almost exactly
-like its lazy counterpart. A related mechanism was explored in the Static
-Authorities policy of \citet{DBLP:conf/sp/RoesslerD18}, which associates a
-unique activation identifier to each function, which is however shared by all
-activations of the same function in order to obtain good cacheability of tag
-rules.
-
-\rb{Parts of this discussion feel somewhat out of order...}
-
-\rb{We can also test the lazy policy, even if less efficiently, and it should
-  enforce an inductive property, which may be more amenable to proving --- this
-  should be the connection to the following section.}
-
-\rb{Implied by the property we started with?}
-
-\rb{Explain and compare what each policy enforces.}
+\sna{moved a lot of discussion to after property, along with Rob's
+     comments on it}
 
 \section{Stack Safety Properties for Lazy Enforcement}
 \label{sec:lazy}
 
   A lazy policy permits some violations of integrity or confidentiality,
   justified because a truly harmful violation will be caught later.
-  In a typical lazy version of the tag policy, writes are always permitted,
-  but tagged to identify the context in which they were written. But reads
-  check that the value read was written by the current context and fail-stop
-  if it wasn't. So, if a callee makes an illegal write to its caller, when the
-  caller tries to read it the policy will catch the error.
-
   The natural question is, how do we characterize the protections provided
   by these policies once stack safety is broken? How does a harmful violation
   that must be caught later differ from a harmless one? The properties in this
   section use the observation model to draw this distinction.
-
-    \sna{Use the \(n\)-transition language above in all of these.}
-
-\apt{Need some intro text here.}
 
   \subsection{Observable Integrity}
 
@@ -2525,8 +2499,44 @@ rules.
     if it enjoys both observable stack integrity and
       observable stack confidentiality with respect to them.
 
-\apt{Words needed to connect these ideas back to the lazy policies which motivated them in the first place!}
+    \paragraph{Connection to Policies}
 
+    Observable properties allow us defer enforcement until a property
+    violation would become visible, as in lazy policies. But by formalizing
+    the connection to the eager policy, we can identify when lazy policies
+    miss violations that can become visible. The basic lazy tag policy from
+    \citet{DBLP:conf/sp/RoesslerD18} tags written memory with the depth in the
+    stack at which it was written, and enforces that it must be read from the
+    same depth. This allows violations of observable stack safety!
+    Say we have functions {\tt foo}, {\tt bar} and {\tt baz}, where {\tt foo}
+    calls {\tt bar}, and then after {\tt bar} returns {\tt foo} calls
+    {\tt baz}. Since {\tt bar} and {\tt baz} are at the same stack depth, if
+    {\tt bar} writes to {\tt foo}'s frame, {\tt baz} can then read the tainted
+    write and use it to create an observable difference that violates both
+    observable integrity and confidentiality without violating the policy.
+    This can be fixed by generating distinct tags per-activation.
+
+    The lazy policy can be repaired if, instead of tagging each function 
+    activation with its depth in the stack, we generate a fresh activation
+    identifier on each call, which prevents a program from exploiting stale
+    tags from previous activations. A related mechanism was explored in the
+    Static Authorities policy of \citet{DBLP:conf/sp/RoesslerD18}, which
+    associates a unique activation identifier to each function, which is
+    however shared by all activations of the same function in order to obtain
+    good cacheability of tag rules. Static Authorities comes closer to
+    observable stack safety, though the example above would still exist
+    if {\tt bar} and {\tt baz} were merged into a single function that tracked
+    whether it had been called previously and changed its behavior accordingly.
+
+  \paragraph{Relation to Stack Safety}
+
+\rb{Implied by the property we started with?}
+
+\rb{We can also test the lazy policy, even if less efficiently, and it should
+  enforce an inductive property, which may be more amenable to proving --- this
+  should be the connection to the following section.}
+
+\rb{Explain and compare what each policy enforces.}
 
 \section{Related Work}
 \label{sec:relwork}
