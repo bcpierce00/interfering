@@ -14,3 +14,5 @@ coq:
 	coqc -R . "" ObsTrace.v
 	coqc -R . "" formal.v
 
+clean:
+	rm -f *.aux
