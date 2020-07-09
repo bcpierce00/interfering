@@ -717,7 +717,7 @@ $\cdots$
   \row{\lw ~ r_4 ~ \rsp ~ 0}{r_4 \leftarrow [\rsp]}{r_4 \leftarrow 18}
       {Load return value to $r_4$}
   \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[105] \leftarrow 18}
-      {Set {\tt w} to 18}
+      {Set {\tt w} to return value}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\rsp \leftarrow 106}
       {Deallocate {\tt h}'s call frame}
   \row{\lw ~ r_5 ~ \rsp ~ \negate 4}{r_5 \leftarrow [\rsp - 4]}{r_5 \leftarrow 0}
@@ -1478,7 +1478,7 @@ respect to \(\contour\) if its final state (if any) agrees with its
 initial one on all components marked \(\HIGHSEC\) in \(\contour\):
 %
 \[\begin{split}
-  \propdef{TraceIntegrity} ~ \contour ~ \MPT \triangleq &
+  \propdef{TraceInt} ~ \contour ~ \MPT \triangleq &
     \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \Rightarrow \\
   & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
   & \forall \component. ~ \contour(\component) = \HIGHSEC \Rightarrow
@@ -1558,7 +1558,7 @@ we take the induced trace \(\mpstate{\mach_0}{\pinit(\mach_0)} \hookrightarrow
 \mpstate{\mach_c}{\pol_c} ~ \mpstate{\mach_e}{\pol_e}\) we take the prefix of
 the call up to its return, \(\mpstate{\mach_e}{\pol_e} \hookrightarrow
 \MPT_{call} | \ret{\mach_c}\). If for any such call trace \(\MPT_{call}\), 
-\(\propdef{TraceIntegrity} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{call}\), then the
+\(\propdef{TraceInt} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{call}\), then the
 system as a whole enjoys stack integrity with respect to \(\callmap\).
 
 \apt{Some more words needed here to smooth the technicalities.}
@@ -1647,7 +1647,7 @@ enjoy trace confidentiality with respect to \(R\).
 Putting it all together:
 
 \[\begin{split}
-  \propdef{TraceConfidentiality} ~ R ~ \MPT ~ \machT \triangleq
+  \propdef{TraceConf} ~ R ~ \MPT ~ \machT \triangleq
   & \mathit{ReturnCase} ~ R ~ \MPT ~ \machT \land \\
   & \mathit{InfCase} ~ R ~ \MPT ~ \machT \land
     \mathit{FailCase} ~ R ~ \MPT ~ \machT \\
@@ -1703,7 +1703,7 @@ We also take the corresponding trace from any variant \(\mach_e'
 %
 \[\mach_e' \hookrightarrow \machT_{call} | \ret{\mach_c}\]
 
-If, for all such pairs of traces, \(\propdef{TraceConfidentialiy} ~
+If, for all such pairs of traces, \(\propdef{TraceConf} ~
 \ret{\mach_c} ~ \MPT ~ \machT\), then the system as a whole enjoys
 stack confidentiality with respect to \(\callmap\).
 
@@ -2276,38 +2276,48 @@ rules.
 
 \rb{Explain and compare what each policy enforces.}
 
-\section{Lazy Stack Safety}
+\section{Stack Safety Properties for Lazy Enforcement}
 \label{sec:lazy}
 
-    \rb{Suggestion: name this ``observable \emph{trace? something else?}
-      integrity'' to avoid confusion with observable stack integrity (in fact,
-      it is called exactly this when discussing the example below). The rollback
-      may also be a definition of its own to match the granularity of
-      definitions in previous sections.}
+  A lazy policy permits some violations of integrity or confidentiality,
+  justified because a truly harmful violation will be caught later.
+  In a typical lazy version of the tag policy, writes are always permitted,
+  but tagged to identify the context in which they were written. But reads
+  check that the value read was written by the current context and fail-stop
+  if it wasn't. So, if a callee makes an illegal write to its caller, when the
+  caller tries to read it the policy will catch the error.
+
+  The natural question is, how do we characterize the protections provided
+  by these policies once stack safety is broken? How does a harmful violation
+  that must be caught later differ from a harmless one? The properties in this
+  section use the observation model to draw this distinction.
 
     \sna{Use the \(n\)-transition language above in all of these.}
 
 \apt{Need some intro text here.}
 
-\subsection{Observable Integrity} 
+  \subsection{Observable Integrity} 
 
     \paragraph{Rolling Back to Idealized State}
       Observable integrity weakens eager integrity by allowing a returned
       state to differ from its call state at high integrity components,
       provided that the differences do not change the observable behavior
-      of the rest of the program.  
-%      provided the observable behavior of the induced trace from the return
-%      matches that of an idealized state whose high integrity components do
-%      match the call state.
+      of the rest of the program. It is not immediately clear what constitutes
+      changing behavior; we construct an idealized return state that contains
+      only the changes that the caller was allowed to make, and use the trace
+      from that state as a baseline against which the real trace will be
+      compared.
+
+      \definition
 
       Given a contour, a call state, and a returned state, we define a
-      ``rollback'' function \(\mathit{roll} : \CONTOURS \times \MACHS \times
+      {\em rollback} function \(\mathit{roll} : \CONTOURS \times \MACHS \times
       \MACHS \rightarrow \MACHS\). The rollback returns a state that matches
       the call state on those components that are high integrity in its
       contour, and matches the return state on low integrity components:
-      \[\mathit{roll}(\contour,\mach_c,\mach_r)(\component) =
+      \[\mathit{roll}(\contour,\mach_e,\mach_r)(\component) =
       \begin{cases}
-        \mach_c(\component) & \text{if } \contour(\component) = (\HIGHINT,\_) \\
+        \mach_e(\component) & \text{if } \contour(\component) = (\HIGHINT,\_) \\
         \mach_r(\component) & \text{if } \contour(\component) = (\LOWINT,\_) \\
       \end{cases}\]
 
@@ -2319,21 +2329,18 @@ rules.
       which we compare the trace from \(\mach_r\), which must prefix it (to
       account for premature halts due to policy violations.)
 
-      \apt{Much confusion here and below about whether $\mathit{roll}$ applies to call state
-        or entry state just after.}
-
       Now we can define a version of trace integrity that compares the trace
       from a returned state to that from its idealized counterpart.
 
     \definition%{Observable Trace Integrity}
 
-      An MP-Trace enjoys {\em observable trace integrity} with respect to
-      some contour \(\contour\) if its final state (if any) has observable
-      behavior \apt{states don't have behavior} that prefixes that of its idealized version, constructed by
-      \(\mathit{roll}\):
+      A trace enjoys {\em observable trace integrity} with respect to
+      some contour \(\contour\) if the trace induced by its final state
+      (if any) has observable behavior that prefixes that of its idealized
+      version, constructed by \(\mathit{roll}\):
 
       \[\begin{split}
-        \text{\sc ObsInt}_\contour ~ \MPT \triangleq
+        \propdef{ObsTraceInt} ~ \contour ~ \MPT \triangleq
         & \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \\
         & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
         & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' \Rightarrow \\
@@ -2359,68 +2366,48 @@ rules.
     trace from \(\mach_r\), it prints 18, but in the trace from \(\mach_r'\)
     it prints 0. So observable trace integrity does not hold.
 
-    However, if {\tt g} had an additional instruction to overwrite {\tt z}
-    before printing, observable trace integrity would hold.
-    \apt{Better to give an example in which {\tt h} overwrites something that
-      is not needed to compute an output, so OTI does not fail.
-      E.g., {\tt h} could overwrite {\tt w} with nonsense before returning -- but
-      this doesn't matter, because the return value will replace the nonsense
-      before this figures in the final print. 
-      Also could be good to give an example in which we 
-      overwrite {\tt x} instead of {\tt z} to show that we still fail OTI -- in other words,
-      the entire remainder of the program matters, not just the caller.
-    }
+    However, consider instead if we insert after instruction 44 a new
+    instruction \(45: [\rsp-4] \leftarrow 50\), overwriting {\tt w} in
+    {\tt g}'s frame. So \(\mach_r'\) maps address 105 to 50, while the
+    rolled-back state \(\mach_r'\) maps it to 0. But in the trace from either
+    state, instructions 27 and 28 load the return value (18) and store it to
+    105, eliminating the only difference. The remainder of the observation
+    traces must be identical, so this trace does obey observable trace
+    integrity.
 
     \definition%{Observable Stack Integrity}
 
-    A system enjoys {\em observable stack integrity}
-    % with respect to    \(\callmap\) and \(\codemap\)
-    if, for any initial state \(\mach_0\) and
-      each transition with entry state \(\mpostate{\mach_e}{\pol_e}{\obs_e}\)
-      and contour \(\contour\) in the induced trace from
-      \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), if
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_e}\),
-      then \(\text{\sc ObsInt}_\contour ~ \MPT\).
-\apt{more words please}
+      A system enjoys {\em observable stack integrity}, like stack integrity,
+      if, for any initial state and each \(n\)-transition from
+      \(\mpstate{\mach_c}{\pol_c}\) to \(\mpstate{\mach_e}{\pol_e}\) in its
+      induced trace, we take the prefix of the call
+      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{call} | \ret{\mach_c}\)
+      and observable trace integrity holds on \(\MPT_{call}\) with
+      contour \(\mathit{Cof}(\mach_c,n)\).
 
-\subsection{Observable Confidentiality}
+  \subsection{Observable Confidentiality}
 
-    \paragraph{Restoring Varied States}
+      Two of the cases of trace confidentiality, \(\mathit{InfCase}\) and
+      \(\mathit{FailCase}\), are purely properties of the observations produced
+      by the traces they are properties of. If the traces are infinite, they
+      should be similar; if one fail-stops, it should be a prefix. Only
+      the \(\mathit{ReturnCase}\) checks machine states, because in that case
+      the traces could continue, but have been cut off by a return. The key
+      to making confidentiality lazy is to consider the traces after the
+      return, considering only whether they are observationally similar
+      or prefixes.
 
-      Trace confidentiality is a property of two traces whose initial machine
-      states are variations, with two sub-properties. First, the behavioral
-      condition -- that their observable behaviors prior to the end of the
-      trace are equivalent -- reflects the intuition that secret values should
-      not influence visible behavior. Second, we have the end condition that
-      their final states (if any) are equal up to the original variation. The
-      end condition over-approximates the extension of the behavioral condition
-      to future execution.\apt{That's quite mysterious.}
+      This requires restoring varied components to their original values
+      in the trace from the variant state, since after return they will
+      once again be legitimately accessible. To return to the example in
+      \cref{fig:confex}, the varied final state \(\mach_r'\) still has
+      -5 as a return address for {\tt g}, so the trace after that return will
+      behave oddly in a way that doesn't reflect a confidentiality violation.
+      So we cannot immediately compare traces from \(\mach_r\) and
+      \(\mach_r'\). We must restore the varied values while preserving
+      differences that have occurred during execution.
 
-      We introduce {\em observable trace confidentiality}, which extends the
-      behavioral condition to apply to execution from the final state on.
-      This requires restoring varied components to their original values,
-      since after return they will once again be legitimately accessible.
-
-      To return to the example in \cref{fig:confex}, the varied final state
-      \(\mach_r'\) might do anything depending on the values of the variation,
-      so we cannot immediately compare traces from \(\mach_r\) and
-      \(\mach_r'\). We must first restore the varied values to their original
-      state, while preserving differences that have occurred during
-      execution.
-      \rb{To me, this reads like a prologue to the definitions properly
-        speaking---maybe the definition header above should be a paragraph and
-        a definition header appear next? I would also split it into two
-        definitions.}
-      \sna{Definitely better as a prologue. Where would you split it?}
-
-%      In \cref{fig:lazyex1}, the final states of the original and variant
-%      differ, because a written value (in black or white) depended on the value
-%      of a high confidentiality location. So the resulting trace fails trace
-%      confidentiality. For observable trace confidentiality, we ask whether the
-%      differing values at address 42 cause any observable distinctions in
-%      future behavior. To do so, we must undo the variation of formerly high
-%      confidentiality locations, so that those in yellow match those in red,
-%      while preserving the updated values where data may have been leaked.
+      \definition
 
       The \(\mathit{restore}\) function takes a contour and four states: the
       original call state, a variant call state, and corresponding return
@@ -2437,31 +2424,51 @@ rules.
           \mach_r'(\component) & \text{else} \\
         \end{cases}\]
 
-      Now we can describe a trace property that extends trace confidentiality.
+      Now we can describe a trace property akin to trace confidentiality, but
+      continuing execution after the end of the callee trace.
 
     \definition{%Observable Trace Confidentiality}
 
-      Let \(\MPT\) and \(\machT\) be a pair of traces starting from
-      \(\mpstate{\mach_e}{\pol_e}\) and \(\mach_e'\), respectively, with
-      \(\mach_e \approx_\contour \mach_e'\). \apt{Should some of this move into the defining clauses below?} Then
-      $\MPT$ and $\machT$ enjoy \emph{observable trace
-        confidentiality} with respect to \(\contour\), written
-            \(\text{\sc ObsConf}_\contour ~ \MPT ~ \machT\), if:
+      {\em Observable trace confidentiality} is the lazy analog to trace
+      confidentiality, and reuses the cases in which the traces don't return.
+      For a contout \(\contour\), return predicate \(R\), and a pair of traces
+      \(\MPT\) and \(\machT\), we consider the return case, in which
+      \(\last(\MPT)\) is some \(\mpostate{\mach_r}{\pol_r}{\obs_r}\) and
+      \(R ~ \mach_r\). Then \(\last(\machT)\) is some \((\mach_r',\obs_r')\)
+      and \(R ~ \mach_r'\). As above, the observations of \(\MPT\) are similar
+      to those of \(\machT\). In place of the requirement that \(\mach_r\)
+      and \(\mach_r'\) agree on components, we have the following requirement.
 
-      \begin{itemize}
-      \item
-      the two traces are observationally equivalent: \(\pi_o(\MPT) \eqsim
-      \pi_o(\machT)\); and
+      Finally, let \(\mach_e\) be the machine state of \(\head(\MPT)\),
+      and \(\mach_e'\) be that of \(\head(\machT)\). We restore \(\mach_r'\)
+      based on \(\mach_e\) and \(\mach_e'\) to get \(\mach_r'' =
+      \mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r')\).
+      The induced trace from \(\mpstate{\mach_r}{\pol_r}\) should be an
+      observational prefix of the induced trace from \(\mach_r'\),
+      reflecting the possibility of a fail-stop after return.
 
-      \item
-      if \(\MPT\) is finite and ends with the state
-      \(\mpostate{\mach_r}{\pol_r}{\_}\), then \(\machT\) is finite, and
-      \(\pi_o(\MPT') \lesssim \pi_o(\machT')\), where
-      \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT'\),
-      \(\mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r') \hookrightarrow \machT'\),
-      and \(\mach_r' = \last(\machT)\). 
-      \end{itemize}
+      \[\begin{split}
+        \mathit{ObsReturnCase} ~ R ~ \MPT ~ \machT \triangleq
+        & \head(\MPT) = \mpostate{\mach_e}{\pol_e}{\obs_e} \Rightarrow \\
+        & \head(\machT) = (\mach_e',\obs_e') \Rightarrow \\
+        & \last(\MPT) = \mpostate{\mach_r}{\pol_r}{\obs_r} \Rightarrow \\
+        & \last(\machT) = (\mach_r',\obs_r') \Rightarrow \\
+        & \mach_r'' = \mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r') \\
+        & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' \Rightarrow \\
+        & \mach_r'' \hookrightarrow \machT' \Rightarrow \\
+        & \pi_o(\MPT) \eqsim \pi_o(\machT) \land \\
+        & \pi_o(\MPT') \lesssim \pi_o(\machT') \\
+      \end{split}\]
 
+      We combine this case with the other two cases from ordinary trace
+      confidentiality:
+
+      \[\begin{split}
+        \propdef{ObsTraceConf} ~ \contour ~ R ~ \MPT ~ \machT \triangleq
+        & \mathit{ObsReturnCase} ~ \contour ~ R ~ \MPT ~ \machT \land \\
+        & \mathit{InfCase} ~ R ~ \MPT ~ \machT \land \mathit{FailCase} ~ R ~
+          \MPT ~ \machT \\
+      \end{split}\]
 
       \begin{figure}
         \confidentialitylazyexample
@@ -2484,16 +2491,24 @@ rules.
       property; it takes until the very end of the program to determine whether
       a tainted value actually influences observable behavior.
 
+      On the other hand, suppose that we inserted an instruction at 43:
+      \(r_6 \leftarrow [\rsp-8]\). \(r_6\) would hold 42 in \(\mach_r\)
+      and -5 in both \(\mach_r'\) and \(\mach_r''\). But since \(r_6\) is
+      never used otherwise, the traces of {\tt h} will enjoy observable trace
+      confidentiality.
+
     \definition%{Observable Stack Confidentiality}
 
-      A system enjoys {\em observable stack confidentiality}
-      %with respect to \(\callmap\) and \(\codemap\)
-      if, for any initial state
-      \(\mach_0\) and each transition with entry state
-      \(\mpostate{\mach_e}{\pol_e}{\obs_e}\) and contour \(\contour\) in the
-      induced trace from \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), if
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_e}\),
-      then \(\text{\sc ObsConf}_\contour ~ \MPT ~ \machT\).
+      {\em Observable stack confidentiality} is structured like stack
+      confidentiality. Let \(\callmap\) be a callmap; for each initial
+      state and \(n\)-transition consisting of \(\mpstate{\mach_c}{\pol_c}\)
+      and \(\mpstate{\mach_e}{\pol_e}\), take any variation \(\mach_e'
+      \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\). Let
+      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_c}\)
+      and \(\mach_e' \hookrightarrow \machT | \ret{\mach_c}\). A system
+      enjoys observable stack confidentiality if, for all such
+      \(\MPT\) and \(\machT\), \(\propdef{ObsTraceConf} ~
+      \mathit{Cof}(\mach_c,n) ~ \ret{\mach_c} ~ \MPT ~ \machT\).
 
     \definition%{Observable Stack Safety}
     A system enjoys {\em observable stack safety}
@@ -2611,7 +2626,6 @@ capability machines, especially in terms of efficiency.
     similar {\em yield integrity} property requires that, from a yield out of
     a coroutine to the next yield back into it, all accessible and same-stack
     data are unchanged. Confidentiality properties are split similarly.
-
 
 \section{Discussion}
 
