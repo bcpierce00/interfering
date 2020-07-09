@@ -129,22 +129,28 @@
 %% before \maketitle command
 \begin{abstract}
 What is stack safety? Numerous mechanisms have been proposed to guard
-against attacks that corrupt the call stacks of running programs, and many
+against attacks that corrupt the call stacks of running programs,
+\ifaftersubmission
+and many
 others rely on a protected stack as an assumption to provide higher level
 guarantees\bcp{this is a good point, but we don't pick it up anywhere in the
-  paper, do we?}\leo{No, should we delete this? it still makes sense in flow}, but a clear and precise definition of stack safety is missing
+  paper, do we?}\leo{No, should we delete this? it still makes sense in flow}
+\bcp{Let's delete for now; later, we can try to incorporate it in the body
+  of the paper.}
+\fi,
+but a clear and precise definition of stack safety is missing
 from the literature.
-
-We propose a formal definition of stack safety phrased in the technical
+%
+We propose a formal definition phrased in the technical
 terminology of language-based security---as a combination of a
 confidentiality property (callees should not be able to read their caller's
 stack frames) and an integrity property (callees should not corrupt their
 caller's stack frames or control state).
   %
-We discuss how these properties are enforced or approximated by  
+We discuss how these properties are enforced or approximated by
 existing stack protection mechanisms and describe some useful
-provably stronger and weaker variants.  \bcp{should we mention stktokens here?}
-\leo{Not sure. We almost never cite stuff in the abstract, do we?}
+provably stronger and weaker variants.  \ifaftersubmission\bcp{should we mention stktokens here?}
+\leo{Not sure. We almost never cite stuff in the abstract, do we?}\fi
 \end{abstract}
 
 
@@ -245,8 +251,10 @@ bounds checking~\citep{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
 split stacks~\citep{Kuznetsov+14},
 shadow stacks~\citep{Dang+15,Shanbhogue+19},
 capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b},
-and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \iflater\apt{Mostly from
-  nick; there could be more}\leo{Do we want to hunt for more refs here?}\fi
+and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \ifaftersubmission\apt{Mostly from
+  nick; there could be more}\leo{Do we want to hunt for more refs here?}
+\bcp{Sure, but later!}
+\fi
 
 But what {\em is} this stack safety of which people speak? Precise formal
 definitions are mostly lacking: rather, the notion
@@ -359,19 +367,23 @@ In summary, we offer the following contributions:
 \begin{itemize}
 \item
   % \leo{More? Extensional}\bcp{We might need to invent a word for   this---''quasi-extensional''?}
-  A novel formal stack safety property capturing the
+  A new {\em formal stack-safety property} capturing the
   intuitive concepts of strict local state encapsulation and well-bracketed
   control flow~(\cref{sec:lse-and-wbcf}) in terms of security concepts.
   % These properties   rule out common examples of stack memory abuse.
-  This property is enforced by 
-  the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, based on hardware tags~(\cref{sec:conservative}).
+  This property can be enforced by
+  the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, which is
+  based on hardware tagging~(\cref{sec:conservative}).
 \item
-  A lockstep stack safety property that is also enforced by the Depth Isolation policy,
-  and is more efficient to test, which we prove (in Coq) is stronger than the basic property~(\cref{sec:lockstep}).
+  A {\em lockstep} variant of the stack-safety property that is also
+  enforced by the Depth Isolation policy
+  but is more efficient to test, plus a proof (in Coq) that this variant is
+  stronger than the original~(\cref{sec:lockstep}).
 \item
-  A novel lazy stack safety property that is enforced by the more efficient
-  Lazy Tagging and Clearing policy
-  of \citet{DBLP:conf/sp/RoesslerD18}, which we prove (in Coq) is weaker than the basic property~(\cref{sec:lazy}).
+  A {\em lazy} variant of the stack-safety property that can be enforced by the
+  more efficient Lazy Tagging and Clearing policy
+  of \citet{DBLP:conf/sp/RoesslerD18}, plus a proof (in Coq) that this
+  variant is weaker than the original~(\cref{sec:lazy}).
 %  This policy does not enforce our strict
 %  local state encapsulation property,
 %  but a modified version of it using unique per-activation tags enforces
@@ -399,7 +411,7 @@ In summary, we offer the following contributions:
 \end{itemize}
 \Cref{sec:relwork} discusses related work;
 \cref{sec:future} sketches directions for future work.
-%
+
 We begin with a description of our threat model
 (\cref{sec:threat}), a running example that we refer to throughout the paper
 (\cref{sec:running-example}),  and some technical preliminaries
@@ -433,7 +445,7 @@ loads, stores, and (direct or indirect) jumps; other details of the machine's IS
 
 To make our stack safety definitions precise, we make some simple assumptions about
 memory layout; our definitions could easily be changed to be parametric over
-these assumptions, at the cost of greater complexity.  Memory 
+these assumptions, at the cost of greater complexity.  Memory
 consists of an instruction region and a stack that grows upwards; for simplicity,
 we omit a heap. (Integrating a memory safety property for the heap in the style of
 \citet{DBLP:conf/post/AmorimHP18} is a natural extension that we discuss
@@ -442,8 +454,8 @@ contiguously allocated per-function frames.
 The boundary between the frames of a caller and callee is given by the $\rsp$ register
 at the time of the call.  The stack can be used to
 pass arguments or return results in the usual way, by placing them
-at the top of the caller's frame. Functions can also communicate via registers; indeed, our 
-definitions say nothing at all about registers (except $\PCname$ and $\rsp$). 
+at the top of the caller's frame. Functions can also communicate via registers; indeed, our
+definitions say nothing at all about registers (except $\PCname$ and $\rsp$).
 
 Our stack safety concepts depend critically on the notions of ``call'' and ``return,''
 which are not fully explicit in machine code.  We define a call to be
@@ -452,7 +464,7 @@ If a call occurs at $\PCname = a$ and $\rsp = s$, then the \emph{corresponding
   return} has occurred when $\PCname = \nextPC(a)$ and $\rsp = s$. (Our definition
 of well-bracketed control flow relates this definition of return to the program's
 declared set of return points.)
-Our property definitions make no other detailed assumptions about call or return sequences, although 
+Our property definitions make no other detailed assumptions about call or return sequences, although
 some of the enforcement mechanisms we consider do.
 
 Enforcement mechanisms are modeled as {\em policies} that add some auxiliary
@@ -465,8 +477,8 @@ can perform an action that would violate the security property; our
 properties are naturally therefore \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
-We model ordinary program state and policy enforcement state separately to make it 
-easier to use well-established concepts from language-based security.  
+We model ordinary program state and policy enforcement state separately to make it
+easier to use well-established concepts from language-based security.
 In particular, confidentiality has an elegant extensional characterization in terms of
 \emph{noninterference}: a program preserves the confidentiality of certain data if
 \emph{varying} that data would not change the program's observable behavior.\leo{What citation should go here? Not the hyperproperties one?}
@@ -474,7 +486,7 @@ In applying this idea to a system that incorporates policy enforcement, only
 ordinary program data should be varied, whereas any associated policy enforcement
 state should be left alone; our model makes this distinction obvious.
 %That is, we compare the actual execution of the program with a \emph{hypothetical}
-%execution where data has been varied. 
+%execution where data has been varied.
 We also introduce a notion of observational integrity that relies on the idea of
 \emph{rolling back} program state; again, our model makes it easy to describe
 rollback of ordinary program data while leaving policy enforcement data unchanged.
@@ -494,7 +506,7 @@ or capability-based techniques).
 \paragraph*{Micropolicies}
 %
 Micropolicies~\citep{pump_oakland2015} are a hardware-assisted tag-based
-reference monitoring mechanism, which have been applied to stack safety by 
+reference monitoring mechanism, which have been applied to stack safety by
 \citet{DBLP:conf/sp/RoesslerD18}.
 Here the policy state consists of metadata tags (e.g., identifying stack frames)
 attached to each value in memory or registers, and the policy step function
@@ -518,7 +530,7 @@ ordinary machine state and policy state is very natural in this setting.
 %Other policies are implemented in hardware or built on hardware mechanisms.
 Capability machines like CHERI \citep{Woodruff+14} extend conventional
 architectures to support efficient and fine-grained control over memory
-accesses, which can be used to implement security policies, including 
+accesses, which can be used to implement security policies, including
 the stack protection policies of
 \citet{Skorstengaard+19,Skorstengaard+19b}.  Capabilities tightly package pointers
 (ordinary data) with base and bounds information (policy data),
@@ -1928,7 +1940,7 @@ and return to the appropriate location. For any initial state \(\mach_0\), let
 \(\MPT\) be the induced trace of \(\mpstate{\mach_0}{\pinit(\mach_0)}\).
 \(\MPT\) may not have an unmatched return -- \(\Unmatched ~ \MPT ~ \MPT_{tail}\)
 may not hold for any \(\MPT_{tail}\). For any state pair \((\mach_c, \pol_c)\)
-corresponding to a call \(\MPT\), if 
+corresponding to a call \(\MPT\), if
 \(\mpstatename = \mpostate{\mach_r}{\pol_r}{\obs_r}\)
 is the first unmatched return such that
 \( \Unmatched ~ \MPT ~ \MPT_{tail}\) and \(\head{\MPT_{tail}} = \mpstatename\),
@@ -2593,7 +2605,7 @@ will be compared.
 
 %      \paragraph*{PROOF} \leo{TODO: Whatever we say about the previous proof
  %       we have to say similar things here}
-      
+
     \paragraph{Connection to Policies}
 
     Observable properties allow us defer enforcement until a property
