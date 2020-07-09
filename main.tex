@@ -897,9 +897,18 @@ property.
 
 \paragraph*{Capability machines}
 %
-\rb{TODO Here the policy is built into the hardware, although the extended ISA
-  could be split into a machine without capabilities and capabilities as the
-  policy.}
+Other policies are implemented in hardware or built on such hardware mechanisms.
+Capability machines like CHERI \rb{Woodruff+14} extend conventional
+architectures to support efficient and fine-grained control over memory
+accesses, which can be used to implement security policies involving, for
+example, compartmentalization or the stack protection policies of
+\citet{Skorstengaard+19,Skorstengaard+19b}. Mapping the underlying protection
+mechanisms to policy states and step function would be a delicate operation, as
+those are tightly coupled to the hardware design. However, separating the
+enforcement aspects of a concrete policy (such as StkTokens, where \(\POLS\)
+would encompass details like the abstract call stack, the capability sealing
+scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
+the machine would be relatively straightforward.
 
 \newcommand{\TAGS}{\mathcal{T}}
 \newcommand{\tagname}{t}
@@ -2020,26 +2029,26 @@ machine.
     \mach(\component) = \mach'(\component)
   \]
 
-\definition
-  Given two machine states $\mach_1$ and $\mach_2$ with stepping machine states
-  and observations $\mach_1 \stepstoobs{\obs_1} \mach_1'$ and $\mach_2
-  \stepstoobs{\obs_2} \mach_2'$, all these satisfy the \emph{stack
-    confidentiality test} if their observations and changed components coincide:
-  \[
-    \mathit{conf}_T ~ \mach_1 ~ \mach_2 ~ \obs_1 ~ \obs_2 ~ \mach_1' ~ \mach_2' ~ \triangleq
-    \obs_1 = \obs_2 \wedge \forall \component . ~
+\definition Two machine states $\mach_1$ and $\mach_2$ satisfy the
+\emph{stack confidentiality test} if the machines they stepped to
+have their changed components coincide and the observations during
+these steps are equal:
+\[
+\begin{array}{rl}
+  \mathit{conf}_T ~ \mach_1 ~ \mach_2 ~ \triangleq &
+  \exists \obs_1 ~ \obs_2 ~ \mach_1' ~ \mach_2'. ~
+  \mach_1 \stepstoobs{\obs_1} \mach_1' \wedge \mach_2 \stepstoobs{\obs_2} \mach_2' \Rightarrow \\
+&    \obs_1 = \obs_2 \wedge \forall \component . ~
    (     \mach_1(\component) \neq \mach_1'(\component)
     \vee \mach_2(\component) \neq \mach_2'(\component))
     \rightarrow \mach_1'(\component) = \mach_2'(\component)
+\end{array}
   \]
-\apt{scoping of $\forall$ is ambiguous.}
-\rb{Fix notations, including for properties below.
-  In particular, note that the last four arguments could be computed from the
-  first two and it may be clearer to elide them.}
 
-\definition The testing property keeps track of relevant information
-on a {\em variant stack}: a list of machine states, each element of
-which (denoted $\vm{C}$) of which is a variation of the actual machine
+\definition The testing property keeps track of a variation machine
+for every nested call performed so far on a {\em variant stack}: a
+list of machine states annotated with a contour, each element of which
+(denoted $\vm{C}$) of which is a variation of the actual machine
 according to a contour $C$.
 %
 \footnote{The full formal definition in Coq also records additional
@@ -2082,16 +2091,18 @@ according to a contour $C$.
   with respect to the original machine state. We write
   this $\testVS{(\mach, \pol)}{\vs}$.
 
-\definition{Eager testing property}
-  Let $\callmap$ a call map and $\codemap$ a function map. Given a state
-  $(\mach, \pol) \in \MPS$ that is well-formed w.r.t. a variant stack $\vs$, we
-  say that an MP-trace induced from $(\mach, \pol)$ satisfies the \emph{eager
-  testing property} at a given call depth as follows.
+\definition
+%  Let $\callmap$ a call map and $\codemap$ a function map.
+  Given a state $(\mach, \pol) \in \MPS$ that is well-formed w.r.t. a
+  variant stack $\vs$, we say that an MP-trace induced from $(\mach,
+  \pol)$ satisfies the \emph{strong stack safety} at a given call
+  depth as follows.
 % Refactor repetitive notation before case split
-  In all cases that assume a machine step, $(\mach, \pol) \hookrightarrow_P
-  (\mach', \pol', \obs)$, assume also (unless the step is a return) that the
-  variant stack can step, $\vs \hookrightarrow \vs'$, i.e., all its variant
-  machines can step.
+  In all cases that let $(\mach, \pol) \hookrightarrow_P
+  (\mach', \pol', \obs)$.
+  %and assume (unless the step is a return) that the
+  %variant stack can step, $\vs \hookrightarrow \vs'$, i.e., all its variant
+  %machines can step.
 
 %  Let $\callmap$ a call map and $\codemap$ a code map. Given a state $(\mach,
 %  \pol) \in \MPS$ that is well-formed w.r.t. a variant stack $\vs$ and induces
@@ -2101,6 +2112,28 @@ according to a contour $C$.
 
   \begin{itemize}
 
+  \item
+%
+    If the machine takes a \emph{call step} and $\contour$ is the contour at
+    the call then,
+%
+    (1) the variant stack test $\testVS{(\mach, \pol)}{\vs}$ must be
+    satisfied,
+%
+    (2) the stack integrity test $\testInt{\contour}{\mach}{\mach'}$ is
+    satisfied and the stack confidentiality test $\testConf{\mach}{\vm{\contour}}$
+    is satisfied with regard to an arbitrary $\contour$-variant
+    of $\mach$,
+%
+    and (4) the stack safety test $\testProp{d}{((\mach', \pol') :
+    \MPT)}{(\vm{\contour} : \vs')}$ is coinductively satisfied, for an arbitrary
+    $\contour$-variant of the machine,
+%
+    {\em then} we conclude $\testProp{d}{((\mach, \pol) : (\mach',
+    \pol') : \MPT)}{vs}$.
+
+
+    
   \item If the machine \emph{fail-stops}, i.e., $(\mach, \pol) \hookrightarrow_P
     (\mach, \pol, \tau)$, the property is safisfied for the singleton trace:
     $\testProp{d}{[(\mach, \pol)]}{\vs}$, for any $d$ up to the size of
@@ -2131,26 +2164,6 @@ according to a contour $C$.
     {\em then} we conclude $\testProp{d}{((\mach, \pol) : (\mach', \pol') :
     \MPT)}{vs}$.
     %% \rb{omitting stack size condition}
-
-  \item
-%
-    If (1) the machine takes a \emph{call step} and $\contour$ is the contour at
-    the call,
-%
-    (2) the variant stack test $\testVS{(\mach, \pol)}{\vs}$ is
-    satisfied,
-%
-    (3) the stack integrity test $\testInt{\contour}{\mach}{\mach'}$ is
-    satisfied and the stack confidentiality test $\testConf{\mach}{\vm{\contour}}$
-    is satisfied with regard to an arbitrary $\contour$-variant
-    of $\mach$,
-%
-    and (4) the stack safety test $\testProp{d}{((\mach', \pol') :
-    \MPT)}{(\vm{\contour} : \vs')}$ is coinductively satisfied, for an arbitrary
-    $\contour$-variant of the machine,
-%
-    {\em then} we conclude $\testProp{d}{((\mach, \pol) : (\mach',
-    \pol') : \MPT)}{vs}$.
 
     %% the contour $\contour$ is updated based on the top of the current machine.
     %% For the property to hold for a trace $(\mach, \pol) \cdot \MPT$ at depth $d$
