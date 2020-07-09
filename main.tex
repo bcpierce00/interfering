@@ -1979,12 +1979,29 @@ tagged $\tagStackDepth{n}$.  \rb{Note that we have also considered and
 %% return, it is OK.
 
 \paragraph*{Strong Stack Safety}
-%
+
+\leo{Maybe lockstep?}
+
 This conservative policy does not only satisfy the stack safety above,
-but also a provably stronger one, which at each step of the
-computation performs integrity and confidentiality tests for a stack
-of running variants, which are kept in lockstep with the original
-machine.
+but also a provably (in Coq) stronger one that enforces local state
+encapsulation throughout every calls execution. To encode that
+property, we not only keep track of the execution of one machine
+(whose trace we're trying to characterize as safe), but of an entire
+stack of machine variations corresponding to nested calls of the
+original machine. For each step of the original machine, we take a
+step in every variant machine (thus, keeping them in lockstep
+execution) and enforce a single-step variant of integrity and
+confidentiality tests. In addition, every time a call is made we push
+a variation of the original machine state at the time of that call on
+top of the variant stack (just like the stack confidentiality property
+enforced trace confidentiality for every transition), and every time
+the machine returns from a call we pop the top variation (to account
+for stack confidentiality taking the prefix of the transition trace
+until its return).
+
+We start by defining the integrity and confidentiality tests, as well
+as the variant stack, before giving the full definition of strong
+stack safety.
 
 \newcommand{\vse}{\mathit{vse}}
 \newcommand{\VSES}{\mathit{VSE}}
@@ -2055,151 +2072,105 @@ according to a contour $C$.
   \item The registers of its contour $\contour(\vse)$ are public.
   \end{itemize}
   \fi
+
+We also need two auxilliary notations that relate to variant stacks.
+% 
+First, strong safety will check that the basic tests above hold for every
+machine in the variant stack.  Given a machine that steps $(\mach,
+\pol) \hookrightarrow_P (\mach', \pol', \obs)$, say that a variant
+stack $\vs$ safisfies the \emph{variant stack test} if for each
+variant element $\vm{C}$ (which is a variation of $\mach$ for $C$),
+$\vm{C}$ can take a step, denoted $\vm{C} \stepstoobs{\obs} \mach'$,
+while satisfying the stack integrity test $\testInt{C}{\mach}{\mach'}$
+and stack confidentiality test $\testConf{\mach}{\mach'}$ with regard
+to the original machine state. We will write $\testVS{(\mach,
+  \pol)}{\vs}$ for this compound check.
+%
+Second, we will write $\vs \stepsto \vs'$ if every variant machine
+in $\vs$ steps to the corresponding machine in $\vs'$.
+%
+
+We are now ready to define strong stack safety coinductively.
+
+\definition Given a state $(\mach, \pol) \in \MPS$ and a variant stack
+$\vs$ in which every element $\vm{\contour}$ is a variation of $\mach$
+with respect to its contour, we say that an MP-trace induced from
+$(\mach, \pol)$ satisfies the \emph{trace strong stack safety}, and write
+$\testProp{}{\MPT}{\vs}$, if:
+
+\begin{itemize}
+
+\item
+  If the machine takes a \emph{non-call, non-return step}
+  \[(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs)\MPT,\]
+  then the variant stack test must be satisfied:
+  \[\testVS{(\mach, \pol)}{\vs},\]
+  and trace strong stack safety must be coinductively satisfied for
+  the remainder of the trace and the variant stack $vs'$ that
+  steps to ($\vs \stepsto \vs'$):
+  \[ \testProp{}{((\mach',\pol',\obs)\MPT)}{\vs'}\]
   
-\definition
+\item
+  If the machine takes a \emph{call step} and $\contour$ is the contour at
+  the call
+  \[(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs) \wedge \callmap(\mach) = n,\]
 %
-  Our testing property extends the basic tests above to whole variant
-  stacks.  Given a machine that steps $(\mach, \pol) \hookrightarrow_P
-  (\mach', \pol', \obs)$, say that a variant stack $\vs$ \iflater that
-  is well-formed with respect to $\mach$\fi safisfies the
-  \emph{variant stack test} if for each variant element $\vm{C}$
-  (which is a variation of $\mach$ for $C$), $\vm{C}$ can take a step,
-  denoted $\vm{C} \stepstoobs{\obs} \mach'$, while
-  satisfying the stack integrity test $\testInt{C}{\mach}{\mach'}$
-  and stack confidentiality test $\testConf{\mach}{\mach'}$
-  with regard to the original machine state. We write
-  this $\testVS{(\mach, \pol)}{\vs}$.
-
-\definition
-%  Let $\callmap$ a call map and $\codemap$ a function map.
-  Given a state $(\mach, \pol) \in \MPS$ that is well-formed w.r.t. a
-  variant stack $\vs$, we say that an MP-trace induced from $(\mach,
-  \pol)$ satisfies the \emph{strong stack safety} at a given call
-  depth as follows.
-% Refactor repetitive notation before case split
-  In all cases that let $(\mach, \pol) \hookrightarrow_P
-  (\mach', \pol', \obs)$.
-  %and assume (unless the step is a return) that the
-  %variant stack can step, $\vs \hookrightarrow \vs'$, i.e., all its variant
-  %machines can step.
-
-%  Let $\callmap$ a call map and $\codemap$ a code map. Given a state $(\mach,
-%  \pol) \in \MPS$ that is well-formed w.r.t. a variant stack $\vs$ and induces
-%  an MP-trace $(\mach, \pol) \hookrightarrow \MPT$, we say that the \emph{stack
-%  testing property} is satisfied at call depth $d$, and write
-%  $\mathit{stack}_T ~ d ~ \MPT ~ \vs$, as follows:
-
-  \begin{itemize}
-
-  \item
+  then the variant stack test $\testVS{(\mach, \pol)}{\vs}$ must be
+  satisfied:
+  \[\testVS{(\mach, \pol)}{\vs},\]
 %
-    If the machine takes a \emph{call step} and $\contour$ is the contour at
-    the call then,
+%    (2) the stack integrity test $\testInt{\contour}{\mach}{\mach'}$ is
+%    satisfied and the stack confidentiality test $\testConf{\mach}{\vm{\contour}}$
+%    is satisfied with regard to an arbitrary $\contour$-variant
+%    of $\mach$,
 %
-    (1) the variant stack test $\testVS{(\mach, \pol)}{\vs}$ must be
-    satisfied,
-%
-    (2) the stack integrity test $\testInt{\contour}{\mach}{\mach'}$ is
-    satisfied and the stack confidentiality test $\testConf{\mach}{\vm{\contour}}$
-    is satisfied with regard to an arbitrary $\contour$-variant
-    of $\mach$,
-%
-    and (4) the stack safety test $\testProp{d}{((\mach', \pol') :
-    \MPT)}{(\vm{\contour} : \vs')}$ is coinductively satisfied, for an arbitrary
-    $\contour$-variant of the machine,
-%
-    {\em then} we conclude $\testProp{d}{((\mach, \pol) : (\mach',
-    \pol') : \MPT)}{vs}$.
+  and trace strong stack safety must be coinductively satisfied
+  for the remainder of the trace and for every variant stack
+  that is the result of adding a variation of $\mach'$ with
+  respect to $C$ at the top of the stack $\vs'$ that $\vs$ steps
+  to:
+  \[\testProp{}{((\mach', \pol', \obs)\MPT)}{(\vm{\contour} : \vs')}\]
 
+\item
+%
+  If the machine $\mach$ takes a \emph{return step},
+  \[(\mach, \pol) \hookrightarrow_P (\mach', \pol', \obs) \wedge \retmap(\mach),\]
+  %
+  the top of the variant stack also returns,
+  the tail of $\vs$ satisfies the stack safety test
+  \[\testVS{(\mach, \pol)}{\mathit{tail}(\vs)},\]
+  %
+  and trace strong stack safety must be coinductively satisfied for
+  the remainder of the trace and for the tail of the varant stack
+  that $\vs$ steps to:
+  \[\testProp{}{((\mach', \pol', \obs)\MPT)}{(\mathit{tail}(\vs'))}\]
 
-    
-  \item If the machine \emph{fail-stops}, i.e., $(\mach, \pol) \hookrightarrow_P
+\item If the machine \emph{fail-stops}, i.e., $(\mach, \pol) \hookrightarrow_P
     (\mach, \pol, \tau)$, the property is safisfied for the singleton trace:
-    $\testProp{d}{[(\mach, \pol)]}{\vs}$, for any $d$ up to the size of
-    $\vs$. (That is, a violation was detected $d$ levels into the stack.
-    Elements are created and pushed to the variant stack on calls and popped
-    from it on returns, so its size always reflects the depth of the program
-    stack.)
+    $\testProp{}{[(\mach, \pol)]}{\vs}$.
 
-  \item If the top variant of the stack (and only the top variant) returns,
-    %i.e., $\mathit{ret}(\head(\vs), \mach)$ holds,
-    the property is safisfied for
-    the singleton trace $[(\mach, \pol)]$ at depth equal to the size of the
-    stack: $\testProp{|\vs|}{[(\mach, \pol)]}{\vs}$. \rb{Explain the
-    use of this vs the return case below.}
-
-  \item If
-%
-    (1) the machine takes a \emph{non-call, non-return step},
-%
-    (2) the variant stack test $\testVS{(\mach, \pol)}{\vs}$ is
-    satisfied, and
-%
-    (3) the stack safety test $\testProp{d}{((\mach', \pol') : \MPT)}{\vs'}$
-    is coinductively satisfied % at depth $d$
-    %% and for a trace starting continuing after the step, $\head(\MPT) = (\mach',
-    %% \pol')$,
-%
-    {\em then} we conclude $\testProp{d}{((\mach, \pol) : (\mach', \pol') :
-    \MPT)}{vs}$.
-    %% \rb{omitting stack size condition}
-
-    %% the contour $\contour$ is updated based on the top of the current machine.
-    %% For the property to hold for a trace $(\mach, \pol) \cdot \MPT$ at depth $d$
-    %% the eager integrity test must hold for $\contour$ at the call,
-    %% the eager confidentiality test must hold for all variants at the call,
-    %% including the new variant that is added to the top of the stack,
-    %% and the property recurses on an arbitrary variant at the new contour
-    %% at depth $d$ with trace $\MPT$.
-
-  \item
-%
-    If (1) the machine takes a \emph{return step}, so the top of the variant
-    stack (and only the top variant) returns,
-%
-    (2) the variant stack test $\testVS{(\mach, \pol)}{\vs}$ is
-    satisfied,
-%
-    (3) the stack safety test $\testProp{d}{((\mach', \pol') :
-    \MPT)}{\mathit{tail}(\vs)}$ is coinductively satisfied
-%
-    {\em then} we conclude $\testProp{d}{((\mach, \pol) : (\mach',
-    \pol') : \MPT)}{vs}$.
-
-  \item If the machine takes a \emph{simultaneous return-call step}, that is,
-    the instruction to which execution returns immediately after completing a
-    call is itself a call instruction, the \emph{call step} and \emph{return
-    step} cases are combined.
+%  \item If the machine takes a \emph{simultaneous return-call step}, that is,
+%    the instruction to which execution returns immediately after completing a
+%    call is itself a call instruction, the \emph{call step} and \emph{return
+%    step} cases are combined.
 
   \end{itemize}
 
-\definition
+\definition 
 %
-  A trace $\MPT$ satisfies our \emph{top-level stack testing property} if it
-  satisfies the eager testing property at depth 1 with regard to the initial
-  variant, $\testProp{1}{\MPT}{\vm{\contour_0}}$.
-%
-  \rb{I don't think the initial variant has been defined, but it's
-    straightforward.}
+A system satisfies {\em strong stack safety} if for every initial machine $\mach$,
+the trace induced from $(\mach, \pinit{\mach})$ satisfies trace strong stack safety with
+respect to the empty stack.
 
-By using property-based testing techniques, we can determine with a high degree
-of confidence that an implementation of the conservative micropolicy satisfies
-this eager testing property. Although we have not proved that the conservative
-policy guarantees the stack safety property, the testing property is provably
-stronger than the stack safety property \rb{theorem?} and, by this implication,
-we can conclude that the conservative policy also enforces stack safety.
+\theorem
+Strong stack safety implies stack safety.
 
-% The properties we give are indeed enforceable.
+\proof
+By coinduction on trace strong stack safety.
+\leo{3000 lines Coq?}
+\leo{I can write a TON about this proof, but I'm not sure how much is interesting/how much space we have}.
 
-\rb{What is the strongest property enforced by the conservative policy?}
-
-\paragraph*{End-to-end stack safety property}
-
-Integrity
-
-Confidentiality as a form of noninterference
-
-\paragraph*{Eager vs lazy testing}
+\paragraph*{Eager vs Lazy Stack Safety}
 
 The conservative policy we just described, while testable and enforceable, is
 too slow to be of practical use. What we want, instead, is a somewhat more
@@ -2211,8 +2182,8 @@ mitigate those costs, they propose optimizations like Lazy Tagging and Lazy
 Clearing that relax and defer some of the checks of an eager policy, being more
 permissive in their allowed operations and catching violations if and when their
 effect becomes manifest.
-\rb{How much detail to go into? Refer to examples if we have the space?}
 
+\leo{Not sure how much of the following could go after the lazy stack safety property}
 These \emph{lazy policies} admit more efficient implementations while being
 harder to test, given that potential violations may or may not materialize,
 requiring in turn additional bookkeeping. However, a critical observation is
