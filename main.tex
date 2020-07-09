@@ -897,9 +897,18 @@ property.
 
 \paragraph*{Capability machines}
 %
-\rb{TODO Here the policy is built into the hardware, although the extended ISA
-  could be split into a machine without capabilities and capabilities as the
-  policy.}
+Other policies are implemented in hardware or built on such hardware mechanisms.
+Capability machines like CHERI \rb{Woodruff+14} extend conventional
+architectures to support efficient and fine-grained control over memory
+accesses, which can be used to implement security policies involving, for
+example, compartmentalization or the stack protection policies of
+\citet{Skorstengaard+19,Skorstengaard+19b}. Mapping the underlying protection
+mechanisms to policy states and step function would be a delicate operation, as
+those are tightly coupled to the hardware design. However, separating the
+enforcement aspects of a concrete policy (such as StkTokens, where \(\POLS\)
+would encompass details like the abstract call stack, the capability sealing
+scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
+the machine would be relatively straightforward.
 
 \newcommand{\TAGS}{\mathcal{T}}
 \newcommand{\tagname}{t}
@@ -1040,7 +1049,7 @@ on states that are well-formed in some way.\apt{Is this our current thinking?}
 We write $\MPS$ for the set of all pairs of machine states and policy
 states.
 %
-\[\MPS = \MACHS \times \POLS\]
+\[\mpstatename \in \MPS = \MACHS \times \POLS\]
 %
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
@@ -1101,8 +1110,6 @@ to relate a machine-policy state pair to the MP-trace
 induced by the step function on $\MPS$. Unlike the $\MOTRACE$ above, this trace can
 be finite as the policy can cause a fault, in which case the final observation is
 a \(\tau\):
-\rb{This $\hookrightarrow_P$ is often enough written just $\hookrightarrow$.
-  Overload everywhere?}\apt{Done, and for $\rightharpoonup$ too.}
 
 \begin{minipage}{.4\textwidth}
 \judgment{\(\neg \exists \pol_1 . \mpstate{\mach_0}{\pol_0} \polstep \pol_1\)}
@@ -1251,21 +1258,6 @@ an external observer looking at two machine runs cannot (computably)
 distinguish between a machine that steps forever and a machine that
 steps for a long time before producing some output.
 
-%Let the predicate \(\isinf(T)\) hold when the trace $T$ is infinite.
-%We then define {\em policy-sensitive observational equivalence}: a
-%trace $\MPT \in \MPOTRACE$ is equivalent to a trace $\machT \in
-%\MOTRACE$ if (1) \(\MPT\) is infinite and the observations of \(\MPT\)
-%and \(\machT\) are equivalent, or (2) if the \(\MPT\) is finite (due to a
-%policy fault) and its observations are a prefix of those of M.
-%
-%% Fixed by Sean
-%%\leo{Why $\mathit{Obs}$ and not $\pi_o$ defined earlier?}
-%\judgmenttwo{\(\neg \isinf(\MPT)\)}{\(\pi_o(\MPT) \lesssim \pi_o(\machT)\)}
-%            {\(\MPT \sim_P \machT\)}
-%
-%\judgmenttwo{\(\isinf(\MPT)\)}{\(\pi_o(\MPT) \simeq \pi_o(\machT)\)}
-%            {\(\MPT \sim_P \machT\)}
-
 \section{Stack Safety, Formally}
 \label{sec:lse-and-wbcf}
 
@@ -1407,12 +1399,7 @@ are marked high confidentiality and low integrity.
 The same is true for the designated output location: it can be
 freely written into but should not be read.
 %
-Special care is needed for the code memory corresponding to the
-callee: they are marked low confidentiality if they belong to the
-callee and high confidentiality otherwise; regardless they are always
-high integrity.\apt{Sean:I think this is vestigial from an aborted version
-  in which you were modeling WBCF using confidentiality. In any casen
-  it is not reflected in the definition below.}
+Code is always high integrity and low confidentiality.
 %
 Finally, registers and the frame of arguments and results are free
 for the callee to use, and are therefore tagged with low integrity and
@@ -1484,21 +1471,20 @@ then we will lift that to a property for every such subtrace of a
 callee.
 
 \definition
-Let $\contour$ be a contour and $\MPT$ be a (potentially infinite)
-$\MPOTRACE$. We will say $\MPT$ satisfies {\em trace integrity} with
-respect to $\contour$ if its final state (if any) agrees with its
-initial one on all components marked $\HIGHSEC$ in $\contour$:
+
+Let \(\contour\) be a contour and \(\MPT\) be a (potentially infinite)
+\(\MPOTRACE\). We will say \(\MPT\) satisfies {\em trace integrity} with
+respect to \(\contour\) if its final state (if any) agrees with its
+initial one on all components marked \(\HIGHSEC\) in \(\contour\):
 %
 \[\begin{split}
-  \mathit{int} ~ \contour ~ \MPT \triangleq &
-    \head(\MPT) = \mpostate{\mach_e}{\_}{\_}  \land 
-    \last(\MPT) = \mpostate{\mach_r}{\_}{\_} \Rightarrow \\
+  \propdef{TraceIntegrity} ~ \contour ~ \MPT \triangleq &
+    \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \Rightarrow \\
+  & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
   & \forall \component. ~ \contour(\component) = \HIGHSEC \Rightarrow
     \mach_e(\component) = \mach_r(\component) \\
 \end{split}\]
-%\leo{TODO: DISCUSS: Figure out notation for first/last machine state in a trace}
-%\sna{We could do it like this, with finiteness implicit in the existence of
-%     a final state.}+1
+\sna{Experimenting with font on the mathy version of the property.}
 
 Intuitively, the caller expects to find their private data untouched
 after the callee returns. That means that if the callee never returns,
@@ -1529,9 +1515,9 @@ Instead of storing data to the return value slot,
 the changed version overwrites {\tt g}'s local variable {\tt z}.
 The figure shows the modified trace, with snapshots of the initial
 and final states colored to show the contour; high 
-integrity memory is in red\apt{NO?}, while low integrity is in green\apt{NO?}.
-At the end of the trace high integrity address 103 should match the initial state, and does not.
-So trace integrity is violated.
+integrity memory is in \high, while low integrity is in \low.
+At the end of the trace high integrity address 103 should match the initial
+state, and does not. So trace integrity is violated.
 \rb{There are some color name macros, but none for integrity yet? Use instead
   of hardcoded color names.}\apt{I don't understand what's going on with the colors.
   I thought we agreed to use the same coloring scheme throughout?}
@@ -1539,37 +1525,44 @@ So trace integrity is violated.
 We now lift this definition to an integrity property for a complete
 execution trace. We do this by requiring that trace integrity holds
 for every subtrace delimited by a call and its corresponding return.
-%for every transition between a caller and a callee for the entirety of
-%the trace of the callee.\apt{?????}
+
+\definition Given a trace \(\MPT\) and a call map \(\callmap\)
+%and a function map \(\codemap\),
+an \(n\)-{\em transition} is a pair of
+machine-policy state pairs \(\mpstate{\mach_c}{\pol_c}\) and
+\(\mpstate{\mach_e}{\pol_e}\) in the trace such that
+\(\mach_c\) is a valid call with \(n\) arguments, and
+\(\mpstate{\mach_c}{\pol_c}\) steps to \(\mpstate{\mach_e}{\pol_e}\).
+
+\apt{or is in some function?? and why do we need either??}:
+\sna{I think Andrew is right that we don't need to know the function
+     here, or that the entry point is valid; that's part of WBCF.}
+%and \(\mach_e\) is an entry point for some function \(f\):
+ 
+  \[\begin{split}
+    \mathit{Tr}_n ~ \MPT ~ \mpstate{\mach_c}{\pol_c} ~ \mpstate{\mach_e}{\pol_e}
+    \triangleq & \exists \obs, f.
+    ~ \mpstate{\mach_c}{\pol_c} \stepstopol{\obs} \mpstate{\mach_e}{\pol_e} \\
+    & \land \callmap(\mach_c(\PCname)) = n
+      %\land \codemap(\mach_e(\PCname)) = f
+  \end{split}\]
+
+\definition 
+
+{\em Stack integrity} is a property of a system with regard to a call map
+\(\callmap\) that holds when every \(n\)-transition \(\mpstate{\mach_c}{\pol_c}\)
+and \(\mpstate{\mach_e}{\pol_e}\) in every legal trace exhibits trace integrity
+on the prefix up to its return, if any. For any initial state \(\mach_0\)
+we take the induced trace \(\mpstate{\mach_0}{\pinit(\mach_0)} \hookrightarrow
+\MPT\). For each \(n\)-transition \(\mathit{Tr}_n ~ \MPT ~
+\mpstate{\mach_c}{\pol_c} ~ \mpstate{\mach_e}{\pol_e}\) we take the prefix of
+the call up to its return, \(\mpstate{\mach_e}{\pol_e} \hookrightarrow
+\MPT_{call} | \ret{\mach_c}\). If for any such call trace \(\MPT_{call}\), 
+\(\propdef{TraceIntegrity} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{call}\), then the
+system as a whole enjoys stack integrity with regard to \(\callmap\).
 
 \apt{Some more words needed here to smooth the technicalities.}
-
-\definition%{Transition}
-Given a trace $\MPT$, an $n$-{\em transition} is a pair of
-machine-policy state pairs $(\mach_c, \pol_c)$ and $(\mach_e, \pol_e)$
-in the trace such that:
-\begin{itemize}
-\item one state pair steps to the other:
-  $$\exists \obs. ~ (\mach_c, \pol_c) \stepstopol{\obs} (\mach_e, \pol_e),$$
-\item $\mach_c$ is a valid call with $n$ arguments:
-  $$\callmap(\mach_c(\PCname)) = n,$$
-\item and $\mach_e$ is an entry point\apt{or is in some function?? and why do we need either??}:
-  $$\exists f. \codemap(\mach_e(\PCname)) = f.$$
-\end{itemize}
-
-\definition%{Stack Integrity}
-A system satisfies {\em stack
-  integrity} if, for every
-initial machine-policy state pair $(\mach_0, \pol_0)$ and its induced
-trace $\MPT$, and every $n$-transition $(\mach_c, \pol_c)$ and
-$(\mach_e, \pol_e)$ in $\MPT$, the prefix $\MPT_{pre}$ of $\MPT$ from
-$(\mach_e, \pol_e)$ until the first return corresponding to $\mach_c$
-(if any) satisfies trace integrity with respect to the contour at the
-call:
-%
-$$\forall \MPT_{pre}. ~ \mpstate{\mach_e}{\pol_e} \hookrightarrow_P
-\MPT_{pre} ~ | ~ \ret{\mach_c} \Rightarrow
-\mathit{int}~\mathit{Cof}(\mach_c, n)~\MPT_{pre}$$
+\sna{Attempt...}
 
 \subsubsection{Stack Confidentiality}
 
@@ -1581,12 +1574,12 @@ confidentiality in two similar steps: a trace version and a system
 version.
 
 Unlike integrity, confidentiality is a noninterference-style property,
-comparing the behavior of a machine with an arbitrary variant that
+comparing the behavior of a machine with an arbitrary variation that
 preserves low confidentiality data.
 
 \definition%{Variations}
-We say two machine states $\mach$ and $\mach'$ are {\em variations} of one
-another with respect to a contour $\contour$ if they agree on low
+We say two machine states \(\mach\) and \(\mach'\) are {\em variations}
+of one another given a contour \(\contour\) if they agree on low
 confidentiality data:
 %
 \[
@@ -1596,8 +1589,8 @@ confidentiality data:
 \]
 %
 Then, the trace version of confidentiality operates on two traces: the
-``original'' tracce $MP \in \MPOTRACE$ that corresponds to a callee $f$
-and a ``variant'' trace $M \in \MTRACE$ that corresponds to how $f$
+``original'' trace $\MPT \in \MPOTRACE$ that corresponds to a callee $f$
+and a ``variant'' trace $\machT \in \MTRACE$ that corresponds to how $f$
 would behaves if it were started from a variant initial machine state.
 %
 As an example of variations, consider the top of \Cref{fig:confex1}
@@ -1605,41 +1598,76 @@ which shows a snapshot of the state as in the running example (top
 memory layout) and a variation of it (bottom). \leo{Finalize
   contents, describe}
 
-\definition%{Trace Confidentiality}
-%% Suppose $m_e \approx_\contour m_e'$.
-%% Two traces $MP$ with $\head(MP) = m_e$ and $M$ with $head(M) = m_e'$
-%% satisfy {\em trace confidentiality} with respect to $\contour$ and
-%% a return predicate \(R \subset \MACHS\) if:
-Two traces $MP$, with head $m_e$, and $M$, with head $m_e'$,
-satisfy {\em trace confidentiality} with respect to contour $\contour$ and
-a return predicate \(R \subset \MACHS\) if, whenever $m_e \approx_\contour m_e'$ then:
+\definition
+
+{\em Trace confidentiality} will be a property of two traces, \(\MPT\) and
+\(\machT\), with regard to a return predicate \(R \subset \MACHS\) that
+reflects the states that are considered to have returned. We abstract over
+\(R\) because what it means to return depends on the state from which
+\(f\) was called. There are three cases in which \(\MPT\) and \(\machT\)
+enjoy trace confidentiality with respect to \(R\).
+
+\sna{Interestingly, split out like this, we don't need to talk about
+     contour here -- they are varied in the next property.}
 \begin{itemize}
-\item If $\MPT$ is finite with final state $\mach_r$ and $\mach_r \in R$, 
-  then $\machT$ is also finite with some final state $\mach_r'$ and
-  any changes from the initial states have changed in the same way:
-$$\forall \component. ~ \mach_e(\component) \not = \mach_r(\component)
-  \vee \mach_e'(\component) \not = \mach_r'(\component) \Rightarrow
-  \mach_r(\component) = \mach_r'(\component)$$
-  In addition their observations must be similar:
-  $$\pi_o(\MPT) \eqsim \pi_o(\machT)$$
-\item If $\MPT$ is infinite, then $\machT$ is also infinite and their
-  observations are similar:
-  $$\pi_o(\MPT) \eqsim \pi_o(\machT)$$
-\item If the $\MPT$ ends prematurely, without fulfilling \(R\), then
-  we require that its observations are a prefix of those of $\machT$:
-  $$\pi_o(\MPT) \lesssim \pi_o(\machT)$$
+  \item If \(\MPT\) has a final state \(\last(\MPT) = \mpostate{\mach_r}
+    {\pol_r}{\obs_r}\) and \(R\ \mach_r\), then \(\machT\) is also finite with
+    some final state \(\mach_r'\) and any changes from the initial states are
+    matched between \(\mach_r\) and \(\mach_r'\). In addition their
+    observations are similar.
+    \[\begin{split}
+      \mathit{ReturnCase} ~ R ~ \MPT ~ \machT \triangleq &
+      \forall ~ \mach_r ~ \pol_r ~ \obs_r ~ \component . \last(\MPT) =
+        \mpostate{\mach_r}{\pol_r}{\obs_r} \Rightarrow \\
+      & \exists \mach_r' ~ \obs_r' . \last(\machT) = (\mach_r',\obs_r')
+        \land \pi_o(\MPT) \eqsim \pi_o(\machT) \land \\
+      & ~ (\mach_e(\component) \not = \mach_r(\component)
+        \lor \mach_e'(\component) \not = \mach_r'(\component) \Rightarrow
+      \mach_r(\component) = \mach_r'(\component))
+    \end{split}\]
+  \item If \(\MPT\) is infinite, then \(\machT\) is also infinite and their
+  observations are similar.
+    \[\begin{split}
+      \mathit{InfCase} ~ R ~ \MPT ~ \machT \triangleq
+      & \neg (\exists mpo . \last(\MPT) = mpo) \Rightarrow \\
+      & \neg (\exists mo . \last(\machT) = mo)
+        \land \pi_o(\MPT) \eqsim \pi_o(\machT)
+    \end{split}\]
+\item If \(\MPT\) ends prematurely without fulfilling \(R\), then
+  its observations are a prefix of those of \(\machT\).
+    \[\begin{split}
+      \mathit{FailCase} ~ R ~ \MPT ~ \machT \triangleq
+      & \forall \mach_r ~ \pol_r ~ \obs_r .
+        \last(\MPT) = \mpostate{\mach_r}{\pol_r}{\obs_r} \Rightarrow \\
+      & \neg ~ R ~ \mach_r \Rightarrow \\
+      & \pi_o(\MPT) \lesssim \pi_o(\machT)
+    \end{split}\]
 \end{itemize}
-\apt{Needs words about why we need a return predicate abstraction.}
+
+Putting it all together:
+
+\[\begin{split}
+  \propdef{TraceConfidentiality} ~ R ~ \MPT ~ \machT \triangleq
+  & \mathit{ReturnCase} ~ R ~ \MPT ~ \machT \land \\
+  & \mathit{InfCase} ~ R ~ \MPT ~ \machT \land
+    \mathit{FailCase} ~ R ~ \MPT ~ \machT \\
+\end{split}\]
+
+In the non-return cases, we only care that the traces exhibit the same
+observable behavior (or a prefix if the trace halts prematurely), as changes
+in the state will not affect the caller absent a return.  In the return case
+we must additionally guarantee that no changes were made based on secret data
+that could corrupt the caller upon return.
 
 Consider the result of modifying line 42 of our running example to $r_4 \leftarrow [\rsp - 9]$.
 Instead of reading the proper argument {\tt v}, {\tt h} now reads directly from the
 secret value of {\tt x} that belongs to {\tt main}. \Cref{fig:confex}
 shows \(\mach_e\), the entry state of {\tt h}, with high confidentiality memory
-in {\high} and low confidentiality in \low. Below it, the variant state
+in {\high} and low confidentiality in {\low}. Below it, the variant state
 \(\mach_e'\) agrees on low confidentiality memory, but all other addresses
-hold -5, in orange.\apt{NO?}  After the last step, the return states \(\mach_r\) and
+hold -5, in {\varied}.  After the last step, the return states \(\mach_r\) and
 \(\mach_r'\) should agree on every component that changed since \(\mach_e\) or
-\(\mach_e'\). Addresses 108 and 109 have changed, shown in \tainted, and while 109
+\(\mach_e'\). Addresses 108 and 109 have changed, shown in light {\low}, and while 109
 had changed in a consistent way (independent of the variation), 108 holds either 43 or -4, so the trace does not obey trace confidentiality.
 \rb{Color name macros}
 \apt{Explain slash notation in effects column.}
@@ -1648,17 +1676,6 @@ As another example,
 changing line 30 of the running example to $r_5  \leftarrow [\rsp - 6]$ would cause
 {\tt g} to read the value of {\tt main}'s local variable {\tt x} and then immediately
 output it, violating the internal observation clause of the confidentiality definition.
-%\Cref{fig:confex2} shows the initial states \(\mach_e\), above,
-%and \(\mach_e'\), below. Low confidentiality data in green is shared
-%between them, while high confidentiality data in red and yellow may differ.
-%After executing the code shown, the final states below have written different
-%values to address 42, represented by the black and white components.
-%It is allowed for address 40 to differ between the states due to the initial
-%variation, but address 42 changed differently between the traces, representing
-%a leak of data. %Meanwhile \ref{fig:lazyex2}, while high confidentiality data
-%is read, it is overwritten before return, and the write at step 3 always writes
-%the same value. \Gprivc and red locations differ between variations only because
-%of the initial variation, and the rest are identical. So this example passes.
 
 \begin{figure}
   \confidentialityendexample
@@ -1666,46 +1683,40 @@ output it, violating the internal observation clause of the confidentiality defi
   \label{fig:confex}
 \end{figure}
 
-%\Cref{fig:confex2} gives an example of a trace that fails trace
-%confidentiality. At instruction 42, {\tt h} reads {\tt x} from {\tt main}.
-%Since {\tt x}, at address 100, is high confidentiality (red) the variant
-%may have a different value (yellow). So both \(r_4\) and address 107
-%differ in the final state between the original trace and the variant one,
-%failing the ending condition of trace confidentiality.
 
 To lift trace confidentiality to a system property, we follow the same
 pattern as in stack integrity:
 
 \definition%{Stack Confidentiality}
 %Let $\callmap$ be a call map and $\codemap$ a function map.
-We say that a
-system satisfies {\em stack confidentiality}
-% with respect to $\callmap$ and $\codemap$
-if, for every initial machine-policy state
-pair $(\mach_0, \pol_0)$ and its induced trace $\MPT$, and every
-$n$-transition $(\mach_c, \pol_c)$ and $(\mach_e, \pol_e)$ 
-in $\MPT$, the following holds. Let $\MPT_{\mathit{call}}$ be the prefix where
-\(\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT_{\mathit{call}} | \ret{\mach_c}\).
-For each variant state \(\mach_e' \approx_{\mathit{Cof}(\mach_c,n)}
-\mach_e\), let \(\machT\) be the similarly prefixed trace such that
-\(\mach_e' \hookrightarrow \machT\). Then trace confidentiality holds on
-\(\MPT_{\mathit{call}}\) and \(\machT\) with regard to \(\mathit{Cof}(\mach_c, n)\)
-and \(R = \ret{\mach_c}\):
+We will say that a system satisfies {\em stack confidentiality} with respect to
+\(\callmap\) in a similar way to stack integrity. For every initial state
+\(\mach_0\), we take the induced trace \(\mpstate{\mach_0}{\pinit(\mach_0)}
+\hookrightarrow \MPT\). Then for any \(n\)-transition
+\(\mathit{Tr}_n ~ \MPT ~ \mpstate{\mach_c}{\pol_c} ~
+\mpstate{\mach_e}{\pol_e}\), we take the prefix trace until return:
+%
+\[\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{call} | \ret{\mach_c}\]
 
-$$\forall \MPT_{\mathit{call}} ~ \machT. ~
-\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT_{\mathit{call}} ~ | ~ \ret{\mach_c} \Rightarrow$$
-$$\forall \mach_e'. ~ \mach_e \approx_{\mathit{Cof}(\mach_c, n)} \mach_e' \wedge
-\mach_e' \hookrightarrow \machT ~ | ~ \ret{\mach_c} \Rightarrow$$
-$$\mathit{conf}~\mathit{Cof}(\mach_c, n) ~ (\ret{\mach_c}) ~ \MPT_{\mathit{call}} ~ \machT_{\mathit{call}}$$
+We also take the corresponding trace from any variant \(\mach_e' 
+\approx_{\mathit{Cof}(\mach_c,n)} \mach_e\):
+%
+\[\mach_e' \hookrightarrow \machT_{call} | \ret{\mach_c}\]
+
+If, for all such pairs of traces, \(\propdef{TraceConfidentialiy} ~
+\ret{\mach_c} ~ \MPT ~ \machT\), then the system as a whole enjoys
+stack confidentiality with regard to \(\callmap\).
 
 \apt{oy. still needs work to make this intelligible}
+\sna{Attempted. There's a tension between introducing all the variables
+     and keeping a good flow that I'm not sure I'm managing here though.}
 
 \subsection{Well-bracketed Control Flow}
 \label{sec:wbcf}
 
 Both the integrity and confidentiality components of local state
-encapsulation concern themselves with the accessibility of data, and
-may hold on a wide range of programs that violate expected control
+encapsulation concern themselves only with the accessibility of data, and
+may still hold on a wide range of programs that violate expected control
 flow. Say, if {\tt g} managed to jump in the middle of the
 code of {\tt h} with its call, confidentiality and integrity would
 still be satisfied.
@@ -1715,91 +1726,95 @@ callee) should not be able to bypass a password check by jumping (or
 returning) in the middle of a block of code --- even if such an execution
 would ostensibly satisfy local state encapsulation.
 %
-Stack safety is traditionally associated with preventing such unwanted
+Informal definitions of stack safety usually \apt{evidence?} aim to prevent such unwanted
 flows: every jump between functions should either be a call or a
 return, and each return should be to the instruction after its
 corresponding call.
 
 To formally capture this aspect of stack safety, we introduce three
 security properties that rely on the underlying knowledge of the
-program structure (call maps, function maps, return maps, and entry
-maps): {\em control separation} ensures the validity of transition
+program structure (call map $\callmap$, function map $\codemap$, return map $\retmap$, and entry
+map $\entmap$): {\em control separation} ensures the validity of transition
 sources between functions, {\em entry integrity} ensures the validity
 of call targets, and {\em return integrity} ensures the validity of
 return targets.
 
-\definition{Control Separation}
-
-A system enjoys {\em control separation} with regard to a function map
-\(\codemap\), a call map \(\callmap\), and a return map \(\retmap\),
-if for any initial state \((\mach_0, \pol_0)\) and any adjacent pair
+\definition%{Control Separation}
+A system enjoys {\em control separation}
+% with respect to a function map
+%\(\codemap\), a call map \(\callmap\), and a return map \(\retmap\),
+if, for any initial state $\mpstatename$ and any adjacent pair
 of states \((\mach_1,\pol_1)\) and \((\mach_2,\pol_2)\) in the induced
-trace from \(\mpstate{\mach_0}{\pol_0})\) whose current instruction
+trace from $\mpstatename$ whose current instruction
 belongs to different functions according to the function map,
-either $\mach_1$ is a valid call or a valid return:
+$\mach_1$ is either a valid call or a valid return:
 
 \[ \codemap(\mach_1(\PCname)) \not = \codemap(\mach_2(\PCname)) \Rightarrow
 \exists n. ~ \callmap(\mach_1(\PCname)) = n \vee
 \retmap(\mach_1) \]
 
-For example, consider the unsafe substitution:
-\[
-5 : ~ \jalr ~ r_4 ~ \rra ~ 0
-\]
-This violates control separation as the instruction that causes a
+For example, consider changing line 5 of the running example to a $\jalr$,
+$\PCname \leftarrow r_4$, with effect $\PCname \leftarrow 42$, causing {\tt main}
+to jump into the middle of {\tt h}. 
+This violates control separation because the instruction that causes a
 function switch is not a valid call (or a return) according to the
 call map.
 
-\definition{Entry Integrity}
-
-A system enjoys {\em entry integrity} with regard to a call map
-\(\callmap\) and entry map \(\entmap\) if for any initial state
-\((\mach_0, \pol_0)\) and any n-transition \((\mach_c,\pol_c)\) and
+\definition%{Entry Integrity}
+A system enjoys {\em entry integrity}
+%with respect to a call map
+%\(\callmap\) and entry map \(\entmap\)
+if, for any initial state $\mpstatename$
+and any n-transition \((\mach_c,\pol_c)\) and
 \((\mach_e, \pol_e)\) in the induced trace from
-\(\mpstate{\mach_0}{\pol_0}\), $\mach_e$ is a member of the entry map:
+$\mpstatename$, $\mach_e$ is a member of the entry map:
 \[\callmap(\mach_c(\PCname)) = n \Rightarrow \entmap(\mach_e)\]
 
-The same unsafe substitution violates entry integrity
-\[
-5 : ~ \jalr ~ r_4 ~ \rra ~ 0
-\]
-as its target (instruction 42) is not an established entry point for
-{\tt h} according to the entry map.
+The changed program described just above also violates entry integrity,
+because the target (instruction 42) of the new $\jalr$ is not an established entry point
+according to the entry map.
 
 \leo{Note something about not enforcing control flow integrity
   with allowing a call from {\tt main} to {\tt h}?}
 
-\definition{Return Integrity}
-
-\newcommand*{\Unmatched}{\mathit{Unmatched}}
+\newcommand*{\Unmatched}{\mathit{um}}
 
 Return integrity captures the expected behavior of marked returns with
-regard to their call points. Given a call map $\callmap$ and a return
-map $\retmap$, we begin by defining a coinductive relation
-$\Unmatched$ over two $\MPOTRACE$ $\MPT$ and $\MPT'$, if $\MPT'$ is a
-suffix of $\MPT$ whose head is the first unmatched return in $\MPT$.
+respect to their call points. Intuitively, it says that the marked return
+matching a call $\mach_c$ should satisfy $\ret{\mach_c}$.
+Observe that, given an MP-trace $\mpstate{\mach_c}{\pol}\MPT$, if $\mach_c$ is a call state then
+the matching return will be the first \emph{unmatched} return in $\MPT$. So
+we begin by defining an auxiliary ``unmatched'' relation between two MP-traces.
 
-Formally:
+\definition
+We write $\Unmatched~\MPT~\MPT'$ if $\MPT'$ is
+obtained from $\MPT$ by dropping elements until we reach the first unmatched return
+(according to the return map).  Formally, $\Unmatched$ is defined coinductively as follows:
 \begin{itemize}
 \item A trace that starts with a return is related to itself:
 
+\begin{minipage}{.3\textwidth}
   \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
               {\(\retmap(\mach(\PCname))\)}
               {\(\Unmatched ~ \mpstate{\mach}{\pol} ~ \mpstate{\mach}{\pol}\)}
+\end{minipage}
+\hspace*{0.1\textwidth}
+\begin{minipage}{.3\textwidth}
   \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
               {\(\retmap(\mach(\PCname))\)}
               {\(\Unmatched ~ \mpstate{\mach}{\pol}\MPT ~ \mpstate{\mach}{\pol}\MPT\)}
+\end{minipage}
 
 \item If a trace \(\MPT\) starts with a non-call, non-return state,
   its unmatched return must come later:
 
   \judgment{\(\callmap(\mach(\PCname)) = \bot
               \hspace{.5cm} \neg \retmap(\mach(\PCname))
-              \Unmatched ~ \MPT ~ \MPT'\)}
+              \hspace{.5cm}\Unmatched ~ \MPT ~ \MPT'\)}
            {\(\Unmatched ~ \mpstate{\mach}{\pol}\MPT ~ \MPT'\)}
 
-\item Finally, if a trace starts with the call, then we must discard the first
-  unmatched return to get to the real one:
+\item Finally, if a trace starts with a call, then we must discard the first
+  unmatched return from its tail to get to the real one:
 
 
   \judgmentbr{\(\callmap(\mach(\PCname)) = n \hspace{.5cm} \neg \retmap(\mach(\PCname)) \)}
@@ -1808,25 +1823,34 @@ Formally:
               \(\Unmatched ~ \MPT_{\mathit{tail}} ~ \MPT_{\mathit{unmatched}}\)}
             {\(\Unmatched ~ \MPT ~ \MPT_{\mathit{unmatched}}\)}
 \end{itemize}
-A system enjoys {\em return integrity} with regard to a call map
-\(\callmap\) and return map \(\retmap\) if for any initial state pair
-\((\mach_0, \pol_0)\) and any state pair \((\mach_c, \pol_c)\)
+\apt{Could cut formal definition for space.}
+
+\definition%{Return Integrity}
+A system enjoys {\em return integrity}
+% with respect to a call map \(\callmap\) and return map \(\retmap\)
+if, for any initial state pair 
+$\mpstatename$ and any state pair \((\mach_c, \pol_c)\)
 corresponding to a call in its induced trace, if
-\(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P \MPT\) and \(\mach_r\)
+\(\mpstate{\mach_c}{\pol_c} \hookrightarrow \MPT\) and \(\mach_r\)
 is the first unmatched return such that for some $\pol_r$
 \[ \Unmatched ~ \MPT ~ (m_r,p_r)\MPT',\]
 then $\mach_r$ corresponds to a return state for $\mach_c$:
 \[\ret{\mach_c}\ \mach_r\]
 
-For example, if we added an instruction between 45 and 46:
 \[
-45.5: ~ \addi ~ \rra ~ r_0 ~ \negate 19
+\exists p_r.\Unmatched ~ \MPT ~ (m_r,p_r)\MPT' \Rightarrow \ret{\mach_c}\ \mach_r.
 \]
-This would cause the return from {\tt h} to go to instruction 8 and
+\apt{I've tried to tidy this, but I don't think it corresponds to the Coq.
+  Shouldn't we apply $\Unmatched$ to the tail of $\MPT$?
+  And what about the no-unmatched-return-at-top-level clause?}
+
+For example, if we modified the running example by adding
+an instruction $ \rra \rightarrow \rra - 19$
+between 45 and 46, this would cause the return from {\tt h} to go to instruction 8 and
 return to {\tt main} instead of {\tt g}. While the instruction that
 causes the return would still be a valid return (satisfying control
 separation), the state after the return would not correspond to an
-$\Unmatched$ return for {\tt g}'s call to {\tt h}, violating return
+unmatched return for {\tt g}'s call to {\tt h}, violating return
 integrity.
 
 \definition{Well-Bracketed Control Flow}
@@ -1835,9 +1859,10 @@ The above properties are somewhat orthogonal, but together they
 capture a standard notion of control flow for a stack: functions keep
 their code separate outside of calls and returns, calls respect
 explicit entry points, and returns respect implicit entry points
-corresponding to their call.  A system that enjoys them with regard to
-a code, a call, a return, and an entry map is said to enjoy
-{\em well-bracketed control flow} with regard to those maps.
+corresponding to their call.  A system that enjoys all three
+properties (with respect to a function map, call map, return map,
+and entry map) is said to enjoy
+{\em well-bracketed control flow} (with respect to those maps).
 
 
 \section{Enforcement}
@@ -2265,7 +2290,7 @@ rules.
         \text{\sc ObsInt}_\contour ~ \MPT \triangleq
         & \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \\
         & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
-        & \mpstate{\mach_r}{\pol_r} \hookrightarrow_P \MPT' \Rightarrow \\
+        & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' \Rightarrow \\
         & \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT'
           \Rightarrow \\
         & \pi_o(\MPT') \lesssim_O \pi_o(\machT')
@@ -2293,12 +2318,12 @@ rules.
 
     \definition{Observable Stack Integrity}
 
-      A system enjoys {\em observable stack integrity} with regard to
+      A system enjoys {\em observable stack integrity} with respect to
       \(\callmap\) and \(\codemap\) if for any initial state \(\mach_0\) and
       each transition with entry state \(\mpostate{\mach_e}{\pol_e}{\obs_e}\)
       and contour \(\contour\) in the induced trace from
       \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), if
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow_P \MPT | \ret{\mach_e}\),
+      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_e}\),
       then \(\text{\sc ObsInt}_\contour ~ \MPT\).
 
     \paragraph{Restoring Varied States}
@@ -2368,7 +2393,7 @@ rules.
       If \(\MPT\) is finite and ends with the state
       \(\mpostate{\mach_r}{\pol_r}{\obs_r}\), then \(\machT\) is finite. Let
       \(\mach_r' = \last(\machT)\). Then the induced traces
-      \(\mpstate{\mach_r}{\pol_r} \hookrightarrow_P \MPT'\) and
+      \(\mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT'\) and
       \(\mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r')
       \hookrightarrow \machT'\) are observationally prefixed,
       \(\pi_o(\MPT') \lesssim \pi_o(\machT')\).
@@ -2383,7 +2408,7 @@ rules.
 
       In our example, \cref{fig:conflex} shows how execution continues from
       \(\mach_r'\) and the restored \(\mach_r'' = \mathit{restore}(\contour,
-      \mach_e,\mach_e',\mach_r,\mach_r')\). Addresses 108 and 109, in \tainted,
+      \mach_e,\mach_e',\mach_r,\mach_r')\). Addresses 108 and 109
       are not restored; every address that was varied and not changed in one
       of the executions is. So 108 contains 43 in the trace from \(\mach_r\),
       and after returning from {\tt g}, {\tt main} prints 85. But in the trace
@@ -2397,7 +2422,7 @@ rules.
 
       From observable trace confidentiality we construct {\em observable stack
       confidentiality}. A system enjoys {\em observable stack confidentiality}
-      with regard to \(\callmap\) and \(\codemap\) if for any initial state
+      with respect to \(\callmap\) and \(\codemap\) if for any initial state
       \(\mach_0\) and each transition with entry state
       \(\mpostate{\mach_e}{\pol_e}{\obs_e}\) and contour \(\contour\) in the
       induced trace from \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), if
@@ -2405,9 +2430,9 @@ rules.
       then \(\text{\sc ObsConf}_\contour ~ \MPT ~ \machT\).
 
     \definition{Observable Stack Safety}
-      A system enjoys {\em observable stack safety} with regard to a call map
+      A system enjoys {\em observable stack safety} with respect to a call map
       and a function map if it enjoys both observable stack integrity and
-      observable stack confidentiality with regard to them.
+      observable stack confidentiality with respect to them.
 
 \section{Related Work}
 \label{sec:relwork}
