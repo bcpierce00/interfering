@@ -210,6 +210,12 @@
 %
 %\leo{I hate the writing here, but I wanted to make a start.}
 
+\bcp{We don't actually say very clearly anywhere that we are interested in
+  low-level enforcement mechanisms for machine-code programs (because this
+  is where stack attacks occur, and because at higher levels of abstraction
+  the stack is a built-in concept, not something that can be attacked even
+  in principle).  This could cause confusion.}
+
 The call stack is a perennial target for attacks
 based on memory safety vulnerabilities, with potential consequences
 ranging from leakage or corruption of private stack data to
@@ -221,58 +227,55 @@ bounds checking~\citep{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
 split stacks~\citep{Kuznetsov+14},
 shadow stacks~\citep{Dang+15,Shanbhogue+19},
 capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b},
-and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \apt{Mostly from
+and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \iflater\apt{Mostly from
   nick;there could be more}\bcp{How about static techniques??  We decided
   these were also in-scope.}\bcp{... or are they?  I guess in any case we should
-list any that we know about.}
+list any that we know about.}\fi
 
-But what {\em is} this ``stack safety'' of which we speak? Precise formal
-definitions are lacking in the literature; instead, the notion
-is usually defined negatively, by enumerating the bad things that a given
-enforcement mechanism
+But what {\em is} this stack safety of which people speak? Precise formal
+definitions are mostly lacking: rather, the notion
+is commonly defined in a negative way, by enumerating the bad things that a
+given enforcement mechanism
 prevents, such as corruption of return addresses, buffer overflows, or
-use of uninitialized variables.
+use of uninitialized variables\bcp{Does use of unitialized variables lead to
+stack safety attacks?}.
 %with the notion usually being
 %defined negatively: through examples of stack-based exploits
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
-Indeed, we are only aware of one---quite recent---attempt to frame a
-positive definition:
-\citet{Skorstengaard+19} define stack safety as
-the conjunction of two properties, {\em local state encapsulation} and {\em
+Indeed, we are only aware of one quite recent attempt to frame a
+positive definition, by
+\citet{Skorstengaard+19}, who define stack safety as
+the conjunction of two properties: {\em local state encapsulation} and {\em
   well-bracketed control flow}.
 They formalize these properties by defining an abstract capability-based machine
 that ``satisfies [stack safety] by construction.''
 %
-Although this represents an important step in the right direction, we believe
+While this represents an important step in the right direction, we believe
 there is still room to craft a more abstract, more generic characterization
 of stack safety that is independent of capabilities or any other specific
 enforcement
 technique.  In other words, we seek formal criteria that can be applied
-against \emph{any} stack-based system + enforcement mechanism to judge
-whether or not the combination is actually stack-safe.
-
-\iflater
-\leo{Should this be its own paragraph?}
-\fi
-The key contribution of this paper is a novel, generic presentation of
+to \emph{any} mechanism for protecting stack-based low-level programs to judge
+whether or not it actually ``guarantees stack safety.''
+%
+Our key contribution is a novel, generic presentation of
 local state encapsulation and well-bracketed control flow using the
 technical framework of language-based security.
 
 The intuition behind \citeauthor{Skorstengaard+19}'s use of the term {\em
   local state encapsulation} is that callers should be protected from
 callees: a callee should not be able to access or overwrite private data
-in the caller's stack frame. We formalize this intuition as a security
-property with both confidentiality and integrity components.
+in the caller's stack frame.
 %
-We reflect this intuition in a formal
-{\em stack confidentiality} property, which promises that a callee's
-observable behavior is not affected by memory outside its stack frame
-(e.g., a caller's private data or uninitialized memory).  Conversely, {\em stack
-  integrity} promises that, if a function call ever returns, the caller's
-stack data at the point of return will be identical to what it was before
-the call.
+We formalize this intuition in (1) a {\em stack confidentiality}
+property, which promises that a callee's observable behavior is not affected
+by memory outside its stack frame (e.g., a caller's private data or
+uninitialized memory), plus (2) a {\em stack integrity} property,
+which promises that, if a function call ever returns, the caller's stack
+data at the point of return will be identical to what it was before the
+call.
 
 \iflater
 \bcp{We need to point out somewhere that we are only dealing with
@@ -284,7 +287,7 @@ with the heap safety property of [Azevedo et al]}\leo{Should this be
 
 The intuition behind \citeauthor{Skorstengaard+19}'s {\em well-bracketed control
   flow} is
-the desire to protect the call graph itself: a callee should pass control
+the need to protect the call graph itself: a callee should pass control
 back to the caller only by returning in the standard way (transferring
 control to the instruction following the call); it should
 not be
@@ -382,18 +385,6 @@ We begin with a running example that we refer to throughout the paper
 
 \section{Running Example}
 \label{sec:running-example}
-
-\leo{We've said this literally in the previous sentence. What should this intro
-  be in the new reorg?}
-%We begin with a running example that will serve both to demonstrate several
-%``stack-unsafe'' behaviors that our stack safety property should prohibit
-%and to ground the technical presentation in later sections.
-
-The example program appears in \Cref{fig:running-program}. It consists
-of a {\tt main} function, written in some C-like high-level language,
-that performs a call to some function {\tt f}, which in turns makes a
-nested call to some function {\tt g} before returning, while
-performing some simple arithmetic operations in the process.
 
 \begin{figure}[b]
 \hfill
@@ -794,28 +785,34 @@ $\cdots$
 \label{fig:running-trace-b}
 \end{figure}
 
-To show a trace of the execution of this program, we need a low-level
-view of both the code and the machine it runs on. While the concrete
-implementation of our enforcement mechanism (\Cref{sec:enforcement})\apt{Is it ``ours'' in this context?}
-operates on a full conventional RISC-V architecture (using the FORVIS
-simulator\leo{cite}\apt{why mention this here?}), we make a few simplifying assumptions here to
-ease the exposition.
+\Cref{fig:running-program} shows a high-level view of our running example,
+written in C-like pseudo-code.  It consists of a {\tt main} function that
+performs a call to some function {\tt f}, which in turns makes a nested call
+to some function {\tt g} before returning, while performing some simple
+arithmetic operations in the process. \cref{fig:running-trace-b} shows an
+execution trace of corresponding machine instructions. (These might have
+been generated by compiling the high-level code, but it is only the behavior
+of the machine instructions that we care about
+here---\Cref{fig:running-program} is our actual running example.)
 
-First of all, we ignore the heap. We are mainly concerned with stack
-interactions so that will be the main focus; integrating a safety
-propety for the heap in the
-style of \citet{AzevedoDeAmorim17} is a natural extension we discuss
-in~\Cref{sec:future}.
+To streamline the exposition of the example, we use a small instruction set
+reminiscent of RISC-V and make few simplifying assumptions.
 %
-We also abstract away low-level details of memory layout and present a
-machine that is word-addressed, with instructions starting from
+First, since our goal is to formalize stack safety, we ignore the heap and
+assume that the memory is divided between the instructions and the stack.
+(Integrating a memory safety property for the heap in the style of
+\citet{AzevedoDeAmorim17} is a natural extension that we discuss
+in~\Cref{sec:future}.)
+%
+We also abstract away low-level details of memory layout and assume a
+machine that is word- (not byte-) addressed, with instructions starting from
 location 0, a dedicated memory-mapped output port at location 99, and
 the stack beginning at location 100 and growing upwards with increasing
 addresses.  \leo{Explain more? How to connect to realistic
-  one? Observations? DMA? Interrupt handlers?}
-%
-A sketch of the initial memory layout can be found at the top of
-\cref{fig:running-trace-b}: instructions for {\tt main} begin at 0,
+  one? Observations? DMA? Interrupt handlers?}\bcp{Yes.}
+
+A sketch of the initial memory layout appears at the top of
+\cref{fig:running-trace-b}: the instructions for {\tt main} begin at 0,
 the dedicated output is uninitialized, while the (also uninitialized)
 stack begins at 100. Directly below the layout, we summarize the parts
 of the register file that are relevant to the example.
@@ -828,7 +825,8 @@ rather than using assembler syntax. The $\jal$ (jump-and-link)
 instruction used for calls atomically saves the return address in a register
 and jumps to a specified new $\PCname$; the $\jalr$ (jump-and-link-via-register)
 instruction used for returns jumps to the address stored in a register.
-Register $r_0$ is hardwired to zero. \leo{Expand upon this?}
+Register $r_0$ is hardwired to zero. \leo{Expand upon this?}\bcp{Yes, if it
+  matters to understanding the example---point to where.}
 
 \apt{Need to clarify to what extent our properties depend on the
 particular compilation style, calling sequences, etc. illustrated here.}
