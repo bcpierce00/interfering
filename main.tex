@@ -940,47 +940,10 @@ rollback of ordinary program data while leaving policy enforcement data unchange
 This enforcement model is flexible enough to capture any kind of mechanism used
 for dynamic enforcement of properties of interest, including the following
 representative families of policies.
-
-\apt{rest of this section still needs rethink}
-\paragraph*{Null policy}
-%
-The simplest possible policy is the neutral policy that carries no information
-and does nothing. Its set of policy states is the unit type, and its policy step
-function is the constant unit function, thereby allowing all calls to the machine
-step function. Its initialization function is defined on all states. This
-corresponds to the lifting of our machine model to the policy setting. Machines
-that fulfill a property by construction will also fulfill that property with the
-null policy.
-
-\paragraph*{Software-only policies}
-%
-Some policies are implemented in software, by modifying code in the compiler to
-(e.g.) perform bounds checking \citep{NagarakatteZMZ09} or to insert stack
-canaries \citep{Cowan+98}. These approaches are represented as policies that
-accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
-being produced by the compiler.) The set of policy states is again the unit type
-and the step function constant. Property enforcement comes from the fact that
-only ill-formed states can induce a trace that violates the property.
-
-\rb{TODO In a way, in these schemes the policy state is built in as part of the
-  program state and transparent to the hardware, although it could be simulated
-  by an overlay where enforcement is represented at the policy level.}
-
-\paragraph*{Capability machines}
-%
-Other policies are implemented in hardware or built on hardware mechanisms.
-Capability machines like CHERI \citep{Woodruff+14} extend conventional
-architectures to support efficient and fine-grained control over memory
-accesses, which can be used to implement security policies involving, for
-example, compartmentalization or the stack protection policies of
-\citet{Skorstengaard+19,Skorstengaard+19b}. Mapping the underlying protection
-mechanisms to policy states and step function would be a delicate operation, as
-those are tightly coupled to the hardware design. However, separating the
-enforcement aspects of a concrete policy (such as StkTokens, where policy state
-would encompass details like the abstract call stack, the capability sealing
-scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
-the machine would be relatively straightforward.  \bcp{Not sure that any of
-  this is comprehensible... :-(}
+\apt{I don't really buy this, because we really depend on the ability to define
+  variation and rollback. I think we should back off and say: this
+  works well for micropolicies, and we conjecture that we can make it work
+  for code-altering appraoches (pure software or capability).}
 
 \newcommand{\TAGS}{\mathcal{T}}
 \newcommand{\tagname}{t}
@@ -988,19 +951,73 @@ the machine would be relatively straightforward.  \bcp{Not sure that any of
 
 \paragraph*{Micropolicies}
 %
-Micropolicies are another major family of policies \citep{pump_oakland2015},
-which are applied to stack safety in \citep{DBLP:conf/sp/RoesslerD18}.
-Here the machine state is extended with tags paired with all components of the
-system, and a monitor checks for each operation that the tags on the operands
-obey a set of rules. One could treat tags directly as part of the machine
-state, and build the rules into the step function. But local state
-encapsulation properties as we frame them are not intuitive in their
-interaction with tags or other additional enforcement state, so it is helpful
-to separate tags for clarity. This also distinguishes a hardware fail-stop from
-a software fail state.
-\rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
-  policy? }
+Micropolicies~\citep{pump_oakland2015} are a hardware-assisted tag-based
+reference monitoring mechanism, which have been applied to stack safety by 
+\citet{DBLP:conf/sp/RoesslerD18}.
+Here the policy state consists of metadata tags (e.g., identifying stack frames)
+attached to each value in memory or registers, and the policy step function
+checks that each machine operation obeys a set of rules on tags
+(e.g., that the current $\PCname$ tag matches the tag on the stack
+location being accessed), and halts the machine if not.  Distinguishing
+ordinary machine state and policy state is very natural in this setting.
+%% Here the machine state is extended with tags paired with all components of the
+%% system, and a monitor checks for each operation that the tags on the operands
+%% obey a set of rules. One could treat tags directly as part of the machine
+%% state, and build the rules into the step function. But local state
+%% encapsulation properties as we frame them are not intuitive in their
+%% interaction with tags or other additional enforcement state, so it is helpful
+%% to separate tags for clarity. This also distinguishes a hardware fail-stop from
+%% a software fail state.
+%% \rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
+%%   policy? }
 
+\paragraph*{Capability machines}
+%
+%Other policies are implemented in hardware or built on hardware mechanisms.
+Capability machines like CHERI \citep{Woodruff+14} extend conventional
+architectures to support efficient and fine-grained control over memory
+accesses, which can be used to implement security policies, including 
+the stack protection policies of
+\citet{Skorstengaard+19,Skorstengaard+19b}.  Capabilities tightly package pointers
+(ordinary data) with base and bounds information (policy data),
+and their use requires rewriting source code (e.g. to use capabilities in place
+of ordinary pointers), so separating ordinary machine state from policy
+state is delicate. \apt{But we conjecture it can be done...?}
+
+%% Mapping the underlying protection
+%% mechanisms to policy states and step function would be a delicate operation, as
+%% those are tightly coupled to the hardware design. However, separating the
+%% enforcement aspects of a concrete policy (such as StkTokens, where policy state
+%% would encompass details like the abstract call stack, the capability sealing
+%% scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
+%% the machine would be relatively straightforward.  \bcp{Not sure that any of
+%%   this is comprehensible... :-(}
+
+\paragraph*{Software-only policies}
+%
+Some policies are implemented in software, by modifying code in the compiler to
+(e.g.) perform bounds checking~\citep{NagarakatteZMZ09} or to insert stack
+canaries~\citep{Cowan+98}. \apt{not sure what to say here}
+%These approaches are represented as policies that
+%accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
+%being produced by the compiler.) The set of policy states is again the unit type
+%and the step function constant. Property enforcement comes from the fact that
+%only ill-formed states can induce a trace that violates the property.
+
+\rb{TODO In a way, in these schemes the policy state is built in as part of the
+  program state and transparent to the hardware, although it could be simulated
+  by an overlay where enforcement is represented at the policy level.}
+
+
+%% \Paragraph*{Null policy}
+%% %
+%% The simplest possible policy is the neutral policy that carries no information
+%% and does nothing. Its set of policy states is the unit type, and its policy step
+%% function is the constant unit function, thereby allowing all calls to the machine
+%% step function. Its initialization function is defined on all states. This
+%% corresponds to the lifting of our machine model to the policy setting. Machines
+%% that fulfill a property by construction will also fulfill that property with the
+%% null policy.
 
 %
 %\leo{TODO: Add citations of mitigation techniques}
