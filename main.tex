@@ -1829,48 +1829,45 @@ return targets.
 A system enjoys {\em control separation}
 % with respect to a function map
 %\(\codemap\), a call map \(\callmap\), and a return map \(\retmap\),
-if, for any initial state $\mpstatename$ and any adjacent pair
-of states \((\mach_1,\pol_1)\) and \((\mach_2,\pol_2)\) in the induced
-trace from $\mpstatename$ whose current instruction
-belongs to different functions according to the function map,
-$\mach_1$ is either a valid call or a valid return:
-
-\[ \codemap(\mach_1(\PCname)) \not = \codemap(\mach_2(\PCname)) \Rightarrow
-\exists n. ~ \callmap(\mach_1(\PCname)) = n \vee
-\retmap(\mach_1) \]
+if, for any initial state \(\mach_0\) and any adjacent pair of states
+\(\mpostate{\mach_1}{\pol_1}{\obs_1}\) and \(\mpostate{\mach_2}{\pol_2}{\obs_2}\)
+in the induced trace from \(\mpstate{\mach_0}{\pinit(\mach_0)}\),
+if \(\codemap(\mach_1(\PCname)) \not = \codemap(\mach_2(\PCname))\),
+then \(\mpstate{\mach_1}{\pol_1}\) is either a call \(\callmap(\mach_1(\PCname))\)
+or a return \(\retmap(\mach_1(\PCname))\).
 
 For example, consider changing line 5 of the running example to a $\jalr$,
 $\PCname \leftarrow r_4$, with effect $\PCname \leftarrow 42$, causing {\tt main}
 to jump into the middle of {\tt h}.
 This violates control separation because the instruction that causes a
 function switch is not a valid call (or a return) according to the
-call map.
+call map. On the other hand we do permit functions to jump freely internally.
 
 \definition%{Entry Integrity}
 A system enjoys {\em entry integrity}
 %with respect to a call map
 %\(\callmap\) and entry map \(\entmap\)
-if, for any initial state $\mpstatename$
+if, for any initial state \(\mach_0\)
 and any n-transition \((\mach_c,\pol_c)\) and
 \((\mach_e, \pol_e)\) in the induced trace from
-$\mpstatename$, $\mach_e$ is a member of the entry map:
+\(\mpstate{\mach_0}{\pinit(\mach_0)}\), $\mach_e$ is a valid entry:
 \[\callmap(\mach_c(\PCname)) = n \Rightarrow \entmap(\mach_e)\]
 
 The changed program described just above also violates entry integrity,
-because the target (instruction 42) of the new $\jalr$ is not an established entry point
-according to the entry map.
-
-\leo{Note something about not enforcing control flow integrity
-  with allowing a call from {\tt main} to {\tt h}?}
+because the target (instruction 42) of the new $\jalr$ is not an established
+entry point according to the entry map. Our properties to not enforce which
+call points jump to which entry points, however; that is left for a stronger
+notion of control flow integrity.
 
 \newcommand*{\Unmatched}{\mathit{um}}
 
 Return integrity captures the expected behavior of marked returns with
 respect to their call points. Intuitively, it says that the marked return
 matching a call $\mach_c$ should satisfy $\ret{\mach_c}$.
-Observe that, given an MP-trace $\mpstate{\mach_c}{\pol}\MPT$, if $\mach_c$ is a call state then
-the matching return will be the first \emph{unmatched} return in $\MPT$. So
-we begin by defining an auxiliary ``unmatched'' relation between two MP-traces.
+Observe that, given an MP-trace $\mpstate{\mach_c}{\pol}\MPT$, if $\mach_c$ is
+a call state then the matching return will be the first \emph{unmatched} return
+in $\MPT$. So we begin by defining an auxiliary ``unmatched'' relation between
+two traces.
 
 \definition
 We write $\Unmatched~\MPT~\MPT'$ if $\MPT'$ is
@@ -1912,23 +1909,17 @@ obtained from $\MPT$ by dropping elements until we reach the first unmatched ret
 \apt{Could cut formal definition for space.}
 
 \definition%{Return Integrity}
-A system enjoys {\em return integrity}
-% with respect to a call map \(\callmap\) and return map \(\retmap\)
-if, for any initial state pair
-$\mpstatename$ and any state pair \((\mach_c, \pol_c)\)
-corresponding to a call in its induced trace, if
-\(\mpstate{\mach_c}{\pol_c} \hookrightarrow \MPT\) and \(\mach_r\)
-is the first unmatched return such that for some $\pol_r$
-\[ \Unmatched ~ \MPT ~ (m_r,p_r)\MPT',\]
-then $\mach_r$ corresponds to a return state for $\mach_c$:
-\[\ret{\mach_c}\ \mach_r\]
-
-\[
-\exists p_r.\Unmatched ~ \MPT ~ (m_r,p_r)\MPT' \Rightarrow \ret{\mach_c}\ \mach_r.
-\]
-\apt{I've tried to tidy this, but I don't think it corresponds to the Coq.
-  Shouldn't we apply $\Unmatched$ to the tail of $\MPT$?
-  And what about the no-unmatched-return-at-top-level clause?}
+A system enjoys {\em return integrity} if all of its returns match prior calls
+and return to the appropriate location. For any initial state \(\mach_0\), let
+\(\MPT\) be the induced trace of \(\mpstate{\mach_0}{\pinit(\mach_0)}\).
+\(\MPT\) may not have an unmatched return -- \(\Unmatched ~ \MPT ~ \MPT_{tail}\)
+may not hold for any \(\MPT_{tail}\). For any state pair \((\mach_c, \pol_c)\)
+corresponding to a call \(\MPT\), if 
+\(\mpstatename = \mpostate{\mach_r}{\pol_r}{\obs_r}\)
+is the first unmatched return such that
+\( \Unmatched ~ \MPT ~ \MPT_{tail}\) and \(\head{\MPT_{tail}} = \mpstatename\),
+then $\mach_r$ must correspond to a return state for $\mach_c$:
+\(\ret{\mach_c}\ \mach_r\)
 
 For example, if we modified the running example by adding
 an instruction $ \rra \rightarrow \rra - 19$
