@@ -1040,7 +1040,7 @@ on states that are well-formed in some way.\apt{Is this our current thinking?}
 We write $\MPS$ for the set of all pairs of machine states and policy
 states.
 %
-\[\MPS = \MACHS \times \POLS\]
+\[\mpstatename \in \MPS = \MACHS \times \POLS\]
 %
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
@@ -1689,7 +1689,7 @@ in $\MPT$, the following holds. Let $\MPT_{\mathit{call}}$ be the prefix where
 For each variant state \(\mach_e' \approx_{\mathit{Cof}(\mach_c,n)}
 \mach_e\), let \(\machT\) be the similarly prefixed trace such that
 \(\mach_e' \hookrightarrow \machT\). Then trace confidentiality holds on
-\(\MPT_{\mathit{call}}\) and \(\machT\) with regard to \(\mathit{Cof}(\mach_c, n)\)
+\(\MPT_{\mathit{call}}\) and \(\machT\) with respect to \(\mathit{Cof}(\mach_c, n)\)
 and \(R = \ret{\mach_c}\):
 
 $$\forall \MPT_{\mathit{call}} ~ \machT. ~
@@ -1704,8 +1704,8 @@ $$\mathit{conf}~\mathit{Cof}(\mach_c, n) ~ (\ret{\mach_c}) ~ \MPT_{\mathit{call}
 \label{sec:wbcf}
 
 Both the integrity and confidentiality components of local state
-encapsulation concern themselves with the accessibility of data, and
-may hold on a wide range of programs that violate expected control
+encapsulation concern themselves only with the accessibility of data, and
+may still hold on a wide range of programs that violate expected control
 flow. Say, if {\tt g} managed to jump in the middle of the
 code of {\tt h} with its call, confidentiality and integrity would
 still be satisfied.
@@ -1715,91 +1715,95 @@ callee) should not be able to bypass a password check by jumping (or
 returning) in the middle of a block of code --- even if such an execution
 would ostensibly satisfy local state encapsulation.
 %
-Stack safety is traditionally associated with preventing such unwanted
+Informal definitions of stack safety usually \apt{evidence?} aim to prevent such unwanted
 flows: every jump between functions should either be a call or a
 return, and each return should be to the instruction after its
 corresponding call.
 
 To formally capture this aspect of stack safety, we introduce three
 security properties that rely on the underlying knowledge of the
-program structure (call maps, function maps, return maps, and entry
-maps): {\em control separation} ensures the validity of transition
+program structure (call map $\callmap$, function map $\codemap$, return map $\retmap$, and entry
+map $\entmap$): {\em control separation} ensures the validity of transition
 sources between functions, {\em entry integrity} ensures the validity
 of call targets, and {\em return integrity} ensures the validity of
 return targets.
 
-\definition{Control Separation}
-
-A system enjoys {\em control separation} with regard to a function map
-\(\codemap\), a call map \(\callmap\), and a return map \(\retmap\),
-if for any initial state \((\mach_0, \pol_0)\) and any adjacent pair
+\definition%{Control Separation}
+A system enjoys {\em control separation}
+% with respect to a function map
+%\(\codemap\), a call map \(\callmap\), and a return map \(\retmap\),
+if, for any initial state $\mpstatename$ and any adjacent pair
 of states \((\mach_1,\pol_1)\) and \((\mach_2,\pol_2)\) in the induced
-trace from \(\mpstate{\mach_0}{\pol_0})\) whose current instruction
+trace from $\mpstatename$ whose current instruction
 belongs to different functions according to the function map,
-either $\mach_1$ is a valid call or a valid return:
+$\mach_1$ is either a valid call or a valid return:
 
 \[ \codemap(\mach_1(\PCname)) \not = \codemap(\mach_2(\PCname)) \Rightarrow
 \exists n. ~ \callmap(\mach_1(\PCname)) = n \vee
 \retmap(\mach_1) \]
 
-For example, consider the unsafe substitution:
-\[
-5 : ~ \jalr ~ r_4 ~ \rra ~ 0
-\]
-This violates control separation as the instruction that causes a
+For example, consider changing line 5 of the running example to a $\jalr$,
+$\PCname \leftarrow r_4$, with effect $\PCname \leftarrow 42$, causing {\tt main}
+to jump into the middle of {\tt h}. 
+This violates control separation because the instruction that causes a
 function switch is not a valid call (or a return) according to the
 call map.
 
-\definition{Entry Integrity}
-
-A system enjoys {\em entry integrity} with regard to a call map
-\(\callmap\) and entry map \(\entmap\) if for any initial state
-\((\mach_0, \pol_0)\) and any n-transition \((\mach_c,\pol_c)\) and
+\definition%{Entry Integrity}
+A system enjoys {\em entry integrity}
+%with respect to a call map
+%\(\callmap\) and entry map \(\entmap\)
+if, for any initial state $\mpstatename$
+and any n-transition \((\mach_c,\pol_c)\) and
 \((\mach_e, \pol_e)\) in the induced trace from
-\(\mpstate{\mach_0}{\pol_0}\), $\mach_e$ is a member of the entry map:
+$\mpstatename$, $\mach_e$ is a member of the entry map:
 \[\callmap(\mach_c(\PCname)) = n \Rightarrow \entmap(\mach_e)\]
 
-The same unsafe substitution violates entry integrity
-\[
-5 : ~ \jalr ~ r_4 ~ \rra ~ 0
-\]
-as its target (instruction 42) is not an established entry point for
-{\tt h} according to the entry map.
+The changed program described just above also violates entry integrity,
+because the target (instruction 42) of the new $\jalr$ is not an established entry point
+according to the entry map.
 
 \leo{Note something about not enforcing control flow integrity
   with allowing a call from {\tt main} to {\tt h}?}
 
-\definition{Return Integrity}
-
-\newcommand*{\Unmatched}{\mathit{Unmatched}}
+\newcommand*{\Unmatched}{\mathit{um}}
 
 Return integrity captures the expected behavior of marked returns with
-regard to their call points. Given a call map $\callmap$ and a return
-map $\retmap$, we begin by defining a coinductive relation
-$\Unmatched$ over two $\MPOTRACE$ $\MPT$ and $\MPT'$, if $\MPT'$ is a
-suffix of $\MPT$ whose head is the first unmatched return in $\MPT$.
+respect to their call points. Intuitively, it says that the marked return
+matching a call $\mach_c$ should satisfy $\ret{\mach_c}$.
+Observe that, given an MP-trace $\mpstate{\mach_c}{\pol}\MPT$, if $\mach_c$ is a call state then
+the matching return will be the first \emph{unmatched} return in $\MPT$. So
+we begin by defining an auxiliary ``unmatched'' relation between two MP-traces.
 
-Formally:
+\definition
+We write $\Unmatched~\MPT~\MPT'$ if $\MPT'$ is
+obtained from $\MPT$ by dropping elements until we reach the first unmatched return
+(according to the return map).  Formally, $\Unmatched$ is defined coinductively as follows:
 \begin{itemize}
 \item A trace that starts with a return is related to itself:
 
+\begin{minipage}{.3\textwidth}
   \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
               {\(\retmap(\mach(\PCname))\)}
               {\(\Unmatched ~ \mpstate{\mach}{\pol} ~ \mpstate{\mach}{\pol}\)}
+\end{minipage}
+\hspace*{0.1\textwidth}
+\begin{minipage}{.3\textwidth}
   \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
               {\(\retmap(\mach(\PCname))\)}
               {\(\Unmatched ~ \mpstate{\mach}{\pol}\MPT ~ \mpstate{\mach}{\pol}\MPT\)}
+\end{minipage}
 
 \item If a trace \(\MPT\) starts with a non-call, non-return state,
   its unmatched return must come later:
 
   \judgment{\(\callmap(\mach(\PCname)) = \bot
               \hspace{.5cm} \neg \retmap(\mach(\PCname))
-              \Unmatched ~ \MPT ~ \MPT'\)}
+              \hspace{.5cm}\Unmatched ~ \MPT ~ \MPT'\)}
            {\(\Unmatched ~ \mpstate{\mach}{\pol}\MPT ~ \MPT'\)}
 
-\item Finally, if a trace starts with the call, then we must discard the first
-  unmatched return to get to the real one:
+\item Finally, if a trace starts with a call, then we must discard the first
+  unmatched return from its tail to get to the real one:
 
 
   \judgmentbr{\(\callmap(\mach(\PCname)) = n \hspace{.5cm} \neg \retmap(\mach(\PCname)) \)}
@@ -1808,25 +1812,32 @@ Formally:
               \(\Unmatched ~ \MPT_{\mathit{tail}} ~ \MPT_{\mathit{unmatched}}\)}
             {\(\Unmatched ~ \MPT ~ \MPT_{\mathit{unmatched}}\)}
 \end{itemize}
-A system enjoys {\em return integrity} with regard to a call map
-\(\callmap\) and return map \(\retmap\) if for any initial state pair
-\((\mach_0, \pol_0)\) and any state pair \((\mach_c, \pol_c)\)
-corresponding to a call in its induced trace, if
-\(\mpstate{\mach_c}{\pol_c} \hookrightarrow_P \MPT\) and \(\mach_r\)
-is the first unmatched return such that for some $\pol_r$
-\[ \Unmatched ~ \MPT ~ (m_r,p_r)\MPT',\]
-then $\mach_r$ corresponds to a return state for $\mach_c$:
-\[\ret{\mach_c}\ \mach_r\]
+\apt{Could cut formal definition for space.}
 
-For example, if we added an instruction between 45 and 46:
+\definition%{Return Integrity}
+A system enjoys {\em return integrity}
+% with respect to a call map \(\callmap\) and return map \(\retmap\)
+if, for any initial state pair 
+$\mpstatename$ and any state pair \((\mach_c, \pol_c)\)
+corresponding to a call in its induced trace, if
+\(\mpstate{\mach_c}{\pol_c} \hookrightarrow \MPT\) and \(\mach_r\)
+is the first unmatched return in $\MPT$, then $\mach_r$ corresponds
+to a return state for $\mach_c$: 
+
 \[
-45.5: ~ \addi ~ \rra ~ r_0 ~ \negate 19
+\exists p_r.\Unmatched ~ \MPT ~ (m_r,p_r)\MPT' \Rightarrow \ret{\mach_c}\ \mach_r.
 \]
-This would cause the return from {\tt h} to go to instruction 8 and
+\apt{I've tried to tidy this, but I don't think it corresponds to the Coq.
+  Shouldn't we apply $\Unmatched$ to the tail of $\MPT$?
+  And what about the no-unmatched-return-at-top-level clause?}
+
+For example, if we modified the running example by adding
+an instruction $ \rra \rightarrow \rra - 19$
+between 45 and 46, this would cause the return from {\tt h} to go to instruction 8 and
 return to {\tt main} instead of {\tt g}. While the instruction that
 causes the return would still be a valid return (satisfying control
 separation), the state after the return would not correspond to an
-$\Unmatched$ return for {\tt g}'s call to {\tt h}, violating return
+unmatched return for {\tt g}'s call to {\tt h}, violating return
 integrity.
 
 \definition{Well-Bracketed Control Flow}
@@ -1835,9 +1846,10 @@ The above properties are somewhat orthogonal, but together they
 capture a standard notion of control flow for a stack: functions keep
 their code separate outside of calls and returns, calls respect
 explicit entry points, and returns respect implicit entry points
-corresponding to their call.  A system that enjoys them with regard to
-a code, a call, a return, and an entry map is said to enjoy
-{\em well-bracketed control flow} with regard to those maps.
+corresponding to their call.  A system that enjoys all three
+properties (with respect to a function map, call map, return map,
+and entry map) is said to enjoy
+{\em well-bracketed control flow} (with respect to those maps).
 
 
 \section{Enforcement}
@@ -2067,7 +2079,7 @@ according to a contour $C$.
   denoted $\vm{C} \stepstoobs{\obs} \mach'$, while
   satisfying the stack integrity test $\testInt{C}{\mach}{\mach'}$
   and stack confidentiality test $\testConf{\mach}{\mach'}$
-  with regard to the original machine state. We write
+  with respect to the original machine state. We write
   this $\testVS{(\mach, \pol)}{\vs}$.
 
 \definition{Eager testing property}
@@ -2172,7 +2184,7 @@ according to a contour $C$.
 \definition
 %
   A trace $\MPT$ satisfies our \emph{top-level stack testing property} if it
-  satisfies the eager testing property at depth 1 with regard to the initial
+  satisfies the eager testing property at depth 1 with respect to the initial
   variant, $\testProp{1}{\MPT}{\vm{\contour_0}}$.
 %
   \rb{I don't think the initial variant has been defined, but it's
@@ -2318,7 +2330,7 @@ rules.
 
     \definition{Observable Stack Integrity}
 
-      A system enjoys {\em observable stack integrity} with regard to
+      A system enjoys {\em observable stack integrity} with respect to
       \(\callmap\) and \(\codemap\) if for any initial state \(\mach_0\) and
       each transition with entry state \(\mpostate{\mach_e}{\pol_e}{\obs_e}\)
       and contour \(\contour\) in the induced trace from
@@ -2422,7 +2434,7 @@ rules.
 
       From observable trace confidentiality we construct {\em observable stack
       confidentiality}. A system enjoys {\em observable stack confidentiality}
-      with regard to \(\callmap\) and \(\codemap\) if for any initial state
+      with respect to \(\callmap\) and \(\codemap\) if for any initial state
       \(\mach_0\) and each transition with entry state
       \(\mpostate{\mach_e}{\pol_e}{\obs_e}\) and contour \(\contour\) in the
       induced trace from \(\mpstate{\mach_0}{\mathit{pinit}(\mach_0)}\), if
@@ -2430,9 +2442,9 @@ rules.
       then \(\text{\sc ObsConf}_\contour ~ \MPT ~ \machT\).
 
     \definition{Observable Stack Safety}
-      A system enjoys {\em observable stack safety} with regard to a call map
+      A system enjoys {\em observable stack safety} with respect to a call map
       and a function map if it enjoys both observable stack integrity and
-      observable stack confidentiality with regard to them.
+      observable stack confidentiality with respect to them.
 
 \section{Related Work}
 \label{sec:relwork}
