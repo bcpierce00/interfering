@@ -1116,7 +1116,7 @@ into address 101.
 The code itself is straightforward, and should be largely self-explanatory, but
 a few points deserve clarification. Functions return their result value on the
 stack rather than in a register.  Stack frames are built in two parts:
-space for local variables and the return address is allocated and initialized at function entry, and deallocated at function exit; space for arguments and return values is allocated and initialized immediately prior to each function call and deallocated on return. The return value slot is always initialized
+space for local variables (which are all stack-allocated) and the return address is allocated and initialized at function entry, and deallocated at function exit; space for arguments and return values is allocated and initialized immediately prior to each function call and deallocated on return. The return value slot is always initialized
 because some of our enforcement mechanisms will rely on this.
 \apt{this is bogus, but oh well}
 The return address is spilled to the stack even by leaf functions such as
@@ -2064,7 +2064,7 @@ are enriched with an abstract metadata tag, which can represent
 arbitrary information about the value. A micropolicy is defined as a set of tags and a
 collection of software-defined rules, indexed by machine opcode.
 At each step of the machine, the relevant rule is applied to the tags on
-the instructions inputs (PC, registers, memory) and on the instruction itself, and produces
+the instruction's inputs (PC, registers, memory) and on the instruction itself, and produces
 one of two outcomes: either the instruction is allowed to execute (and generates
 tags for the result of the operation and the new PC), or the machine
 fail-stops with a policy violation.
@@ -2095,7 +2095,7 @@ on the Depth Isolation policy presented by
 with ownership information associated to each stack frame (and to each
 separate object inside that frame, a more finely grained access
 control that we do not need to consider here), and tags registers containing
-stack pointers with access permission information. The compiler also
+stack pointers with access permission information. The policy also
 uses tags on instructions to identify the code
 sequences that have permission to manage the stack, say during calls and returns.
 %% \rb{Conceivably on alloc
@@ -2307,9 +2307,9 @@ these steps are equal:
 
 \definition The testing property keeps track of a variation machine
 for every nested call performed so far on a {\em variant stack}: a
-list of machine states, each annotated with its own contour written
+list of machine states, each annotated with its own contour (written
 as $\vm{C}$), and each being a variation of the actual machine
-according to $C$.
+according to $C$.%
 %
 \footnote{The full formal definition in Coq also records additional
   information (the initial machine state at the call, its initial
@@ -2399,7 +2399,7 @@ We are now ready to define lockstep stack safety coinductively.
 $\vs$ in which every element $\vm{\contour}$ is a variation of $\mach$
 with respect to its annotated contour $\contour$, we say that an
 MP-trace induced from $(\mach, \pol)$ satisfies the \emph{trace
-  lockstep stack safety}, and write $\testProp{}{\MPT}{\vs}$, if the
+  lockstep stack safety}, written $\testProp{}{\MPT}{\vs}$, if the
 following conditions are satisfied:
 
 \begin{itemize}
@@ -2410,7 +2410,7 @@ following conditions are satisfied:
   then the variant stack test must be satisfied:
   \[\testVS{(\mach, \pol)}{\vs},\]
   and trace lockstep stack safety must be coinductively satisfied for
-  the remainder of the trace and the variant stack $vs'$ that
+  the remainder of the trace and the variant stack $vs'$ that $vs$
   steps to ($\vs \stepsto \vs'$):
   \[ \testProp{}{((\mach',\pol',\obs)\MPT)}{\vs'}\]
 
@@ -2421,7 +2421,7 @@ following conditions are satisfied:
   %% $\hookrightarrow$ and give the rest of the induced trace?}
   \[(\mach, \pol) \stepstopol{\obs} (\mach', \pol') \wedge \callmap(\mach) = n,\]
 %
-  then the variant stack test $\testVS{(\mach, \pol)}{\vs}$ must be
+  then the variant stack test must be
   satisfied:
   \[\testVS{(\mach, \pol)}{\vs},\]
 %
@@ -2442,8 +2442,8 @@ following conditions are satisfied:
   If the machine $\mach$ takes a \emph{return step},
   \[(\mach, \pol) \stepstopol{\obs} (\mach', \pol') \wedge \retmap(\mach),\]
   %
-  the top of the variant stack also returns,
-  the tail of $\vs$ satisfies the stack safety test
+  then the top of the variant stack also returns,
+  the tail of $\vs$ satisfies the stack safety test:
   \[\testVS{(\mach, \pol)}{\mathit{tail}(\vs)},\]
   %
   and trace lockstep stack safety must be coinductively satisfied for
@@ -2464,7 +2464,7 @@ following conditions are satisfied:
 
 \definition
 %
-A system satisfies {\em lockstep stack safety} if for every initial machine $(\mach,\pol)$,
+A system satisfies {\em lockstep stack safety} if, for every initial machine $(\mach,\pol)$,
 the trace induced from $(\mach, \pol)$ satisfies trace lockstep stack safety with
 respect to the empty stack.
 
@@ -2474,7 +2474,7 @@ Lockstep stack safety implies stack safety.
 \smallskip
 
 The proof is a fairly involved coinductive argument
-(around 3K LoC in Coq) on the definition trace lockstep stack safety,
+(around 3K LoC in Coq) on the definition of trace lockstep stack safety,
 using an auxiliary depth-index to ensure the proper alignment of
 calls and returns.
 
@@ -2488,10 +2488,16 @@ be efficiently implemented. Most of the performance overhead incurred
 stems from the need to set stack activation tags as a frame is created
 and reset them as it is destructed, as
 \citet{DBLP:conf/sp/RoesslerD18} confirm in their evaluation. To
-mitigate those costs, they propose optimizations like Lazy Tagging and
-Lazy Clearing that relax and defer some of the checks of an eager
-policy, being more permissive in their allowed operations and catching
-violations if and when their effect becomes manifest.
+mitigate those costs, they propose optimizations called Lazy Tagging and
+Lazy Clearing that relax and defer some of the checks of the Depth Isolation
+policy. Under these optimizations, the policy does not initialize stack
+frames on entry or clear them on exit (thus speeding up execution),
+and it permits all writes to the stack, even when the $\PCname$ tag
+does not match the memory tag. 
+However, reads from the stack do still require $\PCname$ tag and memory tag
+to match. Thus, even if a callee illicitly writes to a private location
+in its caller, the caller will eventually detect this if it ever tries to read from
+that location.
 %
 These \emph{lazy policies} admit more efficient implementations, but
 they deliberately allow violations of stack integrity temporarily,
@@ -2509,8 +2515,8 @@ observations to draw this distinction.
 Observable integrity weakens eager integrity by allowing a returned
 state to differ from its call state at high integrity components,
 provided that the differences do not change the observable behavior of
-the rest of the program. It is not immediately clear what constitutes
-changing behavior: we construct an idealized return state that
+the rest of the program. The challenge here is to define what constitutes
+a change in behavior. We construct an idealized return state that
 contains only the changes that the caller was allowed to make, and use
 the trace from that state as a baseline against which the real trace
 will be compared.
@@ -2550,17 +2556,17 @@ will be compared.
 
       \[\begin{split}
         \propdef{ObsTraceInt} ~ \contour ~ \MPT \ \ \triangleq \ \
-        & \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \Rightarrow \\
-        & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
-        & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' \Rightarrow \\
-        & \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT'
+        & \head(\MPT) = \mpostate{\mach_e}{\_}{\_} ~ \land ~
+          \last(\MPT) = \mpostate{\mach_r}{\_}{\_} ~ \land \\
+        & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' ~ \land ~
+          \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT'
           \Rightarrow \\
         & \pi_o(\MPT') \lesssim_O \pi_o(\machT')
       \end{split}\]
 
     \begin{figure}
       \integritylazyexample
-      \caption{Rolling back from Figure \ref{fig:intex}\bcp{too much space!}}
+      \caption{Rolling back from Figure \ref{fig:intex}.\apt{But at 27, $[\rsp]$ contains 0, not 18, because of the change at 44. Could just fix diagram, but this complicates story.}}
       \label{fig:intlex}
     \end{figure}
 
@@ -2575,8 +2581,8 @@ will be compared.
     trace from \(\mach_r\), it prints 18, but in the trace from \(\mach_r'\)
     it prints 0. Only then is observable trace integrity violated.
 
-    However, consider instead if we insert after instruction 44 a new
-    instruction \(45: [\rsp-4] \leftarrow 50\), overwriting {\tt w} in
+    However, consider instead if we modify the original code of \cref{fig:running-trace-b} to insert after instruction 44 a new
+    instruction \(44.5: [\rsp-4] \leftarrow 50\), overwriting {\tt w} in
     {\tt g}'s frame. So \(\mach_r'\) maps address 105 to 50, while the
     rolled-back state \(\mach_r'\) maps it to 0. But in the trace from either
     state, instructions 27 and 28 load the return value (18) and store it to
@@ -2692,7 +2698,7 @@ will be compared.
 
       \begin{figure}
         \confidentialitylazyexample
-        \caption{Continuing from \cref{fig:confex}\bcp{Spacing!}}
+        \caption{Continuing from \cref{fig:confex}.}
         \label{fig:conflex}
       \end{figure}
 
