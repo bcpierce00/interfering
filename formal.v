@@ -851,7 +851,7 @@ CoInductive StackSafety (cm : CallMap) : MTrace -> Contour -> Prop :=
        StackSafety cm MM C.
  *)
 
-Definition EagerStackSafetyOld (cm : CallMap) (cdm : CodeMap) : MPTrace -> Contour -> Prop :=
+Definition EagerLSE (cm : CallMap) (cdm : CodeMap) : MPTrace -> Contour -> Prop :=
   fun (MP : MPTrace) (C : Contour) =>
     (EagerStackIntegrityThru C MP) /\
     (EagerStackConfidentialityOld C MP (fun _ => False)) /\
@@ -861,7 +861,7 @@ Definition EagerStackSafetyOld (cm : CallMap) (cdm : CodeMap) : MPTrace -> Conto
         EagerStackIntegrityThru C' MPpre' /\
         EagerStackConfidentialityOld C' MPpre' (justRet (ms (head MPpre')))).
 
-Definition EagerStackSafety cm rm em cdm : Prop :=
+Definition EagerLSEExperimental cm rm em cdm : Prop :=
   forall m p,
     let pm := (cm,rm,em,cdm) in
     let initC := makeContour cdm 0 m in
@@ -872,13 +872,13 @@ Definition EagerStackSafety cm rm em cdm : Prop :=
         EagerStackIntegrityEnd C mp (justRet (ms mp)) /\
         EagerStackConfidentiality C mp (justRet (ms mp))).
 
-Definition EagerStackSafetyOldWrap (pm : ProgramMap) (m : MachineState) :=
+Definition EagerLSEWrap (pm : ProgramMap) (m : MachineState) :=
   forall p,
     let '(cm,rm,em,cdm) := pm in
     let initC := makeContour cdm 0 m in
     let MP := MPTraceOf (m,p) in
     initPolicyState m pm = Some p ->
-    EagerStackSafetyOld cm cdm MP initC.
+    EagerLSE cm cdm MP initC.
 
 (* TODO: step by step property that implies the rest *)
 
@@ -3366,12 +3366,12 @@ Qed.
 Theorem StackSafetyTestImpliesStackSafety :
   forall pm m,
   EagerStackSafetyTest'' pm ->
-  EagerStackSafetyOldWrap pm m.
+  EagerLSEWrap pm m.
 Proof.
   intros pm m Safety. destruct pm as [[[cm rm] em] cdm].
   unfold EagerStackSafetyTest'' in *.
-  unfold EagerStackSafetyOldWrap in *.
-  unfold EagerStackSafetyOld.
+  unfold EagerLSEWrap in *.
+  unfold EagerLSE.
   split; [|split].
   - eapply StackIntegrityIndEquiv.
     eapply TestImpliesIntegrityNested; simpl; eauto using variantOf_id.
@@ -3536,7 +3536,7 @@ Definition ObservableConfidentiality (C : Contour) (mp:MPState) (justReturned : 
         ~ justReturned (ms (fst mpohalt)) ->
         ObsOfMP callMPO <=_O ObsOfM call'MO).
 
-Definition LazyStackSafetyOld (cm : CallMap) (cdm : CodeMap) (MP:MPTrace) : Prop :=
+Definition LazyLSE (cm : CallMap) (cdm : CodeMap) (MP:MPTrace) : Prop :=
     ObservableConfidentialityOld (makeContour cdm 0 (ms (head MP))) MP None (fun _ => False) /\
     (forall MPcall MPpre C' MPsuffO,
         FindCallMP cm cdm MP C' MPcall ->
@@ -3544,7 +3544,7 @@ Definition LazyStackSafetyOld (cm : CallMap) (cdm : CodeMap) (MP:MPTrace) : Prop
         ObservableIntegrityOld C' MPpre MPsuffO /\
         ObservableConfidentialityOld C' MPpre MPsuffO (justRet (ms (head MPcall)))).
 
-Definition LazyStackSafety cm rm em cdm : Prop :=
+Definition LazyLSEExperimental cm rm em cdm : Prop :=
   forall m p,
     let pm := (cm,rm,em,cdm) in
     let initC := makeContour cdm 0 m in
@@ -3571,7 +3571,7 @@ Definition ObservableConfidentegrity (C:Contour) (MP:MPTrace) (MPsuffO:option MP
     let ideal := N ^ (option_map (fun N' => MTraceOf (RollbackCI C (ms (head MP)) n (head N'))) NO) in
     (ObsTraceOf actual) <=_O (ObsTraceOfM ideal).
 
-Definition LazyStackSafety' (cm : CallMap) (MP:MPTrace) : Prop :=
+Definition LazyLSEExperimental' (cm : CallMap) (MP:MPTrace) : Prop :=
   ObservableConfidentegrity (makeContour 0 (ms (head MP))) MP None (fun _ => False) /\
   (forall MP' MP'' C' MPsuffO, FindCall cm (mapTrace ms MP) C' (mapTrace ms MP') ->
                           TraceSpan (fun mp => ~isRet (ms (head MP')) (ms mp)) MP' MP'' MPsuffO ->
@@ -4030,11 +4030,11 @@ Proof.
     specialize H with m' callMPO call'MO. destruct H; auto.
 Qed.
 
-Theorem EagerSafetyImpliesLazy:
+Theorem EagerSafetyImpliesLazyExp:
   forall cm rm em cdm,
-    EagerStackSafety cm rm em cdm -> LazyStackSafety cm rm em cdm.
+    EagerLSEExperimental cm rm em cdm -> LazyLSEExperimental cm rm em cdm.
 Proof.
-  unfold EagerStackSafety. unfold LazyStackSafety. intros.
+  unfold EagerLSEExperimental. unfold LazyLSEExperimental. intros.
   specialize H with m p.
   pose (pm := (cm,rm,em,cdm)).
   destruct H; auto. split.
@@ -4044,13 +4044,13 @@ Proof.
     + apply EagerImpliesLazyConf; auto.
 Qed.
 
-(*Theorem EagerSafetyImpliesLazy:
-  forall cm MP,
+Theorem EagerSafetyImpliesLazy:
+  forall cm cdm MP,
     RealMPTrace'' MP ->
-    EagerStackSafety cm MP (makeContour 0 (ms (head MP))) -> LazyStackSafety cm MP.
+    EagerLSE cm cdm  MP (makeContour cdm 0 (ms (head MP))) -> LazyLSE cm cdm  MP.
 Proof.
-  unfold EagerStackSafety. unfold LazyStackSafety. intros. split.
-  - destruct H0. apply (EagerImpliesLazyConf (makeContour 0 (ms (head MP))) MP).
+  unfold EagerLSE. unfold LazyLSE. intros. split.
+  - destruct H0. apply (EagerImpliesLazyConfOld (makeContour cdm 0 (ms (head MP))) MP).
     + auto.
     + right. split;try split; auto.
       * apply ForallTraceTautology. unfold not. intros. contradiction.
@@ -4061,13 +4061,13 @@ Proof.
     split.
     + destruct H2.
       * destruct H2 as [MPsuff]. destruct H2.
-        apply (EagerImpliesLazyInt C' MPcall MPpre MPsuffO); auto.
+        apply (EagerImpliesLazyIntOld C' MPcall MPpre MPsuffO); auto.
         { constructor. exists MPsuff. split; auto. }
         destruct H0. destruct H5. specialize H6 with MPpre MPcall C'.
         apply H6 in H1. destruct H1;auto. constructor.
         exists MPsuff. auto.
-      * destruct H2. destruct H4. rewrite H5. unfold ObservableIntegrity. auto.
-    + apply (EagerImpliesLazyConf C' MPcall); auto.
+      * destruct H2. destruct H4. rewrite H5. unfold ObservableIntegrityOld. auto.
+    + apply (EagerImpliesLazyConfOld C' MPcall); auto.
       destruct H0. destruct H4. specialize H5 with MPpre MPcall C'.
         destruct H5; auto.
         { unfold PrefixUpTo. destruct H2.
@@ -4079,43 +4079,7 @@ Proof.
             apply SplitInclusiveHeadEq in H7. auto.
           - destruct H2. destruct H7. inversion H7;auto. }
         rewrite H7. auto.
-Qed.*)
-
-(*Conjecture Lazy'ImpliesLazy :
-  forall cm C MM,
-  LazyStackSafety' cm C MM -> LazyStackSafety cm C MM.
-
-Conjecture LazyNotImpliesLazy' :
-  exists cm C MM,
-  LazyStackSafety cm C MM /\ ~ LazyStackSafety' cm C MM.*)
-(* The counterexample:
-
-main: mov #0 r1
-      store r1 FP
-      [call sequence to sub]
-      ld FP r1
-      bne r1 r2 #2
-      mov #1 O
-      beq #0 #0 #1
-      mov #0 O
-      halt
-
-sub:  ld (FP-1) r2
-      beq r2 #0 #2
-      mov #1 r1
-      store r1 (FP-1)
-      [return sequence]
-
-In observable confidentiality, if the variation keeps main's memory the same,
-sub returns and the behavior is [1]. Of course that is the case for the actual trace as well.
-If it changes, sub writes 1 to it and to r1, so the behavior is still [1].
-
-In observable integrity, sub never does anything, because there is no variant. So
-the behavior is [1] for both the ideal and actual traces.
-
-But for confidentegrity, if main's memory varies, sub moves 1 to r1 and stores it
-in main's memory. Then the rollback sets main's memory back to 0. So r1 and r2 will
-not be equal, and the behavior is [0]. So confidentegrity does not hold. *)
+Qed.
 
 (* ********* Well Bracketed Control Flow ******** *)
 
@@ -4742,44 +4706,3 @@ Section PaperVersions.
   Definition ObservableStackSafetyPaper : Prop :=
     ObservableStackIntPaper /\ ObservableStackConfPaper.
 
-  (********** Eager to Observable Proofs ***********)
-  Lemma EagerToObsTraceInt :
-    forall C MP,
-      TraceIntegrityPaper C MP ->
-      ObservableTraceIntPaper C MP.
-  Proof.
-    unfold TraceIntegrityPaper. unfold ObservableTraceIntPaper. intros.
-    assert (RollbackInt C (ms (fst mp1)) (ms (fst mp2)) = (ms (fst mp2))).
-    { unfold RollbackInt. extensionality k. destruct (integrityOf (C k)) eqn:E2.
-      - specialize H with mp1 mp2 k.
-        apply H; auto.
-      - auto. }
-    rewrite H2. apply MPRunPrefRun; auto.
-  Qed.
-
-  Lemma EagerToObsReturnCase :
-    forall R MP M,
-      ReturnCase R MP M ->
-      ReturnCaseObservable R MP M.
-  Proof.
-    unfold ReturnCase. unfold ReturnCaseObservable. intros.
-    specialize H with m p o. destruct H as [m']; auto. destruct H as [o'].
-    exists m'. exists o'. destruct H; split; auto.
-    destruct H2; split; auto. destruct H3; split; auto.
-    assert (HEq: ms (fst (head MP)) = RollbackConf (ms (fst (head MP))) (fst (head M)) m m').
-    { extensionality k. specialize H4 with k.
-      unfold RollbackConf.
-      Admitted.
-      (*destruct (weq (ms (fst (head MP)) k) (m k)) eqn:Unchanged; simpl.
-          - destruct (weq (fst (head M) k) (m' k)) eqn:Unchanged'; simpl.
-            + destruct (weq (ms (fst (head MP)) k) (fst (head M) k)) eqn:Unvaried; simpl.
-              * apply weq_implies_eq in Unchanged'.
-                apply weq_implies_eq in Unchanged'.
-                apply weq_implies_eq in Unvaried.
-                rewrite <- Unchanged'.
-                rewrite Unvaried. auto.
-              * apply weq_implies_eq in Unchanged. apply eq_sym. auto.
-            + apply not_weq_implies_neq in Unchanged'.
-              apply Hksame. right. rewrite H8. auto.
-          - apply not_weq_implies_neq in Unchanged.
-            apply Hksame. left. auto. }*)
