@@ -456,7 +456,7 @@ Although this information would typically come from a compiler together with
 the machine code, we do not
 assume anything about their provenance.  We assume that the machine has a
 program counter $\PCname$
-and stack pointer $\rsp$\bcp{but not a frame pointer?!}; other details of the machine's ISA are unimportant.
+and stack pointer $\rsp$\bcp{but not a frame pointer?!\apt{right; we're agnostic about that}}; other details of the machine's ISA are unimportant.
 
 To make our stack safety definitions precise, we make some straightforward
 assumptions about
@@ -472,18 +472,18 @@ The boundary between the frames of a caller and callee is indicated by the $\rsp
 at the time of the call.  The stack can be used to
 pass arguments or return results in the usual way, by placing them
 at the top of the caller's frame. Callers and callees can also communicate
-via registers if they wish; indeed, our
+via registers if they wish; indeed, our 
 definitions say nothing at all about registers (except $\PCname$ and
 $\rsp$). \bcp{This implicitly amounts to choosing a caller-saves register
-  convention, though, doesn't it?}
+  convention, though, doesn't it?\apt{I think it is neutral; we could add separate caller register protection if we wanted.}}
 
 Our stack safety concepts depend critically on the notions of ``call'' and ``return,''
-which are not fully explicit in machine code (the same instruction may be
+which are not fully explicit in machine code (the same instruction opcode may be
 used in some places as part of a call or return sequence and in other places
 for other purposes).  We define a call to be
 any instruction declared as such in the compiler-provided call structure.
 If a call occurs at $\PCname = a$ and $\rsp = s$, then the \emph{corresponding
-  return} has occurred when $\PCname = \nextPC(a)$ and $\rsp = s$. (Our definition
+  return} has occurred when the $\PCname$ points to the next instruction after $a$ and $\rsp = s$. (Our definition
 of well-bracketed control flow relates this definition of return to the program's
 declared set of return points.)
 Our property definitions make no other detailed assumptions about call or return sequences, although
@@ -505,7 +505,7 @@ easier to use well-established concepts from language-based security.
 In particular, confidentiality has an elegant extensional characterization in terms of
 \emph{noninterference}: a program preserves the confidentiality of certain data if
 \emph{varying} that data would not change the program's observable
-behavior~\citep{6234468}
+behavior~\citep{6234468}.
 In applying this idea to a system that incorporates policy enforcement, only
 ordinary program data should be varied, while any associated policy
 state should be left alone; our model makes this distinction obvious.
@@ -534,8 +534,7 @@ reference monitoring mechanism; they been applied to stack safety
 enforcement by \citet{DBLP:conf/sp/RoesslerD18}.
 Here the policy state consists of metadata tags (e.g., identifying stack frames)
 attached to each value in memory or registers, and the policy step
-function\bcp{undefined!}\leo{``partial policy step'' is explained informally above}
-checks that each machine operation obeys a set of rules on tags
+function checks that each machine operation obeys a set of rules on tags
 (e.g., that the current $\PCname$ tag matches the tag on the stack
 location being accessed), and halts the machine if not.  Distinguishing
 ordinary machine state and policy state is very natural in this setting.
@@ -557,11 +556,12 @@ Capability machines such as CHERI \citep{Woodruff+14} extend conventional
 architectures to support efficient and fine-grained control over memory
 accesses, which can be used to implement security policies, including
 the stack protection policies of
-\citet{Skorstengaard+19,Skorstengaard+19b}\bcp{I thought these policies used
-  linear capabilities?}\leo{Only the second one AFAIK. What would you
-  change to characterize it more accurately?}\rb{StkPointers uses linear
-  capabilities, its predecessor users local capabilities (and unlike
-  StkPointers could be implemented in CHERI)}.
+\citet{Skorstengaard+19b} and (with an extension to support linear capabilities) \citet{Skorstengaard+19}.
+%\bcp{I thought these policies used
+%  linear capabilities?}\leo{Only the second one AFAIK. What would you
+%  change to characterize it more accurately?}\rb{StkPointers uses linear
+%  capabilities, its predecessor users local capabilities (and unlike
+%  StkPointers could be implemented in CHERI)}.
 Capabilities package up pointers
 (ordinary data) with base and bounds information (policy data),
 and they require rewriting source code (e.g., to use capabilities in place
@@ -582,8 +582,8 @@ state is delicate; we conjecture it can be done with some effort.
 Some policies are implemented in software, by modifying code in the
 compiler, for example to perform bounds checking~\citep{NagarakatteZMZ09} or
 to insert stack canaries~\citep{Cowan+98}. Such approaches should
-still satisfy our formal notion of stack safety with a trivial null
-policy, but only for programs produced by the compiler.
+still satisfy our formal notion of stack safety \apt{Stack canaries certainly would not!} with a trivial null
+policy, but only for programs produced by the compiler.\apt{This still seems wrong to me. The policy part needs somehow to describe everything that isn't varied or rolled back.}
 %These approaches are represented as policies that
 %accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
 %being produced by the compiler.) The set of policy states is again the unit type
@@ -1061,13 +1061,14 @@ $\cdots$
   later.}
 \fi
 
-\Cref{fig:running-program} shows a high-level view of our running example,
+\Cref{fig:running-program} shows a high-level view of a running example,
 written in C-like pseudo-code.  It consists of a {\tt main} function that
 performs a call to some function {\tt f}, which in turn makes a nested call
 to some function {\tt g} before returning, while performing some simple
 arithmetic operations in the process. \Cref{fig:running-trace-b} shows an
 execution trace of the corresponding machine instructions. These might have
-been generated by compiling the high-level code, but it is only the behavior
+been generated from the high-level code by a (rather simple-minded) compiler,
+but it is only the behavior 
 of the machine instructions that we care about
 here---\Cref{fig:running-trace-b} is our actual example.
 
@@ -1096,7 +1097,7 @@ of the register file that are relevant at this point in the example.
 The rest of \Cref{fig:running-trace-b} traces the execution of the
 program, showing the machine state at call and return points.
 Instructions are intended to
-be similar to RISC-V, but are described in a (hopefully more readable) an
+be similar to RISC-V, but are described in a (hopefully more readable)
 ad-hoc notation
 rather than using assembler syntax. The $\jal$ (jump-and-link)
 instruction used for calls atomically simultaneously the return address in a
@@ -1105,6 +1106,15 @@ and jumps to a specified new $\PCname$; the $\jalr$ (jump-and-link-via-register)
 instruction used for returns jumps to the address stored in a register.
 Register $r_0$ is hardwired to zero, so that, e.g., instruction 3 stores $0$
 into address 101.
+
+The code itself is straightforward, and should be largely self-explanatory, but
+a few points deserve clarification. Functions return their result value on the
+stack rather than in a register.  Stack frames are built in two parts:
+space for local variables and the return address is allocated and initialized at function entry, and deallocated at function exit; space for arguments and return values is allocated and initialized immediately prior to each function call and deallocated on return. The return value slot is always initialized
+because some of our enforcement mechanisms will rely on this.
+\apt{this is bogus, but oh well}
+The return address is spilled to the stack even by leaf functions such as
+{\tt h} that could just leave it in $\rra$. 
 
 %\apt{Need to clarify to what extent our properties depend on the
 %particular compilation style, calling sequences, etc. illustrated here.}
@@ -2115,6 +2125,10 @@ sequence at a point where the stack safety property expects a return,
 the micropolicy will incorrectly behave as if execution
 is continuing in the callee, but since the callee never has stronger access
 rights than the caller, this is harmless.
+
+\apt{It would be good to relate this back to the running example. This is
+  complicated because the example passes arguments/returns, and it builds
+  and initializes this part of the frame separately.}
 
 %% APT: removed because the tag part is too mysterious and the instruction part
 %% is standard.
