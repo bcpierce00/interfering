@@ -1708,8 +1708,6 @@ reflects the states that are considered to have returned. We abstract over
 \(f\) was called. There are three cases in which \(\MPT\) and \(\machT\)
 enjoy trace confidentiality with respect to \(R\).
 
-%\sna{Interestingly, split out like this, we don't need to talk about
-%     contour here -- they are varied in the next property.}+1
 \begin{itemize}
   \item If \(\MPT\) has a final state \(\last(\MPT) = \mpostate{\mach_r}
     {\pol_r}{\obs_r}\) and \(R\ \mach_r\), then \(\machT\) is also finite with
@@ -1786,7 +1784,6 @@ definition.
   \label{fig:confex}
 \end{figure}
 
-
 To lift trace confidentiality to a system property, we follow the same
 pattern as in stack integrity:
 
@@ -1803,17 +1800,21 @@ from the entry point until its corresponding return:
 We also take the corresponding trace from any variant \(\mach_e'
 \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\):
 %
-\[\mach_e' \hookrightarrow \machT_{\mathit{call}} ~ | ~ \ret{\mach_c}\]
-%
-If trace confidentiality holds for all such pairs of traces,
-\(\propdef{TraceConf} ~ \ret{\mach_c} ~ \MPT ~ \machT\), then the
+\[\mach_e' \hookrightarrow \machT_{\mathit{call}} | \ret{\mach_c}\]
+
+For all such pairs of traces, \(\propdef{TraceConf} ~
+\ret{\mach_c} ~ \MPT_{\mathit{call}} ~ \machT{\mathit{call}}\) must hold.
+Trace confidentiality must also hold on the trace as a whole, so that
+unallocated memory is still secret. Let \(\mach_0'
+\approx_{\mathit{Cof}(\mach_0),0} \mach_0\) and \(\mach_0' \hookrightarrow
+\machT\). Then \(\propdef{TraceConf} ~ \emptyset ~ \MPT ~ \machT\) must hold.
+
+If trace confidentiality holds for all such traces,
+\(\propdef{TraceConf} ~ \ret{\mach_c} ~ \MPT_{\mathit{call}} ~
+\machT_{\mathit{call}}\) and
+\(\propdef{TraceConf} ~ \emptyset ~ \MPT ~ \machT\), then the
 system as a whole enjoys {\em stack confidentiality} with respect to
 \(\callmap\).
-
-%\apt{oy. still needs work to make this intelligible}
-%\sna{Attempted. There's a tension between introducing all the variables
-%     and keeping a good flow that I'm not sure I'm managing here though.}
-%Added even more
 
 \subsection{Well-bracketed Control Flow}
 \label{sec:wbcf}
@@ -2489,16 +2490,16 @@ will be compared.
 
       \definition
 
-      The \(\mathit{restore}\) function takes a contour and four states: the
-      original call state, a variant call state, and corresponding return
-      states, and returns another state. The resulting state restores those
-      components that are high confidentiality to match the original call,
+      The \(\mathit{restore}\) function takes four states: the
+      original entry state, a variant entry state, and corresponding return
+      states. It returns another state. The resulting state restores those
+      components that varied between entries to match the original entry,
       unless they were changed during execution:
-      \[\mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r')
+      \[\mathit{restore}(\mach_e,\mach_e',\mach_r,\mach_r')
         (\component) =
         \begin{cases}
-          \mach_c(\component) & \text{if } \contour(\component) = (\HIGHSEC,\_)
-            \text{ and } \\
+          \mach_e(\component) & \text{if } \mach_e(\component) \not =
+                                \mach_e'(\component) \text { and } \\
           & \mach_e(\component) = \mach_r(\component) \text{ and }
             \mach_e'(\component) = \mach_r'(\component) \\
           \mach_r'(\component) & \text{else} \\
@@ -2511,7 +2512,7 @@ will be compared.
 
       {\em Observable trace confidentiality} is the lazy analog to trace
       confidentiality, and reuses the cases in which the traces don't return.
-      For a contout \(\contour\), return predicate \(R\), and a pair of traces
+      For a return predicate \(R\) and a pair of traces
       \(\MPT\) and \(\machT\), we consider the return case, in which
       \(\last(\MPT)\) is some \(\mpostate{\mach_r}{\pol_r}{\obs_r}\) and
       \(R ~ \mach_r\). Then \(\last(\machT)\) is some \((\mach_r',\obs_r')\)
@@ -2522,7 +2523,7 @@ will be compared.
       Finally, let \(\mach_e\) be the machine state of \(\head(\MPT)\),
       and \(\mach_e'\) be that of \(\head(\machT)\). We restore \(\mach_r'\)
       based on \(\mach_e\) and \(\mach_e'\) to get \(\mach_r'' =
-      \mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r')\).
+      \mathit{restore}(\mach_e,\mach_e',\mach_r,\mach_r')\).
       The induced trace from \(\mpstate{\mach_r}{\pol_r}\) should be an
       observational prefix of the induced trace from \(\mach_r'\),
       reflecting the possibility of a fail-stop after return.
@@ -2545,8 +2546,8 @@ will be compared.
       confidentiality:
 
       \[\begin{split}
-        \propdef{ObsTraceConf} ~ \contour ~ R ~ \MPT ~ \machT \triangleq
-        & \mathit{ObsReturnCase} ~ \contour ~ R ~ \MPT ~ \machT \land \\
+        \propdef{ObsTraceConf} ~  R ~ \MPT ~ \machT \triangleq
+        & \mathit{ObsReturnCase} ~ R ~ \MPT ~ \machT \land \\
         & \mathit{InfCase} ~ R ~ \MPT ~ \machT \land \mathit{FailCase} ~ R ~
           \MPT ~ \machT \\
       \end{split}\]
@@ -2582,14 +2583,21 @@ will be compared.
 
       {\em Observable stack confidentiality} is structured like stack
       confidentiality. Let \(\callmap\) be a callmap; for each initial
-      state and \(n\)-transition from \(\mpstate{\mach_c}{\pol_c}\)
-      to \(\mpstate{\mach_e}{\pol_e}\), take any variation \(\mach_e'
-      \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\). Let
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT | \ret{\mach_c}\)
-      and \(\mach_e' \hookrightarrow \machT | \ret{\mach_c}\). A system
-      enjoys observable stack confidentiality if, for all such
-      \(\MPT\) and \(\machT\), \(\propdef{ObsTraceConf} ~
-      \mathit{Cof}(\mach_c,n) ~ \ret{\mach_c} ~ \MPT ~ \machT\).
+      state \(\mach_0\) and \(n\)-transition from \(\mpstate{\mach_c}{\pol_c}\)
+      to \(\mpstate{\mach_e}{\pol_e}\) in the induced trace
+      \(\mpstate{\mach_0}{\pinit(\mach_0)} \hookrightarrow \MPT\), take any
+      variation \(\mach_e' \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\). Let
+      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} |
+      \ret{\mach_c}\) and \(\mach_e' \hookrightarrow \machT_{call} |
+      \ret{\mach_c}\). We must have \(\propdef{ObsTraceConf} ~
+      \ret{\mach_c} ~ \MPT ~ \machT\).
+
+      Additional, for any variation \(\mach_0' \approx_{\mathit{Cof}(\mach_0),0}
+      \mach_0\), taking the induced trace  \(\mach_0' \hookrightarrow
+      \machT\), we must have \(\propdef{TraceConf} ~ \emptyset ~ \MPT ~ \machT\).
+
+      A system enjoys observable stack confidentiality if observable
+      confidentiality holds in all such cases.
 
     \definition%{Observable Stack Safety}
     A system enjoys {\em observable stack safety}
