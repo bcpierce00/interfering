@@ -1178,20 +1178,13 @@ written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
 
 \subsection{Policies}
 
-We now present our model of enforcement, which we introduced informally in \Cref{sec:threat}.
-A policy is a general model of an enforcement mechanism, consisting of a
-set of policy states \(\pol \in \POLS\), a policy step function
-\((\mach, \pol) \polstep \pol' : \MACHS \times \POLS
-\rightharpoonup \POLS\), and an initializer \(\pinit : \MACHS \rightharpoonup
-\POLS\). The initializer establishes the initial policy state for a given
-machine state, but is partial to reflect that some policies are only defined
-on states that are well-formed in some way.
-%
-\apt{Is this our current thinking?}
-\leo{I thought this was what we settled on in the last two days'
-  discussions}\bcp{That was not my impression!  I don't see how the policy
-  state can be recovered from just the machine state---e.g., the machine
-  state doesn't say where the calls and returns are, does it?!}
+We now present our model of enforcement, which we introduced
+informally in \Cref{sec:threat}.  A policy is a general model of an
+enforcement mechanism, consisting of a set of policy states \(\pol \in
+\POLS\), a policy step function \((\mach, \pol) \polstep \pol' :
+\MACHS \times \POLS \rightharpoonup \POLS\). We assume that the
+compiler provides an initial policy state $\pol_0$ to accompany 
+the initial machine state.
 %
 A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
 \Cref{sec:enforcement}.
@@ -1680,8 +1673,8 @@ machine-policy state pairs \(\mpstate{\mach_c}{\pol_c}\) and
 \definition
 
 We say that a system enjoys {\em stack integrity} if for every initial
-state $\mach_0$ and its corresponding induced trace $\MPT$ (with
-$\mpstate{\mach_0}{\pinit(\mach_0)} \hookrightarrow \MPT$), for every
+state $(\mach_0,\pol_0)$ and its corresponding induced trace $\MPT$ (with
+$\mpstate{\mach_0}{\pol_0} \hookrightarrow \MPT$), for every
 $n$-transition from $\mpstate{\mach_c}{\pol_c}$ to
 $\mpstate{\mach_e}{\pol_e}$ in $\MPT$, if we take the prefix of the
 call until its corresponding return $\mpstate{\mach_e}{\pol_e}
@@ -1836,8 +1829,8 @@ pattern as in stack integrity:
 
 \definition%{Stack Confidentiality}
 %Let $\callmap$ be a call map and $\codemap$ a function map.
-For every initial state \(\mach_0\), we take the induced trace
-\(\mpstate{\mach_0}{\pinit(\mach_0)} \hookrightarrow \MPT\). Then for
+For every initial state \((\mach_0,\pol_0)\), we take the induced trace
+\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \MPT\). Then for
 any \(n\)-transition from $\mpstate{\mach_c}{\pol_c}$ to
 $\mpstate{\mach_e}{\pol_e}$ in $\MPT$, we take the prefix of the trace
 from the entry point until its corresponding return:
@@ -1847,21 +1840,21 @@ from the entry point until its corresponding return:
 We also take the corresponding trace from any variant \(\mach_e'
 \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\):
 %
-\[\mach_e' \hookrightarrow \machT_{\mathit{call}} | \ret{\mach_c}\]
-
-For all such pairs of traces, \(\propdef{TraceConf} ~
-\ret{\mach_c} ~ \MPT_{\mathit{call}} ~ \machT{\mathit{call}}\) must hold.
-Trace confidentiality must also hold on the trace as a whole, so that
-unallocated memory is still secret. Let \(\mach_0'
-\approx_{\mathit{Cof}(\mach_0),0} \mach_0\) and \(\mach_0' \hookrightarrow
-\machT\). Then \(\propdef{TraceConf} ~ \emptyset ~ \MPT ~ \machT\) must hold.
-
+\[\mach_e' \hookrightarrow \machT_{\mathit{call}} ~ | ~ \ret{\mach_c}\]
+%
+%For all such pairs of traces, \(\propdef{TraceConf} ~
+%\ret{\mach_c} ~ \MPT_{\mathit{call}} ~ \machT{\mathit{call}}\) must hold.
+%Trace confidentiality must also hold on the trace as a whole, so that
+%unallocated memory is still secret. Let \(\mach_0'
+%\approx_{\mathit{Cof}(\mach_0),0} \mach_0\) and \(\mach_0' \hookrightarrow
+%\machT\). Then \(\propdef{TraceConf} ~ \emptyset ~ \MPT ~ \machT\) must hold.
+%
 If trace confidentiality holds for all such traces,
 \(\propdef{TraceConf} ~ \ret{\mach_c} ~ \MPT_{\mathit{call}} ~
-\machT_{\mathit{call}}\) and
-\(\propdef{TraceConf} ~ \emptyset ~ \MPT ~ \machT\), then the
-system as a whole enjoys {\em stack confidentiality} with respect to
-\(\callmap\).
+\machT_{\mathit{call}}\) and it also holds for the toplevel execution
+trace to account for unallocated memory \(\propdef{TraceConf} ~
+\emptyset ~ \MPT ~ \machT\) , then the system as a whole enjoys {\em
+  stack confidentiality} with respect to \(\callmap\).
 
 \subsection{Well-bracketed Control Flow}
 \label{sec:wbcf}
@@ -1895,9 +1888,9 @@ return targets.
 A system enjoys {\em control separation}
 % with respect to a function map
 %\(\codemap\), a call map \(\callmap\), and a return map \(\retmap\),
-if, for any initial state \(\mach_0\) and any adjacent pair of states
+if, for any initial state \((\mach_0, \pol_0)\) and any adjacent pair of states
 \(\mpostate{\mach_1}{\pol_1}{\obs_1}\) and \(\mpostate{\mach_2}{\pol_2}{\obs_2}\)
-in the induced trace from \(\mpstate{\mach_0}{\pinit(\mach_0)}\),
+in the induced trace from \(\mpstate{\mach_0}{\pol_0}\),
 if \(\codemap(\mach_1(\PCname)) \not = \codemap(\mach_2(\PCname))\),
 then \(\mpstate{\mach_1}{\pol_1}\) is either a call \(\callmap(\mach_1(\PCname))\)
 or a return \(\retmap(\mach_1(\PCname))\).
@@ -1915,10 +1908,10 @@ call map. On the other hand we do permit functions to jump freely internally.
 A system enjoys {\em entry integrity}
 %with respect to a call map
 %\(\callmap\) and entry map \(\entmap\)
-if, for any initial state \(\mach_0\)
+if, for any initial state \((\mach_0, \pol_0)\)
 and any n-transition from \((\mach_c,\pol_c)\) to
 \((\mach_e, \pol_e)\) in the induced trace from
-\(\mpstate{\mach_0}{\pinit(\mach_0)}\), $\mach_e$ is a valid entry:
+\(\mpstate{\mach_0}{\pol_0}\), $\mach_e$ is a valid entry:
 \[\callmap(\mach_c(\PCname)) = n \Rightarrow \entmap(\mach_e)\]
 
 The changed program described just above also violates entry integrity,
@@ -1980,8 +1973,8 @@ obtained from $\MPT$ by dropping elements until we reach the first unmatched ret
 
 \definition%{Return Integrity}
 A system enjoys {\em return integrity} if all of its returns match prior calls
-and return to the appropriate location. For any initial state \(\mach_0\), let
-\(\MPT\) be the induced trace of \(\mpstate{\mach_0}{\pinit(\mach_0)}\).
+and return to the appropriate location. For any initial state \((\mach_0\, \pol_0)\), let
+\(\MPT\) be the induced trace of \(\mpstate{\mach_0}{\pol_0}\).
 \(\MPT\) may not have an unmatched return -- \(\Unmatched ~ \MPT ~ \MPT_{tail}\)
 may not hold for any \(\MPT_{tail}\). For any state pair \((\mach_c, \pol_c)\)
 corresponding to a call \(\MPT\), if
@@ -2383,8 +2376,8 @@ $\testProp{}{\MPT}{\vs}$, if:
 
 \definition
 %
-A system satisfies {\em lockstep stack safety} if for every initial machine $\mach$,
-the trace induced from $(\mach, \pinit(\mach))$ satisfies trace lockstep stack safety with
+A system satisfies {\em lockstep stack safety} if for every initial machine $(\mach,\pol)$,
+the trace induced from $(\mach, \pol)$ satisfies trace lockstep stack safety with
 respect to the empty stack.
 
 \medskip
@@ -2635,9 +2628,9 @@ will be compared.
 
       {\em Observable stack confidentiality} is structured like stack
       confidentiality. Let \(\callmap\) be a callmap; for each initial
-      state \(\mach_0\) and \(n\)-transition from \(\mpstate{\mach_c}{\pol_c}\)
+      state \((\mach_0, \pol_0)\) and \(n\)-transition from \(\mpstate{\mach_c}{\pol_c}\)
       to \(\mpstate{\mach_e}{\pol_e}\) in the induced trace
-      \(\mpstate{\mach_0}{\pinit(\mach_0)} \hookrightarrow \MPT\), take any
+      \(\mpstate{\mach_0}{\pol_0} \hookrightarrow \MPT\), take any
       variation \(\mach_e' \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\). Let
       \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} |
       \ret{\mach_c}\) and \(\mach_e' \hookrightarrow \machT_{\mathit{call}} |
