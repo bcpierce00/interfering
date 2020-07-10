@@ -332,10 +332,10 @@ call, we assume that the callee can execute arbitrary instructions
 until it returns.
 
 A key challenge in adapting the concepts of language-based security to this
-setting is that stack safety is a ``nested'' property: not only does a given
-caller need to be protected from its callee, but the callee also needs to be
-protected from {\em its} callees, and so on. That is, the notion of
-``attacker'' changes at many points throughout the execution of the program.
+setting is that integrity and confidentiality are ``nested'' properties: not
+only does a given caller need to be protected from its callee, but the callee
+also needs to be protected from {\em its} callees, and so on. That is, the notion
+of ``attacker'' changes at many points throughout the execution of the program.
 We address
 this issue by introducing a dynamically changing notion of {\em accessibility} for
 the different components of the machine state and adjusting the integrity
@@ -361,22 +361,29 @@ that is more efficient by virtue of being lazy in its enforcement.
 Instead of enforcing the integrity and confidentiality of the stack at the
 exact moment
 when a callee returns, this policy signals violations when the
-caller actually uses data that the callee has written into  its stack
+caller actually accesses data that the callee has written into its stack
 frame\ifaftersubmission\bcp{We could also hint at the lazy confidentiality
   property inthe same way...}\fi.
-The lazy
-policy does not enforce our original stack-safety property, but (a slightly
-enhanced variant of the policy\bcp{I worry that we are being a little
-  dishonest here: the stated advantage of the lazy policy is that it is more
-efficient, but our variant is {\em not} efficient!}) of it does enforce a slightly weaker
-lazy version of the property that still protects from unsafe callees but is
-less intuitive to state.
+The lazy policy does not enforce our original integrity and confidentiality
+properties, and to our knowledge there is no formal statement of the properties that
+it ought to enforce. We propose ``observable'' versions of integrity and
+confidentiality property, which capture the desired behavior of a policy that
+detects violations between when they occur and when they make a visible impact.
+Unfortunately the existing Lazy Tagging and Clearing policy of
+\citeauthor{DBLP:conf/sp/RoesslerD18} does not quite enforce these properties,
+but would if enhanced (at some performance cost).
+%\bcp{I worry that we are being a little
+%  dishonest here: the stated advantage of the lazy policy is that it is more
+%efficient, but our variant is {\em not} efficient!}
+
+\sna{There's been some inconsistency in ``stack safety'' vs.
+     ``stack-safety,'' I'm fixing on the former.}
 
 In summary, we offer the following contributions:
 \begin{itemize}
 \item
-  % \leo{More? Extensional}\bcp{We might need to invent a word for   this---''quasi-extensional''?}
-  A new {\em formal stack-safety property} capturing the
+  % \leo{More? Extensional}\bcp{We might need to invent a word for this---''quasi-extensional''?}
+  A new {\em formal stack safety property} capturing the
   intuitive concepts of strict local state encapsulation and well-bracketed
   control flow~(\cref{sec:lse-and-wbcf}) in terms of familiar security concepts.
   % These properties   rule out common examples of stack memory abuse.
@@ -384,15 +391,14 @@ In summary, we offer the following contributions:
   the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, which is
   based on hardware tagging~(\cref{sec:conservative}).
 \item
-  A {\em lockstep} variant of the stack-safety property that is also
+  A {\em lockstep} variant of the stack safety property that is also
   enforced by the Depth Isolation policy
   but is more efficient to test, plus a proof (in Coq) that this variant is
   stronger than the original~(\cref{sec:lockstep}).
 \item
-  A {\em lazy} variant of the stack-safety property that can be enforced by
-  (a variant of\bcp{same concern}) the
-  more efficient Lazy Tagging and Clearing policy
-  of \citet{DBLP:conf/sp/RoesslerD18}, plus a proof (in Coq) that this
+  A {\em lazy} variant of the stack safety property that can be enforced if the
+  Lazy Tagging and Clearing policy of \citet{DBLP:conf/sp/RoesslerD18} is enhanced
+  with unique tags on each activation, plus a proof (in Coq) that this
   variant is weaker than the original~(\cref{sec:lazy}).
 %  This policy does not enforce our strict
 %  local state encapsulation property,
@@ -556,7 +562,10 @@ accesses, which can be used to implement security policies, including
 the stack protection policies of
 \citet{Skorstengaard+19,Skorstengaard+19b}\bcp{I thought these policies used
   linear capabilities?}\leo{Only the second one AFAIK. What would you
-  change to characterize it more accurately?}.  Capabilities package up pointers
+  change to characterize it more accurately?}\rb{StkPointers uses linear
+  capabilities, its predecessor users local capabilities (and unlike
+  StkPointers could be implemented in CHERI)}.
+Capabilities package up pointers
 (ordinary data) with base and bounds information (policy data),
 and they require rewriting source code (e.g., to use capabilities in place
 of ordinary pointers), so separating ordinary machine state from policy
