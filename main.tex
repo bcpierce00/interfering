@@ -1125,7 +1125,9 @@ The return address is spilled to the stack even by leaf functions such as
 
 We next describe our machine model. To make our definition of stack safety
 as generic as possible, this section proposes an abstract interface to a
-machine model plus some kind of (static or dynamic, software- or
+machine model plus some kind of 
+% static or dynamic,
+(software- or
 hardware-enforced) policy monitor. In~\cref{sec:enforcement}, we will
 instantiate this model with a concrete dynamic policy enforcement mechanism
 based on \citet{DBLP:conf/sp/RoesslerD18}.
@@ -1158,8 +1160,8 @@ communicates to the outside world:
 \[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
 \[\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \]
 %
-This step function is total: execution traces are infinite unless
-cut short externally by a policy fault (as explained below).
+This step function is total, so the machine's execution traces
+(defined in \cref{sec:traces}) are infinite.
 
 We choose to model observations explicitly, rather than simply
 treating
@@ -1189,7 +1191,9 @@ We now present our model of enforcement, which we introduced
 informally in \Cref{sec:threat}.  A policy is a general model of an
 enforcement mechanism, consisting of a set of policy states \(\pol \in
 \POLS\), a policy step function \((\mach, \pol) \polstep \pol' :
-\MACHS \times \POLS \rightharpoonup \POLS\). We assume that the
+\MACHS \times \POLS \rightharpoonup \POLS\). This step function is partial; 
+it is undefined on input configurations that correspond to a policy fault.
+We assume that the
 compiler provides an initial policy state $\pol_0$ to accompany
 the initial machine state.
 %
@@ -1209,16 +1213,19 @@ by combining it with the regular step function for machine states.
             {\(\mpstate{\mach_1}{\pol_1} \stepstopol{\obs}
                \mpstate{\mach_2}{\pol_2}\)}
 
+This combined step function is also partial, and traces of the machine-with-policy
+will be finite iff a policy fault occurs.
 
 \subsection{Traces}
+\label{sec:traces}
 
 A trace over a type $\TRACEELEMS$ is a nonempty, finite or infinite sequence of
 $\TRACEELEMS$s; we write $\TRACE{\TRACEELEMS}$ for the set of traces over
 $\TRACEELEMS$. We will mostly be concerned with sequences of pairs of
 machine states
-and observations, called machine traces and denoted $\machT \in \MOTRACE$,
+and observations, called \emph{machine traces} and denoted $\machT \in \MOTRACE$,
 and with sequences of triples of a machine state, a policy state, and an
-observation, denoted $\MPT \in \MPOTRACE$ and referred to as MP-traces.
+observation, called \emph{MP-traces} and denoted $\MPT \in \MPOTRACE$.
 
 \paragraph*{Trace-Of}
 
@@ -1235,7 +1242,7 @@ Since the step function is total, if \(\mach \hookrightarrow \machT\),
 then \(\machT\) must be infinite.
 
 In our running example in \Cref{fig:running-trace-b} we can
-see a depiction of such a trace: starting from an initial machine
+see a depiction of (a prefix of) such a trace: starting from an initial machine
 state at the very top, each instruction leads to a new machine state
 (the diff of which, compared to the previous one, appears in the
 ``{\textit{Effect}'' column), and the majority of observations are $\tau$, except
@@ -1328,18 +1335,21 @@ for convenience.
 %
 If \(f\) be a predicate on machine states, we define \(\mach
 \hookrightarrow \machT | f\) (read ``\(\machT\) is the prefix of
-running \(\mach\) up to \(f\)'')
+running \(\mach\) up to \(f\)'') and similarly for traces with policies:
 
+\begin{center}
+\begin{minipage}{.3\textwidth}
 \judgmenttwo{\(\mach \hookrightarrow \machT'\)}
             {\(\PUT~(f,\machT')
               = \machT\)}
             {\(\mach \hookrightarrow \machT | f\)}
-\noindent
-and similarly for traces with policies:
-
+\end{minipage}
+\begin{minipage}{.6\textwidth}
 \judgmenttwo{\(\mpstatename \hookrightarrow \MPT'\)}
             {\(\PUT~(\lambda \mpstate{\mach}{\pol}.f\ \mach,\MPT') = \MPT\)}
          {\(\mpstatename \hookrightarrow \MPT | f\)}
+\end{minipage}
+\end{center}
 
 %    \COQ{this operation steps until it reaches a state on which \(f\) holds,
 %    and is infinite if it doesn't. It doesn't compute the observation of the step after the final,
@@ -1391,7 +1401,7 @@ We then define similarity of observation traces as traces prefixing each other:
 %for a finite trace ($\tau \lesssim \obsT$ or $w \lesssim w\obsT$).\apt{Is this immportant?}\leo{I agree. Probably not}
 
 Note that an infinite silent trace is a
-prefix of (and equivalent\bcp{similar?} to) any other trace. While this might seem
+prefix of (and similar to) any other trace. While this might seem
 surprising at first, it makes sense in a timing-insensitive context:
 an external observer looking at two machine runs cannot (computably)
 distinguish between a machine that steps forever and a machine that
@@ -1407,8 +1417,8 @@ well-bracketed control flow, which together constitute stack safety.
 
 \subsection{Program Structure}
 
-Our properties and policies are parameterized by several types of
-annotations describing features of a program.
+Our properties and policies assume that the program is annotated
+with various information about its structure.
 
 \paragraph*{Function Map}
 
@@ -1422,7 +1432,15 @@ identifier drawn from the set \(\FUNIDS\).
 In our running example, instructions 1-13 correspond to {\tt main},
 instructions 20-36 correspond to {\tt g}, and instructions 40-47
 correspond to {\tt h}, which means that the function map would be:
-\[ \codemap = \{\texttt{main} \mapsto \{1\ldots13\}, \texttt{g} \mapsto \{20\ldots36\}, \texttt{h} \mapsto \{40\ldots47\}\}\]
+
+\[ \codemap(w) = 
+  \begin{cases}
+    \texttt{main} & \text{if } 1 \leq w \leq 13 \\
+    \texttt{g} & \text{if } 20 \leq w \leq 36 \\
+    \texttt{h} & \text{if } 40 \leq w \leq 47 \\
+    \mathit{undefined} & \text {otherwise}\\
+  \end{cases}
+\]
 
 \paragraph*{Call Map}
 
@@ -1439,15 +1457,18 @@ return value; and the word 26 corresponding to the call to {\tt h},
 also with a single argument and return value:
 \[ \callmap = \{ 7 \mapsto 2, 26 \mapsto 2\}\]
 
-For concreteness, in a typical calling convention, a call map may be
-considered to identify the state just before the \jal, in which
-space for arguments is already allocated, but the mechanism is more
-general. A state in which a call map is defined on the program counter
+For concreteness, in a typical calling convention, the call map will
+identify the locations of the $\jal$ instructions representing calls.
+% APT: I found this more confusing than helpful...
+%, in which
+%space for arguments is already allocated, but the mechanism is more
+%general.
+A state in which a call map is defined on the program counter
 is referred to as a {\it call state}.
 
 \paragraph*{Return Map}
 Similarly, a {\em return map} identifies addresses that complete a
-return sequence. Formally, it is simply a set of words; each one
+return sequence. Formally, it is a set of words; each one
 is the address of the final jump corresponding to a function return:
 %
 \[\retmap \in \RETMAPS \subseteq \WORDS\]
@@ -1467,10 +1488,10 @@ points of {\tt g} and {\tt h}:
 
 \paragraph*{What is a return?}
 
-We separately identify, for any call state, what it means for a state
-to have correctly returned from a call. We consider the call to have
+We separately identify, for any call state, what it means to have 
+correctly returned from that call. We consider the call to have
 returned when control returns to the instruction following
-the \jal with the stack restored. Formally, this is a predicate on
+the $\jal$ with the stack restored. Formally, this is a predicate on
 states that says when the machine has just returned from a specified call state
 (where $\nextPC$ gives the address of the next instruction after a given address):
 \[%\begin{split}
