@@ -449,16 +449,16 @@ representing calls, returns, and function entry points.
 Although this information would typically come from a compiler together with
 the machine code, we do not
 assume anything about their provenance.  We assume that the machine has a
-program counter $\PCname$ 
+program counter $\PCname$
 and stack pointer $\rsp$\bcp{but not a frame pointer?!}; other details of the machine's ISA are unimportant.
 
 To make our stack safety definitions precise, we make some straightforward
-assumptions about 
+assumptions about
 memory layout; our definitions could easily be changed to be parametric over
 these assumptions, at the cost of some complexity in their statements.  Memory
 consists of an instruction region and a stack that grows upwards. (For simplicity,
 we do not consider the heap. Integrating a memory safety property for the
-heap in the style of 
+heap in the style of
 \citet{DBLP:conf/post/AmorimHP18} is a natural extension that we discuss
 in~\Cref{sec:relwork}.)  The stack has a conventional structure, with
 contiguously allocated per-function frames.
@@ -466,7 +466,7 @@ The boundary between the frames of a caller and callee is indicated by the $\rsp
 at the time of the call.  The stack can be used to
 pass arguments or return results in the usual way, by placing them
 at the top of the caller's frame. Callers and callees can also communicate
-via registers if they wish; indeed, our 
+via registers if they wish; indeed, our
 definitions say nothing at all about registers (except $\PCname$ and
 $\rsp$). \bcp{This implicitly amounts to choosing a caller-saves register
   convention, though, doesn't it?}
@@ -484,7 +484,10 @@ declared set of return points.)
 Our property definitions make no other detailed assumptions about call or return sequences, although
 some of the enforcement mechanisms we consider do.
 
-Enforcement mechanisms are modeled as {\em policies} that add some auxiliary
+Enforcement mechanisms are modeled as {\em policies}\bcp{this is a somewhat
+  special use of the word ``policy'' that comes from the micropolicies
+  world.  We should include a comment about this to avoid confusing
+  readers.} that add some auxiliary
 policy state to the ordinary machine state
 %\bcp{This may be surprising to people who are not thinking about micropolicies.\apt{added para below}}
 and a partial policy step function that refines the machine step
@@ -494,26 +497,28 @@ can perform an action that would violate the security property; our
 properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
-We model ordinary program state and policy enforcement state separately to make it
+We model ordinary program state and policy-enforcement state separately to make it
 easier to use well-established concepts from language-based security.
 In particular, confidentiality has an elegant extensional characterization in terms of
 \emph{noninterference}: a program preserves the confidentiality of certain data if
-\emph{varying} that data would not change the program's observable behavior.\leo{What citation should go here? Not the hyperproperties one?}
+\emph{varying} that data would not change the program's observable
+behavior.\leo{What citation should go here? Not the hyperproperties one?
+  Goguen and Meseguer?}
 In applying this idea to a system that incorporates policy enforcement, only
-ordinary program data should be varied, whereas any associated policy enforcement
+ordinary program data should be varied, while any associated policy
 state should be left alone; our model makes this distinction obvious.
 %That is, we compare the actual execution of the program with a \emph{hypothetical}
 %execution where data has been varied.
-We also introduce a notion of observational integrity that relies on the idea of
+We will also introduce a notion of {\em observational integrity} that relies on the idea of
 \emph{rolling back} program state; again, our model makes it easy to describe
-rollback of ordinary program data while leaving policy enforcement data unchanged.
+rollback of ordinary program data while leaving policy state alone.
 
 %% \leo{Policies of interest: null, micro, cherri, software-only}
 %% \leo{TODO: Write down carefully}
 
-This enforcement model is flexible enough to capture
-micropolicies~\citep{pump_oakland2015}, and we believe that it can
-also capture code-altering approaches (such as software-based
+This enforcement model directly describes
+micropolicies~\citep{pump_oakland2015}, and we believe that it is
+flexible enough to capture code-altering approaches (such as code rewriting
 or capability-based techniques).
 
 \newcommand{\TAGS}{\mathcal{T}}
@@ -522,11 +527,12 @@ or capability-based techniques).
 
 \paragraph*{Micropolicies}
 %
-Micropolicies~\citep{pump_oakland2015} are a hardware-assisted tag-based
-reference monitoring mechanism, which have been applied to stack safety by
-\citet{DBLP:conf/sp/RoesslerD18}.
+Micropolicies are a flexible tag-based, hardware-accelerated
+reference monitoring mechanism; they been applied to stack safety
+enforcement by \citet{DBLP:conf/sp/RoesslerD18}.
 Here the policy state consists of metadata tags (e.g., identifying stack frames)
-attached to each value in memory or registers, and the policy step function
+attached to each value in memory or registers, and the policy step
+function\bcp{undefined!}
 checks that each machine operation obeys a set of rules on tags
 (e.g., that the current $\PCname$ tag matches the tag on the stack
 location being accessed), and halts the machine if not.  Distinguishing
@@ -545,16 +551,16 @@ ordinary machine state and policy state is very natural in this setting.
 \paragraph*{Capability machines}
 %
 %Other policies are implemented in hardware or built on hardware mechanisms.
-Capability machines like CHERI \citep{Woodruff+14} extend conventional
+Capability machines such as CHERI \citep{Woodruff+14} extend conventional
 architectures to support efficient and fine-grained control over memory
 accesses, which can be used to implement security policies, including
 the stack protection policies of
-\citet{Skorstengaard+19,Skorstengaard+19b}.  Capabilities tightly package pointers
+\citet{Skorstengaard+19,Skorstengaard+19b}\bcp{I thought these policies used
+linear capabilities?}.  Capabilities package up pointers
 (ordinary data) with base and bounds information (policy data),
-and their use requires rewriting source code (e.g., to use capabilities in place
+and they require rewriting source code (e.g., to use capabilities in place
 of ordinary pointers), so separating ordinary machine state from policy
-state is delicate, but we conjecture it can be done with some effort.
-%\apt{But we conjecture it can be done...?}\leo{Just say that?}
+state is delicate; we conjecture it can be done with some effort.
 
 %% Mapping the underlying protection
 %% mechanisms to policy states and step function would be a delicate operation, as
@@ -568,12 +574,13 @@ state is delicate, but we conjecture it can be done with some effort.
 \paragraph*{Software-only policies}
 %
 Some policies are implemented in software, by modifying code in the
-compiler to (e.g.) perform bounds checking~\citep{NagarakatteZMZ09} or
+compiler, for example to perform bounds checking~\citep{NagarakatteZMZ09} or
 to insert stack canaries~\citep{Cowan+98}. Such approaches should
 still satisfy our formal notion of stack safety with a trivial null
 policy, but only for programs produced by the compiler.
 \apt{not sure what to say here}
 \leo{Something like this?}
+\bcp{OK}
 %These approaches are represented as policies that
 %accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
 %being produced by the compiler.) The set of policy states is again the unit type
@@ -2743,7 +2750,7 @@ Heap safety, like stack safety, may be framed as a security property
 in the form of noninterference~\citet{DBLP:conf/post/AmorimHP18}. Just
 like~\citeauthor{DBLP:conf/post/AmorimHP18} give a rigorous
 characterization of the meaning of (heap) memory safety, in this paper
-we aim to do the same for the stack. 
+we aim to do the same for the stack.
 %
 Their model describing safety of shared stack-allocated
 objects extends naturally to heap safety, complicated by the fact that
@@ -2813,7 +2820,7 @@ contours computed at each crossing between caller and callee.
   framework for debugging our policy enforcement for this property, and
   it would be interesting to explore whether a testing-amenable variant
   of the lazy property also exists.
-    
+
 % \rb{Notes from meeting:
 %   \begin{itemize}
 %   \item Explain how the theory applies to production compilers like GCC and
