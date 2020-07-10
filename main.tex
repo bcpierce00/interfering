@@ -133,11 +133,11 @@ against attacks that corrupt the call stacks of running programs,
 \ifaftersubmission
 and many
 others rely on a protected stack as an assumption to provide higher level
-guarantees\bcp{this is a good point, but we don't pick it up anywhere in the
+guarantees,\bcp{this is a good point, but we don't pick it up anywhere in the
   paper, do we?}\leo{No, should we delete this? it still makes sense in flow}
 \bcp{Let's delete for now; later, we can try to incorporate it in the body
   of the paper.}
-\fi,
+\fi
 but a clear and precise definition of stack safety is missing
 from the literature.
 %
@@ -284,12 +284,13 @@ technique.  In other words, we seek formal criteria that can be applied
 to \emph{any} mechanism for protecting stack-based low-level programs to judge
 whether or not it actually ``guarantees stack safety.''
 %
-Our key contribution is such a generic presentation of
-local state encapsulation and well-bracketed control\bcp{we need to either
-  weaken the previous sentence or else add ``first steps toward'' in this sentence...} flow using the
-technical framework of language-based security.
+Our key contribution is another important step towards this goal: a generic
+presentation of local state encapsulation and well-bracketed
+control\bcp{we need to either weaken the previous sentence or else add
+  ``first steps toward'' in this sentence...}\leo{Weakened enough?} flow using the technical
+framework of language-based security.
 
-The intuition behind \citeauthor{Skorstengaard+19}'s use of the term {\em
+The intuition behind \citeauthor{Skorstengaard+19}'s {\em
   local state encapsulation} is that callers should be protected from
 callees: a callee should not be able to access or overwrite private data
 in the caller's stack frame.
@@ -305,8 +306,8 @@ call.
 The intuition behind \citeauthor{Skorstengaard+19}'s {\em
   well-bracketed control flow} is the need to protect the call graph
 itself: a callee should pass control back to the caller only by
-returning in the standard way (transferring control to the instruction
-following the call); it should not be allowed to jump back into the
+transferring control to the instruction
+following the call; it should not be allowed to jump back into the
 caller's code at an arbitrary point, either directly (via a jump
 instruction) or indirectly (by corrupting stack data and
 returning). Well-bracketed control flow establishes safety between
@@ -315,7 +316,9 @@ all jumps between functions are either calls that enter at a marked
 entry point or returns that re-enter just after their associated call
 in the standard nested call structure.  \apt{clarify what we are
   contributing here. We are not trying to phrase this as a security
-  property.}\leo{Better now? Should this be fixed two paragraphs above too?}
+  property.}\leo{Better now? Should this be fixed two paragraphs above
+  too?}\bcp{Hmmm this seems like a fundamental issue with the way we are
+  framing the story...}
 
 To phrase stack safety, and especially local state encapsulation, as a
 security property requires an explicit attacker model: a clear
@@ -332,45 +335,50 @@ A key challenge in adapting the concepts of language-based security to this
 setting is that stack safety is a ``nested'' property: not only does a given
 caller need to be protected from its callee, but the callee also needs to be
 protected from {\em its} callees, and so on. That is, the notion of
-``attacker'' changes throughout the execution of the program.  We address
-this issue using a dynamically changing notion of {\em accessibility} for
+``attacker'' changes at many points throughout the execution of the program.
+We address
+this issue by introducing a dynamically changing notion of {\em accessibility} for
 the different components of the machine state and adjusting the integrity
 and confidentiality levels of different stack locations and registers at
 every transition (call or return) between functions.
 
-After formally defining stack safety, we show that our definition is
+After formally defining stack safety, we show that the definition is
 enforceable using an existing tag-based enforcement
-mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider their
+mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider
+\citeauthor{DBLP:conf/sp/RoesslerD18}'s
 conservative Depth Isolation policy, which not only enforces our basic
 stack safety property, but also an alternative lockstep property that
 checks for integrity and confidentiality violations at every step of
-an execution trace. Thus, this property fails faster and can lead to
-more efficient testing. We prove (in Coq) that this lockstep property
-implies our basic definition of stack safety.
+an execution trace. The advantage of this property is that it ``fails
+faster'' and os therefore more suitable for efficient testing. We prove (in
+Coq) that this ``lockstep'' property implies our original definition of stack
+safety.
 
-However, at the same time the conservative enforcement mechanism is
+The downside of the Depth Isolation policy is that it is rather
 expensive to implement. In the same work,
 \citeauthor{DBLP:conf/sp/RoesslerD18} propose a different mechanism
-that is more efficient by virtue of being lazy in its enforcement. At
-a high level, instead of guaranteeing integrity and confidentiality
-when a callee returns, this policy checks for violations when the
-caller actually makes use of (potentially compromised) data. The lazy
-policy does not enforce our basic propety, but an enhanced version of
-it does enforce a proveably weaker property that still protects from
-unsafe callees, but is less intuitive.
+that is more efficient by virtue of being lazy in its enforcement.
+Instead of enforcing the integrity and confidentiality of the stack at the
+exact moment
+when a callee returns, this policy signals violations when the
+caller actually uses data that the callee has written into  its stack
+frame\ifaftersubmission\bcp{We could also hint at the lazy confidentiality
+  property inthe same way...}\fi.
+The lazy
+policy does not enforce our original stack-safety property, but (a slightly
+enhanced variant of the policy\bcp{I worry that we are being a little
+  dishonest here: the stated advantage of the lazy policy is that it is more
+efficient, but our variant is {\em not} efficient!}) of it does enforce a slightly weaker
+lazy version of the property that still protects from unsafe callees but is
+less intuitive to state.
 
 In summary, we offer the following contributions:
-%\bcp{I would still like to
-%  see these points phrased in ``contribution normal form'': say exactly what
-%  we did for each one (it's a bit vague---''considers,'' etc.), and
-%  explicitly say why it is (a) useful, (b) challenging, and (c) novel.}
-% +1 on Andrew's rewrite
 \begin{itemize}
 \item
   % \leo{More? Extensional}\bcp{We might need to invent a word for   this---''quasi-extensional''?}
   A new {\em formal stack-safety property} capturing the
   intuitive concepts of strict local state encapsulation and well-bracketed
-  control flow~(\cref{sec:lse-and-wbcf}) in terms of security concepts.
+  control flow~(\cref{sec:lse-and-wbcf}) in terms of familiar security concepts.
   % These properties   rule out common examples of stack memory abuse.
   This property can be enforced by
   the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, which is
@@ -381,7 +389,8 @@ In summary, we offer the following contributions:
   but is more efficient to test, plus a proof (in Coq) that this variant is
   stronger than the original~(\cref{sec:lockstep}).
 \item
-  A {\em lazy} variant of the stack-safety property that can be enforced by the
+  A {\em lazy} variant of the stack-safety property that can be enforced by
+  (a variant of\bcp{same concern}) the
   more efficient Lazy Tagging and Clearing policy
   of \citet{DBLP:conf/sp/RoesslerD18}, plus a proof (in Coq) that this
   variant is weaker than the original~(\cref{sec:lazy}).
@@ -435,32 +444,39 @@ scope.
 
 \newcommand*{\rsp}{\textsc{sp}}
 
-We assume we are given a machine language program, together with certain auxiliary declarations
+We assume we are given a machine language program, together with some auxiliary information
 about its structure: the code footprint of each function and the locations of instructions
 representing calls, returns, and function entry points.
-Although this information would typically come from a compiler, we do not
-assume anything about the provenance of the machine
-code. We assume that the machine has a program counter $\PCname$
-and stack pointer $\rsp$ and can perform the usual
-loads, stores, and (direct or indirect) jumps; other details of the machine's ISA are unimportant.
+Although this information would typically come from a compiler together with
+the machine code, we do not
+assume anything about their provenance.  We assume that the machine has a
+program counter $\PCname$
+and stack pointer $\rsp$\bcp{but not a frame pointer?!}; other details of the machine's ISA are unimportant.
 
-To make our stack safety definitions precise, we make some simple assumptions about
+To make our stack safety definitions precise, we make some straightforward
+assumptions about
 memory layout; our definitions could easily be changed to be parametric over
-these assumptions, at the cost of greater complexity.  Memory
-consists of an instruction region and a stack that grows upwards; for simplicity,
-we omit a heap. (Integrating a memory safety property for the heap in the style of
+these assumptions, at the cost of some complexity in their statements.  Memory
+consists of an instruction region and a stack that grows upwards. (For simplicity,
+we do not consider the heap. Integrating a memory safety property for the
+heap in the style of
 \citet{DBLP:conf/post/AmorimHP18} is a natural extension that we discuss
 in~\Cref{sec:relwork}.)  The stack has a conventional structure, with
 contiguously allocated per-function frames.
-The boundary between the frames of a caller and callee is given by the $\rsp$ register
+The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
 at the time of the call.  The stack can be used to
 pass arguments or return results in the usual way, by placing them
-at the top of the caller's frame. Functions can also communicate via registers; indeed, our
-definitions say nothing at all about registers (except $\PCname$ and $\rsp$).
+at the top of the caller's frame. Callers and callees can also communicate
+via registers if they wish; indeed, our
+definitions say nothing at all about registers (except $\PCname$ and
+$\rsp$). \bcp{This implicitly amounts to choosing a caller-saves register
+  convention, though, doesn't it?}
 
 Our stack safety concepts depend critically on the notions of ``call'' and ``return,''
-which are not fully explicit in machine code.  We define a call to be
-any instruction declared as such in the program.
+which are not fully explicit in machine code (the same instruction may be
+used in some places as part of a call or return sequence and in other places
+for other purposes).  We define a call to be
+any instruction declared as such in the compiler-provided call structure.
 If a call occurs at $\PCname = a$ and $\rsp = s$, then the \emph{corresponding
   return} has occurred when $\PCname = \nextPC(a)$ and $\rsp = s$. (Our definition
 of well-bracketed control flow relates this definition of return to the program's
@@ -468,36 +484,40 @@ declared set of return points.)
 Our property definitions make no other detailed assumptions about call or return sequences, although
 some of the enforcement mechanisms we consider do.
 
-Enforcement mechanisms are modeled as {\em policies} that add some auxiliary
+Enforcement mechanisms are modeled as {\em policies}\bcp{this is a somewhat
+  special use of the word ``policy'' that comes from the micropolicies
+  world.  We should include a comment about this to avoid confusing
+  readers.} that add some auxiliary
 policy state to the ordinary machine state
 %\bcp{This may be surprising to people who are not thinking about micropolicies.\apt{added para below}}
 and a partial policy step function that refines the machine step
 function by allowing or disallowing a step to be taken based on its
 auxiliary state.  Enforcement works by halting the program before it
 can perform an action that would violate the security property; our
-properties are naturally therefore \emph{termination insensitive.}
+properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
-We model ordinary program state and policy enforcement state separately to make it
+We model ordinary program state and policy-enforcement state separately to make it
 easier to use well-established concepts from language-based security.
 In particular, confidentiality has an elegant extensional characterization in terms of
 \emph{noninterference}: a program preserves the confidentiality of certain data if
-\emph{varying} that data would not change the program's observable behavior.\leo{What citation should go here? Not the hyperproperties one?}
+\emph{varying} that data would not change the program's observable
+behavior~\citep{6234468}
 In applying this idea to a system that incorporates policy enforcement, only
-ordinary program data should be varied, whereas any associated policy enforcement
+ordinary program data should be varied, while any associated policy
 state should be left alone; our model makes this distinction obvious.
 %That is, we compare the actual execution of the program with a \emph{hypothetical}
 %execution where data has been varied.
-We also introduce a notion of observational integrity that relies on the idea of
+We will also introduce a notion of {\em observational integrity} that relies on the idea of
 \emph{rolling back} program state; again, our model makes it easy to describe
-rollback of ordinary program data while leaving policy enforcement data unchanged.
+rollback of ordinary program data while leaving policy state alone.
 
 %% \leo{Policies of interest: null, micro, cherri, software-only}
 %% \leo{TODO: Write down carefully}
 
-This enforcement model is flexible enough to capture
-micropolicies~\citep{pump_oakland2015}, and we believe that it can
-also capture code-altering approaches (such as software-based
+This enforcement model directly describes
+micropolicies~\citep{pump_oakland2015}, and we believe that it is
+flexible enough to capture code-altering approaches (such as code rewriting
 or capability-based techniques).
 
 \newcommand{\TAGS}{\mathcal{T}}
@@ -506,11 +526,12 @@ or capability-based techniques).
 
 \paragraph*{Micropolicies}
 %
-Micropolicies~\citep{pump_oakland2015} are a hardware-assisted tag-based
-reference monitoring mechanism, which have been applied to stack safety by
-\citet{DBLP:conf/sp/RoesslerD18}.
+Micropolicies are a flexible tag-based, hardware-accelerated
+reference monitoring mechanism; they been applied to stack safety
+enforcement by \citet{DBLP:conf/sp/RoesslerD18}.
 Here the policy state consists of metadata tags (e.g., identifying stack frames)
-attached to each value in memory or registers, and the policy step function
+attached to each value in memory or registers, and the policy step
+function\bcp{undefined!}\leo{``partial policy step'' is explained informally above}
 checks that each machine operation obeys a set of rules on tags
 (e.g., that the current $\PCname$ tag matches the tag on the stack
 location being accessed), and halts the machine if not.  Distinguishing
@@ -529,16 +550,20 @@ ordinary machine state and policy state is very natural in this setting.
 \paragraph*{Capability machines}
 %
 %Other policies are implemented in hardware or built on hardware mechanisms.
-Capability machines like CHERI \citep{Woodruff+14} extend conventional
+Capability machines such as CHERI \citep{Woodruff+14} extend conventional
 architectures to support efficient and fine-grained control over memory
 accesses, which can be used to implement security policies, including
 the stack protection policies of
-\citet{Skorstengaard+19,Skorstengaard+19b}.  Capabilities tightly package pointers
+\citet{Skorstengaard+19,Skorstengaard+19b}\bcp{I thought these policies used
+  linear capabilities?}\leo{Only the second one AFAIK. What would you
+  change to characterize it more accurately?}\rb{StkPointers uses linear
+  capabilities, its predecessor users local capabilities (and unlike
+  StkPointers could be implemented in CHERI)}.
+Capabilities package up pointers
 (ordinary data) with base and bounds information (policy data),
-and their use requires rewriting source code (e.g. to use capabilities in place
+and they require rewriting source code (e.g., to use capabilities in place
 of ordinary pointers), so separating ordinary machine state from policy
-state is delicate, but we conjecture it can be done with some effort.
-%\apt{But we conjecture it can be done...?}\leo{Just say that?}
+state is delicate; we conjecture it can be done with some effort.
 
 %% Mapping the underlying protection
 %% mechanisms to policy states and step function would be a delicate operation, as
@@ -552,12 +577,10 @@ state is delicate, but we conjecture it can be done with some effort.
 \paragraph*{Software-only policies}
 %
 Some policies are implemented in software, by modifying code in the
-compiler to (e.g.) perform bounds checking~\citep{NagarakatteZMZ09} or
+compiler, for example to perform bounds checking~\citep{NagarakatteZMZ09} or
 to insert stack canaries~\citep{Cowan+98}. Such approaches should
 still satisfy our formal notion of stack safety with a trivial null
 policy, but only for programs produced by the compiler.
-\apt{not sure what to say here}
-\leo{Something like this?}
 %These approaches are represented as policies that
 %accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
 %being produced by the compiler.) The set of policy states is again the unit type
@@ -1025,30 +1048,33 @@ $\cdots$
 \label{fig:running-trace-b}
 \end{figure}
 
+\ifaftersubmission
 \bcp{We really want readers to understand this trace.  I think we should
   spend a few more words walking through it in detail.}\leo{Not sure
   exactly what you mean here. It would take roughly a page to go through
   each instruction in detail - that's what the last column is for in my mind.
   Or do you have something else in mind?}
+\bcp{I was thinking about just a few words, not a page.  But let's do this
+  later.}
+\fi
 
 \Cref{fig:running-program} shows a high-level view of our running example,
 written in C-like pseudo-code.  It consists of a {\tt main} function that
-performs a call to some function {\tt f}, which in turns makes a nested call
+performs a call to some function {\tt f}, which in turn makes a nested call
 to some function {\tt g} before returning, while performing some simple
-arithmetic operations in the process. \cref{fig:running-trace-b} shows an
-execution trace of corresponding machine instructions. (These might have
+arithmetic operations in the process. \Cref{fig:running-trace-b} shows an
+execution trace of the corresponding machine instructions. These might have
 been generated by compiling the high-level code, but it is only the behavior
 of the machine instructions that we care about
-here---\Cref{fig:running-trace-b} is our actual running example.)
+here---\Cref{fig:running-trace-b} is our actual example.
 
 To streamline the example, we use a small instruction set reminiscent of
 RISC-V and make a few simplifying assumptions about the organization of
 memory.
 %
-First, since our goal is to formalize stack safety, we ignore the heap
-and assume that all variables are stack allocated. As noted in the
-previous section, the extension to account for memory safety is
-discussed in~\Cref{sec:relwork}.
+First, as noted above, since our goal is to formalize stack safety, we
+ignore the heap
+and assume that all variables are stack allocated.
 %
 We also assume that the machine is word- (not byte-) addressed, that program
 instructions start from location 0, that the machine communicates with the
@@ -1059,21 +1085,23 @@ location), and that the stack begins at location 100 and grows upwards.
 %   Interrupt handlers?}\bcp{Yes.}
 
 A sketch of the initial memory layout appears at the top of
-\cref{fig:running-trace-b}: the instructions for {\tt main} begin at 0,
-the dedicated output is uninitialized, while the (also uninitialized)
-stack begins at 100. Directly below the layout, we summarize the parts
-of the register file that are relevant to the example.
+\Cref{fig:running-trace-b}: the instructions for {\tt main} begin at 0,
+and the (uninitialized)
+stack begins at 100. Directly below the memory sketch, we summarize the parts
+of the register file that are relevant at this point in the example.
 %
-The rest of \cref{fig:running-trace-b} traces the execution of the
+The rest of \Cref{fig:running-trace-b} traces the execution of the
 program, showing the machine state at call and return points.
 Instructions are intended to
-be similar to RISC-V, but are described in an ad-hoc notation
+be similar to RISC-V, but are described in a (hopefully more readable) an
+ad-hoc notation
 rather than using assembler syntax. The $\jal$ (jump-and-link)
-instruction used for calls atomically saves the return address in a register
+instruction used for calls atomically simultaneously the return address in a
+register
 and jumps to a specified new $\PCname$; the $\jalr$ (jump-and-link-via-register)
 instruction used for returns jumps to the address stored in a register.
-Register $r_0$ is hardwired to zero (so that, e.g., instruction 3 stores $0$
-into address 101.).
+Register $r_0$ is hardwired to zero, so that, e.g., instruction 3 stores $0$
+into address 101.
 
 %\apt{Need to clarify to what extent our properties depend on the
 %particular compilation style, calling sequences, etc. illustrated here.}
@@ -1082,13 +1110,12 @@ into address 101.).
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
 
-In this section we describe our machine model. Our definition of stack
-safety is generic and this section discusses an abstract interface to
-our machine model and some kind of static or dynamic, software- or
-hardware-enforced security monitor. We will refer back to the running
-example of \cref{sec:running-example} for concreteness, and then,
-in~\cref{sec:enforcement}, extend this model with a dynamic policy
-enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
+We next describe our machine model. To make our definition of stack safety
+as generic as possible, this section proposes an abstract interface to a
+machine model plus some kind of (static or dynamic, software- or
+hardware-enforced) policy monitor. In~\cref{sec:enforcement}, we will
+instantiate this model with a concrete dynamic policy enforcement mechanism
+based on \citet{DBLP:conf/sp/RoesslerD18}.
 
 \subsection{Values, States, and Observations}
 
@@ -1105,22 +1132,24 @@ $\REGS$.
 The register names are assumed to include two special purpose registers: the
 program counter {\PCname} and the stack pointer \SP.
 
-A machine state is a map from components to values:
+A {\em machine state} is a map from components to values:
 %
 \[\mach \in \MACHS = \COMPONENTS \rightarrow \WORDS\]
 
 The step function of the machine takes a machine state and produces a
 pair of a machine state and an {\em observation}, which may be either
-silent (written $\tau$) or a word of data that the machine
+silent (written $\tau$) or a word of data\bcp{This is a rather concrete
+  choice!  Why not leave the set of observations abstract?} that the machine
 communicates to the outside world:
 %
 \[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
 \[\mach \stepstoobs{\obs} \mach' : \MACHS \rightarrow \MACHS \times \OBSS \]
 %
-This step function is total---execution traces are infinite unless cut
-short externally (e.g. by a policy as we'll see below).
+This step function is total: execution traces are infinite unless
+cut short externally by a policy fault (as explained below).
 
-Notice that we choose to model observations explicitly, rather than simply treating
+We choose to model observations explicitly, rather than simply
+treating
 a subset of registers or memory as being observable.  This choice gives
 us the flexibility to treat programs as observationally equivalent even when
 their internal states may differ.
@@ -1135,14 +1164,15 @@ their internal states may differ.
 In the running example of \Cref{sec:running-example},
 $\WORDS$ is the
 set of 64-bit integers and $\REGS$ is the set $\{r_0, \cdots, r_{31}\}
-\cup \{\PCname,\SP\}$. Observations are the writes to the
-  special $\rout$ location, which can be thought of as a memory-mapped
+\cup \{\PCname,\SP\}$. Observations are writes to the
+special $\rout$ location\bcp{Which is 100! (do we need a name for it? seems
+  not...)}, which can be thought of as a memory-mapped
   output port: if during an execution step a word $w$ is
 written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
 
 \subsection{Policies}
 
-We now present our model of enforcement, introduced informally in \Cref{sec:threat}.
+We now present our model of enforcement, which we introduced informally in \Cref{sec:threat}.
 A policy is a general model of an enforcement mechanism, consisting of a
 set of policy states \(\pol \in \POLS\), a policy step function
 \((\mach, \pol) \polstep \pol' : \MACHS \times \POLS
@@ -1152,9 +1182,12 @@ machine state, but is partial to reflect that some policies are only defined
 on states that are well-formed in some way.
 %
 \apt{Is this our current thinking?}
-\leo{I thought this was what we settled on in the last two days' discussions}
+\leo{I thought this was what we settled on in the last two days'
+  discussions}\bcp{That was not my impression!  I don't see how the policy
+  state can be recovered from just the machine state---e.g., the machine
+  state doesn't say where the calls and returns are, does it?!}
 %
-A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be given in
+A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
 \Cref{sec:enforcement}.
 
 We write $\MPS$ for the set of all pairs of machine states and policy
@@ -1764,10 +1797,10 @@ secret value of {\tt x} that belongs to {\tt main}. \Cref{fig:confex}
 shows \(\mach_e\), the entry state of {\tt h}, with high confidentiality memory
 in {\high} and low confidentiality in {\low}. Below it, the variant state
 \(\mach_e'\) agrees on low confidentiality memory, but all other addresses
-hold -5, in {\varied}.  After the last step, the return states \(\mach_r\) and
+hold $-5$, in {\varied}.  After the last step, the return states \(\mach_r\) and
 \(\mach_r'\) should agree on every component that changed since \(\mach_e\) or
 \(\mach_e'\). Addresses 108 and 109 have changed, shown in light {\low}, and while 109
-had changed in a consistent way (independent of the variation), 108 holds either 43 or -4, so the trace does not obey trace confidentiality.
+had changed in a consistent way (independent of the variation), 108 holds either 43 or $-4$, so the trace does not obey trace confidentiality.
 %\rb{Color name macros}
 %\apt{Explain slash notation in effects column.}
 %\rb{Wrote some words to explain after def. 5.4 (variations).}
@@ -2285,7 +2318,7 @@ according to a contour $C$.
 %%     is satisfied with resepct to an arbitrary $\contour$-variant
 %%     of $\mach$,
 %% =======
-We also need two auxilliary notations that relate to variant stacks.
+We also need two auxiliary notations that relate to variant stacks.
 %
 First, lockstep stack safety will check that the basic tests above hold for every
 machine in the variant stack.  Given a machine that steps $(\mach,
@@ -2374,7 +2407,7 @@ $\testProp{}{\MPT}{\vs}$, if:
 \definition
 %
 A system satisfies {\em lockstep stack safety} if for every initial machine $\mach$,
-the trace induced from $(\mach, \pinit{\mach})$ satisfies trace lockstep stack safety with
+the trace induced from $(\mach, \pinit(\mach))$ satisfies trace lockstep stack safety with
 respect to the empty stack.
 
 \medskip
@@ -2384,7 +2417,7 @@ Lockstep stack safety implies stack safety.
 
 The proof of this theorem is a fairly involved coinductive proof
 (around 3K LoC in Coq) on the definition trace lockstep stack safety,
-using an auxilliary depth-index to ensure that proper aligmnent of
+using an auxiliary depth-index to ensure the proper aligmnent of
 calls and returns.
 
 \section{Stack Safety Properties for Lazy Enforcement}
@@ -2437,13 +2470,14 @@ will be compared.
         \mach_r(\component) & \text{if } \contour(\component) = (\LOWINT,\_) \\
       \end{cases}\]
 
-      If \(\mach_e\) is an entry to a call with contour \(\contour\) and
-      \(\mach_r\) its return, \(\mathit{roll}(\contour,\mach_e,\mach_r)\)
-      agrees with \(\mach_e\) on every component the callee should not change,
-      but with \(\mach_r\) on those components that it is permitted to change.
-      So the observable behavior that follows is the idealized behavior to
-      which we compare the trace from \(\mach_r\), which must prefix it (to
-      account for premature halts due to policy violations.)
+      If \(\mach_e\) is an entry to a call with contour \(\contour\)
+      and \(\mach_r\) its return, the result of
+      \(\mathit{roll}(\contour,\mach_e,\mach_r)\) agrees with the
+      entry \(\mach_e\) on every component the callee should not
+      change, and with the actual return \(\mach_r\) on those
+      components that it is permitted to change.  So the observable
+      behavior that follows is the idealized behavior to which we
+      compare the trace from \(\mach_r\).
 
       Now we can define a version of trace integrity that compares the trace
       from a returned state to that from its idealized counterpart.
@@ -2451,9 +2485,10 @@ will be compared.
     \definition%{Observable Trace Integrity}
 
       A trace enjoys {\em observable trace integrity} with respect to
-      some contour \(\contour\) if the trace induced by its final state
-      (if any) has observable behavior that prefixes that of its idealized
-      version, constructed by \(\mathit{roll}\):
+      some contour \(\contour\) if the trace induced by its final
+      state (if any) has observable behavior that prefixes that of its
+      idealized version (to account for premature halts due to policy
+      violations):
 
       \[\begin{split}
         \propdef{ObsTraceInt} ~ \contour ~ \MPT \triangleq
@@ -2480,7 +2515,7 @@ will be compared.
     components are restored to their values as of \(\mach_e\). Specifically,
     address 103 is restored to 0. When instruction 31 prints {\tt z} in the
     trace from \(\mach_r\), it prints 18, but in the trace from \(\mach_r'\)
-    it prints 0. So observable trace integrity does not hold.
+    it prints 0. Only then is observable trace integrity violated.
 
     However, consider instead if we insert after instruction 44 a new
     instruction \(45: [\rsp-4] \leftarrow 50\), overwriting {\tt w} in
@@ -2497,29 +2532,30 @@ will be compared.
       if, for any initial state and each \(n\)-transition from
       \(\mpstate{\mach_c}{\pol_c}\) to \(\mpstate{\mach_e}{\pol_e}\) in its
       induced trace, we take the prefix of the call
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{call} | \ret{\mach_c}\)
-      and observable trace integrity holds on \(\MPT_{call}\) with
+      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} | \ret{\mach_c}\)
+      and observable trace integrity holds on \(\MPT_{\mathit{call}}\) with
       contour \(\mathit{Cof}(\mach_c,n)\).
 
   \subsection{Observable Confidentiality}
 
-      Two of the cases of trace confidentiality, \(\mathit{InfCase}\) and
-      \(\mathit{FailCase}\), are purely properties of the observations produced
-      by the traces they are properties of. If the traces are infinite, they
-      should be similar; if one fail-stops, it should be a prefix. Only
-      the \(\mathit{ReturnCase}\) checks machine states, because in that case
-      the traces could continue, but have been cut off by a return. The key
-      to making confidentiality lazy is to consider the traces after the
-      return, considering only whether they are observationally similar
-      or prefixes.
+      Two of the cases of trace confidentiality, \(\mathit{InfCase}\)
+      and \(\mathit{FailCase}\), are purely properties of the
+      observations produced by the traces they are properties of. If
+      the traces are infinite, they should be similar; if one
+      fail-stops, it should be a prefix. Only the
+      \(\mathit{ReturnCase}\) checks machine states, because in that
+      case the traces could continue, but have been cut off by a
+      return. The key to making confidentiality lazy is not to perform that
+      check but rather to consider the traces after that return,
+      checking only whether they are observationally similar.
 
       This requires restoring varied components to their original
       values in the trace from the variant state, since after return
       they will once again be legitimately accessible. To return to
       the example in \cref{fig:confex}, the varied final state
-      \(\mach_r'\) still has -5 as a return address for {\tt g}, so
+      \(\mach_r'\) still has $-5$ as a return address for {\tt g}, so
       the trace after that return will behave oddly in a way that
-      doesn't reflect a confidentiality violation.  That means we
+      does not reflect a confidentiality violation.  That means we
       cannot immediately compare traces from \(\mach_r\) and
       \(\mach_r'\), but rather that we must restore the varied values
       while preserving differences that have occurred during
@@ -2548,7 +2584,7 @@ will be compared.
     \definition{%Observable Trace Confidentiality}
 
       {\em Observable trace confidentiality} is the lazy analog to trace
-      confidentiality, and reuses the cases in which the traces don't return.
+      confidentiality, and reuses the cases in which the traces do not return.
       For a return predicate \(R\) and a pair of traces
       \(\MPT\) and \(\machT\), we consider the return case, in which
       \(\last(\MPT)\) is some \(\mpostate{\mach_r}{\pol_r}{\obs_r}\) and
@@ -2556,6 +2592,8 @@ will be compared.
       and \(R ~ \mach_r'\). As above, the observations of \(\MPT\) are similar
       to those of \(\machT\). In place of the requirement that \(\mach_r\)
       and \(\mach_r'\) agree on components, we have the following requirement.
+      \rb{This reads a little funny, ending this paragraph with the promise of a
+      requirement and starting the next one introducing a conclusion.}
 
       Finally, let \(\mach_e\) be the machine state of \(\head(\MPT)\),
       and \(\mach_e'\) be that of \(\head(\machT)\). We restore \(\mach_r'\)
@@ -2604,15 +2642,15 @@ will be compared.
       are not restored; every address that was varied and not changed in one
       of the executions is. So 108 contains 43 in the trace from \(\mach_r\),
       and after returning from {\tt g}, {\tt main} prints 85. But in the trace
-      from \(\mach_r''\), 108 contains -4, and ultimately 38 is printed.
+      from \(\mach_r''\), 108 contains $-4$, and ultimately 38 is printed.
       So observable trace confidentiality does not hold. This example
       illustrates the weakness of observable confidentiality as a testing
-      property; it takes until the very end of the program to determine whether
+      property: it takes until the very end of the program to determine whether
       a tainted value actually influences observable behavior.
 
       On the other hand, suppose that we inserted an instruction at 43:
       \(r_6 \leftarrow [\rsp-8]\). \(r_6\) would hold 42 in \(\mach_r\)
-      and -5 in both \(\mach_r'\) and \(\mach_r''\). But since \(r_6\) is
+      and $-5$ in both \(\mach_r'\) and \(\mach_r''\). But since \(r_6\) is
       never used otherwise, the traces of {\tt h} will enjoy observable trace
       confidentiality.
 
@@ -2625,7 +2663,7 @@ will be compared.
       \(\mpstate{\mach_0}{\pinit(\mach_0)} \hookrightarrow \MPT\), take any
       variation \(\mach_e' \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\). Let
       \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} |
-      \ret{\mach_c}\) and \(\mach_e' \hookrightarrow \machT_{call} |
+      \ret{\mach_c}\) and \(\mach_e' \hookrightarrow \machT_{\mathit{call}} |
       \ret{\mach_c}\). We must have \(\propdef{ObsTraceConf} ~
       \ret{\mach_c} ~ \MPT ~ \machT\).
 
@@ -2642,10 +2680,13 @@ will be compared.
     if it enjoys both observable stack integrity and
       observable stack confidentiality with respect to them.
 
-      \paragraph*{THEOREM} Stack safety implies observable stack safety.
+      \medskip
+      \textsc{Theorem.}
+      Stack safety implies observable stack safety.
+      \smallskip
 
-%      \paragraph*{PROOF} \leo{TODO: Whatever we say about the previous proof
- %       we have to say similar things here}
+      This is more straightforward \rb{than what?} (1,5K LoC in Coq) as the recursive
+      structure of the two properties is similar.
 
     \paragraph{Connection to Policies}
 
@@ -2683,21 +2724,23 @@ will be compared.
 
 \paragraph{Formal Stack Safety on Capability Machines}
 %
-To our knowledge, the first and only line of work that has attempted to furnish
-a positive and formal characterization of the meaning of stack safety was
-inaugurated by \citet{Skorstengaard+19b}, who introduce a calling convention
-that uses local capabilities to preserve local state encapsulation and
-well-bracketed control flow, using a logical relation to reason about the stack
-safety of concrete programs. Although the required hardware support is readily
-available in capability machines like CHERI, this technique incurs potentially
-prohibitive performance costs, because it requires the entire unused part of the
-stack to be cleared whenever a security boundary is crossed. Their logical
-relation captures capability safety without ``externally observable side-effects
-(like console output or memory access traces).'' In the discussion, ``while [the
-authors] claim that [their] calling convention enforces control-flow
-correctness, [they] do not prove a general theorem that shows this, because it
-is not clear what such a theorem should look like,'' noting that the correctness
-property enjoyed by their technique ``is not made very explicit.''
+To our knowledge, the first and only line of work that has attempted
+to furnish a positive and formal characterization of the meaning of
+stack safety is \citet{Skorstengaard+19b}, who introduce a calling
+convention that uses local capabilities to preserve local state
+encapsulation and well-bracketed control flow, using a logical
+relation to reason about the stack safety of concrete
+programs. Although the required hardware support is readily available
+in capability machines like CHERI, this technique incurs significant
+costs, because it requires the entire unused part of the stack to be
+cleared whenever a security boundary is crossed. Their logical
+relation captures capability safety without ``externally observable
+side-effects (like console output or memory access traces).'' In the
+discussion, ``while [the authors] claim that [their] calling
+convention enforces control-flow correctness, [they] do not prove a
+general theorem that shows this, because it is not clear what such a
+theorem should look like,'' noting that the correctness property
+enjoyed by their technique ``is not made very explicit.''
 
 StkTokens \citep{Skorstengaard+19} is a natural continuation of that work. Like
 its predecessor, it aims to protect the stack by enforcing local state
@@ -2750,20 +2793,24 @@ they propose a number of lazy optimizations, notably Lazy Tagging and Lazy
 Clearing, discussed in \cref{sec:lazy}, with associated improvements in
 performance.
 
-  \paragraph{Heap Safety as a Security Property}
-\bcp{Talk about the relation.}
-    Heap safety, like stack safety, may be framed as a form of
-    noninterference\citet{DBLP:conf/post/AmorimHP18}. The above model
-    describing safety of
-    shared stack-allocated objects extends naturally to heap safety,
-    complicated by the fact that these objects are not deallocated by returns,
-    and therefore a function's privilege may increase or decrease after its
-    entry point. For instance, if a callee allocates a heap object and returns
-    the pointer to its caller, that object's addresses become accessible in
-    contradiction to a contour computed at the caller's entry. So such an
-    extension must enforce trace confidentiality and integrity properties
-    separately on continuous segments of each call, with contours computed at
-    each crossing between caller and callee.
+\paragraph{Heap Safety as a Security Property}
+
+Heap safety, like stack safety, may be framed as a security property
+in the form of noninterference~\citet{DBLP:conf/post/AmorimHP18}. Just
+like~\citeauthor{DBLP:conf/post/AmorimHP18} give a rigorous
+characterization of the meaning of (heap) memory safety, in this paper
+we aim to do the same for the stack.
+%
+Their model describing safety of shared stack-allocated
+objects extends naturally to heap safety, complicated by the fact that
+these objects are not deallocated by returns, and therefore a
+function's privilege may increase or decrease after its entry
+point. For instance, if a callee allocates a heap object and returns
+the pointer to its caller, that object's addresses become accessible
+in contradiction to a contour computed at the caller's entry. So such
+an extension must enforce trace confidentiality and integrity
+properties separately on continuous segments of each call, with
+contours computed at each crossing between caller and callee.
 
 \section{Future Work}
   \label{sec:future}
@@ -2775,21 +2822,23 @@ performance.
   describes its privilege throughout. Our future plans are to extend the model
   with common language features, some of which violate this assumption. Here we
   describe the basic principles by which our model can be extended to some of
-  these cases.
+  these cases. We also plan to develop a testing framework for quickly
+  checking the validity of different enforcement mechanisms.
 
   \paragraph{Stack-derived Pointers}
 
-    Common programming idioms involve a caller passing a pointer to its local
-    data into a callee. Using standard notions of pointer provenance [cite],
-    we can extend our model to distinguish safe use of this idiom from true
-    stack safety violations. We require additional annotation to identify
-    which addresses within a function's stack frame correspond to distinct
-    objects. Then a valid pointer to an object is one derived through legal
-    arithmetic from its base address, and at each call point, an object's
-    addresses are marked low confidentiality and integrity if a valid pointer
-    exists in a register or in the transitive closure of the callee's
-    accessible memory. All pointers to an object cease to be valid when it is
-    deallocated along with its stack frame.
+    Common programming idioms involve a caller passing a pointer to
+    its local data into a callee. Using standard notions of pointer
+    provenance~\citep{provenance}, we can extend our model to
+    distinguish safe use of this idiom from true stack safety
+    violations. We require additional annotation to identify which
+    addresses within a function's stack frame correspond to distinct
+    objects. Then a valid pointer to an object is one derived through
+    legal arithmetic from its base address, and at each call point, an
+    object's addresses are marked low confidentiality and integrity if
+    a valid pointer exists in a register or in the transitive closure
+    of the callee's accessible memory. All pointers to an object cease
+    to be valid when it is deallocated along with its stack frame.
 
   \paragraph{Non-stack control flow}
 
@@ -2810,6 +2859,16 @@ performance.
     similar {\em yield integrity} property requires that, from a yield out of
     a coroutine to the next yield back into it, all accessible and same-stack
     data are unchanged. Confidentiality properties are split similarly.
+
+  \paragraph{Random Testing}
+
+  Part of the motivation for the strong lockstep stack safety property
+  is that it uncovers errors quickly, and therefore should be quicker
+  to test just like the smarter testing properties
+  of~\citet{TestingNI:ICFP}. We have already developed a testing
+  framework for debugging our policy enforcement for this property, and
+  it would be interesting to explore whether a testing-amenable variant
+  of the lazy property also exists.
 
 % \rb{Notes from meeting:
 %   \begin{itemize}
@@ -2853,9 +2912,8 @@ performance.
 
 
 %% Appendix
-\appendix
-\section{Appendix}
-
-Text of appendix \ldots
+%\appendix
+%\section{Appendix}
+%Text of appendix \ldots
 
 \end{document}
