@@ -457,7 +457,7 @@ Although this information would typically come from a compiler together with
 the machine code, we do not
 assume anything about their provenance.  We assume that the machine has a
 program counter $\PCname$
-and stack pointer $\rsp$\bcp{but not a frame pointer?!\apt{right; we're agnostic about that}}; other details of the machine's ISA are unimportant.
+and stack pointer $\rsp$; other details of the machine's ISA are unimportant.
 
 To make our stack safety definitions precise, we make some straightforward
 assumptions about
@@ -475,8 +475,8 @@ pass arguments or return results in the usual way, by placing them
 at the top of the caller's frame. Callers and callees can also communicate
 via registers if they wish; indeed, our
 definitions say nothing at all about registers (except $\PCname$ and
-$\rsp$). \bcp{This implicitly amounts to choosing a caller-saves register
-  convention, though, doesn't it?\apt{I think it is neutral; we could add separate caller register protection if we wanted.}}
+$\rsp$). \ifaftersubmission\bcp{This implicitly amounts to choosing a caller-saves register
+  convention, though, doesn't it?\apt{I think it is neutral; we could add separate caller register protection if we wanted.}}\fi
 
 Our stack-safety concepts depend critically on the notions of ``call'' and ``return,''
 which are not fully explicit in machine code (the same instruction opcode may be
@@ -589,7 +589,7 @@ memory and subject to the same confidentiality and integrity concerns (to be
 varied, rolled back, etc.), a heavy constraint. Alternately it can be stripped
 out as policy state provided that it can be proven to protect itself.
 
-\apt{This still seems wrong to me. The policy part needs somehow to describe everything that isn't varied or rolled back.}
+\ifaftersubmission\apt{This still seems wrong to me. The policy part needs somehow to describe everything that isn't varied or rolled back.}\fi
 %These approaches are represented as policies that
 %accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
 %being produced by the compiler.) The set of policy states is again the unit type
@@ -662,7 +662,7 @@ out as policy state provided that it can be proven to protect itself.
 \begin{verbatim}
 main = {
   int x = 42, y = 0;
-  y = g(0);
+  y = f(0);
   print (x + y);
 }
 \end{verbatim}
@@ -943,8 +943,8 @@ $\cdots$
 \memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
 \memory{2}{\fprivc}[{\makebox[0pt]{${\texttt{main}}_{\mathit{priv}}$}}]%
 \memory{2}{\fcallc}[{\makebox[0pt]{{\tt f}'s call frame }}]%
-\memory{2}{orange}[{\makebox[0pt]{${\texttt f}_{\mathit{priv}}$}}]%
-\memory{2}{\gprivc}[{\makebox[0pt]{{\tt g}'s call frame }}]%
+\memory{2}{\gprivc}[{\makebox[0pt]{${\texttt f}_{\mathit{priv}}$}}]%
+\memory{2}{orange}[{\makebox[0pt]{{\tt g}'s call frame }}]%
 \memory{2}{\unusedc}%[{\makebox[0pt]{Uninitialized}}]
 ~$\cdots$
 \MemoryLabel{-46.5em}{0.75em}{42}
@@ -1118,7 +1118,7 @@ a few points deserve clarification. Functions return their result value on the
 stack rather than in a register.  Stack frames are built in two parts:
 space for local variables (which are all stack-allocated) and the return address is allocated and initialized at function entry, and deallocated at function exit; space for arguments and return values is allocated and initialized immediately prior to each function call and deallocated on return. The return value slot is always initialized
 because some of our enforcement mechanisms will rely on this.
-\apt{this is bogus, but oh well}
+\ifaftersubmission\apt{this is bogus, but oh well}\fi
 The return address is spilled to the stack even by leaf functions such as
 {\tt g} that could just leave it in $\rra$.
 
@@ -1159,8 +1159,8 @@ A {\em machine state} is a map from components to values:
 
 The step function of the machine takes a machine state and produces a
 pair of a machine state and an {\em observation}, which may be either
-silent (written $\tau$) or a word of data\bcp{This is a rather concrete
-  choice!  Why not leave the set of observations abstract?} that the machine
+silent (written $\tau$) or a word of data\ifaftersubmission\bcp{This is a rather concrete
+  choice!  Why not leave the set of observations abstract?}\fi that the machine
 communicates to the outside world:
 %
 \[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
@@ -1186,8 +1186,8 @@ In the running example of \Cref{sec:running-example},
 $\WORDS$ is the
 set of 64-bit integers and $\REGS$ is the set $\{r_0, \cdots, r_{31}\}
 \cup \{\PCname,\SP\}$. Observations are writes to the
-special $\rout$ location\bcp{Which is 100! (do we need a name for it? seems
-  not...)}, which can be thought of as a memory-mapped
+special $\rout$ location\ifaftersubmission\bcp{Which is 100! (do we need a name for it? seems
+  not...)}\fi, which can be thought of as a memory-mapped
   output port: if during an execution step a word $w$ is
 written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
 
@@ -1650,7 +1650,6 @@ initial one on all components marked \(\HIGHSEC\) in \(\contour\):\bcp{I've
   & \forall \component. ~ \contour(\component) = \HIGHSEC \Rightarrow
     \mach_e(\component) = \mach_r(\component) \\
 \end{split}\]
-\sna{Experimenting with font on the mathy version of the property.\apt{looks fine to me}}
 
 Intuitively, the caller expects to find their private data untouched
 after the callee returns. That means that if the callee never returns,
@@ -1718,7 +1717,7 @@ $\mpstate{\mach_e}{\pol_e}$ in $\MPT$, if we take the prefix of the
 call until its corresponding return $\mpstate{\mach_e}{\pol_e}
 \hookrightarrow \MPT_{\mathit{call}} ~ | ~ \ret{\mach_c}$, then $\MPT_{\mathit{call}}$ must
 satisfy trace integrity:
-\[\propdef{TraceInt} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{call}\]
+\[\propdef{TraceInt} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{\mathit{call}}\]
 \apt{This could still be clearer. Interleaving informal and mathy in the
 same sentence doesn't work so well.}
 
@@ -2159,11 +2158,6 @@ sequence at a point where the stack-safety property expects a return,
 the micropolicy will incorrectly behave as if execution
 is continuing in the callee, but since the callee never has stronger access
 rights than the caller, this is harmless.
-
-\apt{It would be good to relate this back to the running example. This is
-  complicated because the example passes arguments/returns, and it builds
-  and initializes this part of the frame separately.}
-\rb{Added a few words at the end of this sub-section.}
 
 %% APT: removed because the tag part is too mysterious and the instruction part
 %% is standard.
@@ -2749,7 +2743,7 @@ will be compared.
       \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} ~ | ~
       \ret{\mach_c}\) and \(\mach_e' \hookrightarrow \machT_{\mathit{call}} ~ | ~
       \ret{\mach_c}\). We must have \(\propdef{ObsTraceConf} ~
-      \ret{\mach_c} ~ \MPT_{\mathit{call}} ~ \machT_{\mathit{call}}\).\apt{What is $M$ ??}\rb{I think both of these are the call traces, cf. ObservableStackConfPaper in Coq }.
+      \ret{\mach_c} ~ \MPT_{\mathit{call}} ~ \machT_{\mathit{call}}\).
 
       Additionally, for any variation \(\mach_0' \approx_{\mathit{Cof}(\mach_0),0}
       \mach_0\), taking the induced trace  \(\mach_0' \hookrightarrow
@@ -2800,9 +2794,8 @@ will be compared.
     observable stack safety, though the example above would still exist
     if {\tt bar} and {\tt baz} were merged into a single function that tracked
     whether it had been called previously and changed its behavior accordingly.
-    \apt{More blatently, static authorities doesn't work for recursive calls.}
+    \ifaftersubmission\apt{More blatently, static authorities doesn't work for recursive calls.}\fi
 
-    \leo{Should we clearpage this once we're sure of the layout?}
 \section{Related Work}
 \label{sec:relwork}
 
@@ -2935,7 +2928,7 @@ contours computed at each crossing between caller and callee.
     integrity, the first function in a chain of tail calls returns and violates
     integrity, while subsequent tail calls never actually return at all.
     Instead we need a variant that treats the entry of a tail call as the
-    return of its caller for accounting\apt{better word?} purposes.
+    return of its caller.
 
     More complex is the addition of a coroutine model, in which multiple stacks
     respect stack safety internally, but might also yield to one another.
