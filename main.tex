@@ -388,7 +388,8 @@ In summary, we offer the following contributions:
   but is more efficient to test, plus a proof (in Coq) that this variant is
   stronger than the original~(\cref{sec:lockstep}).
 \item
-  A {\em lazy} variant of the stack-safety property that can be enforced by the
+  A {\em lazy} variant of the stack-safety property that can be enforced by
+  (a variant of\bcp{same concern}) the
   more efficient Lazy Tagging and Clearing policy
   of \citet{DBLP:conf/sp/RoesslerD18}, plus a proof (in Coq) that this
   variant is weaker than the original~(\cref{sec:lazy}).
@@ -442,32 +443,40 @@ scope.
 
 \newcommand*{\rsp}{\textsc{sp}}
 
-We assume we are given a machine language program, together with certain auxiliary declarations
+We assume we are given a machine language program, together with some auxiliary information
 about its structure: the code footprint of each function and the locations of instructions
 representing calls, returns, and function entry points.
-Although this information would typically come from a compiler, we do not
-assume anything about the provenance of the machine
-code. We assume that the machine has a program counter $\PCname$
-and stack pointer $\rsp$ and can perform the usual
-loads, stores, and (direct or indirect) jumps; other details of the machine's ISA are unimportant.
+Although this information would typically come from a compiler together with
+the machine code, we do not
+assume anything about their provenance.  We assume that the machine has a
+program counter $\PCname$ 
+and stack pointer $\rsp$\bcp{but not a frame pointer?!}; other details of the machine's ISA are unimportant.
 
-To make our stack safety definitions precise, we make some simple assumptions about
+To make our stack safety definitions precise, we make some straightforward
+assumptions about 
 memory layout; our definitions could easily be changed to be parametric over
-these assumptions, at the cost of greater complexity.  Memory
-consists of an instruction region and a stack that grows upwards; for simplicity,
-we omit a heap. (Integrating a memory safety property for the heap in the style of
+these assumptions, at the cost of some complexity in their statements.  Memory
+consists of an instruction region and a stack that grows upwards. (For simplicity,
+we do not consider the heap. Integrating a memory safety property for the
+heap in the style of 
 \citet{DBLP:conf/post/AmorimHP18} is a natural extension that we discuss
 in~\Cref{sec:relwork}.)  The stack has a conventional structure, with
 contiguously allocated per-function frames.
-The boundary between the frames of a caller and callee is given by the $\rsp$ register
+The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
 at the time of the call.  The stack can be used to
 pass arguments or return results in the usual way, by placing them
-at the top of the caller's frame. Functions can also communicate via registers; indeed, our
-definitions say nothing at all about registers (except $\PCname$ and $\rsp$).
+at the top of the caller's frame. Callers and callees can also communicate
+via registers if they wish; indeed, our 
+definitions say nothing at all about registers (except $\PCname$ and
+$\rsp$). \bcp{This implicitly amounts to choosing a caller-saves register
+  convention, though, doesn't it?}
 
 Our stack safety concepts depend critically on the notions of ``call'' and ``return,''
-which are not fully explicit in machine code.  We define a call to be
-any instruction declared as such in the program.
+which are not fully explicit in machine code (the same instruction may be
+used in some places as part of a call or return sequence and in other places
+for other purposes).  We define a call to be
+any instruction declared as such in the program\bcp{in the call map, not the
+program, right?}.
 If a call occurs at $\PCname = a$ and $\rsp = s$, then the \emph{corresponding
   return} has occurred when $\PCname = \nextPC(a)$ and $\rsp = s$. (Our definition
 of well-bracketed control flow relates this definition of return to the program's
