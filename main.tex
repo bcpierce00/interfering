@@ -287,7 +287,9 @@ whether or not it actually ``guarantees stack safety.''
 Our key contribution is another important step towards this goal: a generic
 presentation of local state encapsulation and well-bracketed
 control\bcp{we need to either weaken the previous sentence or else add
-  ``first steps toward'' in this sentence...}\leo{Weakened enough?} flow using the technical
+  ``first steps toward'' in this sentence...}\leo{Weakened enough?}\bcp{Not
+  sure: it still says ``generic,'' and it's not clear why we're saying it's
+  a step rather than that we achieved the goal...} flow using the technical
 framework of language-based security.
 
 The intuition behind \citeauthor{Skorstengaard+19}'s {\em
@@ -378,12 +380,15 @@ but would if enhanced (at some performance cost).
 
 \sna{There's been some inconsistency in ``stack safety'' vs.
      ``stack-safety,'' I'm fixing on the former.}
+\bcp{Be careful: When a compound phrase is used as an adjective to modify a
+  following noun, it gets hyphenated; otherwise it does not.  This is
+  correct grammar, not inconsistency!  :-)}
 
 In summary, we offer the following contributions:
 \begin{itemize}
 \item
   % \leo{More? Extensional}\bcp{We might need to invent a word for this---''quasi-extensional''?}
-  A new {\em formal stack safety property} capturing the
+  A novel {\em formal stack safety property} formalizing the
   intuitive concepts of strict local state encapsulation and well-bracketed
   control flow~(\cref{sec:lse-and-wbcf}) in terms of familiar security concepts.
   % These properties   rule out common examples of stack memory abuse.
@@ -2007,39 +2012,43 @@ and entry map) is said to enjoy
 \section{Enforcement}
 \label{sec:enforcement}
 
-In this section we are going to see how an existing enforcement mechanism,
+In this section we examine how an existing enforcement mechanism,
 Depth Isolation from \citet{DBLP:conf/sp/RoesslerD18}, can implement
 the formal stack safety property described in the previous section: it in
-fact enforces a stronger, inductive version of it that strengthens the
+fact enforces a stronger, inductive version of that property which strengthens the
 local state encapsulation component by checking for integrity and
 confidentiality violations at every step of the callee's execution trace.
 
-\paragraph*{Micropolicies}
+%\paragraph*{Micropolicies}
 %
 The enforcement policy of \citeauthor{DBLP:conf/sp/RoesslerD18} relies
 on a programmable, tag-based reference monitor that runs alongside the
 program.  To control this monitor, they use a programming model that
 allows fine-grained manipulation of metadata tags to encode so-called
 \emph{micropolicies}~\citep{pump_oakland2015}.
-
-In such a system, all memory addresses and registers (including the program
-counter) are enriched with an abstract metadata tag, which can represent an
-arbitrary data structure. A micropolicy is defined as a set of tags, and a
-collection of software-defined rules that represent the transfer function of the
-policy. Each rule inspects the tags associated to the inputs of an instruction
-(PC, registers, memory) as well as the instruction opcode itself, and produces
+In such a system, all values in
+memory addresses and registers (including the $\PCname$)
+are enriched with an abstract metadata tag, which can represent 
+arbitrary information about the value. A micropolicy is defined as a set of tags and a
+collection of software-defined rules, indexed by machine opcode. 
+At each step of the machine, the relevant rule is applied to the tags on 
+the instructions inputs (PC, registers, memory) and on the instruction itself, and produces
 one of two outcomes: either the instruction is allowed to execute (and generates
-and assigns tags for the new PC and the result of the operation), or the machine
-fail-stops with a policy violation. During program execution, micropolicy rules
-are checked before each machine step.
+tags for the result of the operation and the new PC), or the machine
+fail-stops with a policy violation. 
+\citeauthor{pump_oakland2015} have shown that a wide range of micropolicies can
+be defined using this scheme.
 
 Efficient execution of these micropolicies relies on hardware implementations,
-such as the PUMP architecture. This hardware incorporates a monitor rule cache
-to allow quick retrieval of transfer function outputs for mapped inputs. Cache
-misses are detected and trapped to software handlers that use the software rules
-of the policy to compute the relevant parts of the transfer function.
-\citeauthor{pump_oakland2015} have shown that a wide range of micropolicies can
-be defined and enforced efficiently in these machines.
+such as the PUMP architecture~\citep{pump:asplos2015}.  Tags are represented
+as word-size bit vectors, stored separately from the regular memory and registers.
+The hardware incorporates a rule cache
+to allow quick retrieval of rule outputs for mapped inputs. If the cache misses,
+the hardware traps to a software handler (running in a privileged context or
+on a co-processor) to compute the rule result. To obtain adequate performance,
+it is important to design micropolicies so that they hit in the cache as
+much as possible. Thus, practical policies maintain a small working set of
+distinct tags.
 %% %
 %% \rb{Maybe go into more detail, examples later\ldots or try to segue into stack
 %% policies}
@@ -2054,90 +2063,123 @@ on the Depth Isolation policy presented by
 with ownership information associated to each stack frame (and to each
 separate object inside that frame, a more finely grained access
 control that we do not need to consider here), and tags registers containing
-stack pointers with access permission information. Beyond
-those capabilities, the compiler generates designated sequences of
-instructions with special tags that grant them permission to manage
-the stack, say during calls and returns.
+stack pointers with access permission information. The compiler also
+uses tags on instructions to identify the code 
+sequences that have permission to manage the stack, say during calls and returns.
 %% \rb{Conceivably on alloc
 %%   operations, etc., which we have not yet mentioned.}
 
-Our micropolicy works as follows. We assume for ease of exposition that no
-arguments are passed on the stack.
+Our micropolicy works as follows. (We assume for ease of exposition that no
+arguments are passed on the stack.)
 %% \rb{Come back to this later?}.
-Initially, the entire stack is tagged as unused with an $\tagNoDepth$ tag,
+The micropolicy maintains tags on values in memory of the form $\tagStackDepth{n}$,
+indicating locations that belong to the stack frame at activation depth $n$,
+or $\tagNoDepth$; it tags the $\PCname$ with tags of the form $\tagPCDepth{n}$.
+During normal execution, the micropolicy rules only permit load and store operations
+when the target memory is tagged with the same depth as the current {\PCname} tag.
+Initially, the entire stack is tagged $\tagNoDepth$,
 %\rb{actually, the ``initial frame'' should be tagged with its proper depth}
-and the {\PCname} carries in its tag the depth of the current
-activation at all times, starting with a $\tagPCDepth{0}$ tag. The
-current activation depth needs to change exactly at those points in
+and the {\PCname} has tag $\tagPCDepth{0}$. These tags are altered
+at exactly those points in
 the program where the contour of the stack safety property changes:
 
 \begin{itemize}
 
-\item From caller to callee, when the machine executes an instruction tagged
-  with $\tagCall$ as belonging to the call map. At this point, the current
-  {\PCname} depth $n$ is incremented to $\tagPCDepth{n + 1}$; on function entry,
-  the locations of the newly allocated frame are marked $\tagStackDepth{n + 1}$.
+\item From caller to callee, when the machine executes an instruction marked as a call in
+  the call map. 
+  At this point, the current
+  $\tagPCDepth{n}$ tag is incremented to $\tagPCDepth{(n + 1)}$, and the function
+  entry sequence initializes  all locations of the new function frame with
+  tag $\tagStackDepth{(n + 1)}$.
 
-\item From callee back to caller, when execution reaches the corresponding
-  return instruction for the call instruction, as defined by
-  $\ret{\mach_c}\ \mach_r$. At this point, the {\PCname} tag is decremented.
-  Prior to this point, the locations of the old frame have been restored to
-  $\tagNoDepth$.
+\item From callee back to caller, when execution is about to reach the return point
+  $\ret{c}$
+  corresponding to the call at $c$.  The exit sequence retags all locations in the function
+  frame with $\tagNoDepth$. At the actual return instruction, the
+  $\PCname$ tag is decremented.
 
 \end{itemize}
 
-To enforce this discipline, we define blessed header and return instruction
-sequences. These are specific sequences of tagged instructions that are intended
-to appear at the beginning and end of each function. This is the header
-sequence:
-%
-\setcounter{pcctr}{1}
-\[
-  \begin{array}{l|l|l|l}
-     & \mathit{Instruction} & \mathit{Tags} & \\
-    \hline
-    \row{\sw ~ \rsp ~ \tta ~ 1}{[\rsp+1] \leftarrow \rra}{\tagHa, \tagInstr}
-        {Store return address in stack}
-    \row{\addi ~ \rsp ~ \rsp ~ 2}{\rsp \leftarrow \rsp + 2}{\tagHb, \tagInstr}
-        {Increment stack pointer by frame size}
-  \end{array}
-\]
-%
-And the return sequence:
-%
-\setcounter{pcctr}{1}
-\[
-  \begin{array}{l|l|l|l}
-     & \mathit{Instruction} & \mathit{Tags} & \\
-    \hline
-    \row{\lw ~ \rra ~ \rsp ~ \negate 1}{\rra \leftarrow [\rsp - 1]}{\tagRa, \tagInstr}
-        {Load return address}
-    \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\tagRb, \tagInstr}
-        {Decrement stack pointer by frame size}
-    \row{\jalr ~ \rra ~ \rra ~ 0\apt{wrong}}{\PCname \leftarrow \rra}{\tagRc, \tagInstr}
-        {Return to caller ($\jalr$)}
-  \end{array}
-\]
+This discipline suffices to enforce local stack encapsulation.
+To implement it,  we define ``blessed'' instruction sequences
+intended to appear at the entry and exit of each function,
+which manipulate tags as just described in addition to performing the
+usual calling convention tasks of saving/restoring the return address to/from
+the stack and adjusting the stack pointer. With the aid of an additional tag on
+the $\rsp$ register, these sequences also serve to enforce
+well-bracketed control flow.
+The micropolicy guarantees atomic execution of these sequences
+using a combination of tags on the instructions
+and an additional tag on the $\PCname$; we omit the details here.
+
+There remains the question of how to ensure that the sequences are
+invoked at the right places. For a program to enjoy the stack safety property
+(with respect to a particular call map), all we need require is that 
+the entry sequence be initiated at any instruction marked as a call
+in the call map. This is achieved by giving these instructions (another) special tag,
+and it is easy to check statically that this has been done correctly.
+If the code fails to initiate an exit
+sequence at a point where the stack safety property expects a return,
+the micropolicy will incorrectly behave as if execution
+is continuing in the callee, but since the callee never has stronger access
+rights than the caller, this is harmless.
+
+%% APT: removed because the tag part is too mysterious and the instruction part
+%% is standard. 
+%% This is the entry
+%% sequence:
+%% %
+%% \setcounter{pcctr}{1}
+%% \[
+%%   \begin{array}{l|l|l|l}
+%%      & \mathit{Instruction} & \mathit{Tags} & \\
+%%     \hline
+%%     \row{\sw ~ \rsp ~ \tta ~ 1}{[\rsp+1] \leftarrow \rra}{\tagHa, \tagInstr}
+%%         {Store return address in stack}
+%%     \row{\addi ~ \rsp ~ \rsp ~ 2}{\rsp \leftarrow \rsp + 2}{\tagHb, \tagInstr}
+%%         {Increment stack pointer by frame size}
+%%   \end{array}
+%% \]
+%% %
+%% And the exit sequence:
+%% %
+%% \setcounter{pcctr}{1}
+%% \[
+%%   \begin{array}{l|l|l|l}
+%%      & \mathit{Instruction} & \mathit{Tags} & \\
+%%     \hline
+%%     \row{\lw ~ \rra ~ \rsp ~ \negate 1}{\rra \leftarrow [\rsp - 1]}{\tagRa, \tagInstr}
+%%         {Load return address}
+%%     \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\tagRb, \tagInstr}
+%%         {Decrement stack pointer by frame size}
+%%     \row{\jalr ~ \rra ~ \rra ~ 0\apt{wrong}}{\PCname \leftarrow \rra}{\tagRc, \tagInstr}
+%%         {Return to caller ($\jalr$)}
+%%   \end{array}
+%% \]
 
 %% \rb{Positioning of the above sequences, relation to running example. The tagging
 %%   of stack frames would be considered part of these sequences.}
 
-These sequences also enforce the $\SP$ discipline. When stack frames
-are of fixed size, it suffices to increment $\SP$ and tag it with a
-dedicated tag in the header sequence, which is later checked after
-decrementing $\SP$ during the exit sequence to authorize the
-return. The well-formedness of the blessed sequences can be checked
-statically. Only programs whose sequences are well-formed are
-protected by the micropolicy, although programs are still protected
-(by fail-stopping) even if the intended sequences are missing. By
-tracking the execution of the blessed sequences in the tag state of
-the {\PCname} register, the micropolicy ensures that the entry
-sequences of calls declared in the call map are executed correctly.
+%% These sequences also enforce the $\SP$ discipline. When stack frames
+%% are of fixed size, it suffices to increment $\SP$ and tag it with a
+%% dedicated tag in the header sequence, which is later checked after
+%% decrementing $\SP$ during the exit sequence to authorize the
+%% return. The well-formedness of the blessed sequences can be checked
+%% statically.
+
+%% Only programs whose sequences are well-formed are
+%% protected by the micropolicy, although programs are still protected
+%% (by fail-stopping) even if the intended sequences are missing. By
+%% tracking the execution of the blessed sequences in the tag state of
+%% the {\PCname} register, the micropolicy ensures that the entry
+%% sequences of calls declared in the call map are executed correctly.
+
+Note that in this policy both the entry and exit sequences
+must write to each element of
+the frame, which can be quite expensive, especially for programs that
+allocate large but sparsely populated frames; we return to this point
+in \cref{sec:lazy}.
 %
-During normal execution, the {\PCname} uses the current activation
-depth in its tag $\tagPCDepth{n}$ to gate load and store operations,
-which are allowed to operate only on the corresponding stack frame,
-tagged $\tagStackDepth{n}$.
 %\rb{Note that we have also considered and implemented more flexible schemes
 %  based on allowing operations above the current activation depth. How do we put
 %  these together?}
@@ -2162,9 +2204,10 @@ tagged $\tagStackDepth{n}$.
 
 %% \leo{Maybe lockstep?}
 
-This conservative policy satisfies not only the stack safety above,
+This conservative policy satisfies not only the stack safety policy of
+\cref{sec:lse-and-wbcf},
 but also a provably (in Coq) stronger one that enforces local state
-encapsulation throughout the execution. To encode that
+encapsulation at every point during execution. To encode that
 property, we not only keep track of the execution of one machine
 (whose trace we are trying to characterize as safe), but of an entire
 stack of machine variations corresponding to nested calls of the
@@ -2174,7 +2217,7 @@ execution) and enforce a single-step variant of integrity and
 confidentiality tests. In addition, every time a call is made we push
 a variation of the original machine state at the time of that call on
 top of the variant stack (just like the stack confidentiality property
-enforced trace confidentiality for every transition), and every time
+enforced trace confidentiality for every transition\apt{can we change ``transition'' to ``call transition'' at least sometimes? -- I keep thinking it means ``step''}), and every time
 the machine returns from a call we pop the top variation (to account
 for stack confidentiality taking the prefix of the transition trace
 until its return).
@@ -2204,6 +2247,7 @@ stack safety.
     \contour(\component) = \HIGHINT \rightarrow
     \mach(\component) = \mach'(\component)
   \]
+\apt{We could have used this to define trace integrity in the first place...}
 
 \definition Two machine states $\mach_1$ and $\mach_2$ satisfy the
 \emph{stack confidentiality test} if the machines they stepped to
@@ -2220,11 +2264,12 @@ these steps are equal:
     \rightarrow \mach_1'(\component) = \mach_2'(\component)
 \end{array}
   \]
+\apt{And the last clause here could have been used for trace confidentiality...}
 
 \definition The testing property keeps track of a variation machine
 for every nested call performed so far on a {\em variant stack}: a
-list of machine states annotated with a contour, each element of which
-(denoted $\vm{C}$) of which is a variation of the actual machine
+list of machine states annotated with a contour\apt{one contour per list or one contour per stack??}, each element of which
+(denoted $\vm{C}$) is a variation of the actual machine
 according to a contour $C$.
 %
 \footnote{The full formal definition in Coq also records additional
@@ -2552,31 +2597,36 @@ will be compared.
 
     \definition{%Observable Trace Confidentiality}
 
-      {\em Observable trace confidentiality} is the lazy analog to trace
-      confidentiality, and reuses the cases in which the traces do not return.
-      For a return predicate \(R\) and a pair of traces
-      \(\MPT\) and \(\machT\), we consider the return case, in which
-      \(\last(\MPT)\) is some \(\mpostate{\mach_r}{\pol_r}{\obs_r}\) and
-      \(R ~ \mach_r\). Then \(\last(\machT)\) is some \((\mach_r',\obs_r')\)
-      and \(R ~ \mach_r'\). As above, the observations of \(\MPT\) are similar
-      to those of \(\machT\). In place of the requirement that \(\mach_r\)
-      and \(\mach_r'\) agree on components, we have the following requirement.
-      \rb{This reads a little funny, ending this paragraph with the promise of a
-      requirement and starting the next one introducing a conclusion.}
+      {\em Observable trace confidentiality} is the lazy analog to
+      trace confidentiality, and reuses the cases in which the traces
+      do not return.  For a return predicate \(R\) and a pair of
+      traces \(\MPT\) and \(\machT\), we consider the return case, in
+      which $\MPT$ has a last element
+      \(\mpostate{\mach_r}{\pol_r}{\obs_r}\) and that machine state is
+      a return: \(R ~ \mach_r\).
+%
+      Observable trace confidentiality then requires that $\machT$
+      also has a final state \((\mach_r',\obs_r')\) that is a return:
+      \(R ~ \mach_r'\).
+%
+      In addition, just like in the eager case, 
+      observations of \(\MPT\) are similar to those of \(\machT\).
 
-      Finally, let \(\mach_e\) be the machine state of \(\head(\MPT)\),
-      and \(\mach_e'\) be that of \(\head(\machT)\). We restore \(\mach_r'\)
-      based on \(\mach_e\) and \(\mach_e'\) to get \(\mach_r'' =
-      \mathit{restore}(\mach_e,\mach_e',\mach_r,\mach_r')\).
-      The induced trace from \(\mpstate{\mach_r}{\pol_r}\) should be an
+      The only thing that changes is the requirement that \(\mach_r\)
+      and \(\mach_r'\) agree on components. Instead, let \(\mach_e\)
+      be the machine state of \(\head(\MPT)\), and \(\mach_e'\) be
+      that of \(\head(\machT)\). We restore \(\mach_r'\) based on
+      \(\mach_e\) and \(\mach_e'\) to get \(\mach_r'' =
+      \mathit{restore}(\mach_e,\mach_e',\mach_r,\mach_r')\).  Then
+      observable trace confidentiality requires that the
+      induced trace from \(\mpstate{\mach_r}{\pol_r}\) should be an
       observational prefix of the induced trace from \(\mach_r'\),
       reflecting the possibility of a fail-stop after return.
 
-      \leo{This is starting to be too spread out as a definition. Pack a bit?}
       \[\begin{split}
-        \mathit{ObsReturnCase} ~ R ~ \MPT ~ \machT \ \ \triangleq\ \
-        & \head(\MPT) = \mpostate{\mach_e}{\pol_e}{\obs_e} \Rightarrow \\
-        & \head(\machT) = (\mach_e',\obs_e') \Rightarrow \\
+        \mathit{ObsReturnCase} ~ R ~
+        (\mpostate{\mach_e}{\pol_e}{\obs_e}\MPT) ~
+        ((\mach_e',\obs_e')\machT) \ \ \triangleq \ \ 
         & \last(\MPT) = \mpostate{\mach_r}{\pol_r}{\obs_r} \Rightarrow \\
         & \last(\machT) = (\mach_r',\obs_r') \Rightarrow \\
         & \mach_r'' = \mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r') \Rightarrow\\
