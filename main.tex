@@ -781,7 +781,7 @@ But not critical.}\fi
     \row{\sw ~ \rsp ~ r_0 ~ \negate 2}{[\rsp-2] \leftarrow r_0}{[102] \leftarrow 0}
         {Set argument to 0}
     \row{\sw ~ \rsp ~ r_0 ~ \negate 1}{[\rsp-1] \leftarrow r_0}{[103] \leftarrow 0}
-        {Zero out result\apt{why?}\bcp{+1}}
+        {Zero out result}
     \row{\jal ~ \rra ~ 20}{\rra \leftarrow \PCname + 1; ~ \PCname \leftarrow 20}{\rra \leftarrow \thepcctr; ~ \PCname \leftarrow 20}
         {Call ($\jal$ to) {\tt f}}
   \end{array}
@@ -832,7 +832,7 @@ $\cdots$
     \row{\sw ~ \rsp ~ r_4 ~ \negate 2}{[\rsp - 2] \leftarrow r_4}{[106] \leftarrow 17}
         {Store 17 as the argument {\tt v}}
     \row{\sw ~ \rsp ~ r_0 ~ \negate 1}{[\rsp - 1] \leftarrow r_0}{[107] \leftarrow 0}
-        {Zero out result \apt{why?}}
+        {Zero out result}
     \row{\jal ~ \rra ~ 40}{\rra \leftarrow \PCname + 1 ; ~ \PCname \leftarrow 40}{\rra \leftarrow \thepcctr; ~ \PCname \leftarrow 40}
         {Call {\tt g}}
   \end{array}
@@ -1116,7 +1116,7 @@ into address 101.
 The code itself is straightforward, and should be largely self-explanatory, but
 a few points deserve clarification. Functions return their result value on the
 stack rather than in a register.  Stack frames are built in two parts:
-space for local variables and the return address is allocated and initialized at function entry, and deallocated at function exit; space for arguments and return values is allocated and initialized immediately prior to each function call and deallocated on return. The return value slot is always initialized
+space for local variables (which are all stack-allocated) and the return address is allocated and initialized at function entry, and deallocated at function exit; space for arguments and return values is allocated and initialized immediately prior to each function call and deallocated on return. The return value slot is always initialized
 because some of our enforcement mechanisms will rely on this.
 \apt{this is bogus, but oh well}
 The return address is spilled to the stack even by leaf functions such as
@@ -1636,29 +1636,30 @@ callee.
 \definition
 
 Let \(\contour\) be a contour and \(\MPT\) be a (potentially infinite)
-\(\MPOTRACE\). We say \(\MPT\) satisfies {\em trace integrity} with
+MP-trace. say \(\MPT\) satisfies {\em trace integrity} with
 respect to \(\contour\) if its final state (if any) agrees with its
 initial one on all components marked \(\HIGHSEC\) in \(\contour\):
 %
 \[\begin{split}
   \propdef{TraceInt} ~ \contour ~ \MPT \triangleq &
-    \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \Rightarrow \\
-  & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
+    \head(\MPT) = \mpostate{\mach_e}{\_}{\_} \land
+    \last(\MPT) = \mpostate{\mach_r}{\_}{\_} \Rightarrow \\
   & \forall \component. ~ \contour(\component) = \HIGHSEC \Rightarrow
     \mach_e(\component) = \mach_r(\component) \\
 \end{split}\]
-\sna{Experimenting with font on the mathy version of the property.}
+\sna{Experimenting with font on the mathy version of the property.\apt{looks fine to me}}
 
 Intuitively, the caller expects to find their private data untouched
 after the callee returns. That means that if the callee never returns,
 integrity is trivially satisfied. Similarly, the callee is allowed to
-temporarily overwrite these locations, as long as they are restored
-once control returns. We will see variations of this later on: a
+temporarily overwrite the caller's private locations,
+as long as their values are restored
+by the time the callee returns. We will see variations of this later on: a
 stronger, inductive integrity property that ensures that the caller's
-private data is never overwritten, even during the caller's execution
+private data is never overwritten, even during the callee's execution
 (which leads to easier reasoning and more effective testing);
 and a weaker, lazy integrity property that only ensures the preservation
-of locations that subsequently affect the caller's observable actions
+of locations that subsequently affect the program's observable actions
 (which allows for a more efficient enforcement mechanism).
 
 \begin{figure}
@@ -1686,11 +1687,11 @@ We now lift this definition to an integrity property for a complete
 execution trace. We do this by requiring that trace integrity holds
 for every subtrace delimited by a call and its corresponding return.
 
-\definition Given a trace \(\MPT\) and a call map \(\callmap\)
+\definition Given a trace \(\MPT\), % and a call map \(\callmap\)
 %and a function map \(\codemap\),
 an \(n\)-{\em transition} is a pair of
 machine-policy state pairs \(\mpstate{\mach_c}{\pol_c}\) and
-\(\mpstate{\mach_e}{\pol_e}\) in the trace such that
+\(\mpstate{\mach_e}{\pol_e}\) in \(\MPT\) such that
 \(\mach_c\) is a valid call with \(n\) arguments, and
 \(\mpstate{\mach_c}{\pol_c}\) steps to \(\mpstate{\mach_e}{\pol_e}\).
 
@@ -1708,14 +1709,15 @@ machine-policy state pairs \(\mpstate{\mach_c}{\pol_c}\) and
 
 We say that a system enjoys {\em stack integrity} if for every initial
 state $(\mach_0,\pol_0)$ and its corresponding induced trace $\MPT$ (with
-$\mpstate{\mach_0}{\pol_0} \hookrightarrow \MPT$), for every
+$\mpstate{\mach_0}{\pol_0} \hookrightarrow \MPT$), and for every
 $n$-transition from $\mpstate{\mach_c}{\pol_c}$ to
 $\mpstate{\mach_e}{\pol_e}$ in $\MPT$, if we take the prefix of the
 call until its corresponding return $\mpstate{\mach_e}{\pol_e}
 \hookrightarrow \MPT_{call} ~ | ~ \ret{\mach_c}$, then $\MPT_{call}$ must
 satisfy trace integrity:
 \[\propdef{TraceInt} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{call}\]
-
+\apt{This could still be clearer. Interleaving informal and mathy in the
+same sentence doesn't work so well.}
 
 %{\em Stack integrity} is a property of a system with respect to a call map
 %\(\callmap\) that holds when every \(n\)-transition  in every legal trace exhibits trace integrity
@@ -1736,8 +1738,8 @@ satisfy trace integrity:
 The second component of local state encapsulation is a confidentiality
 property: just like integrity ensures that a caller's data is never
 overwritten by a callee, confidentiality ensures that the caller's data never
-influences the callee's observable behavior. We will formally define
-confidentiality in two similar steps: a trace version and a system
+influences the callee's observable behavior. Again, we will formally define
+confidentiality in two steps: a trace version and a system
 version.
 
 Unlike integrity, confidentiality is a noninterference-style property,
@@ -1745,7 +1747,7 @@ comparing the behavior of a machine with an arbitrary variation that
 preserves low confidentiality data.
 
 \definition%{Variations}
-We say two machine states \(\mach\) and \(\mach'\) are {\em variations}
+Two machine states \(\mach\) and \(\mach'\) are {\em variations}
 of one another given a contour \(\contour\) if they agree on low
 confidentiality data:
 %
@@ -1757,7 +1759,7 @@ confidentiality data:
 %
 Then, the trace version of confidentiality operates on two traces: the
 ``original'' trace $\MPT \in \MPOTRACE$ that corresponds to a callee $f$
-and a ``variant'' trace $\machT \in \MTRACE$ that corresponds to how $f$
+and a ``variant'' trace $\machT \in \MOTRACE$ that corresponds to how $f$
 would behave if it were started from a variant initial machine state.
 %
 As an example of variations, consider the top of \Cref{fig:confex}
@@ -1768,9 +1770,9 @@ The ``Effect'' column shows differences between the two runs by writing values
 in the original run in {\high} and values in the variant run in {\varied}
 separated by a slash.
 %
-This example will end up a violation of confidentiality, as a
-difference in a confidential location (\textcolor{cyan}{42} vs
-\textcolor{magenta}{5} in location 100) leads to a visible
+This example will end up with a violation of confidentiality, as a
+variation in a confidential location (\textcolor{cyan}{42} vs
+\textcolor{magenta}{-5} in location 100) leads to a visible
 difference in return value.
 
 \definition
@@ -1784,24 +1786,24 @@ enjoy trace confidentiality with respect to \(R\).
 
 \begin{itemize}
   \item If \(\MPT\) has a final state \(\last(\MPT) = \mpostate{\mach_r}
-    {\pol_r}{\obs_r}\) and \(R\ \mach_r\), then \(\machT\) is also finite with
+    {\_}{\_}\) and \(R\ \mach_r\), then \(\machT\) is also finite with
     some final state \(\mach_r'\) and any changes from the initial states are
     matched between \(\mach_r\) and \(\mach_r'\). In addition their
     observations are similar.
     \[\begin{split}
       \mathit{ReturnCase} ~ R ~ \MPT ~ \machT \triangleq &
-      \forall ~ \mach_r ~ \pol_r ~ \obs_r ~ \component . \last(\MPT) =
-        \mpostate{\mach_r}{\pol_r}{\obs_r} \Rightarrow \\
-      & \exists \mach_r' ~ \obs_r' . \last(\machT) = (\mach_r',\obs_r')
-        \land \pi_o(\MPT) \eqsim \pi_o(\machT) \land \\
-      & ~ (\mach_e(\component) \not = \mach_r(\component)
-        \lor \mach_e'(\component) \not = \mach_r'(\component) \Rightarrow
-      \mach_r(\component) = \mach_r'(\component))
+      \last(\MPT) =
+        \mpostate{\mach_r}{\_}{\_} ~ \land ~ R ~ \mach_r \Rightarrow \\
+      & \exists \mach_r' . \last(\machT) = (\mach_r',\_)
+        \land \pi_o(\MPT) \eqsim \pi_o(\machT) ~ \land \\
+      & \forall ~ \component . (\mach_e(\component) \not = \mach_r(\component)
+        \lor \mach_e'(\component) \not = \mach_r'(\component)) \Rightarrow
+      \mach_r(\component) = \mach_r'(\component)
     \end{split}\]
   \item If \(\MPT\) is infinite, then \(\machT\) is also infinite and their
   observations are similar.
     \[\begin{split}
-      \mathit{InfCase} ~ R ~ \MPT ~ \machT \triangleq
+      \mathit{InfCase} ~ \MPT ~ \machT \triangleq
       & \neg (\exists mpo . \last(\MPT) = mpo) \Rightarrow \\
       & \neg (\exists mo . \last(\machT) = mo)
         \land \pi_o(\MPT) \eqsim \pi_o(\machT)
@@ -1810,21 +1812,19 @@ enjoy trace confidentiality with respect to \(R\).
   its observations are a prefix of those of \(\machT\).
     \[\begin{split}
       \mathit{FailCase} ~ R ~ \MPT ~ \machT \triangleq
-      & \forall \mach_r ~ \pol_r ~ \obs_r .
-        \last(\MPT) = \mpostate{\mach_r}{\pol_r}{\obs_r} \Rightarrow \\
-      & \neg ~ R ~ \mach_r \Rightarrow \\
+      & \forall \mach_r .
+        \last(\MPT) = \mpostate{\mach_r}{\_}{\_} ~ \land ~ \neg ~ R ~ \mach_r \Rightarrow \\
       & \pi_o(\MPT) \lesssim \pi_o(\machT)
     \end{split}\]
 \end{itemize}
 
 Putting it all together:
 
-\[\begin{split}
-  \propdef{TraceConf} ~ R ~ \MPT ~ \machT \triangleq
-  & \mathit{ReturnCase} ~ R ~ \MPT ~ \machT \land \\
-  & \mathit{InfCase} ~ R ~ \MPT ~ \machT \land
-    \mathit{FailCase} ~ R ~ \MPT ~ \machT \\
-\end{split}\]
+\[  \propdef{TraceConf} ~ R ~ \MPT ~ \machT \triangleq
+   \mathit{ReturnCase} ~ R ~ \MPT ~ \machT ~ \land 
+   \mathit{InfCase} ~ \MPT ~ \machT \land
+    \mathit{FailCase} ~ R ~ \MPT ~ \machT 
+\]
 
 In the non-return cases, we only care that the traces exhibit the same
 observable behavior (or a prefix if the trace halts prematurely), as changes
@@ -1885,8 +1885,8 @@ We also take the corresponding trace from any variant \(\mach_e'
 %
 If trace confidentiality holds for all such traces,
 \(\propdef{TraceConf} ~ \ret{\mach_c} ~ \MPT_{\mathit{call}} ~
-\machT_{\mathit{call}}\) and it also holds for the toplevel execution
-trace to account for unallocated memory \(\propdef{TraceConf} ~
+\machT_{\mathit{call}}\), and it also holds for the toplevel execution
+trace to account for unallocated memory, \(\propdef{TraceConf} ~
 \emptyset ~ \MPT ~ \machT\) , then the system as a whole enjoys {\em
   stack confidentiality} with respect to \(\callmap\).
 
@@ -1950,8 +1950,8 @@ and any n-transition from \((\mach_c,\pol_c)\) to
 
 The changed program described just above also violates entry integrity,
 because the target (instruction 42) of the new $\jalr$ is not an established
-entry point according to the entry map. Our properties to not enforce which
-call points jump to which entry points, however; that is left for a stronger
+entry point according to the entry map. Our properties do not enforce which
+call points jump to which entry points, however; that would require a stronger
 notion of control flow integrity.
 
 \newcommand*{\Unmatched}{\mathit{um}}
@@ -1971,6 +1971,7 @@ obtained from $\MPT$ by dropping elements until we reach the first unmatched ret
 \begin{itemize}
 \item A trace that starts with a return is related to itself:
 
+\begin{center}
 \begin{minipage}{.3\textwidth}
   \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
               {\(\retmap(\mach(\PCname))\)}
@@ -1982,6 +1983,7 @@ obtained from $\MPT$ by dropping elements until we reach the first unmatched ret
               {\(\retmap(\mach(\PCname))\)}
               {\(\Unmatched ~ \mpstate{\mach}{\pol}\MPT ~ \mpstate{\mach}{\pol}\MPT\)}
 \end{minipage}
+\end{center}
 
 \item If a trace \(\MPT\) starts with a non-call, non-return state,
   its unmatched return must come later:
@@ -2008,15 +2010,16 @@ obtained from $\MPT$ by dropping elements until we reach the first unmatched ret
 \definition%{Return Integrity}
 A system enjoys {\em return integrity} if all of its returns match prior calls
 and return to the appropriate location. For any initial state \((\mach_0\, \pol_0)\), let
-\(\MPT\) be the induced trace of \(\mpstate{\mach_0}{\pol_0}\).
-\(\MPT\) may not have an unmatched return -- \(\Unmatched ~ \MPT ~ \MPT_{tail}\)
-may not hold for any \(\MPT_{tail}\). For any state pair \((\mach_c, \pol_c)\)
+\(\MPT\) be the induced trace of \(\mpstate{\mach_0}{\pol_0}\). Then two
+conditions must hold. 
+\emph{(i)} \(\MPT\) must not have an unmatched return, i.e., \(\Unmatched ~ \MPT ~ \MPT_{tail}\)
+must not hold for any \(\MPT_{tail}\). \emph{(ii)} For any state pair \((\mach_c, \pol_c)\)
 corresponding to a call \(\MPT\), if
-\(\mpstatename = \mpostate{\mach_r}{\pol_r}{\obs_r}\)
+\(\mpstatename = \mpostate{\mach_r}{\_}{\_}\)
 is the first unmatched return such that
-\( \Unmatched ~ \MPT ~ \MPT_{tail}\) and \(\head{\MPT_{tail}} = \mpstatename\),
-then $\mach_r$ must correspond to a return state for $\mach_c$:
-\(\ret{\mach_c}\ \mach_r\)
+\( \Unmatched ~ \MPT ~ \MPT_{tail}\) and \(\head{(\MPT_{tail})} = \mpstatename\),
+then $\mach_r$ must correspond to a return state for $\mach_c$, i.e.,
+\(\ret{\mach_c}\ \mach_r\) holds.\apt{This sentence still doesn't make sense to me.}
 
 For example, if we modified the running example by adding
 an instruction $ \rra \rightarrow \rra - 19$
@@ -2061,7 +2064,7 @@ are enriched with an abstract metadata tag, which can represent
 arbitrary information about the value. A micropolicy is defined as a set of tags and a
 collection of software-defined rules, indexed by machine opcode.
 At each step of the machine, the relevant rule is applied to the tags on
-the instructions inputs (PC, registers, memory) and on the instruction itself, and produces
+the instruction's inputs (PC, registers, memory) and on the instruction itself, and produces
 one of two outcomes: either the instruction is allowed to execute (and generates
 tags for the result of the operation and the new PC), or the machine
 fail-stops with a policy violation.
@@ -2092,7 +2095,7 @@ on the Depth Isolation policy presented by
 with ownership information associated to each stack frame (and to each
 separate object inside that frame, a more finely grained access
 control that we do not need to consider here), and tags registers containing
-stack pointers with access permission information. The compiler also
+stack pointers with access permission information. The policy also
 uses tags on instructions to identify the code
 sequences that have permission to manage the stack, say during calls and returns.
 %% \rb{Conceivably on alloc
@@ -2304,9 +2307,9 @@ these steps are equal:
 
 \definition The testing property keeps track of a variation machine
 for every nested call performed so far on a {\em variant stack}: a
-list of machine states, each annotated with its own contour written
+list of machine states, each annotated with its own contour (written
 as $\vm{C}$), and each being a variation of the actual machine
-according to $C$.
+according to $C$.%
 %
 \footnote{The full formal definition in Coq also records additional
   information (the initial machine state at the call, its initial
@@ -2396,7 +2399,7 @@ We are now ready to define lockstep stack safety coinductively.
 $\vs$ in which every element $\vm{\contour}$ is a variation of $\mach$
 with respect to its annotated contour $\contour$, we say that an
 MP-trace induced from $(\mach, \pol)$ satisfies the \emph{trace
-  lockstep stack safety}, and write $\testProp{}{\MPT}{\vs}$, if the
+  lockstep stack safety}, written $\testProp{}{\MPT}{\vs}$, if the
 following conditions are satisfied:
 
 \begin{itemize}
@@ -2407,7 +2410,7 @@ following conditions are satisfied:
   then the variant stack test must be satisfied:
   \[\testVS{(\mach, \pol)}{\vs},\]
   and trace lockstep stack safety must be coinductively satisfied for
-  the remainder of the trace and the variant stack $vs'$ that
+  the remainder of the trace and the variant stack $vs'$ that $vs$
   steps to ($\vs \stepsto \vs'$):
   \[ \testProp{}{((\mach',\pol',\obs)\MPT)}{\vs'}\]
 
@@ -2418,7 +2421,7 @@ following conditions are satisfied:
   %% $\hookrightarrow$ and give the rest of the induced trace?}
   \[(\mach, \pol) \stepstopol{\obs} (\mach', \pol') \wedge \callmap(\mach) = n,\]
 %
-  then the variant stack test $\testVS{(\mach, \pol)}{\vs}$ must be
+  then the variant stack test must be
   satisfied:
   \[\testVS{(\mach, \pol)}{\vs},\]
 %
@@ -2439,8 +2442,8 @@ following conditions are satisfied:
   If the machine $\mach$ takes a \emph{return step},
   \[(\mach, \pol) \stepstopol{\obs} (\mach', \pol') \wedge \retmap(\mach),\]
   %
-  the top of the variant stack also returns,
-  the tail of $\vs$ satisfies the stack safety test
+  then the top of the variant stack also returns,
+  the tail of $\vs$ satisfies the stack safety test:
   \[\testVS{(\mach, \pol)}{\mathit{tail}(\vs)},\]
   %
   and trace lockstep stack safety must be coinductively satisfied for
@@ -2461,7 +2464,7 @@ following conditions are satisfied:
 
 \definition
 %
-A system satisfies {\em lockstep stack safety} if for every initial machine $(\mach,\pol)$,
+A system satisfies {\em lockstep stack safety} if, for every initial machine $(\mach,\pol)$,
 the trace induced from $(\mach, \pol)$ satisfies trace lockstep stack safety with
 respect to the empty stack.
 
@@ -2471,7 +2474,7 @@ Lockstep stack safety implies stack safety.
 \smallskip
 
 The proof is a fairly involved coinductive argument
-(around 3K LoC in Coq) on the definition trace lockstep stack safety,
+(around 3K LoC in Coq) on the definition of trace lockstep stack safety,
 using an auxiliary depth-index to ensure the proper alignment of
 calls and returns.
 
@@ -2485,10 +2488,16 @@ be efficiently implemented. Most of the performance overhead incurred
 stems from the need to set stack activation tags as a frame is created
 and reset them as it is destructed, as
 \citet{DBLP:conf/sp/RoesslerD18} confirm in their evaluation. To
-mitigate those costs, they propose optimizations like Lazy Tagging and
-Lazy Clearing that relax and defer some of the checks of an eager
-policy, being more permissive in their allowed operations and catching
-violations if and when their effect becomes manifest.
+mitigate those costs, they propose optimizations called Lazy Tagging and
+Lazy Clearing that relax and defer some of the checks of the Depth Isolation
+policy. Under these optimizations, the policy does not initialize stack
+frames on entry or clear them on exit (thus speeding up execution),
+and it permits all writes to the stack, even when the $\PCname$ tag
+does not match the memory tag. 
+However, reads from the stack do still require $\PCname$ tag and memory tag
+to match. Thus, even if a callee illicitly writes to a private location
+in its caller, the caller will eventually detect this if it ever tries to read from
+that location.
 %
 These \emph{lazy policies} admit more efficient implementations, but
 they deliberately allow violations of stack integrity temporarily,
@@ -2506,8 +2515,8 @@ observations to draw this distinction.
 Observable integrity weakens eager integrity by allowing a returned
 state to differ from its call state at high integrity components,
 provided that the differences do not change the observable behavior of
-the rest of the program. It is not immediately clear what constitutes
-changing behavior: we construct an idealized return state that
+the rest of the program. The challenge here is to define what constitutes
+a change in behavior. We construct an idealized return state that
 contains only the changes that the caller was allowed to make, and use
 the trace from that state as a baseline against which the real trace
 will be compared.
@@ -2547,17 +2556,17 @@ will be compared.
 
       \[\begin{split}
         \propdef{ObsTraceInt} ~ \contour ~ \MPT \ \ \triangleq \ \
-        & \mpostate{\mach_e}{\pol_e}{\obs_e} = \head(\MPT) \Rightarrow \\
-        & \mpostate{\mach_r}{\pol_r}{\obs_r} = \last(\MPT) \Rightarrow \\
-        & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' \Rightarrow \\
-        & \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT'
+        & \head(\MPT) = \mpostate{\mach_e}{\_}{\_} ~ \land ~
+          \last(\MPT) = \mpostate{\mach_r}{\_}{\_} ~ \land \\
+        & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' ~ \land ~
+          \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT'
           \Rightarrow \\
         & \pi_o(\MPT') \lesssim_O \pi_o(\machT')
       \end{split}\]
 
     \begin{figure}
       \integritylazyexample
-      \caption{Rolling back from Figure \ref{fig:intex}\bcp{too much space!}}
+      \caption{Rolling back from Figure \ref{fig:intex}.\apt{But at 27, $[\rsp]$ contains 0, not 18, because of the change at 44. Could just fix diagram, but this complicates story.}}
       \label{fig:intlex}
     \end{figure}
 
@@ -2572,8 +2581,8 @@ will be compared.
     trace from \(\mach_r\), it prints 18, but in the trace from \(\mach_r'\)
     it prints 0. Only then is observable trace integrity violated.
 
-    However, consider instead if we insert after instruction 44 a new
-    instruction \(45: [\rsp-4] \leftarrow 50\), overwriting {\tt w} in
+    However, consider instead if we modify the original code of \cref{fig:running-trace-b} to insert after instruction 44 a new
+    instruction \(44.5: [\rsp-4] \leftarrow 50\), overwriting {\tt w} in
     {\tt g}'s frame. So \(\mach_r'\) maps address 105 to 50, while the
     rolled-back state \(\mach_r'\) maps it to 0. But in the trace from either
     state, instructions 27 and 28 load the return value (18) and store it to
@@ -2689,7 +2698,7 @@ will be compared.
 
       \begin{figure}
         \confidentialitylazyexample
-        \caption{Continuing from \cref{fig:confex}\bcp{Spacing!}}
+        \caption{Continuing from \cref{fig:confex}.}
         \label{fig:conflex}
       \end{figure}
 
