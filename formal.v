@@ -4698,21 +4698,21 @@ Section PaperVersions.
   Definition StackSafetyPaper :=
     StackIntegrityPaper /\ StackConfidentialityPaper.
 
-  Definition LazyTraceIntPaper (C:Contour) (MP:MPTrace') : Prop :=
+  Definition ObservableTraceIntPaper (C:Contour) (MP:MPTrace') : Prop :=
     forall mp1 mp2,
       (head MP) = mp1 ->
       Last MP mp2 ->
       ObsOfMP (MPRunOf (fst mp2)) <=_O ObsOfM (RunOf (RollbackInt C (ms (fst mp1)) (ms (fst mp2)))).
 
-  Definition LazyStackIntPaper : Prop :=
+  Definition ObservableStackIntPaper : Prop :=
     forall m p MPcall,
       initPolicyState m pm = Some p ->
       (forall (mp : MPState) C,
           FindCallMP cm cdm (MPTraceOf (m,p)) C (MPTraceOf mp) -> (* Find call*)
           RunUpTo (fun mp => justRet m (ms mp)) (MPRunOf mp) MPcall ->
-          LazyTraceIntPaper C MPcall).
+          ObservableTraceIntPaper C MPcall).
 
-  Definition ReturnCaseLazy (R:MachineState -> Prop) (MP:MPTrace') (M:MTrace') : Prop :=
+  Definition ReturnCaseObservable (R:MachineState -> Prop) (MP:MPTrace') (M:MTrace') : Prop :=
     forall m p o,
       Last MP (m,p,o) ->
       R m ->
@@ -4722,22 +4722,64 @@ Section PaperVersions.
         ObsOfMP MP ~=_O ObsOfM M /\
         ObsOfMP (MPRunOf (m,p)) <=_O ObsOfM (RunOf (RollbackConf (ms (fst (head MP))) (fst (head M)) m m')).
 
-  Definition LazyTraceConfPaper (R:MachineState -> Prop) (MP:MPTrace') (M:MTrace') : Prop :=
-    ReturnCaseLazy R MP M /\ InfCase MP M /\ FailCase R MP M.
+  Definition ObservableTraceConfPaper (R:MachineState -> Prop) (MP:MPTrace') (M:MTrace') : Prop :=
+    ReturnCaseObservable R MP M /\ InfCase MP M /\ FailCase R MP M.
 
-  Definition LazyStackConfPaper : Prop :=
+  Definition ObservableStackConfPaper : Prop :=
     forall m m' p,
       let initC := makeContour cdm 0 m in
       initPolicyState m pm = Some p ->
       variantOf m m' initC ->
       (* we've omitted this from the paper... should put it back *)
-      (LazyTraceConfPaper (fun _ => False) (MPRunOf (m,p)) (RunOf m')) /\
+      (ObservableTraceConfPaper (fun _ => False) (MPRunOf (m,p)) (RunOf m')) /\
       (forall (mp : MPState) m' C MPcall Mcall,
           FindCallMP cm cdm (MPTraceOf (m,p)) C (MPTraceOf mp) -> (* Find call*)
           variantOf (ms mp) m' C ->
           RunUpTo (fun mp' => justRet (ms mp) (ms mp')) (MPRunOf mp) MPcall ->
           RunUpTo (justRet (ms mp)) (RunOf m') Mcall ->
-          LazyTraceConfPaper (justRet (ms mp)) MPcall Mcall).
+          ObservableTraceConfPaper (justRet (ms mp)) MPcall Mcall).
 
-  Definition LazyStackSafetyPaper : Prop :=
-    LazyStackIntPaper /\ LazyStackConfPaper.
+  Definition ObservableStackSafetyPaper : Prop :=
+    ObservableStackIntPaper /\ ObservableStackConfPaper.
+
+  (********** Eager to Observable Proofs ***********)
+  Lemma EagerToObsTraceInt :
+    forall C MP,
+      TraceIntegrityPaper C MP ->
+      ObservableTraceIntPaper C MP.
+  Proof.
+    unfold TraceIntegrityPaper. unfold ObservableTraceIntPaper. intros.
+    assert (RollbackInt C (ms (fst mp1)) (ms (fst mp2)) = (ms (fst mp2))).
+    { unfold RollbackInt. extensionality k. destruct (integrityOf (C k)) eqn:E2.
+      - specialize H with mp1 mp2 k.
+        apply H; auto.
+      - auto. }
+    rewrite H2. apply MPRunPrefRun; auto.
+  Qed.
+
+  Lemma EagerToObsReturnCase :
+    forall R MP M,
+      ReturnCase R MP M ->
+      ReturnCaseObservable R MP M.
+  Proof.
+    unfold ReturnCase. unfold ReturnCaseObservable. intros.
+    specialize H with m p o. destruct H as [m']; auto. destruct H as [o'].
+    exists m'. exists o'. destruct H; split; auto.
+    destruct H2; split; auto. destruct H3; split; auto.
+    assert (HEq: ms (fst (head MP)) = RollbackConf (ms (fst (head MP))) (fst (head M)) m m').
+    { extensionality k. specialize H4 with k.
+      unfold RollbackConf.
+      Admitted.
+      (*destruct (weq (ms (fst (head MP)) k) (m k)) eqn:Unchanged; simpl.
+          - destruct (weq (fst (head M) k) (m' k)) eqn:Unchanged'; simpl.
+            + destruct (weq (ms (fst (head MP)) k) (fst (head M) k)) eqn:Unvaried; simpl.
+              * apply weq_implies_eq in Unchanged'.
+                apply weq_implies_eq in Unchanged'.
+                apply weq_implies_eq in Unvaried.
+                rewrite <- Unchanged'.
+                rewrite Unvaried. auto.
+              * apply weq_implies_eq in Unchanged. apply eq_sym. auto.
+            + apply not_weq_implies_neq in Unchanged'.
+              apply Hksame. right. rewrite H8. auto.
+          - apply not_weq_implies_neq in Unchanged.
+            apply Hksame. left. auto. }*)
