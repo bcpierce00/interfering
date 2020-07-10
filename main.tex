@@ -2398,13 +2398,14 @@ will be compared.
         \mach_r(\component) & \text{if } \contour(\component) = (\LOWINT,\_) \\
       \end{cases}\]
 
-      If \(\mach_e\) is an entry to a call with contour \(\contour\) and
-      \(\mach_r\) its return, \(\mathit{roll}(\contour,\mach_e,\mach_r)\)
-      agrees with \(\mach_e\) on every component the callee should not change,
-      but with \(\mach_r\) on those components that it is permitted to change.
-      So the observable behavior that follows is the idealized behavior to
-      which we compare the trace from \(\mach_r\), which must prefix it (to
-      account for premature halts due to policy violations.)
+      If \(\mach_e\) is an entry to a call with contour \(\contour\)
+      and \(\mach_r\) its return, the result of
+      \(\mathit{roll}(\contour,\mach_e,\mach_r)\) agrees with the
+      entry \(\mach_e\) on every component the callee should not
+      change, and with the actual return \(\mach_r\) on those
+      components that it is permitted to change.  So the observable
+      behavior that follows is the idealized behavior to which we
+      compare the trace from \(\mach_r\).
 
       Now we can define a version of trace integrity that compares the trace
       from a returned state to that from its idealized counterpart.
@@ -2412,9 +2413,10 @@ will be compared.
     \definition%{Observable Trace Integrity}
 
       A trace enjoys {\em observable trace integrity} with respect to
-      some contour \(\contour\) if the trace induced by its final state
-      (if any) has observable behavior that prefixes that of its idealized
-      version, constructed by \(\mathit{roll}\):
+      some contour \(\contour\) if the trace induced by its final
+      state (if any) has observable behavior that prefixes that of its
+      idealized version (to account for premature halts due to policy
+      violations):
 
       \[\begin{split}
         \propdef{ObsTraceInt} ~ \contour ~ \MPT \triangleq
@@ -2441,7 +2443,7 @@ will be compared.
     components are restored to their values as of \(\mach_e\). Specifically,
     address 103 is restored to 0. When instruction 31 prints {\tt z} in the
     trace from \(\mach_r\), it prints 18, but in the trace from \(\mach_r'\)
-    it prints 0. So observable trace integrity does not hold.
+    it prints 0. Only then is observable trace integrity violated.
 
     However, consider instead if we insert after instruction 44 a new
     instruction \(45: [\rsp-4] \leftarrow 50\), overwriting {\tt w} in
@@ -2464,15 +2466,16 @@ will be compared.
 
   \subsection{Observable Confidentiality}
 
-      Two of the cases of trace confidentiality, \(\mathit{InfCase}\) and
-      \(\mathit{FailCase}\), are purely properties of the observations produced
-      by the traces they are properties of. If the traces are infinite, they
-      should be similar; if one fail-stops, it should be a prefix. Only
-      the \(\mathit{ReturnCase}\) checks machine states, because in that case
-      the traces could continue, but have been cut off by a return. The key
-      to making confidentiality lazy is to consider the traces after the
-      return, considering only whether they are observationally similar
-      or prefixes.
+      Two of the cases of trace confidentiality, \(\mathit{InfCase}\)
+      and \(\mathit{FailCase}\), are purely properties of the
+      observations produced by the traces they are properties of. If
+      the traces are infinite, they should be similar; if one
+      fail-stops, it should be a prefix. Only the
+      \(\mathit{ReturnCase}\) checks machine states, because in that
+      case the traces could continue, but have been cut off by a
+      return. The key to making confidentiality lazy not perform that
+      check but rather to consider the traces after that return,
+      checking only whether they are observationally similar.
 
       This requires restoring varied components to their original
       values in the trace from the variant state, since after return
@@ -2596,10 +2599,13 @@ will be compared.
     if it enjoys both observable stack integrity and
       observable stack confidentiality with respect to them.
 
-      \paragraph*{THEOREM} Stack safety implies observable stack safety.
+      \medskip
+      \textsc{Theorem.}
+      Stack safety implies observable stack safety.
+      \smallskip
 
-%      \paragraph*{PROOF} \leo{TODO: Whatever we say about the previous proof
- %       we have to say similar things here}
+      This is more straightforward (1500 LoC) as the recursive
+      structure of the two properties is similar.
 
     \paragraph{Connection to Policies}
 
@@ -2637,21 +2643,23 @@ will be compared.
 
 \paragraph{Formal Stack Safety on Capability Machines}
 %
-To our knowledge, the first and only line of work that has attempted to furnish
-a positive and formal characterization of the meaning of stack safety was
-inaugurated by \citet{Skorstengaard+19b}, who introduce a calling convention
-that uses local capabilities to preserve local state encapsulation and
-well-bracketed control flow, using a logical relation to reason about the stack
-safety of concrete programs. Although the required hardware support is readily
-available in capability machines like CHERI, this technique incurs potentially
-prohibitive performance costs, because it requires the entire unused part of the
-stack to be cleared whenever a security boundary is crossed. Their logical
-relation captures capability safety without ``externally observable side-effects
-(like console output or memory access traces).'' In the discussion, ``while [the
-authors] claim that [their] calling convention enforces control-flow
-correctness, [they] do not prove a general theorem that shows this, because it
-is not clear what such a theorem should look like,'' noting that the correctness
-property enjoyed by their technique ``is not made very explicit.''
+To our knowledge, the first and only line of work that has attempted
+to furnish a positive and formal characterization of the meaning of
+stack safety is \citet{Skorstengaard+19b}, who introduce a calling
+convention that uses local capabilities to preserve local state
+encapsulation and well-bracketed control flow, using a logical
+relation to reason about the stack safety of concrete
+programs. Although the required hardware support is readily available
+in capability machines like CHERI, this technique incurs significant
+costs, because it requires the entire unused part of the stack to be
+cleared whenever a security boundary is crossed. Their logical
+relation captures capability safety without ``externally observable
+side-effects (like console output or memory access traces).'' In the
+discussion, ``while [the authors] claim that [their] calling
+convention enforces control-flow correctness, [they] do not prove a
+general theorem that shows this, because it is not clear what such a
+theorem should look like,'' noting that the correctness property
+enjoyed by their technique ``is not made very explicit.''
 
 StkTokens \citep{Skorstengaard+19} is a natural continuation of that work. Like
 its predecessor, it aims to protect the stack by enforcing local state
@@ -2704,20 +2712,24 @@ they propose a number of lazy optimizations, notably Lazy Tagging and Lazy
 Clearing, discussed in \cref{sec:lazy}, with associated improvements in
 performance.
 
-  \paragraph{Heap Safety as a Security Property}
-\bcp{Talk about the relation.}
-    Heap safety, like stack safety, may be framed as a form of
-    noninterference\citet{DBLP:conf/post/AmorimHP18}. The above model
-    describing safety of
-    shared stack-allocated objects extends naturally to heap safety,
-    complicated by the fact that these objects are not deallocated by returns,
-    and therefore a function's privilege may increase or decrease after its
-    entry point. For instance, if a callee allocates a heap object and returns
-    the pointer to its caller, that object's addresses become accessible in
-    contradiction to a contour computed at the caller's entry. So such an
-    extension must enforce trace confidentiality and integrity properties
-    separately on continuous segments of each call, with contours computed at
-    each crossing between caller and callee.
+\paragraph{Heap Safety as a Security Property}
+
+Heap safety, like stack safety, may be framed as a security property
+in the form of noninterference~\citet{DBLP:conf/post/AmorimHP18}. Just
+like~\citeauthor{DBLP:conf/post/AmorimHP18} give a rigorous
+characterization of the meaning of (heap) memory safety, in this paper
+we aim to do the same for the stack. 
+%
+Their model describing safety of shared stack-allocated
+objects extends naturally to heap safety, complicated by the fact that
+these objects are not deallocated by returns, and therefore a
+function's privilege may increase or decrease after its entry
+point. For instance, if a callee allocates a heap object and returns
+the pointer to its caller, that object's addresses become accessible
+in contradiction to a contour computed at the caller's entry. So such
+an extension must enforce trace confidentiality and integrity
+properties separately on continuous segments of each call, with
+contours computed at each crossing between caller and callee.
 
 \section{Future Work}
   \label{sec:future}
@@ -2729,21 +2741,23 @@ performance.
   describes its privilege throughout. Our future plans are to extend the model
   with common language features, some of which violate this assumption. Here we
   describe the basic principles by which our model can be extended to some of
-  these cases.
+  these cases. We also plan to develop a testing framework for quickly
+  checking the validity of different enforcement mechanisms.
 
   \paragraph{Stack-derived Pointers}
 
-    Common programming idioms involve a caller passing a pointer to its local
-    data into a callee. Using standard notions of pointer provenance [cite],
-    we can extend our model to distinguish safe use of this idiom from true
-    stack safety violations. We require additional annotation to identify
-    which addresses within a function's stack frame correspond to distinct
-    objects. Then a valid pointer to an object is one derived through legal
-    arithmetic from its base address, and at each call point, an object's
-    addresses are marked low confidentiality and integrity if a valid pointer
-    exists in a register or in the transitive closure of the callee's
-    accessible memory. All pointers to an object cease to be valid when it is
-    deallocated along with its stack frame.
+    Common programming idioms involve a caller passing a pointer to
+    its local data into a callee. Using standard notions of pointer
+    provenance~\citep{provenance}, we can extend our model to
+    distinguish safe use of this idiom from true stack safety
+    violations. We require additional annotation to identify which
+    addresses within a function's stack frame correspond to distinct
+    objects. Then a valid pointer to an object is one derived through
+    legal arithmetic from its base address, and at each call point, an
+    object's addresses are marked low confidentiality and integrity if
+    a valid pointer exists in a register or in the transitive closure
+    of the callee's accessible memory. All pointers to an object cease
+    to be valid when it is deallocated along with its stack frame.
 
   \paragraph{Non-stack control flow}
 
@@ -2765,6 +2779,16 @@ performance.
     a coroutine to the next yield back into it, all accessible and same-stack
     data are unchanged. Confidentiality properties are split similarly.
 
+  \paragraph{Random Testing}
+
+  Part of the motivation for the strong lockstep stack safety property
+  is that it uncovers errors quickly, and therefore should be quicker
+  to test just like the smarter testing properties
+  of~\citet{TestingNI:ICFP}. We have already developed a testing
+  framework for debugging our policy enforcement for this property, and
+  it would be interesting to explore whether a testing-amenable variant
+  of the lazy property also exists.
+    
 % \rb{Notes from meeting:
 %   \begin{itemize}
 %   \item Explain how the theory applies to production compilers like GCC and
