@@ -1204,7 +1204,9 @@ by combining it with the regular step function for machine states.
 \subsection{Traces}
 
 A trace over a type $\TRACEELEMS$ is a nonempty, finite or infinite sequence of
-$\TRACEELEMS$s. We will mostly be concerned with sequences of pairs of machine states
+$\TRACEELEMS$s; we write $\TRACE{\TRACEELEMS}$ for the set of traces over
+$\TRACEELEMS$. We will mostly be concerned with sequences of pairs of
+machine states
 and observations, called machine traces and denoted $\machT \in \MOTRACE$,
 and with sequences of triples of a machine state, a policy state, and an
 observation, denoted $\MPT \in \MPOTRACE$ and referred to as MP-traces.
@@ -1213,22 +1215,23 @@ observation, denoted $\MPT \in \MPOTRACE$ and referred to as MP-traces.
 
 The ``trace-of'' operator, written \(\mach \hookrightarrow \machT\),
 coinductively relates a machine state with the trace of machine states
-paired with observations produced by repeated application of step:
+and observations produced by repeated application of step:
 
 \judgmenttwo{\(\mach_0 \stepstoobs{\obs} \mach_1\)}{\(\mach_1 \hookrightarrow \machT\)}
             {\(\mach_0 \hookrightarrow (\mach_0,\obs) \machT\)}%
 %
 \noindent
+(We use juxtaposition of an element and a sequence to represent ``cons.'')
 Since the step function is total, if \(\mach \hookrightarrow \machT\),
 then \(\machT\) must be infinite.
 
 In our running example in \Cref{fig:running-trace-b} we can
 see a depiction of such a trace: starting from an initial machine
-state at the very top, each instruction constructs a new machine state
-(the diff of which compared to the previous one appears in the
-``Effect'' column) and the majority of observations are $\tau$ with
-the exception of instructions 31 and 13 which are writes to $\rout$
-and where the observations are $0$ and $60$ respectively.
+state at the very top, each instruction leads to a new machine state
+(the diff of which, compared to the previous one, appears in the
+``{\textit{Effect}'' column), and the majority of observations are $\tau$, except
+for instructions 31 and 13, which are writes to $\rout$
+where the observations are $0$ and $60$, respectively.
 
 In a similar fashion, we define \(\mpstatename \hookrightarrow \MPT\)
 to relate a machine-policy state pair to the MP-trace
@@ -1266,12 +1269,16 @@ The operation \(\PUT~(f,\Trace)\)
 %``while-not''? Trying out ``until''. In any case... moving away
 %from doing joins means this needs to get some work to eliminate
 %the trailing observation. Here's an attempt.}
-takes a trace
-\(\Trace : \mathit{trace} ~ \TRACEELEMS \times \OBSS\) and a predicate
+takes a trace\bcp{I changed a : here to $\in$.  We should check if there are
+any more to fix.}
+\(\Trace \in \TRACE{\TRACEELEMS} \times \OBSS\) and a predicate
 on elements \(f \subset \TRACEELEMS\) and gives the prefix of
 \(\Trace\) ending with the first element on which \(f\) holds.
-Subtly, because the observation associated with a trace represents its
-next step, when we take a prefix from a trace containing observations
+One subtlety is that, because the observation associated with some element
+in a trace
+represents what can be observed when this element is executed (i.e., the
+observation on that step), when we take a prefix from a trace containing
+observations
 we must replace the final observation with a \(\tau\).
 
   \begin{center}
@@ -1292,7 +1299,7 @@ we must replace the final observation with a \(\tau\).
   \end{center}
 %
 If the resulting trace is a strict prefix of the parameter, then the
-predicate must hold on its final element. If the predicate never holds,
+predicate must hold on its final element. If the predicate never holds, then
 \(\PUT\) is the identity function.
 
 % The {\it join} operation, written \(T_1 \cdot T_2\) is the reverse of
@@ -1310,16 +1317,16 @@ through the first state where some condition holds on the machine state.
 This can easily be implemented using \(\PUT\), and we provide special notation
 for convenience.
 %
-Let \(f\) be a predicate on machine states. Then we define \(\mach
+If \(f\) be a predicate on machine states, we define \(\mach
 \hookrightarrow \machT | f\) (read ``\(\machT\) is the prefix of
-running \(\mach\) up to \(f\)''):
+running \(\mach\) up to \(f\)'')
 
 \judgmenttwo{\(\mach \hookrightarrow \machT'\)}
             {\(\PUT~(f,\machT')
               = \machT\)}
             {\(\mach \hookrightarrow \machT | f\)}
 \noindent
-And similarly for traces with policies:
+and similarly for traces with policies:
 
 \judgmenttwo{\(\mpstatename \hookrightarrow \MPT'\)}
             {\(\PUT~(\lambda \mpstate{\mach}{\pol}.f\ \mach,\MPT') = \MPT\)}
@@ -1335,7 +1342,8 @@ And similarly for traces with policies:
 \paragraph*{Observational Similarity}
 
 We say that a trace of observations $\obsT_1$ is a prefix of $\obsT_2$
-as far as an external observer is concerned, if the sequence of
+as far as an external observer is concerned, written \(\obsT_1 \lesssim
+\obsT_2\), if the sequence of
 non-silent observations of $\obsT_1$ is a prefix of those of
 $\obsT_2$; that is, we operate up to deletion of \(\tau\) observations,
 coinductively:
@@ -1363,8 +1371,8 @@ coinductively:
          {\(w\obsT_1 \lesssim w\obsT_2\)}
 \end{minipage}
 
+\smallskip
 We then define similarity of observation traces as traces prefixing each other:
-
 \[\obsT_1 \simeq \obsT_2 \triangleq \obsT_1 \lesssim \obsT_2 \land \obsT_2 \lesssim \obsT_1\]
 %
 %\leo{I still don't know how to do this transition. Maybe contrast
@@ -1374,7 +1382,7 @@ We then define similarity of observation traces as traces prefixing each other:
 %for a finite trace ($\tau \lesssim \obsT$ or $w \lesssim w\obsT$).\apt{Is this immportant?}\leo{I agree. Probably not}
 
 Note that an infinite silent trace is a
-prefix of (and equivalent to) any other trace. While this might seem
+prefix of (and equivalent\bcp{similar?} to) any other trace. While this might seem
 surprising at first, it makes sense in a timing-insensitive context:
 an external observer looking at two machine runs cannot (computably)
 distinguish between a machine that steps forever and a machine that
