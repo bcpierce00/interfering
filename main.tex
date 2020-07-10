@@ -149,7 +149,7 @@ caller's stack frames or control state), together with a straightforward
 well-bracketedness condition on the program's control flow.
   %
 We discuss how these properties are enforced or approximated by
-existing stack protection mechanisms and describe some useful
+existing stack protection mechanisms and describe useful
 stronger and weaker variants.  \ifaftersubmission\bcp{should we mention stktokens here?}
 \leo{Not sure. We almost never cite stuff in the abstract, do we?}\fi
 \end{abstract}
@@ -346,7 +346,7 @@ conservative Depth Isolation policy, which not only enforces our basic
 stack safety property, but also an alternative lockstep property that
 checks for integrity and confidentiality violations at every step of
 an execution trace. The advantage of this property is that it ``fails
-faster'' and os therefore more suitable for efficient testing. We prove (in
+faster'' and is therefore more suitable for efficient testing. We prove (in
 Coq) that this ``lockstep'' property implies our original definition of stack
 safety.
 
@@ -359,7 +359,7 @@ exact moment
 when a callee returns, this policy signals violations when the
 caller actually accesses data that the callee has written into its stack
 frame\ifaftersubmission\bcp{We could also hint at the lazy confidentiality
-  property inthe same way...}\fi.
+  property in the same way...}\fi.
 The lazy policy does not enforce our original integrity and confidentiality
 properties, and to our knowledge there is no formal statement of the properties that
 it ought to enforce. We propose ``observable'' versions of integrity and
@@ -489,11 +489,9 @@ declared set of return points.)
 Our property definitions make no other detailed assumptions about call or return sequences, although
 some of the enforcement mechanisms we consider do.
 
-Enforcement mechanisms are modeled as {\em policies}\bcp{this is a somewhat
-  special use of the word ``policy'' that comes from the micropolicies
-  world.  We should include a comment about this to avoid confusing
-  readers.} that add some auxiliary
-policy state to the ordinary machine state
+Enforcement mechanisms are modeled as {\em policies} (borrowing the
+terminology from tag-based mechanisms) that add some auxiliary policy
+state to the ordinary machine state
 %\bcp{This may be surprising to people who are not thinking about micropolicies.\apt{added para below}}
 and a partial policy step function that refines the machine step
 function by allowing or disallowing a step to be taken based on its
@@ -1477,7 +1475,7 @@ before instruction 8 corresponding to the return from {\tt g}.
 
 \medskip
 
-In the rest of this section we implictly parameterize all
+In the rest of this section we implicitly parameterize all
 definitions by a function map $\codemap$, a call map $\callmap$, a return
 map $\retmap$ and an entry map $\entmap$.
 
@@ -2211,7 +2209,7 @@ execution) and enforce a single-step variant of integrity and
 confidentiality tests. In addition, every time a call is made we push
 a variation of the original machine state at the time of that call on
 top of the variant stack (just like the stack confidentiality property
-enforced trace confidentiality for every transition\apt{can we change ``transition'' to ``call transition'' at least sometimes? -- I keep thinking it means ``step''}), and every time
+enforced trace confidentiality for every call transition), and every time
 the machine returns from a call we pop the top variation (to account
 for stack confidentiality taking the prefix of the transition trace
 until its return).
@@ -2240,9 +2238,10 @@ stack safety.
     \forall \component . ~
     \contour(\component) = \HIGHINT \rightarrow
     \mach(\component) = \mach'(\component)
-  \]
+    \]
+    \ifaftersubmission
 \apt{We could have used this to define trace integrity in the first place...}
-
+\fi
 \definition Two machine states $\mach_1$ and $\mach_2$ satisfy the
 \emph{stack confidentiality test} if the machines they stepped to
 have their changed components coincide and the observations during
@@ -2257,14 +2256,16 @@ these steps are equal:
     \vee \mach_2(\component) \neq \mach_2'(\component))
     \rightarrow \mach_1'(\component) = \mach_2'(\component)
 \end{array}
-  \]
+\]
+\ifaftersubmission
 \apt{And the last clause here could have been used for trace confidentiality...}
+\fi
 
 \definition The testing property keeps track of a variation machine
 for every nested call performed so far on a {\em variant stack}: a
-list of machine states annotated with a contour, each element of which
-(denoted $\vm{C}$) is a variation of the actual machine
-according to a contour $C$.
+list of machine states, each annotated with its own contour written
+as $\vm{C}$), and each being a variation of the actual machine
+according to $C$.
 %
 \footnote{The full formal definition in Coq also records additional
   information (the initial machine state at the call, its initial
@@ -2331,15 +2332,17 @@ We also need two auxiliary notations that relate to variant stacks.
 First, lockstep stack safety will check that the basic tests above hold for every
 machine in the variant stack.  Given a machine that steps $(\mach,
 \pol) \stepstopol{\obs} (\mach', \pol')$, say that a variant
-stack $\vs$ safisfies the \emph{variant stack test} if for each
+stack $\vs$ satisfies the \emph{variant stack test} if for each
 variant element $\vm{C}$ (which is a variation of $\mach$ for $C$),
 $\vm{C}$ can take a step, denoted $\vm{C} \stepstoobs{\obs} \mach'$,
 while satisfying the stack integrity test $\testInt{C}{\mach}{\mach'}$
 and stack confidentiality test $\testConf{\mach}{\mach'}$ with regard
 to the original machine state. We will write $\testVS{(\mach,
-  \pol)}{\vs}$ for this compound check. \apt{I'm having trouble here and below with
-  the scoping of $C$. Each variant stack is for one particular $C$, right?
-  So why not write $vs_C$ rather than $vm_C$ ?}
+  \pol)}{\vs}$ for this compound check.
+%\apt{I'm having trouble here and below with
+%  the scoping of $C$. Each variant stack is for one particular $C$, right?
+%  So why not write $vs_C$ rather than $vm_C$ ?}
+% LEO: Each machine has its own contour. Clarified above, hopefully
 %% >>>>>>> 1886f7a7bf858ce0c9518e407d9481518a4f028d
 %
 Second, we will write $\vs \stepsto \vs'$ if every variant machine
@@ -2350,9 +2353,10 @@ We are now ready to define lockstep stack safety coinductively.
 
 \definition Given a state $(\mach, \pol) \in \MPS$ and a variant stack
 $\vs$ in which every element $\vm{\contour}$ is a variation of $\mach$
-with respect to its \apt{whose?} contour, we say that an MP-trace induced from
-$(\mach, \pol)$ satisfies the \emph{trace lockstep stack safety}, and write
-$\testProp{}{\MPT}{\vs}$, if the following conditions are satisfied:
+with respect to its annotated contour $\contour$, we say that an
+MP-trace induced from $(\mach, \pol)$ satisfies the \emph{trace
+  lockstep stack safety}, and write $\testProp{}{\MPT}{\vs}$, if the
+following conditions are satisfied:
 
 \begin{itemize}
 
@@ -2399,12 +2403,12 @@ $\testProp{}{\MPT}{\vs}$, if the following conditions are satisfied:
   \[\testVS{(\mach, \pol)}{\mathit{tail}(\vs)},\]
   %
   and trace lockstep stack safety must be coinductively satisfied for
-  the remainder of the trace and for the tail of the varant stack
+  the remainder of the trace and for the tail of the variant stack
   that $\vs$ steps to:
   \[\testProp{}{((\mach', \pol', \obs)\MPT)}{(\mathit{tail}(\vs'))}\]
 
 \item If the machine \emph{fail-stops}, i.e., $(\mach, \pol) \hookrightarrow_P
-    (\mach, \pol, \tau)$, the property is safisfied for the singleton trace:
+    (\mach, \pol, \tau)$, the property is satisfied for the singleton trace:
     $\testProp{}{[(\mach, \pol)]}{\vs}$.
 
 %  \item If the machine takes a \emph{simultaneous return-call step}, that is,
@@ -2427,7 +2431,7 @@ Lockstep stack safety implies stack safety.
 
 The proof is a fairly involved coinductive argument
 (around 3K LoC in Coq) on the definition trace lockstep stack safety,
-using an auxiliary depth-index to ensure the proper aligmnent of
+using an auxiliary depth-index to ensure the proper alignment of
 calls and returns.
 
 \section{Stack Safety Properties for Lazy Enforcement}
@@ -2542,7 +2546,7 @@ will be compared.
       if, for any initial state and each \(n\)-transition from
       \(\mpstate{\mach_c}{\pol_c}\) to \(\mpstate{\mach_e}{\pol_e}\) in its
       induced trace, we take the prefix of the call
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} | \ret{\mach_c}\)
+      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} ~ | ~ \ret{\mach_c}\)
       and observable trace integrity holds on \(\MPT_{\mathit{call}}\) with
       contour \(\mathit{Cof}(\mach_c,n)\).
 
@@ -2677,8 +2681,8 @@ will be compared.
       to \(\mpstate{\mach_e}{\pol_e}\) in the induced trace
       \(\mpstate{\mach_0}{\pol_0} \hookrightarrow \MPT\), take any
       variation \(\mach_e' \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\). Let
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} |
-      \ret{\mach_c}\) and \(\mach_e' \hookrightarrow \machT_{\mathit{call}} |
+      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} ~ | ~
+      \ret{\mach_c}\) and \(\mach_e' \hookrightarrow \machT_{\mathit{call}} ~ | ~
       \ret{\mach_c}\). We must have \(\propdef{ObsTraceConf} ~
       \ret{\mach_c} ~ \MPT ~ \machT\).
 
@@ -2733,6 +2737,7 @@ will be compared.
     whether it had been called previously and changed its behavior accordingly.
 
 
+    \leo{Should we clearpage this once we're sure of the layout?}
 \section{Related Work}
 \label{sec:relwork}
 
@@ -2880,7 +2885,7 @@ contours computed at each crossing between caller and callee.
 
   Part of the motivation for the strong lockstep stack safety property
   is that it uncovers errors quickly, and therefore should be quicker
-  to test just like the smarter testing properties
+  to test, just like the smarter testing properties
   of~\citet{TestingNI:ICFP}. We have already developed a testing
   framework for debugging our policy enforcement for this property, and
   it would be interesting to explore whether a testing-amenable variant
