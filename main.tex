@@ -242,7 +242,7 @@ stronger and weaker variants.  \ifaftersubmission\bcp{should we mention stktoken
 %  a bit to make sure though}
 
 The call stack is a perennial target for attacks
-based on memory safety vulnerabilities, with potential consequences
+based on memory-safety vulnerabilities, with potential consequences
 ranging from leakage or corruption of private stack data to
 control-flow hijacking. To detect or prevent such attacks, a menagerie of
 software and hardware techniques for stack safety have been proposed,
@@ -295,10 +295,10 @@ The intuition behind \citeauthor{Skorstengaard+19}'s {\em
 callees: a callee should not be able to access or overwrite private data
 in the caller's stack frame.
 %
-We formalize this intuition in (1) a {\em stack confidentiality}
+We formalize this intuition in (1) a {\em stack-confidentiality}
 property, which promises that a callee's observable behavior is not affected
 by memory outside its stack frame (e.g., a caller's private data or
-uninitialized memory), plus (2) a {\em stack integrity} property,
+uninitialized memory), plus (2) a {\em stack-integrity} property,
 which promises that, if a function call ever returns, the caller's stack
 data at the point of return will be identical to what it was before the
 call.
@@ -343,7 +343,7 @@ enforceable using an existing tag-based enforcement
 mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider
 \citeauthor{DBLP:conf/sp/RoesslerD18}'s
 conservative Depth Isolation policy, which not only enforces our basic
-stack safety property, but also an alternative lockstep property that
+stack-safety property, but also an alternative lockstep property that
 checks for integrity and confidentiality violations at every step of
 an execution trace. The advantage of this property is that it ``fails
 faster'' and is therefore more suitable for efficient testing. We prove (in
@@ -365,8 +365,8 @@ properties, and to our knowledge there is no formal statement of the properties 
 it ought to enforce. We propose ``observable'' versions of integrity and
 confidentiality property, which capture the desired behavior of a policy that
 detects violations between when they occur and when they make a visible impact.
-Unfortunately the existing Lazy Tagging and Clearing policy of
-\citeauthor{DBLP:conf/sp/RoesslerD18} does not quite enforce these properties,
+Unfortunately \citeauthor{DBLP:conf/sp/RoesslerD18}'s existing ``Lazy Tagging
+and Clearing'' policy does not quite enforce these properties,
 but would if enhanced (at some performance cost).
 %\bcp{I worry that we are being a little
 %  dishonest here: the stated advantage of the lazy policy is that it is more
@@ -377,12 +377,13 @@ but would if enhanced (at some performance cost).
 \bcp{Be careful: When a compound phrase is used as an adjective to modify a
   following noun, it gets hyphenated; otherwise it does not.  This is
   correct grammar, not inconsistency!  :-)}
+\sna{Aha, I forgot that. Going hard the other way.}
 
 In summary, we offer the following contributions:
 \begin{itemize}
 \item
   % \leo{More? Extensional}\bcp{We might need to invent a word for this---''quasi-extensional''?}
-  A novel {\em stack safety property} abstractly capturing the
+  A novel {\em stack-safety property} abstractly capturing the
   intuitive concepts of strict local state encapsulation and well-bracketed
   control flow~(\cref{sec:lse-and-wbcf}).
   % These properties rule out common examples of stack memory abuse.
@@ -390,12 +391,12 @@ In summary, we offer the following contributions:
   the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, which is
   based on hardware tagging~(\cref{sec:conservative}).
 \item
-  A {\em lockstep} variant of the stack safety property that is also
+  A {\em lockstep} variant of the stack-safety property that is also
   enforced by the Depth Isolation policy
   but is more efficient to test, plus a proof (in Coq) that this variant is
   stronger than the original~(\cref{sec:lockstep}).
 \item
-  A {\em lazy} variant of the stack safety property that can be enforced if the
+  A {\em lazy} variant of the stack-safety property that can be enforced if the
   Lazy Tagging and Clearing policy of \citet{DBLP:conf/sp/RoesslerD18} is enhanced
   with unique tags on each activation, plus a proof (in Coq) that this
   variant is weaker than the original~(\cref{sec:lazy}).
@@ -463,7 +464,7 @@ assumptions about
 memory layout; our definitions could easily be changed to be parametric over
 these assumptions, at the cost of some complexity in their statements.  Memory
 consists of an instruction region and a stack that grows upwards. (For simplicity,
-we do not consider the heap. Integrating a memory safety property for the
+we do not consider the heap. Integrating a memory-safety property for the
 heap in the style of
 \citet{DBLP:conf/post/AmorimHP18} is a natural extension that we discuss
 in~\Cref{sec:relwork}.)  The stack has a conventional structure, with
@@ -477,7 +478,7 @@ definitions say nothing at all about registers (except $\PCname$ and
 $\rsp$). \bcp{This implicitly amounts to choosing a caller-saves register
   convention, though, doesn't it?\apt{I think it is neutral; we could add separate caller register protection if we wanted.}}
 
-Our stack safety concepts depend critically on the notions of ``call'' and ``return,''
+Our stack-safety concepts depend critically on the notions of ``call'' and ``return,''
 which are not fully explicit in machine code (the same instruction opcode may be
 used in some places as part of a call or return sequence and in other places
 for other purposes).  We define a call to be
@@ -581,9 +582,14 @@ state is delicate; we conjecture it can be done with some effort.
 %
 Some policies are implemented in software, by modifying code in the
 compiler, for example to perform bounds checking~\citep{NagarakatteZMZ09} or
-to insert stack canaries~\citep{Cowan+98}. Such approaches should
-still satisfy our formal notion of stack safety \apt{Stack canaries certainly would not!} with a trivial null
-policy, but only for programs produced by the compiler.\apt{This still seems wrong to me. The policy part needs somehow to describe everything that isn't varied or rolled back.}
+to insert stack canaries~\citep{Cowan+98}. Such approaches can, in principle,
+be evaluated in terms of our formal notion of stack safety with a trivial null
+policy. But any state maintained by the enforcement mechanism must be in normal
+memory and subject to the same confidentiality and integrity concerns (to be
+varied, rolled back, etc.), a heavy constraint. Alternately it can be stripped
+out as policy state provided that it can be proven to protect itself.
+
+\apt{This still seems wrong to me. The policy part needs somehow to describe everything that isn't varied or rolled back.}
 %These approaches are represented as policies that
 %accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
 %being produced by the compiler.) The set of policy states is again the unit type
@@ -2040,7 +2046,7 @@ and entry map) is said to enjoy
 
 In this section we examine how an existing enforcement mechanism,
 Depth Isolation from \citet{DBLP:conf/sp/RoesslerD18}, can implement
-the formal stack safety property described in the previous section: it in
+the formal stack-safety property described in the previous section: it in
 fact enforces a stronger, inductive version of that property which strengthens the
 local state encapsulation component by checking for integrity and
 confidentiality violations at every step of the callee's execution trace.
@@ -2107,7 +2113,7 @@ Initially, the entire stack is tagged $\tagNoDepth$,
 %\rb{actually, the ``initial frame'' should be tagged with its proper depth}
 and the {\PCname} has tag $\tagPCDepth{0}$. These tags are altered
 at exactly those points in
-the program where the contour of the stack safety property changes:
+the program where the contour of the stack-safety property changes:
 
 \begin{itemize}
 
@@ -2139,13 +2145,13 @@ using a combination of tags on the instructions
 and an additional tag on the $\PCname$; we omit the details here.
 
 There remains the question of how to ensure that the sequences are
-invoked at the right places. For a program to enjoy the stack safety property
+invoked at the right places. For a program to enjoy the stack-safety property
 (with respect to a particular call map), all we need require is that
 the entry sequence be initiated at any instruction marked as a call
 in the call map. This is achieved by giving these instructions (another) special tag,
 and it is easy to check statically that this has been done correctly.
 If the code fails to initiate an exit
-sequence at a point where the stack safety property expects a return,
+sequence at a point where the stack-safety property expects a return,
 the micropolicy will incorrectly behave as if execution
 is continuing in the callee, but since the callee never has stronger access
 rights than the caller, this is harmless.
@@ -2246,7 +2252,7 @@ step in every variant machine (thus, keeping them in lockstep
 execution) and enforce a single-step variant of integrity and
 confidentiality tests. In addition, every time a call is made we push
 a variation of the original machine state at the time of that call on
-top of the variant stack (just like the stack confidentiality property
+top of the variant stack (just like the stack-confidentiality property
 enforced trace confidentiality for every call transition), and every time
 the machine returns from a call we pop the top variation (to account
 for stack confidentiality taking the prefix of the transition trace
@@ -2921,7 +2927,7 @@ contours computed at each crossing between caller and callee.
 
   \paragraph{Random Testing}
 
-  Part of the motivation for the strong lockstep stack safety property
+  Part of the motivation for the strong lockstep stack-safety property
   is that it uncovers errors quickly, and therefore should be quicker
   to test, just like the smarter testing properties
   of~\citet{TestingNI:ICFP}. We have already developed a testing
