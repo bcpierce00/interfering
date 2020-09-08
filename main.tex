@@ -912,7 +912,7 @@ $\cdots$
 \\
 \end{center}
 % Register File
-\summary{40}{0}{\thepcctr}{109}{18}{?}
+\summary{40\rb{44}}{0}{\thepcctr\rb{27}}{109}{18}{?}
 \vspace*{0.2em}
 \label{fig:running-trace-a}
 \end{figure}
@@ -925,7 +925,7 @@ $\cdots$
   \row{\lw ~ \rra ~ \rsp ~ \negate 1}{\rra \leftarrow [\rsp - 1]}{\rra \leftarrow 27}
       {Load return address}
   \row{\addi ~ \rsp ~ \rsp ~ \negate 1}{\rsp \leftarrow \rsp - 1}{\rsp \leftarrow 108}
-      {Deallocate {\tt g}'s local state\rb{Yes, still {\tt g}}}
+      {Deallocate {\tt g}'s local state}
   \row{\jalr ~ \rra ~ \rra ~ 0\apt{wrong}}{\PCname \leftarrow \rra}{\PCname \leftarrow 27}
       {Return to {\tt f} ($\jalr$)}
   \end{array}
@@ -958,7 +958,7 @@ $\cdots$
 \\
 \end{center}
 % Starting Register File
-\summary{27}{0}{\thepcctr}{108}{18}{?}
+\summary{27}{0}{\thepcctr\rb{27}}{108}{18}{?}
 % \vspace*{0.2em}
 
 \setcounter{pcctr}{27}
@@ -966,7 +966,7 @@ $\cdots$
 % \vspace*{0.2em}
 \[
 \begin{array}{l|l|l|l}
-  \row{\lw ~ r_4 ~ \rsp ~ 0}{r_4 \leftarrow [\rsp]}{r_4 \leftarrow 18}
+  \row{\lw ~ r_4 ~ \rsp ~ 0\rb{\negate 1}}{r_4 \leftarrow [\rsp \rb{- 1}]}{r_4 \leftarrow 18}
       {Load return value into $r_4$}
   \row{\sw ~ \rsp ~ r_4 ~ \negate 3}{[\rsp - 3] \leftarrow r_4}{[105] \leftarrow 18}
       {Set {\tt w} to return value}
@@ -1009,7 +1009,7 @@ $\cdots$
 \\
 \end{center}
 % Register File
-\summary{8}{0}{\thepcctr}{104}{18}{0}
+\summary{8}{0}{\thepcctr\rb{8}}{104}{18}{0}
 %\vspace*{0.2em}
 \setcounter{pcctr}{8}
 \[
@@ -1043,12 +1043,12 @@ $\cdots$
 \memory{8}{\unusedc}%[{\makebox[0pt]{Uninitialized}}]
 ~$\cdots$
 \MemoryLabel{-51em}{0.75em}{60}
-\MemoryLabel{-47em}{0.75em}{60}
-\MemoryLabel{-43em}{0.75em}{42}
+\MemoryLabel{-47em}{0.75em}{60\rb{42}}
+\MemoryLabel{-43em}{0.75em}{42\rb{18}}
 \\
 \end{center}
 % Starting Register File
-\summary{\thepcctr}{0}{37}{102}{60}{42}
+\summary{\thepcctr}{0}{37\rb{8}}{102}{60}{42}
 \caption{Detailed Execution Trace
 %  \rb{A suggestion for the description of $\jal$ and $\jalr$:
 %    call(function label) [if labels are added next to the entrypoints]
@@ -1593,7 +1593,7 @@ corresponding labels:
 \MemoryLabel{4em}{2em}{0}
 \MemoryLabel{21em}{2em}{99}
 \MemoryLabel{43.5em}{2em}{\SP}
-\memory{3}{\instrc}[{\makebox[0pt]{$(\HIGHSEC,\HIGHINT)$}}]%
+\memory{3}{\instrc}[{\makebox[0pt]{$(\LOWSEC,\HIGHINT)$}}]%
 \hspace*{3pt}
 $\cdots$
 \memory{1}{\emptyoutc}[{\makebox[0pt]{$(\HIGHSEC, \LOWINT)$}}]%
@@ -2584,7 +2584,7 @@ will be compared.
     \end{figure}
 
     For our example, we return to the violation of trace integrity in
-    \cref{fig:intex}, in which {\tt g} \rb{??} has written to {\tt z} and returned.
+    \cref{fig:intex}, in which {\tt g} has written to {\tt z} and returned.
     Whether observable integrity holds depends on the continuing trace, shown
     in \cref{fig:intlex}. Above, we have the final state of \(\MPT\),
     \(\mach_r\), and the rolled-back state, \(\mach_r' =
@@ -2716,14 +2716,14 @@ will be compared.
 
       In our example, \cref{fig:conflex} shows how execution continues from
       \(\mach_r'\) and the restored
-      \[\mach_r'' = \mathit{restore}(\contour,
+      \[\mach_r'' = \mathit{restore}(%\contour,
       \mach_e,\mach_e',\mach_r,\mach_r').
       \]
-      Addresses 107 and 108
+      Addresses 106 and 107
       are not restored; every address that was varied and not changed in one
-      of the executions is. So 108 contains 43 in the trace from \(\mach_r\),
+      of the executions is. So 107 contains 43 in the trace from \(\mach_r\),
       and after returning from {\tt f}, {\tt main} prints 85. But in the trace
-      from \(\mach_r''\), 108 contains $-4$, and ultimately 38 is printed.
+      from \(\mach_r''\), 107 contains $-4$, and ultimately 38 is printed.
       So observable trace confidentiality does not hold. This example
       illustrates the weakness of observable confidentiality as a testing
       property: it takes until the very end of the program to determine whether
@@ -2806,26 +2806,27 @@ will be compared.
 
 \paragraph{Formal Stack Safety on Capability Machines}
 %
-To our knowledge, the first and only line of work that has attempted
-to furnish a positive and formal characterization of the meaning of
+To our knowledge, the only line of work to date that has attempted
+a positive and formal characterization of
 stack safety is \citet{Skorstengaard+19b}, who introduce a calling
 convention that uses local capabilities to preserve local state
 encapsulation and well-bracketed control flow, using a logical
 relation to reason about the stack safety of concrete
 programs. Although the required hardware support is readily available
-in capability machines like CHERI, this technique incurs significant
-costs, because it requires the entire unused part of the stack to be
+in capability machines like CHERI\bcp{including linear capabilities?? or
+  don't they use them in this paper?}, this technique incurs significant
+costs\bcp{This is the pot calling the kettle black}, because it requires the entire unused part of the stack to be
 cleared whenever a security boundary is crossed. Their logical
 relation captures capability safety without ``externally observable
-side-effects (like console output or memory access traces).'' In the
+side-effects (like console output or memory access traces).'' \bcp{Not very clear:}In the
 discussion, ``while [the authors] claim that [their] calling
 convention enforces control-flow correctness, [they] do not prove a
 general theorem that shows this, because it is not clear what such a
 theorem should look like,'' noting that the correctness property
 enjoyed by their technique ``is not made very explicit.''
 
-StkTokens \citep{Skorstengaard+19} is a natural continuation of that work. Like
-its predecessor, it aims to protect the stack by enforcing local state
+StkTokens \citep{Skorstengaard+19} continues this line of work. Like
+the earlier paper, it aims to protect the stack by enforcing local state
 encapsulation and well-bracketed control flow. It does so by defining a new
 calling convention that makes use of linear capabilities for stack and return
 pointers. The convention operates on a single shared stack and requires that
@@ -2854,7 +2855,8 @@ semantics of the capability machines. The main practical limitation of StkTokens
 is its reliance on linear capabilities, as it is unclear now they could be added
 to practical capability machines, especially in terms of efficiency---previous
 work on micropolicies \citep{yannis-report} has shown how to use that framework
-to implement linear return capabilities.
+to implement linear return capabilities.\bcp{But IIUC the Dover realization
+  of micropolicies can't do this...?}
 
 \paragraph{Protecting the Stack with Micropolicies}
 %
@@ -2881,7 +2883,8 @@ Heap safety, like stack safety, may be framed as a security property
 in the form of noninterference~\citep{DBLP:conf/post/AmorimHP18}. Just
 like~\citeauthor{DBLP:conf/post/AmorimHP18} give a rigorous
 characterization of the meaning of (heap) memory safety, in this paper
-we aim to do the same for the stack.
+we aim to do the same for the stack.\bcp{Let's describe their work in a bit
+  more detail.}
 %
 Their model describing safety of shared stack-allocated
 objects extends naturally to heap safety, complicated by the fact that
