@@ -58,11 +58,31 @@ SNA: Thoughts on the criteria.
     On the other hand, we described how we would handle coroutines, and threads would be similar. Basically
     when we lose the property of the contour that exiting a context means either shrinking access monotonically
     or never returning to that context, we need to change the LSE property to vary at each entry to a context
-    and exit at each return. But once that is done the space of threads and coroutines should be wide open.
+    and test at each exit from it. But once that is done the space of threads and coroutines should be wide open.
     As for WBCF, we would need to update Control Separation and Entry Integrity to account for changes in
     acceptable modes of control transfer. Return integrity applies to calls and returns even if separated by
     yields.
 
+SNA: Thoughts on closures (very sketchy).
+
+  Suppose we added yet another partial map (sigh) representing the sealing of a closure. Suppose as well that our
+  model is enhanced to track the provenance of values as discussed in the future work section on stack-derived
+  pointers. A closure map would take a code address as usual and yield: a register r that holds the pointer, an
+  entry point e, a unique Seal identifier i, and a set of components ks. We extend the tuple of a security state a
+  contour can give with (forall i, Seal i). When we take a step from an instruction where the closure map is defined,
+  we update the contour C so that for each k in ks, C(k) is (*,*,Seal i). We also need to add state to track the
+  association between i, e, and r, and carry that association to any k with pointer provenance from r.
+  Finally, we modify call maps to give an optional component whose contents are being used as a function pointer.
+
+  Then, when a call map says that we are making a call using a closure associated with (Seal i), the contour
+  update sets all (Seal i) components (LC,LI) and LSE works just the same, treating sealed components as (HC/HI).
+  WBCF will need an extra clause stating that we really did jump to e. (I'm a little unclear as to whether a
+  closure should be re-sealed on return, but we can do that if we need to.)
+
+  (Notes: arg, maybe we actually need a list of closures.)
+
+  To answer the questions: yes, we believe this can be extended to closures, and with these additions stack safety
+  would indeed imply both temporal safety and encapsulation of closures.
 
 > Review #27A
 > ===========================================================================
