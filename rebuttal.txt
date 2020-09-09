@@ -136,10 +136,9 @@ cofnidentiality.
 
 >  - In the future work section, the authors mentions several types of non-stack control flow that are not addressed by the current model, including tail calls. Other common non-stack control flow includes exceptions (such as c++ exceptions) and setjmp/longjmp. I understand that these non-stack control flow is more difficult to model, but for the exact reasons, how to formally characterize stack safety for these difficult cases becomes critical.
 
-LEO: Not sure what the take should be here. Something like the following?
-Tail calls were left out as it's only the characterization of the return that poses
-a problem - once the point of context switch is determined, the statement of
-stack safety remains largely the same. 
+Tail calls were left out as it's only the characterization of the
+return that poses a problem - once the point of context switch is
+determined, the statement of stack safety remains largely the same.
 
 >  [1] Xiaoyang Xu, Masoud Ghaffarinia, Wenhao Wang, Kevin W. Hamlen, and Zhiqiang Lin. 2019. CONFIRM: evaluating compatibility and relevance of control-flow integrity protections for modern software. In Proceedings of the 28th USENIX Conference on Security Symposium (SEC’19). USENIX Association, USA, 18051821.
 >
@@ -462,17 +461,48 @@ machine tied to some flavor of enforcement,  but rather on more abstract notions
 >   Do you think it can be applied to more or less languages?
 >   Do you think it is better suited or less well suited for reasoning about programs which depend on stack safety?
 >   Do you think it is etc.
->
+
+See the full comparison in terms of the criteria in the summary. 
+
 > * Do you think you could show safety of a specific example program that depends on stack safety (like the awkward example) and if so, how would such a proof work?
->
+
+LEO: This is the (4) criterion I guess again. I'm not sure exactly what this means.
+
 > * Do you think your approach to defining stack safety could be extended to languages with the following features (and if so, how?):
 >   - varargs?  (seems problematic for call map)
+
+Yes. The call map serves two purposes: identifying call points and
+allowing for an easy calculation of the stack pointer at the time of
+the call. We could keep the call map essentially as a set and use a
+frame pointer (or a similar abstraction) for the latter functionality.
+Keeping the number of arguments in the map is certainly convenient,
+but not necessary.
+
 >   - dynamic code generation (seems problematic for the function map, call map and return map)
 >   - dynamic linking (seems problematic for the function map, call map and return map)
 >   - self-editing code (seems problematic for call map and return map)
+
+LEO: Polish needed here.
+These three extensions would indeed be challenging. We could
+potentially handle generated code by using special contours for the
+instructions that generate it, which would correspond to a map that
+allows some instructions to update the maps, including potentially
+the map itself. 
+
 >   - tail calls (seems potentially okay, but I'd like to be sure)
+
+Yes. The only minor problem with tail calls is characterizing the
+return - once the point of context switch is determined, the statement
+of stack safety remains largely the sam.
+
 >   - exceptions and stack unwinding
+
+LEO: Hmmm. I don't remember ever discussing this.
+
 >   - closures (seems potentially problematic for precision of the entry map)
+
+See below.
+
 >   How would you extend your approach to define stack safety in the presence of these features?
 >
 > * Do you think your approach implies the following properties?
@@ -480,20 +510,29 @@ machine tied to some flavor of enforcement,  but rather on more abstract notions
 >   - encapsulation of closures: it should not be possible for the adversary to invoke a closure with a different environment than the one they received?
 >   If not, do you think it should imply these properties and if so, how do you think it could be extended?
 
-SNA:
-  Adding closures requires:
-  - identifying code points where closures are created
-  - adding machinery to track association of closure identities, entry points, and components
+Adding closures would require: 
+(1) identifying code points where closures are created
+(2) adding machinery to track association of closure identities, entry points, and components
     containing valid closure pointers (including pointer provenance, as with stack-derived pointers)
-  - extending WBCF to require that closure invocations respect the closure's designated entry point
+(3) extending WBCF to require that closure invocations respect the closure's designated entry point
     and use a valid closure pointer (ensuring temporal safety and encapsulation)
-  - extending contours to treat some components as sealed, associated with closure identities
-  - on closure invocation, set contour for encapsulated components to LC/LI, other components as normal for stack safety
+(4) extending contours to treat some components as sealed, associated with closure identities
+(5) on closure invocation, set contour for encapsulated components to LC/LI, other components as normal for stack safety
     (allowing access to closure)
-  - otherwise treat sealed components as HC/HI except that from a caller's perspective, they might change during
+(6) otherwise treat sealed components as HC/HI except that from a caller's perspective, they might change during
     nested calls (monotonicity is lost)
 
-  The answers are yes, we believe that with addition of closures, natural extensions to WBCF and LSE would imply these
-  properties.
+So to sum up, the answers are yes, we believe that to add closures,
+natural extensions to WBCF and LSE would imply the properties
+mentioned.
 
 > * Are the lazy and strong variant of your properties specifically intended for the corresponding micropolicy-based enforcement techniques or do you believe they are more broadly applicable?
+
+As discussed in the summary above and in your detailed comments, we
+did not intend for the properties to be micropolicy specific, but a
+spectrum of stack safety properties presenting an interesting
+trade-off in terms of enforcement or reasoning efficiency. But we
+agree that the current exposition does not convey what we set out to
+do, and that the overall motivation of the included work would be
+better portrayed as a formal characterization of micropolicy-enforced
+stack safety.
