@@ -1,6 +1,5 @@
-We thank the reviewers and in particular reviewer C for their thoughtful
-comments.  We first discuss the most important points raised in
-reviews. Then, in an optional appendix, we respond point-by-point to each
+Thank you for the thoughtful comments.  We first discuss the most important
+points raised, then, in an optional appendix, respond point-by-point to each
 individual piece of reviewer feedback.
 
 MOTIVATION
@@ -16,31 +15,31 @@ effort) to describe capability-based enforcement mechanisms, as we state in
 Section 2.  However, given that this effort didn't make it into the final
 product, we agree that the paper as it stands would be more accurately
 described as an abstract property capturing micropolicy enforcement rather
-than the all-encompassing stack safety notion we set out to state, and
-intend to do so for a final version.
-
-BCP: I.e., we plan to limit our claims rather than fixing the exposition?
-Why not promise the latter (and lay out what we would do)?
-LEO: Going with "we'll limit our claims and add the related work comparison"
-seems more doable (and fair) in a revision round than promising to do
-new work (or work that we started doing and then it was clear we couldn't
-work for the deadline).
+than the all-encompassing stack safety notion we set out to state; we will
+clarify this for a final version.
 
 RELATED WORK
 
-All reviewers also wanted additional discussion of related work.  We agree
-that there should be a clearer comparison to both Skorstengaard papers,
-using the informal criteria proposed there. We plan to include a discussion
-like the following:
+All reviewers also wanted additional discussion of related work.  We agree,
+in particular, that there should be a clearer comparison to the two
+Skorstengaard et al papers, using the five informal criteria proposed
+there. We plan to include a discussion like the following:
+
+BCP: Can we format these so that it is clear which bits we're
+getting (verbatim, even) from Skorstengaard and which are us?
+
+BCP: Spell out abbreviations like LSE.  In general, we should not assume
+reviewers remember all the details of the paper (much less the details of
+Skorstengaard)!
 
 (1) On intuition: The LSE part of the property we present aims to
 characterize stack safety in security terms. For readers familiar with
 integrity/confidentiality/noninterference, the eager version should be
-fairly intuitive. The lazy/observable properties, are less intuitive,
-but more interesting in that they precisely characterize violations to
-the more intuitive view of stack safety that can still be considered
-safe to an external observer. The WBCF part simply formalizes standard
-behavior of stack-based control flow.
+fairly intuitive. The lazy/observable properties, though less intuitive, are
+more interesting in that they precisely characterize behaviors that would be
+considered violations to the more intuitive view of stack safety but that
+can still be considered safe by an external observer. The WBCF part simply
+formalizes standard behavior of stack-based control flow.
 
 By contrast, Skorstengaard relies on different prior intuitions:
 for readers familiar with the behavior of pure stacks (or rather the
@@ -55,11 +54,17 @@ stack safety without adding the complex (but solved) overhead of
 dealing with heap locations. But the properties (and the testing
 framework behind it) were designed with [Azevedo et al] in mind.
 
+BCP: I'm not sure this is hitting the right point.  Clearly, to reason about
+programs with both stack and heap, we need something like that frame rule.
+But the reviewer might wonder about how our property can be used for
+_reasoning_ about programs with just a stack...
+
 (3) reusable in compiler chains: As you point out, this is not really
 applicable, since this is a criterion tailored to what Skorstengaard
 is aiming to do. We might consider what the equivalently tailored
 criterion would be for us -- usable in "dynamic enforcement
 environments" with potentially unsafe commodity compilers.
+BCP: "you" is just one reviewer, but this is to be read by all three...
 
 APT: Reviewer C interprets (4) to mean:
 "This criterion asks for an argument that any property of a program
@@ -140,6 +145,9 @@ Tail calls were left out as it's only the characterization of the
 return that poses a problem - once the point of context switch is
 determined, the statement of stack safety remains largely the same.
 
+BCP: Don't understand.  Are we saying tail calls are easy?  (Then why didn't
+we just add them?)
+
 >  [1] Xiaoyang Xu, Masoud Ghaffarinia, Wenhao Wang, Kevin W. Hamlen, and Zhiqiang Lin. 2019. CONFIRM: evaluating compatibility and relevance of control-flow integrity protections for modern software. In Proceedings of the 28th USENIX Conference on Security Symposium (SEC’19). USENIX Association, USA, 18051821.
 >
 > Comments for author
@@ -187,6 +195,8 @@ determined, the statement of stack safety remains largely the same.
 
 Leo: The sketch of stack-derived pointers in 1199 seems fairly intuitive to me. Double down on it?
 
+BCP: Yes.
+
 > - The proposed notion of stack safety is too strong to be enforced by existing stack protection mechanisms.
 >
 >   [Roessler and DeHon 2018]'s "lazy tagging and clearing" is itself not stack-safe according to this paper.
@@ -206,6 +216,14 @@ interest.
 
 BCP: Obviously, this has to be addressed strongly and concretely.
 LEO: I'm not really following the CompCert definition. Has anybody taking a crack at this?
+
+There is some relation.  E.g., the ec_readonly condition
+
+  https://github.com/AbsInt/CompCert/blob/94558ecb3e48261f12c644045d40c7d0784415e0/common/Events.v#L651
+
+looks related.  But CompCert's definition (a) doesn't protect the stack at
+all from _reading_, and (b) isn't "nested" the way ours is.  This makes
+sense, since C doesn't protect the stack!
 
 > Questions for the response period
 > ---------------------------------
@@ -360,11 +378,10 @@ offs in terms of enforcement or reasoning efficiency.
 > Do the three variants score equally well on the above criteria?
 > - For the "lockstep" variant, I get the impression that this is a proof-technical definition that is only used for proving the regularly stack-safety property for the micropolicy enforcement and not really important/useful in itself: is this also how you see it?
 
-The lockstep variant is a slightly more technical artifact that is (1)
-easy to enforce and (2) easy to test, but that is interesting in its
-own right because it captures a very conservative notion of stack
-safety---while still allowing the majority of reasonable stack-safe
-programs. 
+The lockstep variant is a slightly more technical artifact that is (1) easy
+to enforce and (2) easy to test, but that is also interesting in its own
+right because it captures a quite conservative notion of stack safety (while
+still allowing the majority of reasonable stack-safe programs).
 
 > - The lazy variant of stack safety strikes me as problematic because of several reasons:
 >   * It seems very specific to exactly one enforcement technique.
@@ -378,7 +395,7 @@ Similarly, the lazy variant is interesting because it is a property
 that is as liberal as possible in the behaviors it allows. Compared to
 the other properties, it's much harder to reason about or test (as we
 have to consider the entire execution trace), but it's simpler to enforce
-and more permissive. 
+and more permissive.
 
 > I'm also a bit unconvinced about the paper's motivation.
 > Based on comments throughout the paper, they seem to be looking for a property that describes in detail how the stack looks in memory and how the different memory locations are allowed to be modified or how it is allowed to influence the running program.
@@ -462,21 +479,26 @@ machine tied to some flavor of enforcement,  but rather on more abstract notions
 >   Do you think it is better suited or less well suited for reasoning about programs which depend on stack safety?
 >   Do you think it is etc.
 
-See the full comparison in terms of the criteria in the summary. 
+See the full comparison in terms of the criteria in the summary.
 
 > * Do you think you could show safety of a specific example program that depends on stack safety (like the awkward example) and if so, how would such a proof work?
 
 LEO: This is the (4) criterion I guess again. I'm not sure exactly what this means.
 
+BCP: I think this is a more focused question: Suppose you had a program that
+you believed was correct according to this criterion and you wanted to prove
+that it was.  How would the proof look?
+
 > * Do you think your approach to defining stack safety could be extended to languages with the following features (and if so, how?):
 >   - varargs?  (seems problematic for call map)
 
-Yes. The call map serves two purposes: identifying call points and
-allowing for an easy calculation of the stack pointer at the time of
-the call. We could keep the call map essentially as a set and use a
-frame pointer (or a similar abstraction) for the latter functionality.
-Keeping the number of arguments in the map is certainly convenient,
-but not necessary.
+We believe this extension is possible.
+
+The call map serves two purposes: identifying call points and allowing for
+an easy calculation of the stack pointer at the time of the call. We could
+keep the call map essentially as a set and use a frame pointer (or a similar
+abstraction) for the latter functionality.  Keeping the number of arguments
+in the map is certainly convenient, but not necessary.
 
 >   - dynamic code generation (seems problematic for the function map, call map and return map)
 >   - dynamic linking (seems problematic for the function map, call map and return map)
@@ -487,13 +509,15 @@ These three extensions would indeed be challenging. We could
 potentially handle generated code by using special contours for the
 instructions that generate it, which would correspond to a map that
 allows some instructions to update the maps, including potentially
-the map itself. 
+the map itself.
+
+BCP: I don't actually believe the second sentence.
 
 >   - tail calls (seems potentially okay, but I'd like to be sure)
 
-Yes. The only minor problem with tail calls is characterizing the
-return - once the point of context switch is determined, the statement
-of stack safety remains largely the sam.
+Yes. The only minor problem with tail calls is characterizing the return;
+once the point of context switch is determined, the statement of stack
+safety remains largely the sam.
 
 >   - exceptions and stack unwinding
 
@@ -510,7 +534,7 @@ See below.
 >   - encapsulation of closures: it should not be possible for the adversary to invoke a closure with a different environment than the one they received?
 >   If not, do you think it should imply these properties and if so, how do you think it could be extended?
 
-Adding closures would require: 
+Adding closures would require:
 (1) identifying code points where closures are created
 (2) adding machinery to track association of closure identities, entry points, and components
     containing valid closure pointers (including pointer provenance, as with stack-derived pointers)
@@ -528,11 +552,11 @@ mentioned.
 
 > * Are the lazy and strong variant of your properties specifically intended for the corresponding micropolicy-based enforcement techniques or do you believe they are more broadly applicable?
 
-As discussed in the summary above and in your detailed comments, we
-did not intend for the properties to be micropolicy specific, but a
-spectrum of stack safety properties presenting an interesting
-trade-off in terms of enforcement or reasoning efficiency. But we
-agree that the current exposition does not convey what we set out to
-do, and that the overall motivation of the included work would be
-better portrayed as a formal characterization of micropolicy-enforced
-stack safety.
+As discussed in the summary above and in your detailed comments, we did not
+intend for the properties to be micropolicy specific, but rather to
+represent a spectrum of stack safety properties presenting an interesting
+trade-off in terms of enforcement or reasoning efficiency.
+
+But we agree that the current exposition does not convey this generality,
+and that the overall motivation of the work would be better portrayed as a
+formal characterization of micropolicy-enforced stack safety.
