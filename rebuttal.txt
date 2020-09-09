@@ -116,9 +116,22 @@ BCP: Can we sketch it here?
 > Weaknesses
 > ----------
 > - The authors do not explicitly discuss how multiple concurrent threads fit in the definition. It is not clear to me how to apply the definitions in this work to multiple threads. Since the stacks of all threads are allocated in the same linear virtual address space, it is possible for one thread’s stack to overlap the stack of another thread. How should stack safety be defined in this case? I think this is an very important question as recent work points out cross-thread stack smashing attack [1].
->
+
+We sketch how multiple threads/coroutines would work in the future
+work section (l 1213-1219). In particular, we would need to further
+distinguish stack locations as either "accessible" (current frame),
+"belonging to the same call stack", or "belonging in another
+stack". And then integrity would require that when a function changes
+the locations in the "same" stack should be unchanged. Similarly for
+cofnidentiality.
+
 >  - In the future work section, the authors mentions several types of non-stack control flow that are not addressed by the current model, including tail calls. Other common non-stack control flow includes exceptions (such as c++ exceptions) and setjmp/longjmp. I understand that these non-stack control flow is more difficult to model, but for the exact reasons, how to formally characterize stack safety for these difficult cases becomes critical.
->
+
+LEO: Not sure what the take should be here. Something like the following?
+Tail calls were left out as it's only the characterization of the return that poses
+a problem - once the point of context switch is determined, the statement of
+stack safety remains largely the same. 
+
 >  [1] Xiaoyang Xu, Masoud Ghaffarinia, Wenhao Wang, Kevin W. Hamlen, and Zhiqiang Lin. 2019. CONFIRM: evaluating compatibility and relevance of control-flow integrity protections for modern software. In Proceedings of the 28th USENIX Conference on Security Symposium (SEC’19). USENIX Association, USA, 18051821.
 >
 > Comments for author
@@ -163,15 +176,14 @@ BCP: Can we sketch it here?
 >
 >   As discussed in Section 9, stack-derived pointers are not supported (L1199), but they are widely used in real-world programs.
 >   Furthermore, without stack-derived pointers, stack safety is more-or-less obvious to define.
->
+
+Leo: The sketch of stack-derived pointers in 1199 seems fairly intuitive to me. Double down on it?
+
 > - The proposed notion of stack safety is too strong to be enforced by existing stack protection mechanisms.
 >
 >   [Roessler and DeHon 2018]'s "lazy tagging and clearing" is itself not stack-safe according to this paper.
 >   To understand the mechanism, this paper additionally defines the "observable" versions of stack safety.
 >   But then why you didn't use the observable version as the authoritative definition?
-
-BCP: This is a silly objection, but it should be addressed clearly and
-strongly.  E.g.:
 
 We propose two definitions of stack safety: one that is easier to understand
 because it corresponds to a more naive view of what stack safety intuitively
@@ -399,14 +411,12 @@ BCP: Obviously, this has to be addressed strongly and concretely.
 > * You seem to say/suggest that the approach of Skorstengaard 2019b to defining stack safety is specific to capability machines.
 >   Do you really think so and if so, why do you think their approach could not be applied to a different enforcement mechanism?
 
-APT:  Sk2019b _define_ stack safety via a capability machine semantics that is supposed to embody stack
+Sk2019b _define_ stack safety via a capability machine semantics that is supposed to embody stack
 safety "by construction," and relating it to a standard semantics for the same machine via a full abstraction result.
 We did not mean to imply that the same idea could not work for other machine models or enforcement mechanisms (although
 this generalization is not actually in Sk2019b, even as suggested future work). Rather, we wished to distinguish our
 approach from theirs by emphasizing that we define stack safety based not on any "correct by construction"
 machine tied to some flavor of enforcement,  but rather on more abstract notions of observable behavior.
-
-BCP: Nice.
 
 > * What exactly is the benefit of your approach to defining stack safety w.r.t. the approach of Skorstengaard 2019b?
 >   Do you think it can be applied to more or less languages?
