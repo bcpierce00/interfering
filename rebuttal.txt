@@ -1,191 +1,208 @@
-Motivation - Applicability:
+We thank the reviewers and in particular reviewer C for their thoughtful
+comments.  We first discuss the most important points raised in
+reviews. Then, in an optional appendix, we respond point-by-point to each
+individual piece of reviewer feedback.
 
-Our original goal in this work wasn't to formalize a stack safety
-notion that is specific to micropolicies, but in hindsight we agree
-that the result appears to be tailored to that particular enforcement
-mechanism---in large part because of our presentation choices and
-exposition-helping simplifications. In particular, we believe that the
-enforcement model can be used (with some effort) to describe
-capability-based enforcement mechanisms (as we state in Section 2).
-However, given that this effort didn't make it into the final product,
-we agree that the material present would be more accurately described
-as an abstract property capturing micropolicy enforcement rather than
-the all-encompassing stack safety notion we set out to state.
-LEO: ...and we plan to do so for the full version?
+MOTIVATION
 
-Attacker Model:
+Reviewer C is particularly concerned with the way this work is
+motivated. Our original goal in this work wasn't to formalize a stack safety
+notion that is specific to micropolicies, but in hindsight we agree that the
+result may appear to be tailored to that particular enforcement mechanism,
+though we believe this is more a matter of presentation choices and
+exposition-helping simplifications than a fundamental limitation. In
+particular, we believe that the enforcement model can be used (with some
+effort) to describe capability-based enforcement mechanisms, as we state in
+Section 2.  However, given that this effort didn't make it into the final
+product, we agree that the paper as it stands would be more accurately
+described as an abstract property capturing micropolicy enforcement rather
+than the all-encompassing stack safety notion we set out to state, and
+intend to do so for a final version.
 
-The attacker model for the properties is discussed in the paper
-(Section 2). For example, lines 104-106 state that "the attacker can
-run arbitrary machine code" and that "hardware and timing attacks are
-out of scope". The attacker model of the micropolicy enforcement
-mechanism is described in [Roessler and Dehon 18].
+BCP: I.e., we plan to limit our claims rather than fixing the exposition?
+Why not promise the latter (and lay out what we would do)?
 
-5 Criteria - StkTokens:
-LEO: Not really sure what to say here. 
-(1) intuitive: this is subjective but we were aiming for a more extensional property than full abstraction from a "clearly stack safe" machine
-(2) useful for reasoning: LEO: do we have anything to say here other than you're right?
-(3) reusable in compiler chains: not really applicable?
-(4) complete: ??
-(5) scalable: what can we extend this to? the maps appear particularly restrictive here...
+RELATED WORK
 
-SNA: Thoughts on the criteria.
-(1) The LSE property can be conceptually divided into the contour function, which divides the stack into
-    HC/LC and HI/LI components, and the actual definitions of confidentiality and integrity w.r.t. that
-    division. Insofar as confidentiality and integrity are believable, I believe the contour is very
-    intuitive. Confidentiality is not especially intuitive, but is based on non-interference which
-    is well-known. Eager integrity is pretty intuitive. The lazy properties are highly non-intuitive,
-    which makes sense as the policies they aim to characterize permit violations of the standard intuition.
+All reviewers also wanted additional discussion of related work.  We agree
+that there should be a clearer comparison to both Skorstengaard papers,
+using the informal criteria proposed there. We plan to include a discussion
+like the following:
 
-    The WBCF property simply describes the standard behavior of stack-based control flow, it seems very intuitive.
+(1) On intuition: The LSE part of the property we present aims to
+characterize stack safety in security terms. For readers familiar with
+integrity/confidentiality/noninterference, the eager version should be
+fairly intuitive. The lazy/observable properties, are less intuitive,
+but more interesting in the violations they permit. The WBCF part simply
+formalizes standard behavior of stack-based control flow.
 
-    Relating to Skorstengaard, they rely on different prior intuitions. Skorstengaard is intuitive to exactly the
-    degree that one understands the behavior of a pure stack in general and the built-in stack of oLCM in
-    particular. As the behavior of stacks is generally understood, Skorstengaard has an edge, but there is
-    value in offering an intuition that is less circularly dependent on understanding stacks.
-(2) We probably don't have anything to say here. A "Meaning of Memory Safety"-style frame rule would be just the
-    ticket, but we haven't done it.
-(3) Not really applicable, since this is a criterion tailored to what Skorstengaard is aiming to do. We might consider
-    what the equivalently tailored criterion would be for us -- usable in "dynamic enforcement environments" with
-    potentially unsafe commodity compilers? Where we score well but not perfectly, because while we do need some compiler 
-    support it's in the form of very basic control flow information.
-(4) Subject to the limitations of the formalization, our properties should apply to any reasonable program.
-    But we would need to make some argument that we're not missing something obvious.
-(5) It would be very challenging to mess with dynamic code, unfortunately. In the tag world we would handle
-    generated code by tagging the instructions that generate it, I suppose. Which would correspond to
-    a map that allows some instructions to update the maps, including potentially itself, etc...
+BCP: "more interesting in the violations they permit"???  
 
-    On the other hand, we described how we would handle coroutines, and threads would be similar. Basically
-    when we lose the property of the contour that exiting a context means either shrinking access monotonically
-    or never returning to that context, we need to change the LSE property to vary at each entry to a context
-    and test at each exit from it. But once that is done the space of threads and coroutines should be wide open.
-    As for WBCF, we would need to update Control Separation and Entry Integrity to account for changes in
-    acceptable modes of control transfer. Return integrity applies to calls and returns even if separated by
-    yields.
 
-SNA: Thoughts on closures (very sketchy).
+By contrast, Skorstengaard relies on different prior intuitions:
+for readers familiar with the behavior of pure stacks (or rather the
+built-in oLCM stack), their property is more intuitive. For readers
+versed in security, we believe there is value in a different
+perspective.
 
-  Suppose we added yet another partial map (sigh) representing the sealing of a closure. Suppose as well that our
-  model is enhanced to track the provenance of values as discussed in the future work section on stack-derived
-  pointers. A closure map would take a code address as usual and yield: a register r that holds the pointer, an
-  entry point e, a unique Seal identifier i, and a set of components ks. We extend the tuple of a security state a
-  contour can give with (forall i, Seal i). When we take a step from an instruction where the closure map is defined,
-  we update the contour C so that for each k in ks, C(k) is (*,*,Seal i). We also need to add state to track the
-  association between i, e, and r, and carry that association to any k with pointer provenance from r.
-  Finally, we modify call maps to give an optional component whose contents are being used as a function pointer.
+(2) useful for reasoning: In order to reason about actual programs we
+would indeed need to incorporate a "Meaning of Memory Safety"-style
+frame rule. Our goal with this paper was to distill the essence of
+stack safety without adding the complex (but solved) overhead of
+dealing with heap locations. But the properties (and the testing
+framework behind it) were designed with [Azevedo et al] in mind.
 
-  Then, when a call map says that we are making a call using a closure associated with (Seal i), the contour
-  update sets all (Seal i) components (LC,LI) and LSE works just the same, treating sealed components as (HC/HI).
-  WBCF will need an extra clause stating that we really did jump to e. (I'm a little unclear as to whether a
-  closure should be re-sealed on return, but we can do that if we need to.)
+(3) reusable in compiler chains: As you point out, this is not really
+applicable, since this is a criterion tailored to what Skorstengaard
+is aiming to do. We might consider what the equivalently tailored
+criterion would be for us -- usable in "dynamic enforcement
+environments" with potentially unsafe commodity compilers.
 
-  (Notes: arg, maybe we actually need a list of closures.)
+LEO: I'm REALLY not sure about this:
+APT: Reviewer C interprets (4) to mean:
+"This criterion asks for an argument that any property of a program
+that relies on stack safety can be proven with the characterization of stack safety."
+Since we're in the business of _defining_ stack safety, this seems pretty circular to me!
+Maybe the point is that we should not omit any characteristic of
+everyone's informal notion of stack safety (for the set of language features
+we support -- which is the business of (5)).  Can we claim that (informally, of course)?
+(4) complete: Subject to the limitations of the formalization, our
+properties should apply to any reasonable program.
 
-  To answer the questions: yes, we believe this can be extended to closures, and with these additions stack safety
-  would indeed imply both temporal safety and encapsulation of closures.
+(5) scalable: Dynamic code would pose a significant challenge in this
+setup. In the tag world, we could handle generated code by tagging the
+instructions that generate it, which would correspond to a map that
+allows some instructions to update the maps, including potentially
+itself.  On the other hand, we described how we would handle
+coroutines, and threads would be similar. Basically when we lose the
+monotonicity of contours relative to stack depth, we will
+need to change the LSE property to check integrity and confidentiality
+each time we cross between security contexts - nested calls are not
+strictly more limited.
+
+ATTACKER MODEL
+
+Finally, reviewer C is also concerned with the attacker model. The attacker
+model we consider is discussed in Section 2.  In particular, lines 104-106
+state that "the attacker can run arbitrary machine code" and that "hardware
+and timing attacks are out of scope". The attacker model of the micropolicy
+enforcement mechanism is described in [Roessler and Dehon 18].
+
+BCP: Can we sketch it here?
 
 > Review #27A
 > ===========================================================================
->  
+>
 > Overall merit
 > -------------
 > B. Weak Accept
->  
+>
 > Reviewer expertise
 > ------------------
 > Y. Knowledgeable
->  
+>
 > Paper summary
 > -------------
 > This paper defines an abstraction of stack safety in a positive way, meaning defining what operations are allowed. This work improves upon a previous work, which also defines stack safety in a positive way, but whose definitions are tied to capability machines. this work generalizes the stack safety definitions to be applicable to a wide class of  enforcement mechanisms.
->  
+>
 > Strengths
 > ---------
 > + The authors addresses an important problem in software security with a solid methodology. Indeed, stack safety defined in a negative way leads to arm races between defenses and attacks.
->  
+>
 >  + The definitions and theory in this work seem sound
->  
+>
 >  + The authors apply the proposed the stack safety definitions to characterize two variations of enforcement policies that uses tag-based hardware. The characterization enables us to precisely understand what is the safety achieved by the enforcement policy and what safety is lost to achieve a faster implementation.
->  
+>
 > Weaknesses
 > ----------
 > - The authors do not explicitly discuss how multiple concurrent threads fit in the definition. It is not clear to me how to apply the definitions in this work to multiple threads. Since the stacks of all threads are allocated in the same linear virtual address space, it is possible for one thread’s stack to overlap the stack of another thread. How should stack safety be defined in this case? I think this is an very important question as recent work points out cross-thread stack smashing attack [1].
->  
+>
 >  - In the future work section, the authors mentions several types of non-stack control flow that are not addressed by the current model, including tail calls. Other common non-stack control flow includes exceptions (such as c++ exceptions) and setjmp/longjmp. I understand that these non-stack control flow is more difficult to model, but for the exact reasons, how to formally characterize stack safety for these difficult cases becomes critical.
->  
+>
 >  [1] Xiaoyang Xu, Masoud Ghaffarinia, Wenhao Wang, Kevin W. Hamlen, and Zhiqiang Lin. 2019. CONFIRM: evaluating compatibility and relevance of control-flow integrity protections for modern software. In Proceedings of the 28th USENIX Conference on Security Symposium (SEC’19). USENIX Association, USA, 18051821.
->  
+>
 > Comments for author
 > -------------------
 > Please see the weaknesses section.
->  
->  
->  
+>
+>
+>
 > Review #27B
 > ===========================================================================
->  
+>
 > Overall merit
 > -------------
 > D. Strong Reject
->  
+>
 > Reviewer expertise
 > ------------------
 > Y. Knowledgeable
->  
+>
 > Paper summary
 > -------------
 > This paper:
 > - Defines stack safety as confidentiality, integrity, and well-bracketedness.
 > - Evaluates existing stack protection mechanisms w.r.t. the defined notion of stack safety.
 > - Proposes other protection mechanisms.
->  
+>
 > Strengths
 > ---------
 > - This paper is clearly defining a notion of stack safety.
->  
+>
 > Weaknesses
 > ----------
 > - The proposed notion of stack safety is too strong to be used for real-world programs.
 > - The proposed notion of stack safety is too strong to be enforced by existing stack protection mechanisms.
 > - This paper is lacking proper discussion on related work.
->  
+>
 > Comments for author
 > -------------------
 > This paper is not clearly motivated, and as a result, has the following problems:
->  
+>
 > - The proposed notion of stack safety is too strong to be used for real-world programs.
->  
+>
 >   As discussed in Section 9, stack-derived pointers are not supported (L1199), but they are widely used in real-world programs.
 >   Furthermore, without stack-derived pointers, stack safety is more-or-less obvious to define.
->  
+>
 > - The proposed notion of stack safety is too strong to be enforced by existing stack protection mechanisms.
->  
+>
 >   [Roessler and DeHon 2018]'s "lazy tagging and clearing" is itself not stack-safe according to this paper.
 >   To understand the mechanism, this paper additionally defines the "observable" versions of stack safety.
 >   But then why you didn't use the observable version as the authoritative definition?
->
+
+BCP: This is a silly objection, but it should be addressed clearly and
+strongly.  E.g.:
+
+We propose two definitions of stack safety: one that is easier to understand
+because it corresponds to a more naive view of what stack safety intuitively
+means, and a slightly more complex and permissive one that (as Roessler and
+Dehon showed) can be implemented more efficiently.  We believe both are of
+interest.
+
 > - This paper is lacking proper discussion on related work.
->  
+>
 >    On the contrary to this paper's observation (L25), there're a few formalizations of stack safety (and rely/guarantee conditions for function invocation).
 >       For example, see CompCert's assumption on function calls: https://github.com/AbsInt/CompCert/blob/94558ecb3e48261f12c644045d40c7d0784415e0/common/Events.v#L619
->  
+
+BCP: Obviously, this has to be addressed strongly and concretely.
+
 > Questions for the response period
 > ---------------------------------
 > Please address the three weaknesses I discussed above.
->  
->  
->  
+>
+>
+>
 > Review #27C
 > ===========================================================================
->  
+>
 > Overall merit
 > -------------
 > C. Weak Reject
->  
+>
 > Reviewer expertise
 > ------------------
 > X. Expert
->  
+>
 > Paper summary
 > -------------
 > The authors propose a novel characterization of stack safety in terms of a confidentiality policy, an integrity policy and a well-bracketedness condition.
@@ -193,63 +210,63 @@ SNA: Thoughts on closures (very sketchy).
 > In terms of this, it is defined which stack frame the currently running code and the different memory locations belong to.
 > In the next step, the policies define which memory locations may be modified and which memory locations may influence writes to memory and output events, and which code may be returned to.
 > In addition to this base policy, the authors describe a strong and lazy variant which can be quite directly implemented on a system with micropolicy-based security primitives.
->  
+>
 > Strengths
 > ---------
 > * Novel proposal for characterizing stack safety.
->  
+>
 > * The characterization is quite precise about which memory locations may be modified at which time.
 >   As such, it can be used directly to inform and evaluate micropolicy-based control flow enforcement.
->  
+>
 > Weaknesses
 > ----------
 > * very poor evaluation of the proposed characterization of stack safety
 >   no clear statement of the advantages of the proposed technique.
 >   no evaluation in terms of previously proposed informal criteria
->  
+>
 > * no discussion of how the proposed technique can be used for reasoning about programs.
->  
+>
 > * the proposed policies appear specific to certain enforcement techniques.
 >   This is true particularly for the proposed strong and lazy variants of stack safety (which are designed to express exactly what is enforced by a specific enforcement technique).
 >   However, even the normal variant assumes, for example, call, return, entry maps which are, of course, very convenient for defining micropolicies, but fundamentally in conflict with certain features like dynamic code generation, dynamic linking, JIT-compilation, variable-arity functions etc.
->  
+>
 > * proposed characterization seems fundamentally in conflict with features like dynamic code generation, dynamic linking, varargs, closures that have access to their parent stack frame etc.
->  
+>
 > Comments for author
 > -------------------
 > Summary
->  
+>
 > This paper does an interesting proposal for characterizing stack safety rather operationally in terms of memory locations that are allowed to be modified or depended on and code locations which may be returned to at each step of execution.
 > However, the proposal is very poorly evaluated against existing proposals, with only some vague and misleading comments.
 > This is unfortunate especially because Skorstengaard et al 2019, explicitizes an informal list of desirable qualities from a characterization of stack safety which the authors could easily use to compare the approaches.
->  
+>
 > The two variant properties appears specifically designed for capturing the guarantees of very specific micropolicy-based enforcement policies.
 > However, also the more general stack safety characterization makes some assumptions that are undesirable in a general characterization of stack safety, like a static code layout and the complete unmodifiability of inactive stack frames (i.e. no closures with access to their parents' stack frames) and these are very fundamental: the proposed characterization strongly depends on these assumptions.
->  
+>
 > It is my impression that the authors are not really looking for a characterization of stack safety that is general and widely applicable but rather for one that is concrete and operational enough to inform and support the design of micropolicy-based stack safety enforcement.
 > This goal is in my opinion valid and useful, and I believe it would strengthen the paper if the authors were more upfront about this goal.
->  
+>
 > In summary, I think this is a promising paper, but it requires a significant rework, particularly a motivation that is more upfront about the goals of the work and a better evaluation of the policy with respect to alternative proposals.
->  
+>
 > Discussion
->  
+>
 > The weakest point of this paper is the evaluation of the proposed characterization.
 > Particularly, the authors don't actually compare their approach to existing approaches, specifically Skorstengaard 2019b.
 > In the paragraph on l22-35, the authors suggest that Skorstengaard 2019b's characterization of stack safety is specific to capability machines and they are after "a more abstract characterization [...] that is independent of [a] specific enforcement technique".
 > I found no other place in the paper where the authors discuss the advantage of their approach with respect to other approaches, specifically Skorstengaard 2019b.
 > There are a number of problems with this:
->  
+>
 > - The claim about Skorstengaard et al. 2019b is left completely unsubstantiated and it is in my opinion wrong.
 >   It is true that Skorstengaard et al. only instantiate their approach for a capability machine.
 >   However, similar to this paper, Skorstengaard et al. describe their characterization from a more general perspective.
 >   Their approach is to characterize stack safety as full abstraction of the embedding function from a language with a natively stack safe semantics to the same language with a regular, non-natively stack safe semantics.
 >   I don't see why this approach could not be applied in the setting of this paper as well, or in other settings.
->  
+>
 > - To the contrary even, my impression is that the current paper is *much more* specific to micropolicy-based enforcement, than Skorstengaard et al.'s approach is specific to capabilities.
 >   For example, the use of function, call, return and entry maps are big assumptions that rule out dynamic code generation, dynamic linking, JIT-compilation, variable-arity functions (e.g. C varargs) and possibly other features.
 >   At the same time, the maps align suspiciously well with the requirements of micropolicy-based enforcement.
 >   Other aspects of the approach appear to rule out the use of per-component stacks or separate control/data stacks.
->  
+>
 > - Skorstengaard et al. actually provide a list of informal criteria for judging a characterization of full abstraction:
 >   "(1)intuitive
 >    (2)useful for reasoning: we should be able to use WBCF and LSE when reasoning about correctnessand security of programs using StkTokens.
@@ -259,35 +276,35 @@ SNA: Thoughts on closures (very sketchy).
 >   In a paper claiming to improve on their work, I think you are morally obliged to at least mention these criteria and explain why you believe your approach scores better on these criteria.
 >   Of course, if you don't agree with the criteria, you are free to criticize them and/or propose your own.
 >   But leaving them entirely unmentioned strikes me as odd.
->  
+>
 > - Taking a quick look at the criteria above, (1) seems subjective, but the others can clearly be used to compare the two appraoches:
 >   (2) useful for reasoning: Skorstengaard et al. 2019a seems to win here, since it offers a logical relation and use it to prove soundness of an assembly implementation of the "awkward example" (whose validity depends on stack safety).
 >       It is useful to think about how one would prove this awkward example safe using the formalizations of stack safety of Skorstengaard et al. 2019b and the current paper.
->  
+>
 >       Skorstengaard et al. 2019b unfortunately leave the awkward example undiscussed, but it seems like one could prove the example safe in the natively stack-safe semantics and then use full abstraction to extrapolate the results to the real semantics.
 >       This seems like it would work, although perhaps only for formulations of safety that can be expressed as program equivalences.
->  
+>
 >       In the current approach, it seems like one would need to reason about a trace of execution, the different calls and returns and then deduce something from that.
 >       However, encapsulation of heap locations like the one used in the awkward example seems out of scope, so one would either need to combine this with a formulation of memory safety (perhaps Azevedo de Amorim 2018?) or allocate the location on the stack instead.
->       Unfortunately, the latter wouldn't work because this paper's approach doesn't support closures that have access to the stack frame in which they were defined. 
->  
+>       Unfortunately, the latter wouldn't work because this paper's approach doesn't support closures that have access to the stack frame in which they were defined.
+>
 >       In summary, on this criterion, I would expect to score the contenders as Skorstengaard 2019a > Skorstengaard 2019b > current paper
->  
+>
 >   (3) This secure compilation criterion seems to be something that Skorstengaard 2019b was specifically designed for, so perhaps it's a bit biased.
 >       But still, it seems potentially desirable and I don't immediately see how this could be achieved with Skorstengaard 2019a or the current paper.
->  
+>
 >   (4) This criterion asks for an argument that any property of a program that relies on stack safety can be proven with the characterization of stack safety.
 >       For Skorstengaard 2019b, this can be argued because any property that holds in the natively stack safe source language can be carried over to the original assembly.
 >       On the other hand, full abstraction only applies to program equivalences, not safety properties or other.
 >       For Skorstengaard 2019a, there's no argument and I don't see an argument for the current paper.
->  
+>
 >   (5) dynamic code generation seems like it might be supported in Skorstengaard 2019a and 2019b (with some non-trivial extra effort), but it seems quite contradictory with the use of function, call, return and entry maps in the current paper.
 >       concurrency seems fine.
 >       The current paper also seems like it would have a lot of trouble with closures that have access to the stack frame in which they were defined, because the stack safety properties requires the original stack frames to be unmodified and not influence the influence of higher stack frames.
->  
+>
 >   In summary, this quick exercise to evaluate the current approach on the intuitive criteria proposed by Skorstengaard et al., does not strike me as very favorable for the current approach, to the contrary even.
 >   Perhaps this is because Skorstengaard et al. 2019b chose criteria on which they knew their approach would do well, but then why don't the current authors don't propose any alternative criteria themselves?
->  
+>
 > I believe the authors should do at least the following:
 > * remove the claim about Skorstengaard et al., 2019b or substantiate it with a clear argument about why it is specific to capability machine-based enforcement.
 > * discuss the criteria proposed by Skorstengaard et al. and investigate how their approach "scores" on them.
@@ -295,12 +312,12 @@ SNA: Thoughts on closures (very sketchy).
 >   Also, they should discuss language features (more than the ones currently in section 9, like closures and dynamic code generation and discuss how their approach could potentially scale to it in the long term.
 > * discuss in more detail the fundamental limitations of their approach, particularly the assumption of a static code layout.
 > * provide a clear, maximally objective/neutral statement of the benefits of their approach w.r.t. Skorstengaard et al. 2019b
->  
+>
 > The authors do not discuss any attacker model, both for their properties and for their enforcement technique.
 > Who can modify the micropolicy tables?
 > Do you have to trust the operating system or just the hardware?
 > Is the attacker capable of running arbitrary assembly code (like in Skorstengaard et al, 2019ab) or just inject stack modifications like in Abadi et al., 2005?
->  
+>
 > Another odd aspect of this paper is the fact that it doesn't propose one but three increasingly strong properties that characterize stack safety (see l86-96).
 > What does this mean: why do we want stack safety to mean different things and which meaning is appropriate in which setting?
 > Do the three variants score equally well on the above criteria?
@@ -312,7 +329,7 @@ SNA: Thoughts on closures (very sketchy).
 >   * The lazy enforcement seems to create new side-channels in the presence of an attacker being invoked by an adversary.
 >     Can't the lazy enforcement be exploited by such an adversary to cause the trusted code to halt in the middle of its execution, possibly in an inconsistent state?
 >     This reminds me of page-table based attacks in the context of SGX, see, for example, Xu et al. (https://ieeexplore.ieee.org/abstract/document/7163052?casa_token=0ycUzVYD0FoAAAAA:bi8eLFwzqvCnRjtcAWD-y9xG473kJeLQdZaLWEbU43cpAwvGldBu840sXWtcC2mnOnOqGsUPruc).
->  
+>
 > I'm also a bit unconvinced about the paper's motivation.
 > Based on comments throughout the paper, they seem to be looking for a property that describes in detail how the stack looks in memory and how the different memory locations are allowed to be modified or how it is allowed to influence the running program.
 > I get the impression they are motivated to find such a property in order to be able to derive a policy that can be enforced on a micropolicy machine.
@@ -320,88 +337,112 @@ SNA: Thoughts on closures (very sketchy).
 > Properties from related work (Skorstengaard et al., 2019b) seem to strive for a more abstract statement along the lines of "the program should behave the same as when it were running on a machine with a native stack, even in the presence of an adversary" and avoids going into the matter of precisely which memory cell is allowed to be modified at which moment.
 > I have the impression the paper would be improved by being more clear about the real goal of the work: finding a more concrete specification of stack safety that is closer to implementable micro-policies.
 > To this end, the authors should be open about this and remove statements that suggest their goal is different, for example l29-31 "there is still room to craft a more abstract characterization of stack safety that is independent of capabilities or any other specific enforcement technique".
->  
->  
+>
+>
 > General comments:
 > * There is some important missing related work on formalizing stack safety:
 >   - Martín Abadi, Mihai Budiu, Úlfar Erlingsson, and Jay Ligatti. 2005. A Theory of Secure Control Flow. In Formal Methods and Software Engineering. Springer Berlin Heidelberg.
 >   - Martín Abadi, Mihai Budiu, Úlfar Erlingsson, and Jay Ligatti. 2005. Control-flow Integrity. In Conference on Computer and Communications Security. ACM. https://doi.org/10.1145/1102120.1102165
 >   This probably will not compromise novelty of the paper's contributions, but I think it must be cited and compared against.
->  
+>
 > * l17-21: strange that you don't mention CFI here or on l149-150 where you mention "[stack safety enforcement using] code rewriting".
->  
+>
 > * l23: "defined in a negative way": it's quite unclear what you mean exactly with this phrase.
 >   For example, does Abadi2005 (see above) fall under this phrasing?
 >   Skorstengaard 2019b can also be described negatively as "Full abstraction should not be broken." and the same applies to this paper.
 >   Can you more precisely describe what you mean?
->  
+>
 > * l197-244: these figures are very clear and helpful, nice...
 >   perhaps you could additionally annotate l203-211 as "main", l219-225 as "f" and l233-237 as "g", to clearly point out the link to Fig. 1
->  
+>
 > * l299-300 and Fig.2: I find it confusing that you use JALR (jump-and-link-register) when you really mean JR (jump to register).
 >   IIUC, this is because RISC-V doesn't actually offer JR because it can be emulated as JALR with r0 as the target for storing the return pointer.
->   However, I would prefer if you simply pretend that a direct JR instruction exists. 
->  
+>   However, I would prefer if you simply pretend that a direct JR instruction exists.
+>
 > * l318: "components K": odd name. why not locations as in compiler terminology?
->  
+>
 > * l426: "and a machine that steps for a long time before producing some output": actually, it's even more strange: the observer cannot distinguish between a machine that steps forever without producing output and a machine that *immediately* produces output
->  
+>
 > * l483: err.. shouldn't you also require that the stacks below SP are the same in m_c and m_r and that there have been no returns beyond SP between m_c and m_r?
->  
+>
 > * l515-516: here, I found myself confused because I was interpreting your policy as an information flow policy, so I thought you were allowing to write data from uninitialized stack locations to out.
->  
+>
 > * l563: "Intuitively, the caller expects to find their private data untouched after the callee returns": what about settings where closures can access the stack frame they were defined in?
->  
+>
 > * l688 "it also holds for the toplevel execution trace to account for unallocated memory": I don't understand this, please elaborate.
->  
+>
 > * l1110-1126: I don't understand what you're saying here: Roessler and Dehon's lazy tag policies proposals do not actually give you lazy stack safety?
 >   Is there one enforcement technique that satisfies this lazy version of stack safety?
->  
+>
 > Minor comments:
->  
+>
 > * l153: "they been applied"
->  
+>
 > * l298: "[jal] atomically simultaneously the return address in a register": verb missing
->  
+>
 > * l368: "coinductively": I would say "corecursively" here
->  
+>
 > * l393: "T in Traces(A) x Obs": do you mean "Traces(T x Obs)"?
->  
+>
 > * l405: "if f be a predicate": if f is a predicate?
->  
+>
 > * l537: "MP-trace. say MP": capitalize Say?
->  
+>
 > * l559: "marked HC in C": HI?
->  
+>
 > * l687: "TraceConf justret m_c MP_call M_call": parentheses around justret m_c
->  
+>
 > * l872: "with regard to the original machine state": what does this mean?
->  
+>
 > Questions for the response period
 > ---------------------------------
 > * You seem to say/suggest that the approach of Skorstengaard 2019b to defining stack safety is specific to capability machines.
 >   Do you really think so and if so, why do you think their approach could not be applied to a different enforcement mechanism?
->  
+
+APT:  Sk2019b _define_ stack safety via a capability machine semantics that is supposed to embody stack
+safety "by construction," and relating it to a standard semantics for the same machine via a full abstraction result.
+We did not mean to imply that the same idea could not work for other machine models or enforcement mechanisms (although
+this generalization is not actually in Sk2019b, even as suggested future work). Rather, we wished to distinguish our
+approach from theirs by emphasizing that we define stack safety based not on any "correct by construction"
+machine tied to some flavor of enforcement,  but rather on more abstract notions of observable behavior.
+
+BCP: Nice.
+
 > * What exactly is the benefit of your approach to defining stack safety w.r.t. the approach of Skorstengaard 2019b?
 >   Do you think it can be applied to more or less languages?
 >   Do you think it is better suited or less well suited for reasoning about programs which depend on stack safety?
 >   Do you think it is etc.
->  
-> * Do you think you could show safety of a specific example program that depends on stack safety (like the awkward example) and if so, how would such a proof work? 
->  
+>
+> * Do you think you could show safety of a specific example program that depends on stack safety (like the awkward example) and if so, how would such a proof work?
+>
 > * Do you think your approach to defining stack safety could be extended to languages with the following features (and if so, how?):
 >   - varargs?  (seems problematic for call map)
 >   - dynamic code generation (seems problematic for the function map, call map and return map)
 >   - dynamic linking (seems problematic for the function map, call map and return map)
 >   - self-editing code (seems problematic for call map and return map)
->   - tail calls (seems potentially okay, but I'd like to be sure) 
+>   - tail calls (seems potentially okay, but I'd like to be sure)
 >   - exceptions and stack unwinding
 >   - closures (seems potentially problematic for precision of the entry map)
 >   How would you extend your approach to define stack safety in the presence of these features?
->   
+>
 > * Do you think your approach implies the following properties?
 >   - temporal safety in the presence of closures (i.e. closures should only be invokable by the adversary after the adversary first receives a reference to them)
->   - encapsulation of closures: it should not be possible for the adversary to invoke a closure with a different environment than the one they received? 
+>   - encapsulation of closures: it should not be possible for the adversary to invoke a closure with a different environment than the one they received?
 >   If not, do you think it should imply these properties and if so, how do you think it could be extended?
->  
+
+  Adding closures requires:
+  - identifying code points where closures are created
+  - adding machinery to track association of closure identities, entry points, and components
+    containing valid closure pointers (including pointer provenance, as with stack-derived pointers)
+  - extending WBCF to require that closure invocations respect the closure's designated entry point
+    and use a valid closure pointer (ensuring temporal safety and encapsulation)
+  - extending contours to treat some components as sealed, associated with closure identities
+  - on closure invocation, set contour for encapsulated components to LC/LI, other components as normal for stack safety
+    (allowing access to closure)
+  - otherwise treat sealed components as HC/HI except that from a caller's perspective, they might change during
+    nested calls (monotonicity is lost)
+
+  The answers are yes, we believe that with addition of closures, natural extensions to WBCF and LSE would imply these
+  properties.
+
 > * Are the lazy and strong variant of your properties specifically intended for the corresponding micropolicy-based enforcement techniques or do you believe they are more broadly applicable?
