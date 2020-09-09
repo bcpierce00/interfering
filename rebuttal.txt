@@ -21,6 +21,10 @@ intend to do so for a final version.
 
 BCP: I.e., we plan to limit our claims rather than fixing the exposition?
 Why not promise the latter (and lay out what we would do)?
+LEO: Going with "we'll limit our claims and add the related work comparison"
+seems more doable (and fair) in a revision round than promising to do
+new work (or work that we started doing and then it was clear we couldn't
+work for the deadline).
 
 RELATED WORK
 
@@ -33,11 +37,10 @@ like the following:
 characterize stack safety in security terms. For readers familiar with
 integrity/confidentiality/noninterference, the eager version should be
 fairly intuitive. The lazy/observable properties, are less intuitive,
-but more interesting in the violations they permit. The WBCF part simply
-formalizes standard behavior of stack-based control flow.
-
-BCP: "more interesting in the violations they permit"???  
-
+but more interesting in that they precisely characterize violations to
+the more intuitive view of stack safety that can still be considered
+safe to an external observer. The WBCF part simply formalizes standard
+behavior of stack-based control flow.
 
 By contrast, Skorstengaard relies on different prior intuitions:
 for readers familiar with the behavior of pure stacks (or rather the
@@ -58,7 +61,6 @@ is aiming to do. We might consider what the equivalently tailored
 criterion would be for us -- usable in "dynamic enforcement
 environments" with potentially unsafe commodity compilers.
 
-LEO: I'm REALLY not sure about this:
 APT: Reviewer C interprets (4) to mean:
 "This criterion asks for an argument that any property of a program
 that relies on stack safety can be proven with the characterization of stack safety."
@@ -66,8 +68,15 @@ Since we're in the business of _defining_ stack safety, this seems pretty circul
 Maybe the point is that we should not omit any characteristic of
 everyone's informal notion of stack safety (for the set of language features
 we support -- which is the business of (5)).  Can we claim that (informally, of course)?
-(4) complete: Subject to the limitations of the formalization, our
-properties should apply to any reasonable program.
+
+(4) complete: This criterion seems a bit circular. It asks for being
+able to prove any property of a program that relies on stack safety
+with a given characterization of stack safety - but we're in the
+buisness of _defining_ stack safety in the first place. If the point
+is that our definition should capture characteristics of established
+informal notions of stack safety (subject to the limitations of the
+language features our formalization supports - see 5), our properties
+should apply to any such reasonable program.
 
 (5) scalable: Dynamic code would pose a significant challenge in this
 setup. In the tag world, we could handle generated code by tagging the
@@ -197,6 +206,7 @@ interest.
 >       For example, see CompCert's assumption on function calls: https://github.com/AbsInt/CompCert/blob/94558ecb3e48261f12c644045d40c7d0784415e0/common/Events.v#L619
 
 BCP: Obviously, this has to be addressed strongly and concretely.
+LEO: I'm not really following the CompCert definition. Has anybody taking a crack at this?
 
 > Questions for the response period
 > ---------------------------------
@@ -324,16 +334,39 @@ BCP: Obviously, this has to be addressed strongly and concretely.
 >   Also, they should discuss language features (more than the ones currently in section 9, like closures and dynamic code generation and discuss how their approach could potentially scale to it in the long term.
 > * discuss in more detail the fundamental limitations of their approach, particularly the assumption of a static code layout.
 > * provide a clear, maximally objective/neutral statement of the benefits of their approach w.r.t. Skorstengaard et al. 2019b
->
+
+We agree that there should be a much more thorough comparison with Sk2019a/b. See the summary above for more details on what we plan to include.
+
 > The authors do not discuss any attacker model, both for their properties and for their enforcement technique.
 > Who can modify the micropolicy tables?
 > Do you have to trust the operating system or just the hardware?
 > Is the attacker capable of running arbitrary assembly code (like in Skorstengaard et al, 2019ab) or just inject stack modifications like in Abadi et al., 2005?
->
+
+See ATTACKER MODEL in the summary above.
+
 > Another odd aspect of this paper is the fact that it doesn't propose one but three increasingly strong properties that characterize stack safety (see l86-96).
 > What does this mean: why do we want stack safety to mean different things and which meaning is appropriate in which setting?
+
+We view these stack safety properties as a spectrum. The main property
+strives to capture an intuitive notion of stack safety, by relying on
+abstract notions of observable behavior.  The stronger, lockstep
+enforces a more conservative notion of stack safety, where almost any
+digression from a canonical execution is considered unsafe. On the
+other hand, the weaker lazy variant pushes the limit of the standard
+intuition by allowing executions that would otherwise be unsafe, as
+long as their effects are not actually observable. We think all
+three are interesting in their own right and reveal interesting trade
+offs in terms of enforcement or reasoning efficiency.
+
 > Do the three variants score equally well on the above criteria?
 > - For the "lockstep" variant, I get the impression that this is a proof-technical definition that is only used for proving the regularly stack-safety property for the micropolicy enforcement and not really important/useful in itself: is this also how you see it?
+
+The lockstep variant is a slightly more technical artifact that is (1)
+easy to enforce and (2) easy to test, but that is interesting in its
+own right because it captures a very conservative notion of stack
+safety---while still allowing the majority of reasonable stack-safe
+programs. 
+
 > - The lazy variant of stack safety strikes me as problematic because of several reasons:
 >   * It seems very specific to exactly one enforcement technique.
 >     There isn't a single argument in favour of this property except that it is enforced by this one enforcement technique.
@@ -341,7 +374,13 @@ BCP: Obviously, this has to be addressed strongly and concretely.
 >   * The lazy enforcement seems to create new side-channels in the presence of an attacker being invoked by an adversary.
 >     Can't the lazy enforcement be exploited by such an adversary to cause the trusted code to halt in the middle of its execution, possibly in an inconsistent state?
 >     This reminds me of page-table based attacks in the context of SGX, see, for example, Xu et al. (https://ieeexplore.ieee.org/abstract/document/7163052?casa_token=0ycUzVYD0FoAAAAA:bi8eLFwzqvCnRjtcAWD-y9xG473kJeLQdZaLWEbU43cpAwvGldBu840sXWtcC2mnOnOqGsUPruc).
->
+
+Similarly, the lazy variant is interesting because it is a property
+that is as liberal as possible in the behaviors it allows. Compared to
+the other properties, it's much harder to reason about or test (as we
+have to consider the entire execution trace), but it's simpler to enforce
+and more permissive. 
+
 > I'm also a bit unconvinced about the paper's motivation.
 > Based on comments throughout the paper, they seem to be looking for a property that describes in detail how the stack looks in memory and how the different memory locations are allowed to be modified or how it is allowed to influence the running program.
 > I get the impression they are motivated to find such a property in order to be able to derive a policy that can be enforced on a micropolicy machine.
@@ -349,8 +388,9 @@ BCP: Obviously, this has to be addressed strongly and concretely.
 > Properties from related work (Skorstengaard et al., 2019b) seem to strive for a more abstract statement along the lines of "the program should behave the same as when it were running on a machine with a native stack, even in the presence of an adversary" and avoids going into the matter of precisely which memory cell is allowed to be modified at which moment.
 > I have the impression the paper would be improved by being more clear about the real goal of the work: finding a more concrete specification of stack safety that is closer to implementable micro-policies.
 > To this end, the authors should be open about this and remove statements that suggest their goal is different, for example l29-31 "there is still room to craft a more abstract characterization of stack safety that is independent of capabilities or any other specific enforcement technique".
->
->
+
+See MOTIVATION in the summary above.
+
 > General comments:
 > * There is some important missing related work on formalizing stack safety:
 >   - Martín Abadi, Mihai Budiu, Úlfar Erlingsson, and Jay Ligatti. 2005. A Theory of Secure Control Flow. In Formal Methods and Software Engineering. Springer Berlin Heidelberg.
