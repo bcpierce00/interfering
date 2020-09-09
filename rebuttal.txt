@@ -467,10 +467,26 @@ machine tied to some flavor of enforcement,  but rather on more abstract notions
 >
 > * Do you think your approach to defining stack safety could be extended to languages with the following features (and if so, how?):
 >   - varargs?  (seems problematic for call map)
+SNA:
+
+  Varargs can easily be implemented by establishing a more concrete calling convention in which
+  the number of arguments for a call is apparent by examining the call state, at the cost of the
+  convention-agnosticism of the call map. Alternatively the call map can take the entire state as
+  an input and once again abstract over calling conventions. Once we can deduce the number of
+  arguments of each call, our properties would work without alteration.
+
 >   - dynamic code generation (seems problematic for the function map, call map and return map)
 >   - dynamic linking (seems problematic for the function map, call map and return map)
 >   - self-editing code (seems problematic for call map and return map)
 >   - tail calls (seems potentially okay, but I'd like to be sure)
+SNA:
+
+  A tail call in terms of our properties would be a call for which confidentiality and integrity hold,
+  but which is selectively exempted from Return Integrity. From the (tail) callees' perspective, it is
+  permitted to return anywhere. But the return state for the callee is also that of its caller, and so
+  the nested nature of the property means that if the caller obeys Return Integrity, then the callee
+  returns to the correct place.
+
 >   - exceptions and stack unwinding
 >   - closures (seems potentially problematic for precision of the entry map)
 >   How would you extend your approach to define stack safety in the presence of these features?
@@ -482,18 +498,18 @@ machine tied to some flavor of enforcement,  but rather on more abstract notions
 
 SNA:
   Adding closures requires:
-  - identifying code points where closures are created
+  - identifying code points where closures are created (i.e., adding another map)
   - adding machinery to track association of closure identities, entry points, and components
-    containing valid closure pointers (including pointer provenance, as with stack-derived pointers)
+    containing valid closure pointers (via pointer provenance, as with both stack-derived and heao pointers)
   - extending WBCF to require that closure invocations respect the closure's designated entry point
-    and use a valid closure pointer (ensuring temporal safety and encapsulation)
+    and use a valid closure pointer (ensuring temporal safety)
   - extending contours to treat some components as sealed, associated with closure identities
   - on closure invocation, set contour for encapsulated components to LC/LI, other components as normal for stack safety
-    (allowing access to closure)
+    (together with above, ensuring encapsulation)
   - otherwise treat sealed components as HC/HI except that from a caller's perspective, they might change during
     nested calls (monotonicity is lost)
 
   The answers are yes, we believe that with addition of closures, natural extensions to WBCF and LSE would imply these
-  properties.
+  properties. The addition of closures is very non-trivial but plausible.
 
 > * Are the lazy and strong variant of your properties specifically intended for the corresponding micropolicy-based enforcement techniques or do you believe they are more broadly applicable?
