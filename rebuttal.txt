@@ -5,20 +5,24 @@ individual piece of reviewer feedback.
 MOTIVATION
 
 Reviewer C is particularly concerned with the way this work is
-motivated. Our original goal in this work wasn't to formalize a stack safety
-notion that is specific to micropolicies. In particular, we believe that the
-enforcement model can be used (with some effort) to describe
-capability-based enforcement mechanisms, as we state in Section 2.  In
-retrospect we agree that our results may appear to be tailored to that
-particular enforcement mechanism.
+motivated. Our original goal in this work was to formalize a stack
+safety notion that applies to many enforcement mechanisms, not just to
+micropolicies.  In particular, we believe that the enforcement model
+can be used (with some effort) to describe capability-based
+enforcement mechanisms, as we state in Section 2.  But in retrospect
+we agree that our results may appear to be tailored to micropolicies.
 
 We believe this is more a matter of presentation choices and
-exposition-helping simplifications than a fundamental limitation.  However,
+simplifications intended to help exposition than a fundamental limitation.  However,
 given that a satisfying treatment of capability-based enforcement didn't
 make it into the final product, we agree that the paper as it stands would
 be more accurately described as an abstract property capturing micropolicy
 enforcement rather than the all-encompassing stack safety notion we set out
 to state; we will clarify this for a final version.
+
+APT: Not to beat a dead horse, but this seems to completely throw away
+our claim that security theory ideas are useful for characterizing
+stack safety.  Could we incorporate that point somewhere in the above?
 
 RELATED WORK
 
@@ -29,14 +33,15 @@ there. We plan to include a discussion like the following:
 
 (1) Intuitiveness:
 
-The local state encapsulation (LSE) part of the property we present aims to
-characterize stack safety in security terms. For readers familiar with
-integrity / confidentiality / noninterference, the eager version should be
-fairly intuitive. The lazy/observable properties, though less intuitive, are
-more interesting in that they precisely characterize behaviors that would be
-considered violations to the more intuitive view of stack safety but that
-can still be considered safe by an external observer. The WBCF part simply
-formalizes standard behavior of stack-based control flow.
+The local state encapsulation (LSE) part of the property we present
+aims to characterize stack safety in security terms. For readers
+familiar with integrity / confidentiality / noninterference, the eager
+version should be fairly intuitive. The lazy/observable properties,
+though less intuitive, are more interesting in that they precisely
+characterize behaviors that would be considered violations to the more
+intuitive view of stack safety but that can still be considered safe
+by an external observer. The well-bracketec control flow (WBCF) part
+simply formalizes standard behavior of stack-based control flow.
 
 By contrast, [Skorstengaard 2019b] relies on different prior intuitions: for
 readers familiar with operational models of stacks (here the
@@ -70,11 +75,18 @@ SNA: I feel like it would be good to be less informal and put this in programmin
 ------- old -------
 
 In order to reason about actual programs we
-would indeed need to incorporate a frame ruleMeaning of Memory Safety"-style
+would indeed need to incorporate a "Meaning of Memory Safety"-style
 frame rule. Our goal with this paper was to distill the essence of
 stack safety without adding the complex (but solved) overhead of
 dealing with heap locations. But the properties (and the testing
 framework behind it) were designed with [Azevedo et al 2018] in mind.
+
+APT: Leo asks: "what kind of logic do we want to claim to support?"
+I dunno, a Hoare logic with some simple procedure rule?
+Integrity says that local variables do not change over calls,
+which basically says that procedure calls are a no-op (except
+for the return value).  Confidentiality says that lemmas proved about
+procedure return values can be applied at call sites. 
 
 BCP: I'm not sure this is hitting the right point.  Clearly, to reason about
 programs with both stack and heap, we need something like that frame rule.
@@ -87,6 +99,10 @@ captures all the standard intuitions one might want to use in proofs.
 I think the heap is a red herring here.
 BCP: Agree
 
+BCP: I think we should rewrite the point to simply speculate that something
+analogous to the frame rule from the "meaning of memory safety" paper could
+be developed here for the stack.
+
 BCP (OLD): Maybe 2 and 4 go together?  2 is about whether you can use it for
 reasoning; 4 is about whether this reasoning is complete in the sense that
 the proof principle is strong enough to prove safety of any safe program.
@@ -94,12 +110,11 @@ the proof principle is strong enough to prove safety of any safe program.
 (3) reusable in compiler chains:
 
 As reviewer C points out, this is not really applicable, since this is
-a criterion tailored to what Skorstengaard is aiming to do. We might
+a criterion tailored to what Skorstengaard et al. are aiming to do. We might
 consider what the equivalently tailored criterion would be for us --
 usable in "dynamic enforcement environments" with potentially unsafe
 commodity compilers.
 
-SNA: trying to phrase this better.
 A more general version of this criterion might be, "Is the model suitable
 for a practical application in the engineering of secure systems?"
 In our case, such an application would be use in "dynamic enforcement
@@ -119,13 +134,6 @@ it does.
 
 (5) scalable:
 
-Dynamic code would pose a significant challenge in this setup. In the
-tag world, we could handle generated code by tagging the instructions
-that generate it, which would correspond to a map that allows some
-instructions to update the maps, including potentially itself. 
-
-SNA: how about...
-
 Dynamic code would pose a significant challenge in this setting.
 Our various maps would need to be made dynamic, which would require
 either very restricted code modification or very complex machinery.
@@ -138,7 +146,7 @@ On the other hand, we described how we would handle coroutines, and threads
 would be similar. Basically when we lose the monotonicity of contours
 relative to stack depth, we will need to change the LSE property to
 check integrity and confidentiality each time we cross between
-security contexts - nested calls are not strictly more limited than
+security contexts - nested calls are no longer strictly more limited than
 their callers.
 
 Loss of monotonicity, and the attendant changes in the LSE property,
@@ -246,9 +254,6 @@ add a more detailed discussion.
 Stack-derived pointers are not supported yet, but based on the sketch in future work (L1199+)
 we feel it is relatively straightforward combination of known techniques (on top of the
 definition of the properties we introduced).
-
-APT: Does Sk2019b support stack-derived pointers? I don't think so, although I'm not certain.
-LEO: This reviewer doesn't complain about Sk2019b - maybe not make reviewer C look at this even more closely by invoking that?
 
 > - The proposed notion of stack safety is too strong to be enforced by existing stack protection mechanisms.
 >
@@ -546,14 +551,7 @@ See the full comparison in terms of the criteria in the summary.
 
 > * Do you think you could show safety of a specific example program that depends on stack safety (like the awkward example) and if so, how would such a proof work?
 
-LEO: This is the (4) criterion I guess again. I'm not sure exactly what this means.
-APT: I agree with SNA that this is the (2) criterion. Maybe we could doctor up the example program to
-include some external call to an adversary and sketch how it we would use it to prove
-that it still prints 0, 60 (or whatever).
-
-BCP: I think this is a more focused question: Suppose you had a program that
-you believed was correct according to this criterion and you wanted to prove
-that it was.  How would the proof look?
+See discussion of criterion (2) in the summary.
 
 > * Do you think your approach to defining stack safety could be extended to languages with the following features (and if so, how?):
 >   - varargs?  (seems problematic for call map)
@@ -570,9 +568,8 @@ in the map is certainly convenient, but not necessary.
 >   - dynamic linking (seems problematic for the function map, call map and return map)
 >   - self-editing code (seems problematic for call map and return map)
 
-These three extensions would indeed be challenging. Our static maps would need
-to be replaced with more dynamic machinery, likely becoming either very complex
-or much more concrete about what constitutes a call, return, etc.
+As discussed in the toplevel summary, for criterion (5), these three
+extensions would indeed be challenging. 
 
 >   - tail calls (seems potentially okay, but I'd like to be sure)
 >   - exceptions and stack unwinding
