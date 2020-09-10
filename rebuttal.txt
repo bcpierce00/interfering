@@ -194,6 +194,7 @@ we just add them?)
 >   Furthermore, without stack-derived pointers, stack safety is more-or-less obvious to define.
 
 Leo: The sketch of stack-derived pointers in 1199 seems fairly intuitive to me. Double down on it?
+APT: Does Sk2019b support stack-derived pointers? I don't think so, although I'm not certain.
 
 BCP: Yes.
 
@@ -216,6 +217,14 @@ interest.
 
 BCP: Obviously, this has to be addressed strongly and concretely.
 LEO: I'm not really following the CompCert definition. Has anybody taking a crack at this?
+APT: The CompCert specification cited here characterizes the assumptions that the comiler
+correctness proof makes about the behavior of external functions.  
+When taken together with other parts of the CompCert spec that
+describe the block memory model and the treatment of control stacks,
+this does imply some facts about the stack safety conditions that CompCert
+assumes are provided by the external environment. But it is certainly not intended
+as a general characterization of stack safety, and it does not seem suitable
+as a basis for checking validity of an enforcement mechanism.  
 
 There is some relation.  E.g., the ec_readonly condition
 
@@ -484,6 +493,9 @@ See the full comparison in terms of the criteria in the summary.
 > * Do you think you could show safety of a specific example program that depends on stack safety (like the awkward example) and if so, how would such a proof work?
 
 LEO: This is the (4) criterion I guess again. I'm not sure exactly what this means.
+APT: I agree with SNA that this is the (2) criterion. Maybe we could doctor up the example program to
+include some external call to an adversary and sketch how it we would use it to prove 
+that it still prints 0, 60 (or whatever).
 
 BCP: I think this is a more focused question: Suppose you had a program that
 you believed was correct according to this criterion and you wanted to prove
@@ -515,9 +527,12 @@ BCP: I don't actually believe the second sentence.
 
 >   - tail calls (seems potentially okay, but I'd like to be sure)
 
-Yes. The only minor problem with tail calls is characterizing the return;
-once the point of context switch is determined, the statement of stack
-safety remains largely the sam.
+Yes. The only (minor) problem with tail calls is characterizing the
+return - once the point of context switch is determined, the statement
+of stack safety remains largely the same. Notably a tail call's return
+point is shared with its caller, so if the (non-tail-call) caller obeys
+Return Integrity, the expected control flow of the tail call is already
+captured.
 
 >   - exceptions and stack unwinding
 
@@ -539,10 +554,10 @@ Adding closures would require:
 (2) adding machinery to track association of closure identities, entry points, and components
     containing valid closure pointers (including pointer provenance, as with stack-derived pointers)
 (3) extending WBCF to require that closure invocations respect the closure's designated entry point
-    and use a valid closure pointer (ensuring temporal safety and encapsulation)
+    and use a valid closure pointer (ensuring temporal safety)
 (4) extending contours to treat some components as sealed, associated with closure identities
 (5) on closure invocation, set contour for encapsulated components to LC/LI, other components as normal for stack safety
-    (allowing access to closure)
+    (together with the above, ensuring encapsulation)
 (6) otherwise treat sealed components as HC/HI except that from a caller's perspective, they might change during
     nested calls (monotonicity is lost)
 
