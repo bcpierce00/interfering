@@ -25,29 +25,28 @@ in particular, that there should be a clearer comparison to the two
 Skorstengaard et al papers, using the five informal criteria proposed
 there. We plan to include a discussion like the following:
 
-BCP: Can we format these so that it is clear which bits we're
-getting (verbatim, even) from Skorstengaard and which are us?
+(1) Intuitiveness:
 
-BCP: Spell out abbreviations like LSE.  In general, we should not assume
-reviewers remember all the details of the paper (much less the details of
-Skorstengaard)!
+The local state encapsulation (LSE) part of the
+property we present aims to characterize stack safety in security
+terms. For readers familiar with integrity / confidentiality /
+noninterference, the eager version should be fairly intuitive. The
+lazy/observable properties, though less intuitive, are more
+interesting in that they precisely characterize behaviors that would
+be considered violations to the more intuitive view of stack safety
+but that can still be considered safe by an external observer. The
+WBCF part simply formalizes standard behavior of stack-based control
+flow.
 
-(1) On intuition: The LSE part of the property we present aims to
-characterize stack safety in security terms. For readers familiar with
-integrity/confidentiality/noninterference, the eager version should be
-fairly intuitive. The lazy/observable properties, though less intuitive, are
-more interesting in that they precisely characterize behaviors that would be
-considered violations to the more intuitive view of stack safety but that
-can still be considered safe by an external observer. The WBCF part simply
-formalizes standard behavior of stack-based control flow.
-
-By contrast, Skorstengaard relies on different prior intuitions:
-for readers familiar with the behavior of pure stacks (or rather the
+By contrast, Skorstengaard relies on different prior intuitions: for
+readers familiar with the behavior of pure stacks (or rather the
 built-in oLCM stack), their property is more intuitive. For readers
 versed in security, we believe there is value in a different
 perspective.
 
-(2) useful for reasoning: In order to reason about actual programs we
+(2) Useful for reasoning:
+
+In order to reason about actual programs we
 would indeed need to incorporate a "Meaning of Memory Safety"-style
 frame rule. Our goal with this paper was to distill the essence of
 stack safety without adding the complex (but solved) overhead of
@@ -58,23 +57,19 @@ BCP: I'm not sure this is hitting the right point.  Clearly, to reason about
 programs with both stack and heap, we need something like that frame rule.
 But the reviewer might wonder about how our property can be used for
 _reasoning_ about programs with just a stack...
+LEO: Isn't that the point of (4)? These criteria confuse me.
 
-(3) reusable in compiler chains: As you point out, this is not really
-applicable, since this is a criterion tailored to what Skorstengaard
-is aiming to do. We might consider what the equivalently tailored
-criterion would be for us -- usable in "dynamic enforcement
-environments" with potentially unsafe commodity compilers.
-BCP: "you" is just one reviewer, but this is to be read by all three...
+(3) reusable in compiler chains:
 
-APT: Reviewer C interprets (4) to mean:
-"This criterion asks for an argument that any property of a program
-that relies on stack safety can be proven with the characterization of stack safety."
-Since we're in the business of _defining_ stack safety, this seems pretty circular to me!
-Maybe the point is that we should not omit any characteristic of
-everyone's informal notion of stack safety (for the set of language features
-we support -- which is the business of (5)).  Can we claim that (informally, of course)?
+As reviewer C points out, this is not really applicable, since this is
+a criterion tailored to what Skorstengaard is aiming to do. We might
+consider what the equivalently tailored criterion would be for us --
+usable in "dynamic enforcement environments" with potentially unsafe
+commodity compilers.
 
-(4) complete: This criterion seems a bit circular. It asks for being
+(4) complete:
+
+This criterion seems a bit circular. It asks for being
 able to prove any property of a program that relies on stack safety
 with a given characterization of stack safety - but we're in the
 buisness of _defining_ stack safety in the first place. If the point
@@ -83,16 +78,17 @@ informal notions of stack safety (subject to the limitations of the
 language features our formalization supports - see 5), our properties
 should apply to any such reasonable program.
 
-(5) scalable: Dynamic code would pose a significant challenge in this
-setup. In the tag world, we could handle generated code by tagging the
-instructions that generate it, which would correspond to a map that
-allows some instructions to update the maps, including potentially
-itself.  On the other hand, we described how we would handle
-coroutines, and threads would be similar. Basically when we lose the
-monotonicity of contours relative to stack depth, we will
-need to change the LSE property to check integrity and confidentiality
-each time we cross between security contexts - nested calls are not
-strictly more limited.
+(5) scalable:
+
+Dynamic code would pose a significant challenge in this setup. In the
+tag world, we could handle generated code by tagging the instructions
+that generate it, which would correspond to a map that allows some
+instructions to update the maps, including potentially itself.  On the
+other hand, we described how we would handle coroutines, and threads
+would be similar. Basically when we lose the monotonicity of contours
+relative to stack depth, we will need to change the LSE property to
+check integrity and confidentiality each time we cross between
+security contexts - nested calls are not strictly more limited.
 
 ATTACKER MODEL
 
@@ -147,6 +143,8 @@ determined, the statement of stack safety remains largely the same.
 
 BCP: Don't understand.  Are we saying tail calls are easy?  (Then why didn't
 we just add them?)
+LEO: It's much less clean in terms of the formalization and I thought
+we had decided it wasn't worth the trouble - a sketch should be enough.
 
 >  [1] Xiaoyang Xu, Masoud Ghaffarinia, Wenhao Wang, Kevin W. Hamlen, and Zhiqiang Lin. 2019. CONFIRM: evaluating compatibility and relevance of control-flow integrity protections for modern software. In Proceedings of the 28th USENIX Conference on Security Symposium (SEC’19). USENIX Association, USA, 18051821.
 >
@@ -215,16 +213,15 @@ interest.
 >    On the contrary to this paper's observation (L25), there're a few formalizations of stack safety (and rely/guarantee conditions for function invocation).
 >       For example, see CompCert's assumption on function calls: https://github.com/AbsInt/CompCert/blob/94558ecb3e48261f12c644045d40c7d0784415e0/common/Events.v#L619
 
-BCP: Obviously, this has to be addressed strongly and concretely.
-LEO: I'm not really following the CompCert definition. Has anybody taking a crack at this?
-APT: The CompCert specification cited here characterizes the assumptions that the comiler
-correctness proof makes about the behavior of external functions.  
-When taken together with other parts of the CompCert spec that
-describe the block memory model and the treatment of control stacks,
-this does imply some facts about the stack safety conditions that CompCert
-assumes are provided by the external environment. But it is certainly not intended
-as a general characterization of stack safety, and it does not seem suitable
-as a basis for checking validity of an enforcement mechanism.  
+The CompCert specification cited here characterizes the assumptions
+that the comiler correctness proof makes about the behavior of
+external functions.  When taken together with other parts of the
+CompCert spec that describe the block memory model and the treatment
+of control stacks, this does imply some facts about the stack safety
+conditions that CompCert assumes are provided by the external
+environment. But it is certainly not intended as a general
+characterization of stack safety, and it does not seem suitable as a
+basis for checking validity of an enforcement mechanism.
 
 There is some relation.  E.g., the ec_readonly condition
 
@@ -233,6 +230,9 @@ There is some relation.  E.g., the ec_readonly condition
 looks related.  But CompCert's definition (a) doesn't protect the stack at
 all from _reading_, and (b) isn't "nested" the way ours is.  This makes
 sense, since C doesn't protect the stack!
+
+Thanks for the pointer, we will make sure to include a discussion like this
+in the revised version. 
 
 > Questions for the response period
 > ---------------------------------
