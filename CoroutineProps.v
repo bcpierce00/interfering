@@ -66,7 +66,7 @@ Section WITH_MAPS.
   | CRCurrent : forall MP MPpre MPsuff lay,
       SplitInclusive (fun mp => isCall cm (ms mp) lay) MP MPpre MPsuff ->
       ContiguousRout MP MPpre lay
-  | LaterCall : forall MP MPpre MPsuff MP' lay0 lay,
+  | CRLater : forall MP MPpre MPsuff MP' lay0 lay,
       ContiguousRout MP MPpre lay0 ->
       JoinInclusive MPpre MPsuff = MP ->
       ContiguousRout MPsuff MP' lay ->

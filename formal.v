@@ -6,7 +6,6 @@ Require Import Omega.
 Require Import Trace.
 Require Import Machine.
 Require Import ObsTrace.
-(* Require Import Paco.paco. *)
 
 (****************************)
 (***** Eager Integrity ******)
@@ -14,7 +13,7 @@ Require Import ObsTrace.
 
 (* Latex-like definition. *)
 Definition EagerStackIntegrityThru (C : Contour) (MP: MPTrace) : Prop :=
-    forall (k: Component), integrityOf (C k) = HI ->
+    forall (k: Component), integrityOf (C k) = FI ->
       forall (mp : MPState),
         InTrace mp MP -> ms (head MP) k = ms mp k.
 
@@ -29,7 +28,7 @@ CoInductive EagerStackIntegrityInd(*_gen R*) :
     EagerStackIntegrityInd(*_gen R*) C (finished mp)
 | SI_notfinished :
     forall (C : Contour) (mp: MPState) (MP : MPTrace),
-    (forall (k: Component), integrityOf (C k) = HI -> ms mp k = ms (head MP) k) ->
+    (forall (k: Component), integrityOf (C k) = FI -> ms mp k = ms (head MP) k) ->
     (*R*)EagerStackIntegrityInd C MP ->
     EagerStackIntegrityInd(*_gen R*) C (notfinished mp MP).
 Hint Constructors EagerStackIntegrityInd(*_gen*) : core.
@@ -78,7 +77,7 @@ Definition EagerStackIntegrityEnd (C:Contour) (mp:MPState) (justReturned:Machine
   forall MP mp',
     PrefixUpTo (fun mp => justReturned (ms mp)) (MPTraceOf mp) MP ->
     Last MP mp' ->
-    (forall k, integrityOf (C k) = HI -> (ms mp) k = (ms mp') k).
+    (forall k, integrityOf (C k) = FI -> (ms mp) k = (ms mp') k).
 
 (* NB: It doesn't matter whether we calculate this at a
 call instruction (as in a subtrace) or at the first
@@ -761,27 +760,23 @@ Qed.
     | _ => C k
     end.*)
 
-(* LEO: TODO: Instruction memory should be tagged LC HI *)
-(* SNA: Since we never actually use the old contour in updateContour,
-   I made this for FindCall, below. (Importantly, if we did use the old contour,
-   newer versions of subtrace would be wrong.) *)
-Definition makeContour (cdm : CodeMap) (*(f : FunID)*) (args : nat) (m : MachineState) : Contour :=
+Definition makeContour (cdm : CodeMap) (sm : StackMap) (args : nat) (m : MachineState) : Contour :=
   fun k =>
     match k with
     | Mem a =>
       if isCode cdm a then
-        (*if inFun cdm a f then*)
-          (LC,HI)
-        (*else
-          (HC,HI)*)
+          (LC,CI)
       else
-      let a' := wminus (m (Reg SP)) args in
-      if wle a a' then
-        (HC, HI)
-      else if andb (wlt a' a) (wle a (m (Reg SP))) then
-        (LC, LI)
-      else (*if wlt (M (Reg SP)) a then*)
-        (HC, LI)
+        if sidEq (findStack sm a) (findStack sm (m (Reg SP))) then
+          let a' := wminus (m (Reg SP)) args in
+          if wle a a' then
+            (FC, FI)
+          else if andb (wlt a' a) (wle a (m (Reg SP))) then
+            (LC, LI)
+          else (*if wlt (M (Reg SP)) a then*)
+            (FC, LI)
+        else
+          (CC,CI)
     | _ => (LC, LI)
     end.
 
@@ -827,17 +822,23 @@ CoInductive Subtrace (cm: CallMap) : Contour -> MTrace -> Contour -> MTrace -> P
 (* Lemma FindCall_mon cm : monotone3 (FindCall_gen cm). Proof. pmonauto. Qed. *)
 (* Hint Resolve FindCall_mon : paco. *)
 
-Inductive FindCallMP (cm : CallMap) (cdm : CodeMap) : MPTrace -> Contour -> MPTrace -> Prop :=
+Inductive FindCallMP (cm : CallMap) (cdm : CodeMap) (sm : StackMap) : MPTrace -> Contour -> MPTrace -> Prop :=
 | NextCall : forall C MP MPpre MPsuff args,
     SplitInclusive (fun mp => exists args, isCall cm (ms mp) args) MP MPpre MPsuff ->
     isCall cm (ms (head MPsuff)) args ->
-    makeContour cdm args (ms (head MPsuff)) = C ->
-    FindCallMP cm cdm MP C MPsuff
+    makeContour cdm sm args (ms (head MPsuff)) = C ->
+    FindCallMP cm cdm sm MP C MPsuff
 | LaterCall : forall C C' mp MP MP' MPsuff MPcall,
-    FindCallMP cm cdm MP C MPsuff ->
+    FindCallMP cm cdm sm MP C MPsuff ->
     MPsuff = notfinished mp MP' ->
-    FindCallMP cm cdm MP' C' MPcall ->
-    FindCallMP cm cdm MP C' MPcall.
+    FindCallMP cm cdm sm MP' C' MPcall ->
+    FindCallMP cm cdm sm MP C' MPcall.
+
+Inductive FindYieldMP (ym : YieldMap) (sm : StackMap) : MPTrace -> Contour -> MPTrace -> Prop :=
+| NextYield : forall C MP MPpre MPsuff,
+    SplitInclusive (fun mp => isYield ym (ms mp)) MP MPpre MPsuff ->
+    isYield ym (ms (head MPsuff)) ->
+    makeContour cdm sm 
 
 (* TODO: Prove these two equivalent? *)
 (* TODO: Write find call MP coinductively, prove equiv? *)

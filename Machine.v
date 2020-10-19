@@ -15,6 +15,7 @@ Axiom not_weq_implies_neq :
 Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
 Parameter wplus : Word -> nat -> Word.
 Parameter wminus : Word -> nat -> Word.
+Parameter w2nat : Word -> nat.
 
 Parameter wplus_neq : forall w n, n > 0 -> w <> wplus w n.
 
@@ -43,8 +44,11 @@ Inductive Observation : Type :=
 Parameter step : MachineState -> MachineState * Observation.
 
 Parameter FunID : Type.
+Parameter StackID : Type.
 
-Definition CallMap := Addr -> option nat.
+Definition Layout : Type := Addr -> bool.
+
+Definition CallMap := Addr -> option Layout.
 
 Definition RetMap := Addr -> Prop.
 
@@ -54,10 +58,17 @@ Definition CodeMap := Addr -> FunID -> Prop.
 
 Parameter isCode : CodeMap -> Addr -> bool.
 
-Definition ProgramMap := CallMap * RetMap * EntryMap * CodeMap : Type.
+Definition YieldMap := Addr -> Prop.
 
-Definition isCall (cm: CallMap) (m: MachineState) (args: nat) : Prop :=
-   cm (m (Reg PC)) = Some args.
+Definition StackMap := Addr -> StackID -> Prop.
+
+Parameter findStack : StackMap -> Addr -> option StackID.
+Parameter sidEq : option StackID -> option StackID -> bool.
+
+Definition ProgramMap := CallMap * RetMap * EntryMap * CodeMap * YieldMap * StackMap : Type.
+
+Definition isCall (cm: CallMap) (m: MachineState) (lay: Layout) : Prop :=
+  cm (m (Reg PC)) = Some lay.
 
 Definition justRet (mc m: MachineState) : Prop :=
   m (Reg PC) = wplus (mc (Reg PC)) 4 /\ m (Reg SP) = mc (Reg SP).
