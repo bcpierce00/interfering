@@ -60,6 +60,8 @@ Parameter isCode : CodeMap -> Addr -> bool.
 
 Definition YieldMap := Addr -> Prop.
 
+Parameter isYield : YieldMap -> Addr -> bool.
+
 Definition StackMap := Addr -> StackID -> Prop.
 
 Parameter findStack : StackMap -> Addr -> option StackID.
