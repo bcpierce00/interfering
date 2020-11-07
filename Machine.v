@@ -24,6 +24,7 @@ Definition Addr : Type := Word.
 Parameter Register : Type.
 Parameter PC : Register.
 Parameter SP : Register.
+Parameter FP : Register.
 
 Inductive Component:=
 | Mem (a:Addr)
@@ -51,6 +52,8 @@ Definition Layout : Type := Addr -> bool.
 Definition CallMap := Addr -> option Layout.
 
 Definition RetMap := Addr -> Prop.
+
+Parameter isRet : RetMap -> Addr -> bool.
 
 Definition EntryMap := Addr -> Prop.
 
