@@ -31,6 +31,12 @@ Inductive Component:=
 | Reg (r:Register).
 
 Parameter keqb : Component -> Component -> bool.
+Axiom keqb_implies_eq :
+  forall k1 k2,
+    keqb k1 k2 = true -> k1 = k2.
+Axiom not_keqb_implies_neq :
+  forall k1 k2,
+    keqb k1 k2 = false -> k1 <> k2.
 
 (* A Value is a Word. *)
 Definition Value : Type := Word.
@@ -97,6 +103,13 @@ Definition AnnotationOf (cdm : CodeMap') (a:Addr) : option CodeAnnotation :=
   end.
 
 Parameter isCode' : CodeMap' -> Addr -> bool. 
+(* why isn't this defined as
+Definition isCode' (cdm : CodeMap') (a:Addr) : bool :=
+  match cdm a with
+  | isFun _ _ => true
+  | notCode => false
+??
+*)
 
 Definition isCall (cm: CallMap) (m: MachineState) (lay: Layout) : Prop :=
   cm (m (Reg PC)) = Some lay.

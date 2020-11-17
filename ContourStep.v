@@ -21,13 +21,13 @@ Section WITH_CONTOUR_UPDATE.
   Definition MCPTrace := TraceOf MCPState.
   Definition MPOTrace := MPTrace'.
 
-  Variable StateUpdate : MachineState -> ContourState -> ContourState.
+  Variable ContourStateUpdate : MachineState -> ContourState -> ContourState.
   Variable OfState : ContourState -> Contour.
 
   (* WithContour relates an MPTrace to its MCPTrace given an initial contour state cs.
      A finished trace (m,p) is related to (m,OfState c,p).
      We relate a trace (notfinished (m,p) MP) to (notfinished (m,OfState c,p) MCP),
-     where MP relates to MCP given cs' produced by StateUpdate. Additionally,
+     where MP relates to MCP given cs' produced by ContourStateUpdate. Additionally,
      the relation requires that MP begin with m' and p' produced by mpstep (m,p),
      so that only MPTraces produced by the step function relate to any MCPTrace *)
   Inductive WithContour (cs:ContourState) : MPTrace -> MCPTrace -> Prop :=
@@ -35,7 +35,7 @@ Section WITH_CONTOUR_UPDATE.
       WithContour cs (finished (m,p)) (finished (m,OfState cs,p))
   | WCNotfinished : forall m p cs' m' p' o MP MCP,
       mpstep (m,p) = Some (m',p',o) ->
-      StateUpdate m cs = cs' ->
+      ContourStateUpdate m cs = cs' ->
       WithContour cs' MP MCP ->
       head MP = (m',p') -> (* This checks that MP is actually real *)
       WithContour cs (notfinished (m,p) MP) (notfinished (m,OfState cs,p) MCP).
@@ -63,8 +63,8 @@ End WITH_CONTOUR_UPDATE.
    
    For MCP to relate to MCP' given conditions f1 and f2, f1 must hold on the head of MCP',
    and f2 must not hold on any element of its tail except the final element if there is one.
-   So f1 and f2 may both hold on the head of MCP', but if f2 holds on the next element MCP'
-   must be of length two. Otherwise we take elements forever, or until we reach one on which
+   (So f1 and f2 may both hold on the head of MCP', but if f2 holds on the next element MCP'
+   must be of length two.) Otherwise we take elements forever, or until we reach one on which
    f2 holds.
 
    f1 can be thought of as the condition that tells our property it needs to pay attention
@@ -100,7 +100,10 @@ Definition lowCI (k:Component) := fun c => confidentialityOf (c k) = LC \/ integ
 (* The intuition is: if we see that a component is high integrity, we want to make sure that it
    doesn't change until it is once again low integrity. We can check constantly, but if it is
    high confidentiality, nothing should be reading it anyway; so it suffices to check that it is
-   unchanged only when it is low integrity or high confidentiality, whichever comes first. *)
+   unchanged only when it is low integrity or high [APT:low??] confidentiality, whichever comes first. *)
+(* APT: confidentiality part seems debateable.   Should integrity really depend on what is potentially readable rather than being based on observability? And if so, why should we check when integrity goes to LI if confidentiality never goes to LC? *)
+
+(* APT: need an argument about why considering just a single component at a time captures right intuition. *)
 
 (* Putting everything together, we have ContourTraceIntegrity, which holds on a trace if
    for each component and every segment defined as above with regard to k, the first and
@@ -114,11 +117,12 @@ Definition ContourTraceIntegrity (MCP:MCPTrace) : Prop :=
     m k = m' k.
 
 (* Two machine states are variants at k if they agree on every component except k *)
+(* APT: Fixed *)
 Definition variantOf (k : Component) (m n : MachineState) :=
-  forall k', k <> k' -> m k = n k.
+  forall k', k <> k' -> m k' = n k'.
 
 (* We can define a lazy version of trace integrity that does not check that k is
-   the same, but allows it to differ as long as it is never accessed.
+   the same, but allows it to differ as long as it is never (APT: observably?) accessed.
    The execution from the final state is compared to that of a run from any
    k-variant, and the property holds if the protected execution is an
    observational prefix of the variant. *)
@@ -127,23 +131,41 @@ Definition ContourTraceIntegrityLazy (MCP:MCPTrace) : Prop :=
     ContourSegment (highInt k) (lowCI k) MCP MCP' ->
     head MCP' = (m,c,p) ->
     Last MCP' (m',c',p') ->
-    m k <> m' k ->
+    m k <> m' k ->  
     forall m'', variantOf k m' m'' ->
                 ObsOfMP (MPRunOf (m',p')) <=_O ObsOfM (RunOf  m'').
 
 (* We might instead reset k to what it was initially. *)
+(* APT: fixed *)
 Definition RollbackInt (k:Component) (Mstart Mend : MachineState) : MachineState :=
-  fun k0 => if keqb k k0 then Mstart k else Mend k.
+  fun k0 => if keqb k k0 then Mstart k0 else Mend k0.
 
 (* This produces an even weaker property, in which it is permissible to
-   alter k as long as the remaining execution is not changed, perhaps
-   by coincidence. *)
+   alter k (APT: even if it _is_ later accessed), as long as the remaining execution is not (APT observably) changed, perhaps
+   by coincidence. (APT: This needs clarification. *)
 Definition ContourTraceIntegrityLazier (MCP:MCPTrace) : Prop :=
   forall k MCP' m c p m' c' p',
     ContourSegment (highInt k) (lowCI k) MCP MCP' ->
     head MCP' = (m,c,p) ->
     Last MCP' (m',c',p') ->
     ObsOfMP (MPRunOf (m',p')) <=_O ObsOfM (RunOf (RollbackInt k m m')).
+
+Lemma LazierWeaker : forall MCP, ContourTraceIntegrityLazy MCP -> ContourTraceIntegrityLazier MCP.
+Proof.
+   unfold ContourTraceIntegrityLazy, ContourTraceIntegrityLazier.
+   intros.
+   unfold RollbackInt.
+   destruct (WordEqDec (m k) (m' k)). 
+   - apply MPRunPrefRun. simpl. 
+     apply functional_extensionality. intros. destruct (keqb k x) eqn:?. 
+     apply keqb_implies_eq in Heqb.  subst. auto.  auto. 
+   - eapply H; eauto.
+     unfold variantOf.
+     intros. 
+     destruct (keqb k k') eqn:?.
+     apply keqb_implies_eq in Heqb. rewrite Heqb in H3. contradiction H3; auto.  auto.
+Qed.
+
 
 (***** Confidentiality *****)
 
@@ -156,7 +178,7 @@ Definition lowConf (k:Component) := fun c => confidentialityOf (c k) = LC.
      |   d1  |  d2   |   d3   |
   k1 [###############]
   k2         [################]
-
+  
   We need to make sure that k1 is not read (does not impact execution) from the
   start of domain d1 to the end of d2. Same for k2 across d2 and d3. So what matters
   is only the start and end of a contiguous block of high confidentiality. *)
@@ -175,7 +197,7 @@ Definition deltaMatch (m m' n n' : MachineState) :=
 
 (* We define a proposition for a trace that terminates, not because it is cut off due to
    reaching the f2 criterion, but because its policy fail-stops. *)
-Definition Stuck (MPO : MPTrace') : Prop :=
+Definition Stuck (MPO : MPOTrace) : Prop :=
   exists m p o,
     Last MPO (m,p,o) ->
     mpstep (m,p) = None.
@@ -222,6 +244,8 @@ Definition ContourTraceConfidentiality (MCP:MCPTrace) : Prop :=
      ObsOfMP MO ~=_O ObsOfM MOv) /\
     (Stuck MO -> (* and if the original fail-stops, its trace is a prefix of that of the variant *)
      ObsOfMP MO <=_O ObsOfM MOv).
+(* APT: Didn't study carefully. *)
+
 
 (* In this section we will describe Domains, which describe the layout of code in our model.
    We will map components to domains as the ContourState, and that mapping may change during execution.
@@ -300,6 +324,7 @@ Section WITH_MAPS.
 
      The share annotation takes a component that will be shared, which is only meaningful
      if the component is part of a stack.
+     APT: I'm not quite clear where these annotations get attached.
 
      Note that yields don't actually change the contour state, as they don't change which
      addresses belong to which stacks. *)
@@ -345,6 +370,7 @@ Section WITH_MAPS.
       end.
 
   (* So our definition of CodeSafety is general safety instantiated with CodeInit and CodeUpdate *)
+  (* APT:???*)
   Definition CodeSafety :=
     forall MCP,
       WithContour ContourState updateCS CodeContour initCS (MPTraceOf mpInit) MCP ->
@@ -373,6 +399,7 @@ Section WITH_MAPS.
       ContourTraceIntegrity MCP /\
       ContourTraceConfidentiality MCP.
   
+
   (* The subroutine property is a little more complicated. We will
      need to peel back nested stack domains to find whether a component has
      been shared. *)
