@@ -30,6 +30,8 @@ Inductive Component:=
 | Mem (a:Addr)
 | Reg (r:Register).
 
+Parameter keqb : Component -> Component -> bool.
+
 (* A Value is a Word. *)
 Definition Value : Type := Word.
 
@@ -71,6 +73,30 @@ Parameter findStack : StackMap -> Addr -> option StackID.
 Parameter sidEq : option StackID -> option StackID -> bool.
 
 Definition ProgramMap := CallMap * RetMap * EntryMap * CodeMap * YieldMap * StackMap : Type.
+
+Inductive CodeAnnotation :=
+| call
+| ret
+| yield
+| share (k:Component)
+| normal
+.
+
+Inductive CodeStatus :=
+| inFun : FunID -> CodeAnnotation -> CodeStatus
+| notCode : CodeStatus
+.
+
+Definition CodeMap' := Addr -> CodeStatus.
+
+Definition AnnotationOf (cdm : CodeMap') (a:Addr) : option CodeAnnotation :=
+  match cdm a with
+  | inFun f normal => None
+  | inFun f ann => Some ann
+  | notCode => None
+  end.
+
+Parameter isCode' : CodeMap' -> Addr -> bool. 
 
 Definition isCall (cm: CallMap) (m: MachineState) (lay: Layout) : Prop :=
   cm (m (Reg PC)) = Some lay.
