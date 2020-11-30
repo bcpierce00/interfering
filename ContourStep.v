@@ -7,76 +7,475 @@ Require Import Trace.
 Require Import Machine.
 Require Import ObsTrace.
 
-(* This file covers a version of the trace properties in which an arbitrary state
-   is carried alongside the machine state from which we will extrace a contour.*)
-Section WITH_CONTOUR_STATE.
+(* A Domain is a logical unit associated with a collection of components, and can be thought of as the
+   owner of a component. Domains are nested, so a domain can belong to a higher domain, and all of its
+   components with it. For instance, the stack frame for a caller belongs to the active frame for that
+   caller as well as the sealed portion of the stack for its callee, and additionally belongs to the
+   domain of that stack as a whole (in a multi-stack system). *)
+Section DOMAIN_MODEL.
 
-  Variable ContourState : Type.
-  Variable ContourStateUpdate : MachineState -> ContourState -> ContourState.
-
-  Definition MCPState : Type := MachineState * ContourState * PolicyState.
-  Definition MCPTrace := TraceOf MCPState.
-  Definition MPOTrace := MPTrace'.
-
-  (* WithContour relates an MPTrace to its MCPTrace given an initial contour state cs.
-     A finished trace (m,p) is related to (m,cs,p).
-     We relate a trace (notfinished (m,p) MP) to (notfinished (m,cs,p) MCP),
-     where MP relates to MCP given cs' produced by ContourStateUpdate. Additionally,
-     the relation requires that MP begin with m' and p' produced by mpstep (m,p),
-     so that only MPTraces produced by the step function relate to any MCPTrace *)
-  Inductive WithContour (cs:ContourState) : MPTrace -> MCPTrace -> Prop :=
-  | WCFinished : forall m p,
-      WithContour cs (finished (m,p)) (finished (m,cs,p))
-  | WCNotfinished : forall m p cs' m' p' o MP MCP,
-      mpstep (m,p) = Some (m',p',o) ->
-      ContourStateUpdate m cs = cs' ->
-      WithContour cs' MP MCP ->
-      head MP = (m',p') -> (* This checks that MP is actually real *)
-      WithContour cs (notfinished (m,p) MP) (notfinished (m,cs,p) MCP).
-  
-  (* Similarly, with WithObs we relate an MCPTrace into the MPOTrace
-     corresponding to its steps annotated with their observations. We feed
-     each step's observation forward, to line up with the machine state that follows that step. *)
-  Inductive WithObs (o:Observation) : MCPTrace -> MPOTrace -> Prop :=
-  | WOFinished : forall m c p,
-      WithObs o (finished (m,c,p)) (finished (m,p,o))
-  | WONotfinished : forall m c p m' c' o' p' MP MPO,
-      WithObs o' MP MPO ->
-      mpstep (m,p) = Some ((m',p'),o) ->
-      head MP = (m',c',p') ->
-      WithObs o (notfinished (m,c,p) MP) (notfinished (m,p,o) MPO).
-
-  (* ObsOfMCP starts the observation with Tau, reflecting that initially
-     there is no observation until a step occurs. *)
-  Definition ObsOfMCP := WithObs Tau.
-
-  (* ContourSegment relates two MCPTraces given a condition f on contour states, where the second
-     is a longest subtrace of the first such that f holds on all elements except the final.
-     So, it will always have at least two elements, and its head will be preceded by one
-     on which f does not hold, while the last (if any) also does not have f hold.
-
-     We will use this machinery to clip out sections of a trace that fall under a particular
-     "domain", with the final state reflecting the state after that domain has finished.
-   *)
-  Inductive ContourSegment (f : ContourState -> Prop) : MCPTrace -> MCPTrace -> Prop :=
-  | CSCurrent : forall MCP MCP' m cs p,
-      head MCP = (m,cs,p) ->
-      f cs ->
-      PrefixUpTo (fun '(m,cs,p) => ~ f cs) MCP MCP' ->
-      ContourSegment f (notfinished (m,cs,p) MCP) (notfinished (m,cs,p) MCP')
-  | CSNot : forall MCP MCPpre MCPsuff MCP' m cs p,
-      head MCP = (m,cs,p) ->
-      ~ f cs ->
-      SplitInclusive (fun '(m,cs,p) => f cs) MCP MCPpre MCPsuff ->
-      ContourSegment f MCPsuff MCP' ->
-      ContourSegment f MCP MCP'
-  | CSSkip : forall MCP MCPpre MCPsuff MCP' m cs p,
-      head MCP = (m,cs,p) ->
-      f cs ->
-      SplitInclusive (fun '(m,cs,p) => f cs) MCP MCPpre MCPsuff ->
-      ContourSegment f MCPsuff MCP' ->
-      ContourSegment f MCP MCP'
+  (* The smallest domain we treat currently is an object, which currently only
+     carries information about whether that object is shared (up-stack).
+     A fuller model might also need to identify each object, but we don't actually care right now. *)
+  Inductive ObjD :=
+  | shared
+  | local
   .
+  
+  (* Next are stack frames. Frame domains are recursive. Consider an initial stack: every address
+     in it belongs to the active frame. Then upon a call, there is are two new domains - the "sealed"
+     frame of the caller and the active frame of the callee. But an address belonging to either of
+     these domains also belongs to the original active frame.
+
+     An active frame domain is subdivided into objects, which may be local or shared. It might be the
+     base domain or the child of another (active) frame domain.
+
+     A sealed frame domain *must* be the child of another frame domain, and at some point down the
+     stack it will be an active frame domain. Sealed frames are not divided into objects, but at
+     times we will look down the stack to when an address is active to determine its object status.
+   *)
+  Inductive FrameD :=
+  | active : ObjD -> option FrameD -> FrameD
+  | sealed : FrameD -> FrameD
+  .
+
+  (* Finally, the top-level domain type can make a component part of a stack (in which case
+     it also needs to know which stack id it belongs to). It can also be code, in the heap, or
+     a register. Later we can expand the definition of the heap to extend the model. *)
+  Inductive TopD :=
+  | stack : StackID -> FrameD -> TopD
+  | code
+  | heap
+  | registers
+  .
+
+  Definition DomainMap := Component -> TopD.
+  
+End DOMAIN_MODEL.
+
+Section WITH_MAPS.
+  (* Now we describe how components are assigned to domains with an initial
+     domain map and a update function, given our initial program maps *)
+
+  Variable cdm : CodeMap'.
+  Variable sm : StackMap.
+  Variable pOf : MachineState -> PolicyState.
+  
+  Definition initD : DomainMap :=
+    fun k =>
+      match k with
+      | Mem a =>
+        if isCode' cdm a
+        then code
+        else match findStack sm a with
+             | Some sid => stack sid (active local None)
+             | None => heap
+             end
+      | _ => registers
+      end.
+
+  (* Our update function checks the annotation on the code being executed.
+     Annotations are defined in Machine.v as an alternative to a million different
+     maps, and the ones that matter are call, return, yield, and share.
+
+     Annotations are given by the compiler. We assume that the compiler can tell us
+     which instructions represent calls, returns, and yields. Shares are more complicated;
+     the compiler cannot tell us which component(s) are being shared. Instead it can identify
+     another component, typically a register, that holds the target of the share.
+
+     For example, suppose that a caller is sharing an address as an argument to its callee.
+     It executes a store instruction that the compiler identifies as a share; the target of
+     the share is the address to which the argument is being stored, held within the appropriate
+     register.
+
+     Note that yields don't actually change the contour state, as they don't change which
+     addresses belong to which stacks. *)
+  Definition updateD (m:MachineState) (dm:DomainMap) :=
+    match AnnotationOf cdm (m (Reg PC)) with
+    | Some call => (* A call adjusts the domain map by sealing the caller's frame (wrapping it in "sealed") *)
+                   (* as well as by wrapping the remaining stack in a new instance of "active" *)
+      fun k =>
+        match k, dm k with
+        | Mem a, stack sid fd =>
+          if sidEq (Some sid) (findStack sm (m (Reg SP))) && wlt a (m (Reg SP))
+          then stack sid (sealed fd)
+          else stack sid (active local (Some fd))
+        | _,_ => dm k
+        end
+    | Some ret => (* A return unwraps the outermost domain of all components in the initial stack *)
+      fun k =>
+        match dm k with
+        | stack sid (sealed fd) =>
+          if sidEq (Some sid) (findStack sm (m (Reg SP))) then
+            stack sid fd
+          else dm k
+        | stack sid (active _ (Some fd)) =>
+          if sidEq (Some sid) (findStack sm (m (Reg SP))) then
+            stack sid fd
+          else dm k
+        | _ => dm k
+        end
+    | Some (share k0) => (* A share applies only to an object in the active frame, and sets it to shared *)
+      fun k =>
+        match k with
+        | Mem a =>
+          if weq a (m k0) then
+            match dm k with
+            | stack sid (active secret fd) => stack sid (active shared fd)
+            | _ => dm k
+            end
+          else dm k
+        | _ => dm k
+        end
+    | _ => dm
+    end.
+
+  (* Eventually we will see a unified model of integrity and confidentiality using
+     contours, but first we can look at a simple example of how to build a safety property
+     on this model: an ad-hoc code safety property. Note that this property gets to be
+     simple because the code domain is static; on the way to stack safety we will add
+     quite a bit more machinery to deal with changing domains.
+
+     Code safety says that starting from any initial state, between each adjacent
+     pair of states mp and mp' in the program trace, all components in the code domain
+     are unchanged. *)
+  Definition AdHocCodeSafety : Prop :=
+    forall minit mp mp' o k,
+      InTrace mp (MPTraceOf (minit, pOf minit)) ->
+      (initD k) = code ->
+      mpstep mp = Some (mp',o) ->
+      (ms mp) k = (ms mp') k.  
+  
+  (* Now suppose that we had, in our formalization, the ability to expand the code
+     domain to reflect adding some new code to the system. We might well want such
+     a feature some day. We will need to deal with the way domains change over time.
+     Let's introduce some machinery for carring extra state along with an MPTrace. *)
+  Section WITH_STATE.
+    Variable ContextState : Type.
+    Variable ContextStateUpdate : MachineState -> ContextState -> ContextState.
+
+    Definition MCPState : Type := MachineState * ContextState * PolicyState.
+    Definition MCPTrace := TraceOf MCPState.
+    Definition cstate : MCPState -> ContextState := fun '(m,cs,p) => cs.
+    Definition MPOTrace := MPTrace'.
+
+      (* WithContour relates an MPTrace to its MCPTrace given an initial contour state cs.
+         A finished trace (m,p) is related to (m,cs,p).
+         We relate a trace (notfinished (m,p) MP) to (notfinished (m,cs,p) MCP),
+         where MP relates to MCP given cs' produced by ContextStateUpdate. Additionally,
+         the relation requires that MP begin with m' and p' produced by mpstep (m,p),
+         so that only MPTraces produced by the step function relate to any MCPTrace *)
+    Inductive WithContext (cs:ContextState) : MPTrace -> MCPTrace -> Prop :=
+    | WCFinished : forall m p,
+        WithContext cs (finished (m,p)) (finished (m,cs,p))
+    | WCNotfinished : forall m p cs' m' p' o MP MCP,
+        mpstep (m,p) = Some (m',p',o) ->
+        ContextStateUpdate m cs = cs' ->
+        WithContext cs' MP MCP ->
+        head MP = (m',p') -> (* This checks that MP is actually real *)
+        WithContext cs (notfinished (m,p) MP) (notfinished (m,cs,p) MCP).
+
+    (* Similarly, with WithObs we relate an MCPTrace into the MPOTrace
+       corresponding to its steps annotated with their observations. We feed
+       each step's observation forward, to line up with the machine state that follows that step.
+       We will need this later. *)
+    Inductive WithObs (o:Observation) : MCPTrace -> MPOTrace -> Prop :=
+    | WOFinished : forall m c p,
+        WithObs o (finished (m,c,p)) (finished (m,p,o))
+    | WONotfinished : forall m c p m' c' o' p' MP MPO,
+        WithObs o' MP MPO ->
+        mpstep (m,p) = Some ((m',p'),o) ->
+        head MP = (m',c',p') ->
+        WithObs o (notfinished (m,c,p) MP) (notfinished (m,p,o) MPO).
+
+    (* ObsOfMCP starts the observation with Tau, reflecting that initially
+       there is no observation until a step occurs. *)
+    Definition ObsOfMCP := WithObs Tau.
+
+      (* ContextSegment relates two MCPTraces given a condition f on machine and context states,
+         where the second is a longest subtrace of the first such that f holds on all elements
+         except the final. So, it will always have at least two elements, and its head will have been
+         preceded by one on which f does not hold, while the last (if any) also does not have f hold.
+
+         We will use this machinery to clip out sections of a trace that we want to check
+         against a property, with the final state reflecting the state after some relevant execution.
+       *)
+    Inductive ContextSegment (f : MachineState -> ContextState -> Prop) : MCPTrace -> MCPTrace -> Prop :=
+    | CSCurrent : forall MCP MCP' m cs p,
+        head MCP = (m,cs,p) ->
+        f m cs ->
+        PrefixUpTo (fun '(m,cs,p) => ~ f m cs) MCP MCP' ->
+        ContextSegment f (notfinished (m,cs,p) MCP) (notfinished (m,cs,p) MCP')
+    | CSNot : forall MCP MCPpre MCPsuff MCP' m cs p,
+        head MCP = (m,cs,p) ->
+        ~ f m cs ->
+        SplitInclusive (fun '(m,cs,p) => f m cs) MCP MCPpre MCPsuff ->
+        ContextSegment f MCPsuff MCP' ->
+        ContextSegment f MCP MCP'
+    | CSSkip : forall MCP MCPpre MCPsuff MCP' m cs p,
+        head MCP = (m,cs,p) ->
+        f m cs ->
+        SplitInclusive (fun '(m,cs,p) => f m cs) MCP MCPpre MCPsuff ->
+        ContextSegment f MCPsuff MCP' ->
+        ContextSegment f MCP MCP'
+    .
+  End WITH_STATE.
+
+  Arguments WithContext {_}  _ _ _ _.
+  Arguments ContextSegment {_} _ _ _.
+  Arguments ObsOfMCP {_}.
+  Arguments MCPState {_}.
+  Arguments MCPTrace {_}.
+  Arguments cstate {_}.
+  
+  (* Now let's rephrase our ad-hoc code safety property into one that is slightly
+     less ad hoc, that now protects components any time they're marked as code, even
+     if they changed later in the execution. Note that we instantiate the context state
+     with our domain map, and its initial state and update function. 
+
+     Here we use context segment to always give us a pair of adjacent states in the form
+     of (notfinished (m,cs,p) (finished (m',cs',p'))). *)
+  Definition CodeSafetyWithContext : Prop :=
+    forall minit MCP m cs p m' cs' p' k,
+      WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
+      ContextSegment (fun _ _ => False) MCP (notfinished (m,cs,p) (finished (m',cs',p'))) ->
+      cs k = code ->
+      m k = m' k.
+
+  (* We have enough to start working on a more complex property: coroutine safety.
+     Coroutine safety is intuitively the property that when a coroutine is active -
+     determined by the stack pointer pointing somewhere in its stack - no other
+     stack should be read or written. Let's start with something close to our
+     code safety - coroutine integrity, just the property that we can't write
+     to a stack while it's inactive.
+
+     This looks very much like code safety, except that only care about protecting
+     k when the k is in a stack that is not active. We call this a hyper-eager
+     property, because just as with code safety, we always look at pairs of states. *)
+  Definition CoroutineIntegrityHyperEager : Prop :=
+    forall minit MCP m cs p m' cs' p' k sid fd,
+      WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
+      ContextSegment (fun _ _ => False) MCP (notfinished (m,cs,p) (finished (m',cs',p'))) ->
+      cs k = stack sid fd ->
+      activeStack sm m <> sid ->
+      m k = m' k.
+
+  (* We haven't yet seen any confidentiality properties - properties guaranteeing the
+     secrecy of components, in this case components in an inactive stack. Let's stick
+     to the hyper-eager style for now. We'll introduce a few new concepts.
+
+     Firstly: confidentiality is expressed in terms of "variant" states. A k-variant
+     state of m is a state that agrees with m at every component other than k. It may also
+     agree at k. The intuition is that if the step from a state does the same thing as the
+     step from its k-variant, we can't tell from that step what k was, so k is secret.
+     We characterize "does the same thing" as producing the same output and changing
+     state in the same way. *)
+  Definition variantOf (k : Component) (m n : MachineState) :=
+    forall k', k <> k' -> m k' = n k'.
+
+  Definition sameDifference (m m' n n' : MachineState) :=
+    forall k,
+      (m k <> m' k \/ n k <> n' k) ->
+      m' k = n' k.
+
+  Definition CoroutineConfidentialityHyperEager : Prop :=
+    forall minit MCP m cs p o m' cs' p' k sid fd n n' o',
+      WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
+      ContextSegment (fun _ _ => False) MCP  (notfinished (m,cs,p) (finished (m',cs',p'))) ->
+      cs k = stack sid fd ->
+      activeStack sm m <> sid ->
+      variantOf k m n ->
+      step n = (n',o) ->
+      mpstep (m,p) = Some (m',p',o') ->
+      (o = o' /\ sameDifference m m' n n').
+
+  (* Now there are strange things that happen with a hyper-eager property.
+     Consider a program where a coroutine writes to a location in another stack, then
+     reads the same location; this would be a violation of hyper-eager confidentiality,
+     but in principle nothing secret has been revealed (only erased, violating integrity.)
+
+     We therefore want a confidentiality property for coroutines that treats as secret
+     the specific values in hidden locations at the time that control passes to a coroutine that
+     shouldn't read them. This means varying the first state of a subtrace from when we leave a
+     coroutine to when we return to it, and checking that for the entire subtrace, behavior
+     is unchanged as above. Behavior is more complicated now, as the original trace might have
+     three different qualities:
+
+     1. it might end with a final state where the coroutine that can read k is active
+     2. it might end prematurely, due to a fail stop
+     3. it might diverge and run forever without reaching the appropriate coroutine
+
+     In case 1, the variant trace should reach a *convergent* state, one that is also in that coroutine.
+        The traces should be observationally equivalent and the convergent states should be same-different.
+     In case 2, the variant trace will not end, but its observations should be prefixed by the original.
+     In case 3, the variant trace should be observationally equivalent to the original.
+
+     We need to introduce some predicates on states to talk about these traces having similar
+     behavior. Stuck represents a trace that fail-stops before ever returning to the coroutine
+     whose data is being protected. *)
+
+  Definition Stuck (MPO : MPOTrace) : Prop :=
+    exists m p o,
+      Last MPO (m,p,o) ->
+      mpstep (m,p) = None.
+
+  (* We will use this definition of trace confidentiality in many contexts! *)
+  Definition TraceConfidentiality (MCP:MCPTrace)  (k:Component) (Converge:MachineState -> Prop) : Prop :=
+    forall m (cs:DomainMap) p n MO NO,
+      head MCP = (m,cs,p) ->
+      ObsOfMCP MCP MO -> (* We will mostly operate on the observation-annotated trace MO *)
+      variantOf k m n ->
+      PrefixUpTo (fun '(n',o) => Converge n') (RunOf n) NO ->
+         (* Case 1 *)
+      (forall mend p o,
+          Last MO (mend,p,o) ->
+          ~ Stuck MO ->
+          exists nconv o',
+            Last NO (nconv, o') /\
+            ObsOfMP MO ~=_O ObsOfM NO /\
+            sameDifference m mend n nconv)
+      /\ (* Case 2 *)
+      (Infinite MO ->
+       ObsOfMP MO ~=_O ObsOfM NO)
+      /\ (* Case 3 *)
+      (Stuck MO ->
+       ObsOfMP MO <=_O ObsOfM NO).
+
+  (* Coroutine confidentiality: for each component k belonging to stack sid,
+     for each trace segment where sid is inactive, trace confidentiality holds
+     with convergence meaning that sid becomes active. *)
+  Definition CoroutineConfidentialityEager : Prop :=
+    forall minit MCP MCP' k sid fd,
+      WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
+      initD k = stack sid fd ->
+      ContextSegment (fun m _ => activeStack sm m <> sid) MCP MCP' ->
+      TraceConfidentiality MCP' k (fun n => activeStack sm n = sid).
+
+  (* Let's give a similar treatment to integrity. Suppose we wanted to test integrity
+     of a system with coroutines. We don't actually need to check at every step that integrity
+     is maintained; if we're considering a component that belongs to a coroutine, we need only
+     check that from when that coroutine is inactive to when it becomes active again, the
+     component remains unchanged. So we can examine a trace for integrity of a component: *)
+  Definition TraceIntegrity (MCP:MCPTrace) (k:Component) : Prop :=
+    forall m (cs:DomainMap) p m' cs' p',
+      head MCP = (m,cs,p) ->
+      Last MCP (m',cs',p') ->
+      m k = m' k.
+  (* Note that if MCP is infinite, it fulfills trace integrity trivially. *)
+
+  (* Now we have our eager, but not hyper-eager, coroutine integrity.
+     It is similar to the confidentiality property. *)
+  Definition CoroutineIntegrityEager : Prop :=
+    forall minit MCP MCP' k sid fd,
+      WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
+      initD k = stack sid fd ->
+      ContextSegment (fun m _ => activeStack sm m <> sid) MCP MCP' ->
+      TraceIntegrity MCP' k.
+
+  (* Notice how coroutines have the nice property that a stack is always
+     either active or inactive, and we can always read and write the active
+     stack and never an inactive one. Confidentiality and integrity won't
+     always line up, even in more interesting coroutine models, and certainly
+     not in our subroutine model. We introduce a concept of contours to
+     keep track of these separate security concepts.
+
+     A contour is just a map from a component to a pair of levels:
+     - LC/HC: low and high confidentiality
+     - LI/HI: low and high integrity
+     (See machine.v for the definition of contour)
+
+     So far we've seen code being (LC,HI) and stacks being (LC,LI) vs. (HC,HI).
+     What kinds of components are (HC,LI)? Most notably ones that are uninitialized.
+     We'll get into that more, but first lets use contours with the ideas we've just
+     seen to create a very general property. *)
+
+  Definition SafetyProperty (C : MachineState -> DomainMap -> Contour)
+             (SegmentProp : Component -> MachineState -> DomainMap -> Prop) :=
+    forall minit MCP MCP' k m c p,
+      WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
+      ContextSegment (SegmentProp k) MCP MCP' ->
+      head MCP' = (m,c,p) ->
+      (integrityOf ((C m c) k) = HI ->
+       TraceIntegrity MCP k) /\
+      (confidentialityOf ((C m c) k) = HC ->
+       TraceConfidentiality MCP k (fun m => ~ SegmentProp k m c)).
+
+  (* See how we can reimplement our code and coroutine properties as instances of this safety property. *)
+  Definition CodeContour (m:MachineState) (dm:DomainMap) : Contour :=
+    fun k =>
+      match dm k with
+      | code => (LC,HI)
+      | _ => (LC,LI)
+      end.
+  
+  Definition CodeSafety : Prop :=
+    SafetyProperty CodeContour (fun _ _ _ => False).
+
+  Definition CoroutineContour (m:MachineState) (dm:DomainMap) : Contour :=
+    fun k =>
+      match dm k with
+      | stack sid fd =>
+        if sidEq (Some sid) (Some (activeStack sm m))
+        then (LC,LI)
+        else (HC,HI)
+      | _ => (LC, LI)
+      end.
+
+  Definition CoroutineSafety : Prop :=
+    forall sid,
+      SafetyProperty CoroutineContour (fun _ m _ => activeStack sm m <> sid).
+
+  (* Now lets implement stack safety in this style. The subroutine property is a
+     little more complicated than previous ones. We will need to peel back nested
+     stack domains to find whether a component has been shared. *)
+  Fixpoint nestedStatus (fd:FrameD) : ObjD :=
+    match fd with
+    | active o _ => o
+    | sealed fd => nestedStatus fd
+    end.
+
+  (* If a component is secret in the active frame, it is to be treated
+     as uninitialized: (HC,LI).
+     If it is secret and sealed, it is instead (HC,HI).
+     But if it is sealed but shared, the sharing overrides the sealing
+     and it is (LC,LI).
+     At some point it may be useful to distinguish a read-only sharing that is (LC,HI).*)
+  Definition SubroutineContour (m:MachineState) (dm:DomainMap) : Contour :=
+    fun k =>
+      match dm k with
+      | stack sid (active secret _) => (HC,LI)
+      | stack sid fd =>
+        match nestedStatus fd with
+        | local => (HC,HI)
+        | shared => (LC,LI)
+        end
+      | _ => (LC,LI)
+      end.
+
+  Inductive FrameContains : FrameD -> FrameD -> Prop :=
+  | FCEq : forall fd1 fd2,
+      fd1 = fd2 ->
+      FrameContains fd1 fd2
+  | FCActive : forall fd1 fd2 od,
+      FrameContains fd1 fd2 ->
+      FrameContains (active od (Some fd1)) fd2
+  | FCSealed : forall fd1 fd2,
+      FrameContains fd1 fd2 ->
+      FrameContains (sealed fd1) fd2.
+
+  Definition TopFCContains (td:TopD) (fd:FrameD) : Prop :=
+    exists sid fd',
+      td = stack sid fd' /\ FrameContains fd' fd.
+      
+  Definition StackSafety : Prop :=
+    forall fd,
+      SafetyProperty SubroutineContour (fun k m dm => TopFCContains (dm k) fd).
+
+End WITH_MAPS.
+  
+(* This file covers a version of the trace properties in which an arbitrary state
+   is carried alongside the machine state from which we will extrace a context.*)
+Section WITH_CONTEXT_STATE.
 
   (* Moving on, we now discuss our trace properties, integrity and confidentiality.
      These are properties of an MCPtrace and a component, intended to be applied to the subtraces
@@ -86,25 +485,14 @@ Section WITH_CONTOUR_STATE.
      First, we need to check the contour of the subtrace, which is derived from
      the contour state of its head, to see how the component should behave. So we
      have a parameter of the map from contour states to contours. *)
+    
+(***** Integrity *****)
 
-  Variable ofContourState : ContourState -> Contour.
-  
-  (***** Integrity *****)
-
-  (* First, we have ContourTraceIntegrity, which holds on a trace MCP and component k if
-     the first and last machine states agree on k. A segment that is infinite never breaks
-     integrity. *)
-  Definition ContourTraceIntegrity (MCP:MCPTrace) (k:Component) : Prop :=
-    forall m cs p m' cs' p',
-      integrityOf ((ofContourState cs) k) = HI ->
-      head MCP = (m,cs,p) ->
-      Last MCP (m',cs',p') ->
-      m k = m' k.
+(* First, we have ContourTraceIntegrity, which holds on a trace MCP and component k if
+   the first and last machine states agree on k. A segment that is infinite never breaks
+   integrity. *)
 
   (* Two machine states are variants at k if they agree on every component except k *)
-  (* APT: Fixed *)
-  Definition variantOf (k : Component) (m n : MachineState) :=
-    forall k', k <> k' -> m k' = n k'.
 
   (* We can define a lazy version of trace integrity that does not check that k is
      the same, but allows it to differ as long as it is never (APT: observably?) accessed.
@@ -113,7 +501,6 @@ Section WITH_CONTOUR_STATE.
      observational prefix of the variant. *)
   Definition ContourTraceIntegrityLazy (MCP:MCPTrace) (k:Component) : Prop :=
     forall m cs p m' cs' p',
-      integrityOf ((ofContourState cs) k) = HI ->
       head MCP = (m,cs,p) ->
       Last MCP (m',cs',p') ->
       m k <> m' k ->  
@@ -129,9 +516,8 @@ Section WITH_CONTOUR_STATE.
      is not observably changed. Such scenarios are easy to construct relative 
      to a well-understood program, such as multiplying a value that is always
      treated as a boolean by a nonzero constant, but are difficult to generalize. *)
-Definition ContourTraceIntegrityLazier (MCP:MCPTrace)  (k:Component) : Prop :=
+Definition ContourTraceIntegrityLazier (MCP:MCPTrace) (k:Component) : Prop :=
   forall m cs p m' cs' p',
-    integrityOf ((ofContourState cs) k) = HI ->
     head MCP = (m,cs,p) ->
     Last MCP (m',cs',p') ->
     ObsOfMP (MPRunOf (m',p')) <=_O ObsOfM (RunOf (RollbackInt k m m')).
@@ -149,9 +535,8 @@ Proof.
      unfold variantOf.
      intros. 
      destruct (keqb k k') eqn:?.
-     apply keqb_implies_eq in Heqb. rewrite Heqb in H3. contradiction H3; auto.  auto.
+     apply keqb_implies_eq in Heqb. rewrite Heqb in H2. contradiction H2; auto.  auto.
 Qed.
-
 
 (***** Confidentiality *****)
 
@@ -172,22 +557,9 @@ Qed.
    in their execution. m' and n' may not be identical because the original variation
    may be present, but if they have changed differently, that would mean that the variation
    had an effect on the state. *)
-Definition deltaMatch (m m' n n' : MachineState) :=
-  forall k,
-    (m k <> m' k \/ n k <> n' k) ->
-    m' k = n' k.
 
 (* We define a proposition for a trace that terminates, not because it is cut off due to
    reaching the f2 criterion, but because its policy fail-stops. *)
-Definition Stuck (MPO : MPOTrace) : Prop :=
-  exists m p o,
-    Last MPO (m,p,o) ->
-    mpstep (m,p) = None.
-
-(* For now, we define convergence of two states as sharing return to a common program counter
-   and stack pointer. Eventually we may want it to be more general. *)
-Definition Converge (m1 m2 : MachineState) :=
-  m1 (Reg SP) = m2 (Reg SP) /\ m1 (Reg PC) = m2 (Reg PC).
 
 (* Broadly, the trace confidentiality property will take a k-variant of the original
    trace and run it until its state converges with the final state of the original.
@@ -206,7 +578,6 @@ Definition Converge (m1 m2 : MachineState) :=
 *)
 Definition ContourTraceConfidentiality (MCP:MCPTrace)  (k:Component) : Prop :=
   forall m cs p m' MO MOv,
-    confidentialityOf ((ofContourState cs) k) = HC ->
     head MCP = (m,cs,p) ->
     ObsOfMCP MCP MO -> (* We will mostly operate on the observation-annotated trace MCP' *)
     variantOf k m m' -> (* We consider all states m' that are k-variants from m *)
@@ -229,57 +600,10 @@ Definition ContourTraceConfidentiality (MCP:MCPTrace)  (k:Component) : Prop :=
 (* APT: Didn't study carefully. *)
 End WITH_CONTOUR_STATE.
 
-(* In this section we will describe Domains, which describe the layout of code in our model.
-   We will map components to domains as the ContourState, and that mapping may change during execution.
-   Domains have a tree structure, because a component can belong to multiple domains. *)
-Section DomainTree.
-
-  (* In our stack safety property, we will be marking some addresses as shared and some as secret.
-     "shared" can also be thought of as a special form of initialization; it indicates that an address'
-     value on a domain transition should be treated as intentional. "Secret" means that even if it might
-     be accessible, its current value at a transition should be considered uninitialized.
-
-     To link this concept directly to stack safety, when a subroutine is called with arguments, the
-     arguments are shared, and the stack above the stack pointer is secret, as it could have any value. *)
-  Inductive ShareStatus :=
-  | shared
-  | secret
-  .
-  
-  (* Our first actual domain is a Stack Domain. It has two forms: the active frame (everything above the
-     stack pointer on entry) and a sealed stack (everything below). Of course a component that is in a
-     sealed stack is also in some frame, and in fact may be in multiple nested sealed stacks.
-
-     In our actual properties, a component that is just in the active frame is always writeable;
-     sharing determines how components are treated once they are at least one level down. *)
-  Inductive StackD :=
-  | active : ShareStatus -> option StackD -> StackD
-  | sealed : StackD -> StackD
-  .
-
-  (* Finally, the top-level domain type can make a component part of a stack (in which case
-     it also needs to know which stack id it belongs to). It can also be code, in the heap, or
-     a register. Later we can expand the definition of the heap to extend the model. *)
-  Inductive Domain :=
-  | stack : StackID -> StackD -> Domain
-  | code
-  | heap
-  | registers
-  .
-
-  Definition DomainMap := Component -> Domain.
-  
-End DomainTree.
-
-Section WITH_MAPS.
 
   (* Now that we've described confidentiality and integrity in terms of contours,
      we just need to instantiate the properties by defining how routines and coroutines
      manipulate the contour state and how it translates into a contour. *)
-
-  Variable cdm : CodeMap'.
-  Variable sm : StackMap.
-  Variable mpInit : MPState.
 
   (* All of our properties will use the same contour state: a domain map.
      The initial domain map uses some of our other program maps to establish
@@ -287,79 +611,13 @@ Section WITH_MAPS.
      sharing status is secret, because they have not been initialized.
      Any memory that isn't code or a stack is heap, and we mostly ignore it. *) 
   Definition ContourState := DomainMap.
-  Definition initCS : ContourState :=
-    fun k =>
-      match k with
-      | Mem a =>
-        if isCode' cdm a
-        then code
-        else match findStack sm a with
-             | Some sid => stack sid (active secret None)
-             | None => heap
-             end
-      | _ => registers
-      end.
 
-  (* Our update function checks the annotation on the code being executed.
-     Annotations are defined in Machine.v as an alternative to a million different
-     maps, and the ones that matter are call, return, yield, and share.
 
-     The share annotation takes a component that will be shared, which is only meaningful
-     if the component is part of a stack.
-     APT: I'm not quite clear where these annotations get attached.
-
-     Note that yields don't actually change the contour state, as they don't change which
-     addresses belong to which stacks. *)
-  Definition updateCS (m:MachineState) (cs:ContourState) :=
-    match AnnotationOf cdm (m (Reg PC)) with
-    | Some call =>
-      fun k =>
-        match k, cs k with
-        | Mem a, stack sid sd =>
-          if sidEq (Some sid) (findStack sm (m (Reg SP))) && wlt a (m (Reg SP))
-          then stack sid (sealed sd)
-          else stack sid (active secret (Some sd))
-        | _,_ => cs k
-        end
-    | Some ret =>
-      fun k =>
-        match cs k with
-        | stack sid (sealed sd) =>
-          if sidEq (Some sid) (findStack sm (m (Reg SP))) then
-            stack sid sd
-          else cs k
-        | stack sid (active _ (Some sd)) =>
-          if sidEq (Some sid) (findStack sm (m (Reg SP))) then
-            stack sid sd
-          else cs k
-        | _ => cs k
-        end
-    | Some (share k0) =>
-      fun k =>
-        if keqb k k0 then
-          match cs k with
-          | stack sid (active secret sd) => stack sid (active shared sd)
-          | _ => cs k
-          end
-        else cs k
-    | _ => cs
-    end.
-
+  
   (* Here's a very simple property: code is always low confidentiality and high integrity.
      So the contour maps code to (LC,HI), and everything else to (LC,LI) *)
-  Definition CodeContour (cs:ContourState) : Contour :=
-    fun k =>
-      match cs k with
-      | code => (LC,HI)
-      | _ => (LC,LI)
-      end.
 
-  Definition CodeSafety :=
-    forall MCP MCP' k ,
-      WithContour ContourState updateCS initCS (MPTraceOf mpInit) MCP ->
-      ContourSegment ContourState (fun cs => False) MCP MCP' ->
-      ContourTraceIntegrity ContourState CodeContour MCP k /\
-      ContourTraceConfidentiality ContourState CodeContour MCP k.    
+
 
   (* For coroutines, the active stack is accessible.
      All other stacks are inaccessible, and everything else is accessible.
@@ -367,63 +625,9 @@ Section WITH_MAPS.
      Note that this formulation is fine with changing the stack pointer
      outside of a yield and then accessing a different stack. It takes
      yield integrity to enforce that stacks only change on yields. *)
-  Definition CoroutineContour (cs:ContourState) : Contour :=
-    fun k =>
-      match cs k with
-      | stack sid sd =>
-        if sidEq (Some sid) (findStack sm (ms mpInit (Reg SP)))
-        then (LC,LI)
-        else (HC,HI)
-      | _ => (LC, LI)
-      end.
 
-  Definition InStack (d:Domain) (sid:StackID) : Prop :=
-    exists s,
-      d = stack sid s.
 
-  Definition CoroutineSafety :=
-    forall MCP sid k MCP',
-      WithContour ContourState updateCS initCS (MPTraceOf mpInit) MCP ->
-      ContourSegment ContourState (fun cs => ~ InStack (cs k) sid) MCP MCP' ->
-      ContourTraceIntegrity ContourState CoroutineContour MCP k /\
-      ContourTraceConfidentiality ContourState CoroutineContour MCP k.
 
-  (* The subroutine property is a little more complicated. We will
-     need to peel back nested stack domains to find whether a component has
-     been shared. *)
-  Fixpoint nestedStatus (sd:StackD) : ShareStatus :=
-    match sd with
-    | active s _ => s
-    | sealed sd => nestedStatus sd
-    end.
-
-  (* If a component is secret in the active frame, it is to be treated
-     as uninitialized: (HC,LI).
-     If it is secret and sealed, it is instead (HC,HI).
-     But if it is sealed but shared, the sharing overrides the sealing
-     and it is (LC,LI).
-     At some point it may be useful to distinguish a read-only sharing that is (LC,HI).*)
-  Definition SubroutineContour (cs:ContourState) : Contour :=
-    fun k =>
-      match cs k with
-      | stack sid (active secret _) => (HC,LI)
-      | stack sid sd =>
-        match nestedStatus sd with
-        | secret => (HC,HI)
-        | shared => (LC,LI)
-        end
-      | _ => (LC,LI)
-      end.
-
-  (* How do we split up functions? We don't! We check protection on a given stack component
-     from when it goes out of scope to when it returns. *)
-
-  Definition StackSafety :=
-    forall MCP k sid sd MCP',
-      WithContour ContourState updateCS initCS (MPTraceOf mpInit) MCP ->
-      ContourSegment ContourState (fun cs => cs k = stack sid sd) MCP MCP' ->
-      ContourTraceIntegrity ContourState SubroutineContour MCP' k /\
-      ContourTraceConfidentiality ContourState SubroutineContour MCP' k.
 
   (* APT: need an argument about why considering just a single component at a time captures right intuition. *)
 
@@ -434,4 +638,3 @@ Section WITH_MAPS.
      component is identical subsumes it. It is actually weaker: consider taking x || y, where
      x and y are high confidentiality and initialized to 1. *)
 
-End WITH_MAPS.

@@ -75,6 +75,7 @@ Parameter isYield : YieldMap -> Addr -> bool.
 
 Definition StackMap := Addr -> StackID -> Prop.
 
+Parameter activeStack : StackMap -> MachineState -> StackID.
 Parameter findStack : StackMap -> Addr -> option StackID.
 Parameter sidEq : option StackID -> option StackID -> bool.
 
