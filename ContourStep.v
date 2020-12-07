@@ -30,7 +30,7 @@ Section DOMAIN_MODEL.
      again be active. a2 is also in an inactive frame, but it has been passed to B,
      so B should be allowed to use it. It will be active again after the
      return. We consider a1, by contrast, local. a3 is currently still active,
-     at it will be active after the return, so it is active in two contexts.
+     at [APT:"and"?] it will be active after the return, so it is active in two contexts.
      If B calls another function C without sharing a2, it should be inactive and
      local in that context.
 
@@ -45,8 +45,22 @@ Section DOMAIN_MODEL.
      Now what are the statuses of a1, a2, and a3? First, a1 is in a doubly inactive frame;
      it will take two returns before it's active again. It is also local. a2 is in an inactive frame,
      and in that frame it's local; but after a return it will still be inactive but now passed, and
-     after a further return it will remain be active. C will be able to access it. Finally a3 is
+     after a further return it will remain [APT: "once again"?] be active. C will be able to access it. [APT:???]
+     Finally a3 is
      in an inactive frame but shared, which is distinct from being passed because it is uninitialized.
+
+(* APT: Passing address of a3 seems like a bit of a red herring. A simpler example would just be if
+     A allocates space for a call-by-reference argument that is to be filled in by B (which knows
+     where to find it at a fixed offset from the sp).
+*)
+
+(* APT: This example also touches on an issue we need to addres: how fine-grained can a property be in controlling access to
+     the caller's frame from the callee?  In a capability-based enforecment mechanism, it is natural to arrange that access to
+     a stack-allocated variable is limited to holders of a pointer to that variable.  (The lastest Aarhus paper has
+     an example.) And we can emulate capabilities using tag-based policies. But I don't see how we can be that precise 
+     in a _property_ based on purely static annotations,  since any pointer tracking will necessarily be approximate and 
+     will need to be more permissive.
+*)
 
      If we were to give domains unique names, we would identify stack domains by distinct
      activations of each function (perhaps using a counter). But we don't need them to be
@@ -54,29 +68,37 @@ Section DOMAIN_MODEL.
      and contexts that will be returned to.
    *)
 
+
   Inductive FrameStatus :=
   | active
   | inactive
   .
   
+  (* APT: In addition to examples discussed above, need to give a simple description of what these three mean. *)
   Inductive ObjectStatus :=
   | passed
   | shared
   | local
   .
-
+ 
   (* From the perspective of a single function activation, we can treat the layout
      of memory as a partial function from addresses to their statuses. Partial because
      not all addresses are in each stack. *)
+  (* APT: move this later? *)
   Definition StackLayout := Addr -> option (FrameStatus * ObjectStatus).
 
   (* So a domain, which an address might belong to at any given time, is itself a stack
      of such associations. (We will convert this into a layout later.) *)
   Definition StackDomain := list (FrameStatus * ObjectStatus).
 
+
   (* We have a well-formedness condition on stack domains, representing monotonicity -
      given an address in a stack, if it active during the current call, then it
      must have been active for the caller as well. *)
+  (* APT: Where is this used? *)
+  (* APT: Note that in latest Aarhus paper, they deliberately _don't_ want caller to be able to read
+     callee's frame after return; that is, confidentiality is more or less symmetric.  Can we model
+     that variant? *)
   Inductive StackDomainWF : StackDomain -> Prop :=
   | SDWFnil : StackDomainWF []
   | SDWFactive : forall os sd,
@@ -85,12 +107,21 @@ Section DOMAIN_MODEL.
   | SDWFinactive : forall os sd,
       StackDomainWF sd ->
       StackDomainWF ((inactive,os)::sd).
-  
+
+  (* APT: But then why not just the following (is this what you had before?)  *)
+  Inductive StackDomain' :=
+  | Inactive (os:ObjectStatus) (sd:StackDomain)
+  | Active (oss:list ObjectStatus)
+  .
+
   (* Finally, the top-level domain type can make a component part of a stack (in which case
      it also needs to know which stack id it belongs to). It can also be code, in the heap, or
      a register. Later we can expand the definition of the heap to extend the model. *)
   Inductive TopD :=
   | stack : StackID -> StackDomain -> TopD
+(*APT: Suggest more uniform notation:
+  | stack (sid:StackId) (sd:StackDemain)
+*)
   | code
   | heap
   | registers
@@ -128,6 +159,8 @@ Section WITH_MAPS.
       | _ => registers
       end.
 
+(* APT: Does findStack cover the entire potential size of the stack? *)
+
   (* Our update function checks the annotation on the code being executed.
      Annotations are defined in Machine.v as an alternative to a million different
      maps, and the ones that matter are call, return, yield, and share.
@@ -148,6 +181,7 @@ Section WITH_MAPS.
   Definition updateD (m:MachineState) (dm:DomainMap) :=
     match AnnotationOf cdm (m (Reg PC)) with
     | Some call => (* A call adjusts the domain map by sealing the caller's frame (wrapping it in "sealed") *)
+(* APT: sealed?? *)
                    (* as well as by wrapping the remaining stack in a new instance of "active" *)
       fun k =>
         match k, dm k with
@@ -156,7 +190,7 @@ Section WITH_MAPS.
           then if wlt a (m (Reg SP))
                then match LayoutOfDomainMap dm a with
                     | Some (_,os)  => stack sid ((inactive,os)::sd)
-                    | _ => stack sid [(inactive,local)]
+                    | _ => stack sid [(inactive,local)]  (* APT can this happen?? *)
                     end
                else stack sid ((active,local)::sd)
           else stack sid sd
@@ -164,13 +198,13 @@ Section WITH_MAPS.
         end
     | Some ret => (* A return unwraps the outermost domain of all components in the initial stack *)
       fun k =>
-        match dm k with
+        match dm k with  (* APT: why do we need two cases? *)
         | stack sid ((inactive,_)::fd) =>
           if sidEq (Some sid) (findStack sm (m (Reg SP))) then
             stack sid fd
           else dm k
-        | stack sid ((active,_)::fd) =>
-          if sidEq (Some sid) (findStack sm (m (Reg SP))) then
+        | stack sid ((active,_)::fd) => 
+          if sidEq (Some sid) (findStack sm (m (Reg SP))) then 
             stack sid fd
           else dm k
         | _ => dm k
@@ -198,15 +232,19 @@ Section WITH_MAPS.
          -- it is not initialized
          -- so, the compiler annotates this write as (share r (fun w => {a,false | SP-w <= a < SP}))
        Note that this convention assumes the array will be secret
+APT: This is cute, but it still seems pretty ad-hoc, and in this example it requires the value of SP being somehow magically available.
+     If we wanted to describe a dynamic array based at an arbitrary register -- then we would need r1,r2 ... 
+     Seems better to pass the entire state, or at least the entire register set.
      *)
     | Some (share r f) => (* A share applies only to an object in the active frame, and sets it to shared *)
       fun k =>
         match k with
-        | Mem a =>
+        | Mem a =>  
+          (* APT: This is super awkward. How about changing result of share/range to have type (Addr -> bool option) *)
           if find (fun '(a',b) => weq a' a && b) (f (m (Reg r))) then
             match dm k with
             | stack sid ((active,local)::fd) => stack sid ((active,passed)::fd)
-            | _ => dm k
+            | _ => dm k   (* APT: can this happen? *)
             end
           else if find (fun '(a',b) => weq a' a && negb b) (f (m (Reg r))) then
                  match dm k with
@@ -218,6 +256,9 @@ Section WITH_MAPS.
         end
     | _ => dm
     end.
+
+(* APT: I think we should explore enriching the set of annotations to include, for example, initializing writes
+        that would change a location from HC to LC. *)
   
   (* Eventually we will see a unified model of integrity and confidentiality using
      "contours" - generic permissions structures derived from domain maps - but first
@@ -239,8 +280,10 @@ Section WITH_MAPS.
   (* Now suppose that we had, in our formalization, the ability to expand the code
      domain to reflect adding some new code to the system. We might well want such
      a feature some day. We will need to deal with the way domains change over time.
+APT: Not sure this is the best example for introducing context state, since your updateD doesn't in fact ever change the code region.
      Let's introduce some machinery for carring extra state along with an MPTrace. *)
   Section WITH_STATE.
+(* APT: I haven't reviewed this carefully yet. *)
     Variable ContextState : Type.
     Variable ContextStateUpdate : MachineState -> ContextState -> ContextState.
 
@@ -363,6 +406,7 @@ Section WITH_MAPS.
   Definition variantOf (k : Component) (m n : MachineState) :=
     forall k', k <> k' -> m k' = n k'.
 
+(* APT: Is this "changing the state in the same way"? Needs an explanation. *)
   Definition sameDifference (m m' n n' : MachineState) :=
     forall k,
       (m k <> m' k \/ n k <> n' k) ->
@@ -383,6 +427,12 @@ Section WITH_MAPS.
      Consider a program where a coroutine writes to a location in another stack, then
      reads the same location; this would be a violation of hyper-eager confidentiality,
      but in principle nothing secret has been revealed (only erased, violating integrity.)
+APT: Couldn't we model this as a change in contour/domain when the write occurs? 
+     I don't think the leap in the next sentence is fully justified.
+
+APT: A possibly better reason for moving to subtraces is testing efficiency: 
+     (a) HyperEager property would need to be checked until the end of execution.
+     (b) there is no need to vary after each step and (I guess?) it is costlier than just varying once.
 
      We therefore want a confidentiality property for coroutines that treats as secret
      the specific values in hidden locations at the time that control passes to a coroutine that
@@ -443,6 +493,7 @@ Section WITH_MAPS.
 
      But, we are going to quantify over all such traces that are possible in our system,
      so I will argue that considering one component at a time is good enough. *)
+(* APT: Hmm. *)
   
   (* Coroutine confidentiality: for each component k belonging to stack sid,
      for each trace segment where sid is inactive, trace confidentiality holds
@@ -531,7 +582,7 @@ Section WITH_MAPS.
   (* If a component is in the active frame, it is to be treated
      as uninitialized: (HC,LI).
      If it is inactive and local, it is instead (HC,HI).
-     But if it is inactive and passed, the passing overrides the sealing
+     But if it is inactive and passed, the passing overrides the sealing  (APT: "sealing"? )
      and it is (LC,LI).
      Inactive and shared is treated as if it's in the active frame
      At some point it may be useful to distinguish a read-only sharing that is (LC,HI).*)
@@ -598,3 +649,5 @@ Section WITH_MAPS.
      property, we have lazy versions of each of our safety properties. *)
   
 End WITH_MAPS.
+
+(* APT: What is the status of the WBCF properites? *)
