@@ -85,7 +85,7 @@ Inductive CodeAnnotation :=
 | call
 | ret
 | yield
-| share (r:Register) (range: Word -> list (Addr * bool))
+| share (f: MachineState -> Addr -> option bool)
 | normal
 .
 
