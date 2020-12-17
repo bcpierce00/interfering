@@ -24,7 +24,7 @@ Section DOMAIN_MODEL.
 
      B's frame is not yet allocated until it sets the stack pointer, but B
      has access to v and to everything above. So lets consider the status of
-     addresses a1, a2, and a3.
+     addresses a1, a2, and a3 in the moment B gains control.
 
      a1 is in a frame that is currently inactive, but someday - after B returns - will
      again be active. a2 is also in an inactive frame, but it has been passed to B,
@@ -106,8 +106,6 @@ Section DOMAIN_MODEL.
 End DOMAIN_MODEL.
 
 Section WITH_MAPS.
-  (* Now we describe how components are assigned to domains with an initial
-     domain map and a update function, given our initial program maps. *)
 
   Variable cdm : CodeMap'.
   (* A stackmap defines the ranges of addresses each stack in a coroutine system may use.
@@ -154,7 +152,7 @@ Section WITH_MAPS.
         (m k <> m' k \/ n k <> n' k) ->
         m' k = n' k.
 
-    (* Our ultraeager confidentiality property says that if we vary components outside
+    (* Our Ultra Eager confidentiality property says that if we vary components outside
        the active stack at any point, our next step still produces the same output and
        changes the state in the same way. *)
     Definition CoroutineConfNoShareUE : Prop :=
@@ -427,7 +425,7 @@ Section WITH_MAPS.
   (* Coroutine confidentiality: for the set K of unshared components belonging to stack sid,
      for each trace segment where sid is inactive, trace confidentiality of K holds
      with convergence meaning that sid becomes active. *)
-  Definition CoroutineConfidentialityEager : Prop :=
+  Definition CoroutineConfEager : Prop :=
     forall minit MCP MCP' sid sd,
       WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
       ContextSegment (fun m _ => activeStack sm m <> sid) MCP MCP' ->
@@ -457,10 +455,9 @@ Section WITH_MAPS.
       let K := fun k => cstate (head MCP') k = stack sid sd /\ unsharedP sd in
       TraceIntegrity MCP' K.
   
-  (* Notice how coroutines have the nice property that a stack is always
-     either active or inactive, and we can always read and write the active
-     stack and never an inactive one. Confidentiality and integrity won't
-     always line up, even in more interesting coroutine models, and certainly
+  (* Notice how coroutines have the nice property that we can always both read and write
+     a component, or do neither. Confidentiality and integrity won't always line up in
+     the future, even in more interesting coroutine models, and certainly
      not in our subroutine model. We introduce two pairs of security labels:
      - LC/HC: low and high confidentiality
      - LI/HI: low and high integrity
@@ -529,20 +526,24 @@ Section WITH_MAPS.
       | _ => (LC,LI)
       end.
 
-  Definition extends (sd' sd : StackDomain) :=
-    sd' = sd \/ exists os, sd' = Inactive os sd.
+  Fixpoint depth (sd:StackDomain) : nat :=
+    match sd with
+    | Active os oss => 1+(length oss)
+    | Inactive os sd => 1+(depth sd)
+    end.
 
-  (* So the final stack safety policy instantiates safety, quantifying over base configurations
-     for each stack and taking segments that extend those stack. In other words, we consider each
-     function activation and include all nested calls within its trace. *)
+  (* Stack safety takes all stacks s and stack depths d, and takes the segment of execution where,
+     the stack of s has at least d frames, as indicated by any component having a domain "stack s sd"
+     with sd of depth d. These segments represent function activations, possibly with nested calls that
+     must obey their caller's trace properties as well as their own. *)
   Definition StackSafety : Prop :=
-    forall s sd,
-      SafetyProperty SubroutineContour (fun m dm => exists k sd', dm k = stack s sd' /\ extends sd' sd).
+    forall s d,
+      SafetyProperty SubroutineContour (fun m dm => exists k sd, dm k = stack s sd /\ depth sd >= d).
 
-  (* SNA: as APT noted above, there is a version of stack safety in which the residual
-     data of a call should not be accessible after it returns. In this variant we would need
-     confidentiality to apply to subtraces where sd' = sd, i.e. separate subtraces withing
-     an activations. *)
+  (* There is a version of stack safety in which the residual data of a call should not
+     be accessible after it returns. In this variant we would need confidentiality to
+     apply to subtraces where sd has exactly depth d, i.e. separate subtraces within an activations.
+     It might make the most sense for that to be a separate property. *)
 
   (****** Lazy Properties ******)
   
@@ -583,7 +584,49 @@ Section WITH_MAPS.
 
   (* If we substitute one of these properties for TraceIntegrity in the general safety
      property, we have lazy versions of each of our safety properties. *)
-  
-End WITH_MAPS.
 
-(* APT: What is the status of the WBCF properites? *)
+  (* Stop here for Thursday demo. *)
+  (* ********************* Control Flow with Coroutines ******************** *)
+
+  Variable fm : CodeMap. (* This actually just tells us where functions are. *)
+  
+  Definition ControlSeparation : Prop :=
+    forall minit m1 p1 m2 p2 o,
+      InTrace (m1,p1) (MPTraceOf (minit, pOf minit)) ->
+      mpstep (m1,p1) = Some (m2, p2,o) ->
+      fm (m1 (Reg PC)) <> fm (m2 (Reg PC)) ->
+      AnnotationOf cdm (m1 (Reg PC)) = Some call \/
+      AnnotationOf cdm (m1 (Reg PC)) = Some ret \/
+      AnnotationOf cdm (m1 (Reg PC)) = Some yield.
+
+  Definition YieldBackIntegrity : Prop :=
+    forall mp mp1 mp2 MPout,
+      InTrace mp1 (MPTraceOf mp) ->
+      AnnotationOf cdm (ms mp1 (Reg PC)) = Some yield ->
+      SplitInclusive (fun mp2 => sm (ms mp1 (Reg PC)) = sm (ms mp (Reg PC))) (MPTraceOf mp) MPout (MPTraceOf mp2) ->
+      justRet (ms mp1) (ms mp2).
+
+  Definition ReturnIntegrity : Prop :=
+    forall s d minit MCP MCP' m c p m' c' p',
+      WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
+      ContextSegment (fun m dm => exists k sd, dm k = stack s sd /\ depth sd >= d) MCP MCP' ->
+      head MCP' = (m,c,p) ->
+      Last MCP' (m',c',p') ->
+      justRet m m'.
+
+  Variable em:EntryMap.
+  
+  Definition EntryIntegrity : Prop :=
+  forall minit mp1 m2 p2 o,
+    InTrace mp1 (MPTraceOf (minit, pOf minit)) ->
+    mpstep mp1 = Some (m2,p2,o) ->
+    AnnotationOf cdm (ms mp1 (Reg PC)) = Some call ->
+    em (m2 (Reg PC)).
+
+  Definition WellBracketedControlFlow  : Prop :=
+    ControlSeparation /\
+    ReturnIntegrity /\
+    YieldBackIntegrity /\
+    EntryIntegrity.
+
+End WITH_MAPS.
