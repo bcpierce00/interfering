@@ -152,10 +152,12 @@ Section WITH_MAPS.
   (* ********************* Control Flow with Coroutines ******************** *)
 
   Definition ControlSeparation : Prop :=
-    forall m1 p1 m2 p2 o n,
+    forall m1 p1 m2 p2 o n f1 f2 ann1 ann2,
       InTrace (m1,p1) (MPTraceOf mpInit) ->
       mpstep (m1,p1) = Some (m2, p2,o) ->
-      cdm (m1 (Reg PC)) <> cdm (m2 (Reg PC)) ->
+      cdm (m1 (Reg PC)) = inFun f1 ann1 ->
+      cdm (m2 (Reg PC)) = inFun f2 ann2 ->
+      f1 <> f2 ->
       cm (m1 (Reg PC)) = Some n \/
       rm (m1 (Reg PC)) \/
       ym (m1 (Reg PC)).

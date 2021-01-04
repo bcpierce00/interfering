@@ -55,13 +55,13 @@ Parameter step : MachineState -> MachineState * Observation.
 Parameter FunID : Type.
 Parameter StackID : Type.
 
-Definition Layout : Type := Addr -> bool.
+(*Definition Layout : Type := Addr -> bool.
 
 Definition CallMap := Addr -> option Layout.
 
 Definition RetMap := Addr -> Prop.
 
-Parameter isRet : RetMap -> Addr -> bool.
+Parameter isRet : RetMap -> Addr -> bool.*)
 
 Definition EntryMap := Addr -> Prop.
 
@@ -69,9 +69,9 @@ Definition CodeMap := Addr -> FunID -> Prop.
 
 Parameter isCode : CodeMap -> Addr -> bool.
 
-Definition YieldMap := Addr -> Prop.
+(*Definition YieldMap := Addr -> Prop.
 
-Parameter isYield : YieldMap -> Addr -> bool.
+Parameter isYield : YieldMap -> Addr -> bool.*)
 
 Definition StackMap := Addr -> StackID -> Prop.
 
@@ -79,7 +79,7 @@ Parameter activeStack : StackMap -> MachineState -> StackID.
 Parameter findStack : StackMap -> Addr -> option StackID.
 Parameter sidEq : option StackID -> option StackID -> bool.
 
-Definition ProgramMap := CallMap * RetMap * EntryMap * CodeMap * YieldMap * StackMap : Type.
+(*Definition ProgramMap := CallMap * RetMap * EntryMap * CodeMap * YieldMap * StackMap : Type.*)
 
 Inductive CodeAnnotation :=
 | call
@@ -103,17 +103,14 @@ Definition AnnotationOf (cdm : CodeMap') (a:Addr) : option CodeAnnotation :=
   | notCode => None
   end.
 
-Parameter isCode' : CodeMap' -> Addr -> bool. 
-(* why isn't this defined as
 Definition isCode' (cdm : CodeMap') (a:Addr) : bool :=
   match cdm a with
-  | isFun _ _ => true
+  | inFun _ _ => true
   | notCode => false
-??
-*)
+  end.
 
-Definition isCall (cm: CallMap) (m: MachineState) (lay: Layout) : Prop :=
-  cm (m (Reg PC)) = Some lay.
+(*Definition isCall (cm: CallMap) (m: MachineState) (lay: Layout) : Prop :=
+  cm (m (Reg PC)) = Some lay.*)
 
 Definition justRet (mc m: MachineState) : Prop :=
   m (Reg PC) = wplus (mc (Reg PC)) 4 /\ m (Reg SP) = mc (Reg SP).
@@ -130,7 +127,7 @@ Qed.
 Parameter PolicyState : Type.
 Parameter pstep : MachineState * PolicyState -> option PolicyState.
 (* TODO: Does this ever fail? *)
-Parameter initPolicyState : MachineState -> ProgramMap -> option PolicyState.
+(*Parameter initPolicyState : MachineState -> ProgramMap -> option PolicyState.*)
 
 (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.
@@ -213,3 +210,79 @@ Proof.
   intros. destruct mp.  simpl. 
   destruct (pstep (m,p)); auto.
 Qed.
+
+(* ******************* Trace stuff ********************* *)
+
+(* We need to associate domainmaps with a trace. Here is some helpful machinery for associating
+   states in general with a trace. *)
+Section WITH_STATE.
+  Variable ContextState : Type.
+  Variable ContextStateUpdate : MachineState -> ContextState -> ContextState.
+  
+  Definition MCPState : Type := MachineState * ContextState * PolicyState.
+  Definition MCPTrace := TraceOf MCPState.
+  Definition mstate : MCPState -> MachineState := fun '(m,cs,p) => m.
+  Definition cstate : MCPState -> ContextState := fun '(m,cs,p) => cs.
+  Definition MPOTrace := MPTrace'.
+
+  (* WithContour relates an MPTrace to its MCPTrace given an initial contour state cs.
+     A finished trace (m,p) is related to (m,cs,p).
+     We relate a trace (notfinished (m,p) MP) to (notfinished (m,cs,p) MCP),
+     where MP relates to MCP given cs' produced by ContextStateUpdate. Additionally,
+     the relation requires that MP begin with m' and p' produced by mpstep (m,p),
+     so that only MPTraces produced by the step function relate to any MCPTrace *)
+  Inductive WithContext (cs:ContextState) : MPTrace -> MCPTrace -> Prop :=
+  | WCFinished : forall m p,
+      WithContext cs (finished (m,p)) (finished (m,cs,p))
+  | WCNotfinished : forall m p cs' m' p' o MP MCP,
+      mpstep (m,p) = Some (m',p',o) ->
+      ContextStateUpdate m cs = cs' ->
+      WithContext cs' MP MCP ->
+      head MP = (m',p') -> (* This checks that MP is actually real *)
+      WithContext cs (notfinished (m,p) MP) (notfinished (m,cs,p) MCP).
+
+  (* Similarly, with WithObs we relate an MCPTrace into the MPOTrace
+     corresponding to its steps annotated with their observations. We feed
+     each step's observation forward, to line up with the machine state that follows that step.
+     We will need this later. *)
+  Inductive WithObs (o:Observation) : MCPTrace -> MPOTrace -> Prop :=
+  | WOFinished : forall m c p,
+      WithObs o (finished (m,c,p)) (finished (m,p,o))
+  | WONotfinished : forall m c p m' c' o' p' MP MPO,
+      WithObs o' MP MPO ->
+      mpstep (m,p) = Some ((m',p'),o) ->
+      head MP = (m',c',p') ->
+      WithObs o (notfinished (m,c,p) MP) (notfinished (m,p,o) MPO).
+  
+  (* ObsOfMCP starts the observation with Tau, reflecting that initially
+     there is no observation until a step occurs. *)
+  Definition ObsOfMCP := WithObs Tau.
+
+  (* ContextSegment relates two MCPTraces given a condition f on machine and context states,
+     where the second is a longest subtrace of the first such that f holds on all elements
+     except the final. So, it will always have at least two elements, and its head will have been
+     preceded by one on which f does not hold, while the last (if any) also does not have f hold.
+     
+     We will use this machinery to clip out sections of a trace that we want to check
+     against a property, with the final state reflecting the state after some relevant execution.
+   *)
+  Inductive ContextSegment (f : MachineState -> ContextState -> Prop) : MCPTrace -> MCPTrace -> Prop :=
+  | CSCurrent : forall MCP MCP' m cs p,
+      head MCP = (m,cs,p) ->
+      f m cs ->
+      PrefixUpTo (fun '(m,cs,p) => ~ f m cs) MCP MCP' ->
+      ContextSegment f (notfinished (m,cs,p) MCP) (notfinished (m,cs,p) MCP')
+  | CSNot : forall MCP MCPpre MCPsuff MCP' m cs p,
+      head MCP = (m,cs,p) ->
+      ~ f m cs ->
+        SplitInclusive (fun '(m,cs,p) => f m cs) MCP MCPpre MCPsuff ->
+        ContextSegment f MCPsuff MCP' ->
+        ContextSegment f MCP MCP'
+  | CSSkip : forall MCP MCPpre MCPsuff MCP' m cs p,
+      head MCP = (m,cs,p) ->
+      f m cs ->
+      SplitInclusive (fun '(m,cs,p) => f m cs) MCP MCPpre MCPsuff ->
+      ContextSegment f MCPsuff MCP' ->
+      ContextSegment f MCP MCP'
+  .
+End WITH_STATE.

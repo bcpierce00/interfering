@@ -7,6 +7,14 @@ Require Import Trace.
 Require Import Machine.
 Require Import ObsTrace.
 
+Arguments WithContext {_}  _ _ _ _.
+Arguments ContextSegment {_} _ _ _.
+Arguments ObsOfMCP {_}.
+Arguments MCPState {_}.
+Arguments MCPTrace {_}.
+Arguments cstate {_}.
+Arguments mstate {_}.
+
 (* A Domain is an annotation on a component or set of components reflecting its
    relationship to the program state. Domains are nested, so a domain can be subsumed by
    a higher domain, and all of its components with it. For instance, a stack in a coroutine
@@ -14,175 +22,31 @@ Require Import ObsTrace.
    pushed on the stack each have their own, as described below. *)
 Section DOMAIN_MODEL.
 
-  (* First, an example of nested domains. Suppose we have a stack resulting from caller A
-     calling callee B with a value v as an argument. The stack looks like this:
-                     sp
-     -----------------------------------------------
-     | A's frame | v | Empty stack..................
-     -----------------------------------------------
-          a1      a2                a3
-
-     B's frame is not yet allocated until it sets the stack pointer, but B
-     has access to v and to everything above. So lets consider the status of
-     addresses a1, a2, and a3 in the moment B gains control.
-
-     a1 is in a frame that is currently inactive, but someday - after B returns - will
-     again be active. a2 is also in an inactive frame, but it has been passed to B,
-     so B should be allowed to use it. It will be active again after the
-     return. We consider a1, by contrast, local. a3 is currently still active,
-     and it will be active after the return, so it is active in two contexts.
-     If B calls another function C without sharing a2, it should be inactive and
-     local in that context.
-
-     Now suppose that B calls a callee C that requires, as part of its calling convention,
-     an array allocated at a fixed offset from the stack pointer that it will access as a
-     pass-by-reference variable. We call that array arr, at address a3.
-
-                                        sp
-     -----------------------------------------------
-     | A's frame | v | B's frame  | arr | Empty.....
-     -----------------------------------------------
-          a1      a2                a3
-
-     Now what are the statuses of a1, a2, and a3? First, a1 is in a doubly inactive frame;
-     it will take two returns before it's active again. It is also local. a2 is in an inactive frame,
-     and in that frame it's local; but after a return it will still be inactive, but passed from its
-     original owner, and after a further return it will once again be active.
-     Finally a3 is in an inactive frame but shared, which is distinct from being passed because
-     it is uninitialized.
-
-     ===== On Sharing, Passing, and Protection =====
-     Many systems provide some protection to shared data; the natural example
-     is a capability system, in which a shared object is accessible only
-     to a holder of a valid pointer, defined as one "descended" from the original.
-     Our machinery will not track anything as detailed as pointer provenance, and cannot
-     distinguish between legal and illegal uses of pointers to shared memory.
-
-     Instead, our protection properties apply only to components that have not been shared.
-     Once a component is shared, it is freely accessible, except in the narrow case of "passed"
-     variables. A variable is "passed" when its address is only taken by the immediate callee,
-     of its allocating function, and we assume that the compiler can guarantee that the pointer
-     does not escape. This is the case for stack-allocated argument passing between subroutines.
-     A passed component should be accessible in the immediate callee, then inaccessible in its nested calls.
-
-     When a variable has its address taken in a context that may escape, it is considered "shared"
-     and it is universally accessible until it is deallocated. A shared component has no protections
-     unless proven separately. Systems can enforce safety of such components with capabilities or
-     other techniques prove additional safety properties - in the case of capabilities, the property
-     being memory safety.
-   *)
-
-  (* Defining domains: a domain carries sharing information about the objects in it. *)
-  Inductive ObjectStatus :=
-  | passed (* shared with the immediate callee only *)
-  | shared (* shared widely *)
-  | local  (* never shared *)
-  .
- 
-  (* A stack domain is either active or inactive. An active domain may only contain other active
-     domains, nested, so we treat such a nesting as a single object with a non-empty stack of object
-     statuses. An inactive domain may contain other inactive domains, or active ones; it also tracks
-     the sharing status of its objects. *)
   Inductive StackDomain :=
-  | Inactive (os:ObjectStatus) (sd:StackDomain)
-  | Active (os:ObjectStatus) (oss:list ObjectStatus) (* an active domain can only have active ones below it *)
-  .
-
-  (* Finally, the top-level domain type can make a component part of a stack (in which case
-     it also needs to know which stack id it belongs to). It can also be code, in the heap, or
-     a register. Later we can expand the definition of the heap to extend the model.
-     Properly, stack sid sd denotes a domain at the coroutine level, but as it would be a
-     single constructor it's folded in here. *)
-  Inductive TopD :=
-  | stack (sid:StackID) (sd:StackDomain)
-  | code
-  | heap
-  | registers 
+  | Inactive (sd:StackDomain)
+  | Active
+  | Outside
   .
 
   (* Finally we need a way to map components to the domain they belong to. *)
-  Definition DomainMap := Component -> TopD.
+  Definition DomainMap := Component -> StackDomain.
   
 End DOMAIN_MODEL.
 
 Section WITH_MAPS.
 
   Variable cdm : CodeMap'.
-  (* A stackmap defines the ranges of addresses each stack in a coroutine system may use.
-     Note that this makes our maximum coroutine sizes static (theoretically at most two stacks
-     get to be infinite, barring interleaving shenanigans.) The related findStack function maps
-     an address to its stack, if any, whether or not it is in the allocated portion of the stack,
-     and activeStack is a total function from states that determines which stack the stack pointer
-     points to. *)
-  Variable sm : StackMap.
+  Variable sm : Addr -> bool.
   Variable pOf : MachineState -> PolicyState.
 
-  Section WITH_FIXED_DOMAINMAP.
-
-    Variable dm : DomainMap.
-    (* Let's look at an example that isn't dynamic: coroutines without sharing.
-       Intuitively, when a coroutine is active - determined by the stack pointer
-       pointing somewhere in its stack - no other stack should be read or written.
-       First lets talk about writing, and the integrity property.
-       
-       We call this an Ultra Eager property because it concerns the system's behavior
-       at every step. At each step, if the active  *)
-    Definition CoroutineIntNoShareUE : Prop :=
-      forall minit m p dm m' p' o k sid sd,
-        InTrace (m,p) (MPTraceOf (minit, pOf minit)) ->
-        mpstep (m,p) = Some (m',p',o) ->
-        dm k = stack sid sd ->
-        activeStack sm m <> sid ->
-        m k = m' k.
-
-    (* We can do a similar Ultra Eager style property with confidentiality, and since we're
-       not allowing sharing it is straightforward. But some preliminaries on confidentiality.
-       Firstly: confidentiality is expressed in terms of "variant" states. A K-variant
-       state of m is a state that agrees with m at every component not in the set K. It may also
-       agree at some components in K. The intuition is that if the step from a state changes the
-       state in the same way as the step from its K-variant, we can't tell from that step what
-       value a component in K was, so K is secret. *)
-    Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
-      forall k, ~ K k -> m k = n k.
-
-    (* "Changing the state in the same way" means that any component that changed is
-       one trace ends with the same value in the other. *)
-    Definition sameDifference (m m' n n' : MachineState) :=
-      forall k,
-        (m k <> m' k \/ n k <> n' k) ->
-        m' k = n' k.
-
-    (* Our Ultra Eager confidentiality property says that if we vary components outside
-       the active stack at any point, our next step still produces the same output and
-       changes the state in the same way. *)
-    Definition CoroutineConfNoShareUE : Prop :=
-      forall minit m p dm m' p' o sid sd n n',
-        InTrace (m,p) (MPTraceOf (minit, pOf minit)) ->
-        mpstep (m,p) = Some (m',p',o) ->
-        activeStack sm m <> sid ->
-        variantOf (fun k => dm k = stack sid sd) m n ->
-        step n = (n',o) /\ (sameDifference m m' n n').
-
-  End WITH_FIXED_DOMAINMAP.
-
-  (* This is all well and good, but we want to deal with dynamic domains: objects becoming
-     shared, and eventually protection of stack frames within each stack. So we need to
-     introduce an initial domain map, an update function, and a way to map domainmaps
-     onto existing MPTraces.
-
-     The initial map is straightforward, and uses our code map and our stack map to arrange
-     memory in code, stacks, and "heap" (which we don't really talk about yet.)*)
   Definition initD : DomainMap :=
     fun k =>
       match k with
       | Mem a =>
-        if isCode' cdm a
-        then code
-        else match findStack sm a with
-             | Some sid => stack sid (Active local [])
-             | None => heap
-             end
-      | _ => registers
+        if sm a
+        then Active
+        else Outside
+      | _ => Outside
       end.
 
   (* Our update function checks an "annotation" on the code being executed.
@@ -214,116 +78,77 @@ Section WITH_MAPS.
                    (* and wrapping the remaining stack in a new instance of "active" *)
       fun k =>
         match k, dm k with
-        | Mem a, stack sid (Active os oss) =>
-          if sidEq (Some sid) (Some (activeStack sm m))
-          then if wlt a (m (Reg SP))
-               then stack sid (Inactive os (Active os oss))
-               else stack sid (Active local (os::oss))
-          else stack sid (Active os oss)
-        | Mem a, stack sid (Inactive os sd) =>
-          if sidEq (Some sid) (Some (activeStack sm m))
-          then match os with
-               | passed => stack sid (Inactive local (Inactive passed sd))
-               | _ => stack sid (Inactive os (Inactive os sd))
-               end
-          else stack sid (Inactive os sd)
+        | _, Outside => Outside
+        | Mem a, sd =>
+          if wlt a (m (Reg SP))
+          then Inactive sd
+          else sd
         | _,_ => dm k
         end
     | Some ret => (* A return unwraps the outermost domain of all components in the initial stack *)
       fun k =>
         match dm k with
-        | stack sid (Inactive _ sd) =>
-          if sidEq (Some sid) (findStack sm (m (Reg SP))) then
-            stack sid sd
-          else dm k
-        | stack sid (Active _ (os::oss)) => 
-          if sidEq (Some sid) (findStack sm (m (Reg SP))) then 
-            stack sid (Active os oss)
-          else dm k
-        | _ => dm k
-        end
-
-    (* In Machine.v, the sharing annotation contains a partial function from a machine state m and
-       an addresses a to a boolean, such that if it is defined on m and a, then a share step from
-       state m shares (Mem a). If the bool is true, it is "passed," if false, "shared." *)
-    | Some (share f) => (* A share applies only to an object in the active frame, and sets it to shared *)
-      fun k =>
-        match k with
-        | Mem a =>
-          match (f m) a, dm k with
-          | Some true, stack sid (Active local oss) => stack sid (Active passed oss)
-          | Some false, stack sid (Active local oss) => stack sid (Active shared oss)
-          (* Do we need to change this all the way down the stack? I think we do. *)
-          | Some false, stack sid (Inactive passed sd) => stack sid (Inactive shared sd)
-          | _, _ => dm k
-          end          
+        | Inactive sd => sd
         | _ => dm k
         end
     | _ => dm
     end.
 
-  Arguments WithContext {_}  _ _ _ _.
-  Arguments ContextSegment {_} _ _ _.
-  Arguments ObsOfMCP {_}.
-  Arguments MCPState {_}.
-  Arguments MCPTrace {_}.
-  Arguments cstate {_}.
+  Definition SimpleStackIntegrityUE : Prop :=
+    forall minit MCP k sd mcp mcp',
+      WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
+      ContextSegment (fun _ _ => False) MCP (notfinished mcp (finished mcp')) ->
+      cstate mcp k = Inactive sd ->
+      mstate mcp k = mstate mcp' k.
+
+    (* We can do a similar Ultra Eager style property with confidentiality, and since we're
+       not allowing sharing it is straightforward. But some preliminaries on confidentiality.
+       Firstly: confidentiality is expressed in terms of "variant" states. A K-variant
+       state of m is a state that agrees with m at every component not in the set K. It may also
+       agree at some components in K. The intuition is that if the step from a state changes the
+       state in the same way as the step from its K-variant, we can't tell from that step what
+       value a component in K was, so K is secret. *)
+  Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
+    forall k, ~ K k -> m k = n k.
   
-  (* With these tools, we can restate our Ultra Eager properties, but now with dynamic
-     sharing. Note that for coroutines, "passed" objects are still private. *)
-  Definition unshared (sd : StackDomain) : bool :=
+  (* "Changing the state in the same way" means that any component that changed is
+     one trace ends with the same value in the other. *)
+  Definition sameDifference (m m' n n' : MachineState) :=
+    forall k,
+      (m k <> m' k \/ n k <> n' k) ->
+      m' k = n' k.
+  
+  Definition SimpleStackConfidentialityUE : Prop :=
+    forall minit MCP sd mcp mcp' n n' o,
+      WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
+      ContextSegment (fun _ _ => False) MCP (notfinished mcp (finished mcp')) ->
+      variantOf (fun k => cstate mcp k = Inactive sd) (mstate mcp) n ->
+      step (mstate mcp) = (mstate mcp', o) ->
+      step n = (n',o) /\ sameDifference (mstate mcp) (mstate mcp') n n'.
+
+  Fixpoint depth (sd:StackDomain) : option nat :=
     match sd with
-    | Active shared _ => false
-    | Active _ _ => true
-    | Inactive shared _ => false
-    | Inactive _ _ => true
+    | Active => Some O
+    | Inactive sd => option_map S (depth sd)
+    | Outside => None
     end.
-
-  Definition sharedP sd := unshared sd = false.
-  Definition unsharedP sd := unshared sd = true.
   
-  Definition CoroutineIntUE : Prop :=
-    forall minit MCP m dm p m' dm' p' k sid sd,
+  Definition SimpleStackIntegrityEager : Prop :=
+    forall minit MCP MCP' d k sd mcp mcp',
       WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
-      ContextSegment (fun _ _ => False) MCP (notfinished (m,dm,p) (finished (m',dm',p'))) ->
-      dm k = stack sid sd ->
-      unsharedP sd ->
-      activeStack sm m <> sid ->
-      m k = m' k.
-
-  Definition CoroutineConfUE : Prop :=
-    forall minit MCP m cs p o m' cs' p' sid sd n n',
-      WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
-      ContextSegment (fun _ _ => False) MCP  (notfinished (m,cs,p) (finished (m',cs',p'))) ->
-      activeStack sm m <> sid ->
-      variantOf (fun k => cs k = stack sid sd /\ unsharedP sd) m n ->
-      step m = (m',o) ->
-      step n = (n',o) /\ sameDifference m m' n n'.
-
-  (* Now, within a given coroutine, it is really unnecessary to vary at each step,
-     and in a testing setting this may be costly. We can instead vary at entry to
-     a coroutine and check that the variation preserves behavior all the way to when
-     the coroutine yields to another.
-
-     This makes the property a bit more complicated, as the original trace might have
-     one of three different qualities:
-
-     1. it might end with a final state where the coroutine that can read a secret component is active
-     2. it might end prematurely, due to a fail stop
-     3. it might diverge and run forever without reaching the appropriate coroutine
-
-     In case 1, the variant trace should reach a *convergent* state, one that is also in that coroutine.
-        The traces should be observationally equivalent and the convergent states should be same-different.
-     In case 2, the variant trace will not end, but its observations should be prefixed by the original.
-     In case 3, the variant trace should be observationally equivalent to the original.
-
-     We introduce a predicate Stuck that represents a trace that fail-stops before ever returning
-     to the coroutine whose data is being protected. *)
-
+      ContextSegment (fun m dm => exists k, depth (dm k) = Some d) MCP MCP' ->
+      mcp = head MCP' ->
+      cstate mcp k = Inactive sd ->
+      Last MCP' mcp' ->
+      mstate mcp k = mstate mcp' k.
+  
   Definition Stuck (MPO : MPOTrace) : Prop :=
     exists m p o,
       Last MPO (m,p,o) ->
       mpstep (m,p) = None.
+
+  Definition SimpleStackConfidentiality : Prop :=
+    forall minit MCP MCP'
 
   (* Trace confidentiality is a property of a trace MCP with respect to a set of components
      Vary that are secret and should be varied, and a predicate on states of those that Converge. *)
