@@ -24,7 +24,7 @@ Definition Addr : Type := Word.
 Parameter Register : Type.
 Parameter PC : Register.
 Parameter SP : Register.
-Parameter FP : Register.
+Parameter regEq : Register -> Register -> bool.
 
 Inductive Component:=
 | Mem (a:Addr)
@@ -77,7 +77,8 @@ Definition StackMap := Addr -> StackID -> Prop.
 
 Parameter activeStack : StackMap -> MachineState -> StackID.
 Parameter findStack : StackMap -> Addr -> option StackID.
-Parameter sidEq : option StackID -> option StackID -> bool.
+Parameter stack_eqb : StackID -> StackID -> bool.
+Parameter optstack_eqb : option StackID -> option StackID -> bool.
 
 (*Definition ProgramMap := CallMap * RetMap * EntryMap * CodeMap * YieldMap * StackMap : Type.*)
 
@@ -125,7 +126,6 @@ Proof.
 Qed.
 
 Parameter PolicyState : Type.
-Parameter pstep : MachineState * PolicyState -> option PolicyState.
 (* TODO: Does this ever fail? *)
 (*Parameter initPolicyState : MachineState -> ProgramMap -> option PolicyState.*)
 
@@ -134,12 +134,11 @@ Definition MPState : Type := MachineState * PolicyState.
 Definition ms (mp : MPState) := fst mp.
 Definition ps (mp : MPState) := snd mp.
 
-Definition mpstep (mp : MPState) :=
-  let (m', O) := step (ms mp) in
-  match pstep mp with
-  | Some p' => Some (m', p', O)
-  | None => None
-  end.
+Parameter mpstep : MPState -> option (MPState * Observation).
+Axiom mpstepCompat :
+  forall m p o m' p',
+    mpstep (m,p) = Some (m',p',o) ->
+    step m = (m',o).
 
 (* Confidentiality and Integrity Labels *)
 Inductive CLabel :=
@@ -167,9 +166,9 @@ CoFixpoint MTraceOf (M : MachineState) : MTrace :=
 Definition MPTrace := TraceOf MPState.
 
 CoFixpoint MPTraceOf (mp : MPState) : MPTrace :=
-  match pstep mp with
+  match mpstep mp with
   | None => finished mp
-  | Some p' => notfinished mp (MPTraceOf (fst (step (ms mp)), p'))
+  | Some (mp',o) => notfinished mp (MPTraceOf mp')
   end.
 
 Definition MTrace' := TraceOf (MachineState * Observation).
@@ -180,11 +179,11 @@ CoFixpoint RunOf (m : MachineState) : MTrace' :=
 Definition MPTrace' := TraceOf (MachineState * PolicyState * Observation).
 
 CoFixpoint MPRunOf (mp : MPState) : MPTrace' :=
-  match pstep mp with
+  match mpstep mp with
   | None =>
     finished (mp,Tau)
-  | Some p' =>
-    notfinished (mp,snd (step (ms mp))) (MPRunOf (fst (step (ms mp)), p'))
+  | Some (mp',o) =>
+    notfinished (mp,o) (MPRunOf mp')
   end.
 
 (********** Machine Lemmas ************)
@@ -208,7 +207,7 @@ Qed.
 Lemma MPTraceOfHead: forall mp, mp = head (MPTraceOf mp).
 Proof.
   intros. destruct mp.  simpl. 
-  destruct (pstep (m,p)); auto.
+  destruct (mpstep (m,p)); auto; destruct p0; auto.
 Qed.
 
 (* ******************* Trace stuff ********************* *)
@@ -223,6 +222,8 @@ Section WITH_STATE.
   Definition MCPTrace := TraceOf MCPState.
   Definition mstate : MCPState -> MachineState := fun '(m,cs,p) => m.
   Definition cstate : MCPState -> ContextState := fun '(m,cs,p) => cs.
+  Definition MCState : Type := MachineState * ContextState.
+  Definition MCTrace := TraceOf MCState.
   Definition MPOTrace := MPTrace'.
 
   (* WithContour relates an MPTrace to its MCPTrace given an initial contour state cs.
@@ -231,15 +232,25 @@ Section WITH_STATE.
      where MP relates to MCP given cs' produced by ContextStateUpdate. Additionally,
      the relation requires that MP begin with m' and p' produced by mpstep (m,p),
      so that only MPTraces produced by the step function relate to any MCPTrace *)
-  Inductive WithContext (cs:ContextState) : MPTrace -> MCPTrace -> Prop :=
-  | WCFinished : forall m p,
-      WithContext cs (finished (m,p)) (finished (m,cs,p))
-  | WCNotfinished : forall m p cs' m' p' o MP MCP,
+  Inductive WithContextMP (cs:ContextState) : MPTrace -> MCPTrace -> Prop :=
+  | WCMPFinished : forall m p,
+      WithContextMP cs (finished (m,p)) (finished (m,cs,p))
+  | WCMPNotfinished : forall m p cs' m' p' o MP MCP,
       mpstep (m,p) = Some (m',p',o) ->
       ContextStateUpdate m cs = cs' ->
-      WithContext cs' MP MCP ->
+      WithContextMP cs' MP MCP ->
       head MP = (m',p') -> (* This checks that MP is actually real *)
-      WithContext cs (notfinished (m,p) MP) (notfinished (m,cs,p) MCP).
+      WithContextMP cs (notfinished (m,p) MP) (notfinished (m,cs,p) MCP).
+
+  Inductive WithContextM (cs:ContextState) : MTrace -> MCTrace -> Prop :=
+  | WCMFinished : forall m,
+      WithContextM cs (finished m) (finished (m,cs))
+  | WCMNotfinished : forall m cs' m' o MP MCP,
+      step m = (m',o) ->
+      ContextStateUpdate m cs = cs' ->
+      WithContextM cs' MP MCP ->
+      head MP = m' -> (* This checks that MP is actually real *)
+      WithContextM cs (notfinished m MP) (notfinished (m,cs) MCP).
 
   (* Similarly, with WithObs we relate an MCPTrace into the MPOTrace
      corresponding to its steps annotated with their observations. We feed
@@ -257,6 +268,19 @@ Section WITH_STATE.
   (* ObsOfMCP starts the observation with Tau, reflecting that initially
      there is no observation until a step occurs. *)
   Definition ObsOfMCP := WithObs Tau.
+
+  Inductive WithObsM (o:Observation) : MCTrace -> TraceOf (MachineState*Observation) -> Prop :=
+  | WOMFinished : forall m c,
+      WithObsM o (finished (m,c)) (finished (m,o))
+  | WOMNotfinished : forall m c m' c' o' M MO,
+      WithObsM o' M MO ->
+      step m = (m',o) ->
+      head M = (m',c') ->
+      WithObsM o (notfinished (m,c) M) (notfinished (m,o) MO).
+  
+  (* ObsOfMCP starts the observation with Tau, reflecting that initially
+     there is no observation until a step occurs. *)
+  Definition ObsOfMC := WithObsM Tau.
 
   (* ContextSegment relates two MCPTraces given a condition f on machine and context states,
      where the second is a longest subtrace of the first such that f holds on all elements
@@ -285,4 +309,36 @@ Section WITH_STATE.
       ContextSegment f MCPsuff MCP' ->
       ContextSegment f MCP MCP'
   .
+
+  Inductive ContextSegmentM (f : MachineState -> ContextState -> Prop) : MCTrace -> MCTrace -> Prop :=
+  | CSMCurrent : forall MC MC' m cs,
+      head MC = (m,cs) ->
+      f m cs ->
+      PrefixUpTo (fun '(m,cs) => ~ f m cs) MC MC' ->
+      ContextSegmentM f (notfinished (m,cs) MC) (notfinished (m,cs) MC')
+  | CSMNot : forall MC MCpre MCsuff MC' m cs,
+      head MC = (m,cs) ->
+      ~ f m cs ->
+      SplitInclusive (fun '(m,cs) => f m cs) MC MCpre MCsuff ->
+      ContextSegmentM f MCsuff MC' ->
+      ContextSegmentM f MC MC'
+  | CSMSkip : forall MC MCpre MCsuff MC' m cs,
+      head MC = (m,cs) ->
+      f m cs ->
+      SplitInclusive (fun '(m,cs) => f m cs) MC MCpre MCsuff ->
+      ContextSegmentM f MCsuff MC' ->
+      ContextSegmentM f MC MC'
+  .
+
 End WITH_STATE.
+
+Arguments WithContextMP {_}  _ _ _ _.
+Arguments WithContextM {_}  _ _ _ _.
+Arguments ContextSegment {_} _ _ _.
+Arguments ContextSegmentM {_} _ _ _.
+Arguments ObsOfMCP {_}.
+Arguments ObsOfMC {_}.
+Arguments MCPState {_}.
+Arguments MCPTrace {_}.
+Arguments cstate {_}.
+Arguments mstate {_}.
