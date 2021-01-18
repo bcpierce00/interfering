@@ -7,13 +7,53 @@ Require Import Trace.
 Require Import Machine.
 Require Import ObsTrace.
 
-(* A Domain is an annotation on a component or set of components reflecting its
-   relationship to the program state. Domains are nested, so a domain can be subsumed by
-   a higher domain, and all of its components with it. For instance, a stack in a coroutine
-   system has a domain containing all of the addresses in the stack's range, and the frames
-   pushed on the stack each have their own, as described below. *)
+(* To add sharing, we extend our domain model to divide stack frames into addresses that
+   have been shared or passed.*)
 Section DOMAIN_MODEL.
 
+  (* Let's extend our previous example first with passing. Again we have a stack resulting
+     from caller A calling callee B, now with a value v as an argument. The stack looks like this:
+
+                     sp
+     -----------------------------------------------
+     | A's frame | v | Empty stack..................
+     -----------------------------------------------
+          a1      a2                a3
+
+     B has access to v and to everything above the stack pointer. But v is inaccessible!
+     We could treat it as part of B's frame, and therefore accessible, but that could
+     prove tricky with some calling conventions. Instead we label it "passed" and allow
+     it to be an exception to the inaccessibility rule.
+
+     Now suppose that B has an array whose address (a3) is taken. B calls a callee C.
+
+                                                 sp
+     --------------------------------------------------------
+     | A's frame | v | B's frame | arr | B again | Empty.....
+     --------------------------------------------------------
+          a1      a2               a3
+
+     From C's perspective, a2 is no longer passed - that represented access granted only
+     to the immediate callee, B. But a3 is "shared" because its address has been taken, and
+     possibly passed (we cannot statically prove that it was not in all cases, so we make no
+     guarantees.) It will remain shrared until deallocated on B's return. a1, finally, we term
+     "local," and its inaccessibility is respected by all callees.
+
+     Many systems provide some protection to shared data; the natural example
+     is a capability system, in which a shared object is accessible only
+     to a holder of a valid pointer, defined as one "descended" from the original.
+     Our machinery will not track anything as detailed as pointer provenance, and cannot
+     distinguish between legal and illegal uses of pointers to shared memory.
+
+     Instead, our protection properties apply only to components that have not been shared.
+     Once a component is shared, it is freely accessible, except in the narrow case of passed
+     variables. A variable is passed when its address is only taken by the immediate callee,
+     of its allocating function, and we assume that the compiler can guarantee that the pointer
+     does not escape. This is the case for stack-allocated argument passing between subroutines.
+     A passed component should be accessible in the immediate callee, then inaccessible in its
+     nested calls.
+   *)
+  
   Inductive ShareStatus :=
   | Local
   | Shared
