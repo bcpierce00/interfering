@@ -1,11 +1,11 @@
 Require Import List.
 Import ListNotations.
+Require Import Nat.
 Require Import Bool.
-Require Import Coq.Logic.FunctionalExtensionality.
-Require Import Omega.
 Require Import Trace.
 Require Import Machine.
 Require Import ObsTrace.
+Require Import TraceProperties.
 
 (* A Domain is an annotation on a component or set of components reflecting its
    relationship to the program state. Domains are nested, so a domain can be subsumed by
@@ -21,20 +21,20 @@ Section DOMAIN_MODEL.
   .
   
   Inductive StackDomain :=
-  | Inactive (sd:StackDomain) (ss:ShareStatus)
-  | Active (ss:ShareStatus)
+  | Claimed (d:nat)
+  | Unclaimed
   .
-
-  Definition statusOf sd :=
-    match sd with
-    | Inactive _ ss => ss
-    | Active ss => ss
-    end.
 
   Inductive TopDomain :=
-  | Instack (sid:StackID) (sd:StackDomain)
+  | Instack (sid:StackID) (sd:StackDomain) (ss:ShareStatus)
   | Other
   .
+
+  Definition statusOf td :=
+    match td with
+    | Instack _ _ ss => Some ss
+    | Other => None
+    end.
 
   (* Finally we need a way to map components to the domain they belong to. *)
   Definition DomainMap := Component -> TopDomain.
@@ -56,13 +56,15 @@ Section WITH_MAPS.
   Variable cdm : CodeMap'.
   Variable sm : StackMap.
   Variable pOf : MachineState -> PolicyState.
+
+  Definition context : Type := DomainMap * DepthMap.
   
-  Definition initD : DomainMap * DepthMap :=
+  Definition initC : DomainMap * DepthMap :=
     let dm := fun k =>
                 match k with
                 | Mem a =>
                   match findStack sm a with
-                  | Some sid => Instack sid (Active Local)
+                  | Some sid => Instack sid Unclaimed Local
                   | None => Other
                   end
                 | Reg r => Other
@@ -92,85 +94,96 @@ Section WITH_MAPS.
      Note that yields don't actually change the domain map, as they don't change which
      addresses belong to which stacks. *)
   
-  Definition updateD (m:MachineState) (prev:DomainMap*DepthMap) : DomainMap * DepthMap :=
+  Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, depm) := prev in
     match AnnotationOf cdm (m (Reg PC)), findStack sm (m (Reg SP)) with
-    | Some call, Some sid => (* A call adjusts the domain map by marking the caller's frame "inactive" *)
-                   (* and wrapping the remaining stack in a new instance of "active" *)
+    | Some (share f), Some sid =>
+      let dm' := fun k =>
+                   match k with
+                   | Mem a =>
+                     match f m a, dm k with
+                     | Some true, Instack sid' Unclaimed Local =>
+                       if stack_eqb sid sid'
+                       then Instack sid Unclaimed Passed
+                       else dm k
+                     | Some false, Instack sid' Unclaimed ss =>
+                       if stack_eqb sid sid'
+                       then Instack sid Unclaimed Shared
+                       else dm k
+                     | _, _ => dm k
+                     end
+                   | _ => dm k
+                   end in
+      (dm', depm)
+    | Some call, Some sid =>
       let dm' := fun k =>
                    match k, dm k with
-                   | _, Other => Other
-                   | Mem a, Instack sid (Active ss) =>
-                     if wlt a (m (Reg SP))
-                     then Instack sid (Inactive (Active ss) ss)
-                     else Instack sid (Active ss)
-                   | Mem a, Instack sid (Inactive sd Passed) =>
-                     Instack sid (Inactive (Inactive sd Passed) Local)
-                   | Mem a, Instack sid (Inactive sd ss) =>
-                     Instack sid (Inactive (Inactive sd ss) ss)
+                   | Mem a, Instack sid' Unclaimed ss =>
+                     if andb (wlt a (m (Reg SP))) (stack_eqb sid sid')
+                     then Instack sid (Claimed (depm sid)) ss
+                     else dm k
                    | _, _ => dm k
                    end in
       (dm', push depm sid)
-    | Some ret, Some sid => (* A return unwraps the outermost domain of all components in the initial stack *)
+    | Some ret, Some sid =>
       let dm' := fun k =>
                    match dm k with
-                   | Instack sid (Inactive sd Passed) => Instack sid (Active Local)
-                   | Instack sid (Inactive sd ss) => Instack sid sd
+                   | Instack sid' (Claimed d) ss =>
+                     if andb (stack_eqb sid sid') (d =? (depm sid)-1)
+                     then Instack sid Unclaimed Local
+                     else dm k
                    | _ => dm k
                    end in
       (dm', pop depm sid)
     | _,_ => (dm,depm)
     end.
 
+  Definition StackInaccessible (c:context) (k:Component) : Prop :=
+    exists sid d,
+      fst c k = Instack sid (Claimed d) Local \/
+      (fst c k = Instack sid (Claimed d) Passed /\ d < (snd c sid)-1).
+
+  Definition CoroutineInaccessible (c:context) (sid:StackID) (k:Component) : Prop :=
+    exists sd ss,
+      fst c k = Instack sid sd ss /\ ss <> Shared.
+  
   Definition StackIntegrityUE : Prop :=
-    forall minit MCP k sid sd mcp mcp',
-      WithContextMP updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
-      ContextSegment (fun _ _ => False) MCP (notfinished mcp (finished mcp')) ->
-      fst (cstate mcp) k = Instack sid (Inactive sd Local) ->
+    forall minit k mcp mcp',
+      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
+      StackInaccessible (cstate mcp) k ->
       mstate mcp k = mstate mcp' k.
 
-    (* We can do a similar Ultra Eager style property with confidentiality, and since we're
-       not allowing sharing it is straightforward. But some preliminaries on confidentiality.
-       Firstly: confidentiality is expressed in terms of "variant" states. A K-variant
-       state of m is a state that agrees with m at every component not in the set K. It may also
-       agree at some components in K. The intuition is that if the step from a state changes the
-       state in the same way as the step from its K-variant, we can't tell from that step what
-       value a component in K was, so K is secret. *)
-  Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
-    forall k, ~ K k -> m k = n k.
-  
-  (* "Changing the state in the same way" means that any component that changed is
-     one trace ends with the same value in the other. *)
-  Definition sameDifference (m m' n n' : MachineState) :=
-    forall k,
-      (m k <> m' k \/ n k <> n' k) ->
-      m' k = n' k.
+  Definition CoroutineIntegrityUE : Prop :=
+    forall minit k sid mcp mcp',
+      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
+      CoroutineInaccessible (cstate mcp) sid k ->
+      mstate mcp k = mstate mcp' k.
   
   Definition StackConfidentialityUE : Prop :=
-    forall minit MCP sid sd mcp mcp' n n' o,
-      WithContextMP updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
-      ContextSegment (fun _ _ => False) MCP (notfinished mcp (finished mcp')) ->
-      variantOf (fun k => fst (cstate mcp) k = Instack sid (Inactive sd Local)) (mstate mcp) n ->
-      step (mstate mcp) = (mstate mcp', o) ->
-      step n = (n',o) /\ sameDifference (mstate mcp) (mstate mcp') n n'.
+    forall minit m c p m' c' p' p'' n n' o o',
+      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,c,p) (finished (m',c',p'))) ->
+      variantOf (fun k => StackInaccessible c k) m n ->
+      mpstep (m,p) = Some (m',p',o) ->
+      mpstep (n,p) = Some (n',p'',o') ->
+      sameDifference m m' n n' /\ p = p'' /\ o = o'.
 
-  Definition FindSegmentMP P mp dm MCP :=
-    exists MCP',
-      WithContextMP updateD dm (MPTraceOf mp) MCP' /\
-      ContextSegment P MCP' MCP.
-
-  Definition FindSegmentM P m dm MC :=
-    exists MC',
-      WithContextM updateD dm (MTraceOf m) MC' /\
-      ContextSegmentM P MC' MC.
+  Definition CoroutineConfidentialityUE : Prop :=
+    forall minit sid m c p m' c' p' p'' n n' o o',
+      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,c,p) (finished (m',c',p'))) ->
+      variantOf (fun k => CoroutineInaccessible c sid k) m n ->
+      mpstep (m,p) = Some (m',p',o) ->
+      mpstep (n,p) = Some (n',p'',o') ->
+      sameDifference m m' n n' /\ p = p'' /\ o = o'.
   
   Definition StackIntegrityEager : Prop :=
-    forall minit MCP d k sid sd mcp mcp',
-      FindSegmentMP  (fun m c => snd c = d) (minit, pOf minit) initD MCP ->
-      mcp = head MCP ->
-      fst (cstate mcp) k = Instack sid (Inactive sd Local) ->
-      Last MCP mcp' ->
-      mstate mcp k = mstate mcp' k.
+    forall minit MCP d,
+      FindSegmentMP updateC (fun m c => snd c = d) (minit, pOf minit) initC MCP ->
+      TraceIntegrityEager (StackInaccessible (cstate (head MCP))) MCP.
+
+  Definition CoroutineIntegrityEager : Prop :=
+    forall minit MCP sid,
+      FindSegmentMP updateC (fun m c => activeStack sm m = sid) (minit, pOf minit) initC MCP ->
+      TraceIntegrityEager (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) MCP.
   
   Definition Stuck (MCP : @MCPTrace (DomainMap * DepthMap)) : Prop :=
     exists m c p,
@@ -178,62 +191,61 @@ Section WITH_MAPS.
       mpstep (m,p) = None.
 
   Definition StackConfidentialityEager : Prop :=
-    forall minit M MO d sid sd m dm depm p n N NO,
+    forall minit MCP d sid,
       let P := (fun m c => snd c sid = d) in
-      FindSegmentMP P (minit, pOf minit) initD M ->
-      head M = (m,(dm,depm),p) ->
-      variantOf (fun k => dm k = Instack sid (Inactive sd Local)) m n ->
-      FindSegmentM P n (dm,depm) N ->
-      ObsOfMCP M MO ->
-      ObsOfMC N NO ->
-         (* Case 1 *)
-      (forall mend dmend depmend pend,
-          Last M (mend,(dmend,depmend),pend) ->
-          ~ P mend (dm,depm) ->
-          exists nend dnend,
-            Last N (nend,dnend) /\
-            ObsOfMP MO ~=_O ObsOfM NO /\
-            sameDifference m mend n nend)
-      /\ (* Case 2 *)
-      (Infinite M ->
-       ObsOfMP MO ~=_O ObsOfM NO)
-      /\ (* Case 3 *)
-      (Stuck M ->
-       ObsOfMP MO <=_O ObsOfM NO).
+      let K := (fun k => StackInaccessible (cstate (head MCP)) k \/
+                         exists ss, (fst (cstate (head MCP)) k = Instack sid Unclaimed ss)) in
+      FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
+      TraceConfidentialityEager updateC K P MCP.
 
-  Inductive StepsTo : MachineState -> MachineState -> Prop :=
-  | isNow : forall m, StepsTo m m
-  | stepsTo : forall m1 m2 m' o,
-      step m1 = (m',o) ->
-      StepsTo m' m2 ->
-      StepsTo m1 m2.
+  Definition CoroutineConfidentialityEager : Prop :=
+    forall minit MCP sid,
+      let P := (fun m c => activeStack sm m = sid) in
+      let K := (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) in
+      FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
+      TraceConfidentialityEager updateC K P MCP.
 
-  Definition CallRule : Prop :=
-    forall minit MCP mcall dmcall depmcall pcall sid,
-      WithContextMP updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
-      InTrace (mcall,(dmcall,depmcall),pcall) MCP ->
-      AnnotationOf cdm (mcall (Reg PC)) = Some call ->
-      findStack sm (mcall (Reg SP)) = Some sid ->
-         (* Case 1: Divergence (including due to failstop) *)
-      (forall MCP' m' dm d p',
-          WithContextMP updateD (dmcall,depmcall) (MPTraceOf (mcall,pcall)) MCP' ->
-          InTrace (m',dm,p') MCP' ->
-          d > depmcall sid)
-      \/ (* Case 2: Return *)
-      (exists m',
-          StepsTo mcall m' /\
-          (forall k sid sd,
-            dmcall k = Instack sid (Inactive sd Local) ->
-            mcall k = m' k) /\
-          (forall n k,
-              variantOf (fun k' => exists sid sd, dmcall k = Instack sid (Inactive sd Local)) mcall n ->
-              StepsTo n m')).
+  (* ***** Control Flow Properties ***** *)
+  
+  Definition ControlSeparation : Prop :=
+    forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,
+      InTrace (m1,p1) (MPTraceOf (minit, pOf minit)) ->
+      mpstep (m1,p1) = Some (m2, p2,o) ->
+      cdm (m1 (Reg PC)) = inFun f1 ann1 ->
+      cdm (m2 (Reg PC)) = inFun f2 ann2 ->
+      f1 <> f2 ->
+      AnnotationOf cdm (m1 (Reg PC)) = Some call \/
+      AnnotationOf cdm (m1 (Reg PC)) = Some ret \/
+      AnnotationOf cdm (m1 (Reg PC)) = Some yield.
 
-  Theorem EagerSufficient :
-    StackIntegrityEager ->
-    StackConfidentialityEager ->
-    CallRule.
-  Proof.
-  Admitted.
+  Definition YieldBackIntegrity : Prop :=
+    forall mp mp1 mp2 MPout,
+      InTrace mp1 (MPTraceOf mp) ->
+      AnnotationOf cdm (ms mp1 (Reg PC)) = Some yield ->
+      SplitInclusive (fun mp2 => sm (ms mp1 (Reg PC)) = sm (ms mp (Reg PC))) (MPTraceOf mp) MPout (MPTraceOf mp2) ->
+      justRet (ms mp1) (ms mp2).
+
+  Definition ReturnIntegrity : Prop :=
+    forall sid d minit MCP m c p m' c' p',
+      let P := fun m c => activeStack sm m = sid /\ (snd c) sid >= d in
+      FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
+      head MCP = (m,c,p) ->
+      Last MCP (m',c',p') ->
+      justRet m m'.
+
+  Variable em:EntryMap.
+  
+  Definition EntryIntegrity : Prop :=
+  forall minit mp1 m2 p2 o,
+    InTrace mp1 (MPTraceOf (minit, pOf minit)) ->
+    mpstep mp1 = Some (m2,p2,o) ->
+    AnnotationOf cdm (ms mp1 (Reg PC)) = Some call ->
+    em (m2 (Reg PC)).
+
+  Definition WellBracketedControlFlow  : Prop :=
+    ControlSeparation /\
+    ReturnIntegrity /\
+    YieldBackIntegrity /\
+    EntryIntegrity.
 
 End WITH_MAPS.

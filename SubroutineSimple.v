@@ -7,43 +7,11 @@ Require Import Trace.
 Require Import Machine.
 Require Import ObsTrace.
 
-(* A Domain is an annotation on a component or set of components reflecting its
-   relationship to the program state. Domains are nested, so a domain can be subsumed by
-   a higher domain, and all of its components with it.
-
-   First, an example of stack domains. Suppose we have a stack resulting from caller A
-   calling callee B. The stack looks like this:
-               sp
-   -----------------------------------------------
-   | A's frame | Empty stack..................
-   -----------------------------------------------
-        a1                      a2
-
-   B's frame is not yet allocated until it sets the stack pointer, but B
-   has access to everything above the current stack pointer. So lets consider the status of
-   addresses a1 and a2 in the moment B gains control.
-
-   a1 is in a frame that is currently inaccessible, but someday - after B returns - will
-   again be active. a2 is still in the accessible part of the stack. If B makes another call,
-   say to a functin C, we will have:
-
-                            sp
-   -----------------------------------------------
-   | A's frame | B's frame  | Empty.....
-   -----------------------------------------------
-        a1        a2
-
-   a1 and a2 are both inaccessible. But a2 will be accessible again on the next return.
-   Whereas a1 will be inaccesible still, until the return after (assuming no further calls.)
-   So in a stack domain, an Inaccessible domain carries a nested stack domain that is the one
-   that will be used after the next unmatched return.
- *)
-
 Section DOMAIN_MODEL.
-  (* Outside is non-stack memory and registers. Inaccessible and Accessible are as described above. *)
+
   Inductive StackDomain :=
-  | Inaccessible (sd:StackDomain)
-  | Accessible
+  | Claimed (d:nat)
+  | Unclaimed
   | Outside
   .
 
@@ -61,6 +29,7 @@ Section WITH_MAPS.
   (* We will use the machinery defined at the end of Machine.v to extend traces of the
      machine with context that will inform our properties. In this case the context is a
      pair of a Domain Map and a natural number representing the depth of the stack. *)
+
   Definition context : Type := DomainMap * nat.
 
   (* For the initial context, we construct a domain map that maps the stack to Accessible
@@ -70,7 +39,7 @@ Section WITH_MAPS.
                 match k with
                 | Mem a =>
                   if sm a
-                  then Accessible
+                  then Unclaimed
                   else Outside
                 | _ => Outside
                 end in
@@ -92,7 +61,7 @@ Section WITH_MAPS.
                     | _, Outside => Outside
                     | Mem a, sd =>
                       if wlt a (m (Reg SP))
-                      then Inaccessible sd
+                      then Claimed d
                       else sd
                     | _, _ => Outside
                     end in
@@ -100,13 +69,28 @@ Section WITH_MAPS.
     | Some ret => (* A return unwraps the outermost domain of all components in the initial stack *)
       let dm' := fun k =>
                     match dm k with
-                    | Inaccessible sd => sd
+                    | Claimed d' =>
+                      if d =? d'
+                      then Unclaimed
+                      else Claimed d'
                     | _ => dm k
                     end in
       (dm', d-1)
     | _ => (dm, d)
     end.
 
+  (* Here are some helper relations to combine the addition of context to a trace,
+     and the segmenting of the resulting trace by a proposition P.*)
+  Definition FindSegmentMP P mp c MCP :=
+    exists MCP',
+      WithContextMP updateC c (MPTraceOf mp) MCP' /\
+      ContextSegment P MCP' MCP.
+
+  Definition FindSegmentM P m c MC :=
+    exists MC',
+      WithContextM updateC c (MTraceOf m) MC' /\
+      ContextSegmentM P MC' MC.
+  
   (* Now it's quite simple to define an "ultra eager" integrity property:
      if we run from any initial state, updating the context as above, then
      at any particular state where a component k is in an Inaccessible domain,
@@ -114,10 +98,9 @@ Section WITH_MAPS.
      ultra eager because it "checks" at each step that components that are inaccessible
      don't change, the most frequent it is possible to check. *)
   Definition SimpleStackIntegrityUE : Prop :=
-    forall minit MCP k sd mcp mcp',
-      WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
-      ContextSegment (fun _ _ => False) MCP (notfinished mcp (finished mcp')) ->
-      fst (cstate mcp) k = Inaccessible sd ->
+    forall minit k d mcp mcp',
+      FindSegmentMP (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
+      fst (cstate mcp) k = Claimed d ->
       mstate mcp k = mstate mcp' k.
 
     (* We can do a similar ultra eager style property with confidentiality, and since we're
@@ -143,25 +126,16 @@ Section WITH_MAPS.
      Inacessible in that state, the step has the same observable behavior and makes
      the same changes to state. *)
   Definition SimpleStackConfidentialityUE : Prop :=
-    forall minit MCP sd m dm d p m' dm' d' p' n o n' p'' o',
-      WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
-      ContextSegment (fun _ _ => False) MCP (notfinished (m,(dm,d),p) (finished (m',(dm',d'),p'))) ->
-      variantOf (fun k => dm k = Inaccessible sd) m n ->
+    forall minit m dm d p m' dm' d' p' n o n' p'' o',
+      FindSegmentMP (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,(dm,d),p) (finished (m',(dm',d'),p'))) ->
+      variantOf (fun k => dm k = Claimed d) m n ->
       mpstep (m,p) = Some (m',p',o) ->
       mpstep (n,p) = Some (n',p'',o') ->
       sameDifference m m' n n' /\ p = p'' /\ o = o'.
 
-  (* Here are some helper relations to combine the addition of context to a trace,
-     and the segmenting of the resulting trace by a proposition P.*)
-  Definition FindSegmentMP P mp dm MCP :=
-    exists MCP',
-      WithContextMP updateC dm (MPTraceOf mp) MCP' /\
-      ContextSegment P MCP' MCP.
-
-  Definition FindSegmentM P m dm MC :=
-    exists MC',
-      WithContextM updateC dm (MTraceOf m) MC' /\
-      ContextSegmentM P MC' MC.
+  (* There's a problem with this ultra-eager confidentiality property that will become
+     apparent: it doesn't deal with Unclaimed memory that is uninitialized from the perspective
+     of a callee, which should also not be read until initialized. *)
 
   (* For integrity, ultra eager properties are significantly stronger than we actually
      need. In fact, we want to consider lazy policies that allow illegal writes at times
@@ -169,13 +143,6 @@ Section WITH_MAPS.
      use are these properties? Here is an example of how we might think of a program logic
      call rule that lets us guarantee that from a call point, if execution returns to the
      caller, Inaccessible components are preserved. *)
-  Inductive StepsTo : MachineState -> MachineState -> Prop :=
-  | isNow : forall m, StepsTo m m
-  | stepsTo : forall m1 m2 m' o,
-      step m1 = (m',o) ->
-      StepsTo m' m2 ->
-      StepsTo m1 m2.
-  
   Definition CallRule : Prop :=
     forall minit MCP mcall dmcall dcall pcall,
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
@@ -187,11 +154,13 @@ Section WITH_MAPS.
           InTrace (m',(dm,d),p') MCP' ->
           d > dcall)
       \/ (* Case 2: Return *)
-      (exists m',
-          StepsTo mcall m' /\
-          forall k sd,
-            dmcall k = Inaccessible sd ->
-            mcall k = m' k).
+      (exists mp o m' c' p' MCP',
+          mpstep (mcall,pcall) = Some (mp,o) /\
+          FindSegmentMP (fun m '(dm,d) => d > dcall) mp (updateC mcall (dmcall,dcall)) MCP' /\
+          Last MCP' (m',c',p') /\
+          forall a,
+            wlt a (mcall (Reg SP)) = true ->
+            mcall (Mem a) = m' (Mem a)).
 
   (* We could use this as our ultimate specification, or just to guide our trace
      properties. Note that this rule cares nothing for what happens to the state of
@@ -200,10 +169,10 @@ Section WITH_MAPS.
      change, it guarantees that they are unchanged if and when the function returns. *)
   
   Definition SimpleStackIntegrityEager : Prop :=
-    forall minit MCP d k sd mcp mcp',
+    forall minit MCP d d' k mcp mcp',
       FindSegmentMP  (fun m c => snd c = d) (minit, pOf minit) initC MCP ->
       mcp = head MCP ->
-      fst (cstate mcp) k = Inaccessible sd ->
+      fst (cstate mcp) k = Claimed d' ->
       Last MCP mcp' ->
       mstate mcp k = mstate mcp' k.
 
@@ -215,17 +184,15 @@ Section WITH_MAPS.
   
   (* We can make a similar argument about confidentiality, though it may be odd to
      think of a confidentiality call rule. We can at least think of the following as
-     the "caller's view" of confidentiality: that from the call to the return, its
-     Inaccessible memory ought change nothing about the observable behavior of the
-     machine, and if control returns, its Inaccessible memory also did not impact the
-     returned state. *)
-
+     the "caller's view" of confidentiality: that the behavior of the callee does not
+     depend on any of the caller's state. The exception, of course, would be state that
+     is part of the interface, which we are not yet modeling. *)
   Definition ConfRule : Prop :=
     forall minit MCP mcall dmcall dcall pcall n MCP' N MO NO,
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
       InTrace (mcall,(dmcall,dcall),pcall) MCP ->
       AnnotationOf cdm (mcall (Reg PC)) = Some call ->
-      variantOf (fun k => exists sd, dmcall k = Inaccessible sd) mcall n ->
+      variantOf (fun k => exists d, dmcall k = Claimed d \/ dmcall k = Unclaimed) mcall n ->
       (* Clause 1: output up to return identical *)
       PrefixUpTo (fun '(_,(dm,d),_) => d = dcall) MCP MCP' ->
       FindSegmentM (fun _ '(dm,d) => d = dcall) n (dmcall,dcall) N ->
@@ -243,11 +210,11 @@ Section WITH_MAPS.
      representing calls. This only needs to be strong enough to support the caller-side
      reasoning, so here is an example of such an eager (but not ultra-eager) property. *)
   Definition SimpleStackConfidentialityEager : Prop :=
-    forall minit M MO d sd m dm p n N NO,
+    forall minit M MO d d' m dm p n N NO,
       let P := (fun m c => snd c = d) in
       FindSegmentMP P (minit, pOf minit) initC M ->
       head M = (m,(dm,d),p) ->
-      variantOf (fun k => dm k = Inaccessible sd) m n ->
+      variantOf (fun k => dm k = Claimed d' \/ dm k = Unclaimed) m n ->
       FindSegmentM P n (dm,d) N ->
       ObsOfMCP M MO ->
       ObsOfMC N NO ->
@@ -323,7 +290,7 @@ Section WITH_MAPS.
       let P := (fun m '(dm, d') => d' >= d) in
       FindSegmentMP P (minit, pOf minit) initC MCP ->
       head MCP = (m,(dm,d),p) ->
-      let K := (fun k => exists sd, dm k = Inaccessible sd) in
+      let K := (fun k => exists d, dm k = Claimed d) in
       TraceIntegrityEager K MCP /\
       TraceConfidentialityEager K P MCP.
 
@@ -332,5 +299,47 @@ Section WITH_MAPS.
     CallRule /\ ConfRule.
   Proof.
   Admitted.
+
+  (* ***** Control Flow Properties ***** *)
+  
+  Definition ControlSeparation : Prop :=
+    forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,
+      InTrace (m1,p1) (MPTraceOf (minit, pOf minit)) ->
+      mpstep (m1,p1) = Some (m2, p2,o) ->
+      cdm (m1 (Reg PC)) = inFun f1 ann1 ->
+      cdm (m2 (Reg PC)) = inFun f2 ann2 ->
+      f1 <> f2 ->
+      AnnotationOf cdm (m1 (Reg PC)) = Some call \/
+      AnnotationOf cdm (m1 (Reg PC)) = Some ret \/
+      AnnotationOf cdm (m1 (Reg PC)) = Some yield.
+
+  Definition YieldBackIntegrity : Prop :=
+    forall mp mp1 mp2 MPout,
+      InTrace mp1 (MPTraceOf mp) ->
+      AnnotationOf cdm (ms mp1 (Reg PC)) = Some yield ->
+      SplitInclusive (fun mp2 => sm (ms mp1 (Reg PC)) = sm (ms mp (Reg PC))) (MPTraceOf mp) MPout (MPTraceOf mp2) ->
+      justRet (ms mp1) (ms mp2).
+
+  Definition ReturnIntegrity : Prop :=
+    forall d minit MCP m c p m' c' p',
+      FindSegmentMP (fun m '(dm,d') => d' >= d) (minit, pOf minit) initC MCP ->
+      head MCP = (m,c,p) ->
+      Last MCP (m',c',p') ->
+      justRet m m'.
+
+  Variable em:EntryMap.
+  
+  Definition EntryIntegrity : Prop :=
+  forall minit mp1 m2 p2 o,
+    InTrace mp1 (MPTraceOf (minit, pOf minit)) ->
+    mpstep mp1 = Some (m2,p2,o) ->
+    AnnotationOf cdm (ms mp1 (Reg PC)) = Some call ->
+    em (m2 (Reg PC)).
+
+  Definition WellBracketedControlFlow  : Prop :=
+    ControlSeparation /\
+    ReturnIntegrity /\
+    YieldBackIntegrity /\
+    EntryIntegrity.
 
 End WITH_MAPS.
