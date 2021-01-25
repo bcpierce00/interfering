@@ -1,13 +1,21 @@
 Require Import List.
 Import ListNotations.
 Require Import Bool.
-Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Omega.
 Require Import Trace.
 Require Import Machine.
 Require Import ObsTrace.
 
 Section DOMAIN_MODEL.
+
+  (* In general, a domain is a coherent logical division of the state that
+     has meaning in one or more of our security properties. Domain models will get
+     complicated, but let's start with a simple one: the simple stack.
+
+     Here the state is divided into "Outside" - anything that isn't part of the
+     stack - and Claimed and Unclaimed portions of the stack. Claimed portions
+     are indexed by an identifier for the activation that has claimed them, namely
+     its depth. The Unclaimed portion is singular. *)
 
   Inductive StackDomain :=
   | Claimed (d:nat)
@@ -22,13 +30,17 @@ End DOMAIN_MODEL.
 
 Section WITH_MAPS.
 
-  Variable cdm : CodeMap'. (* Map of where code lives in memory and its annotation. *)
-  Variable sm : Addr -> bool. (* Determines whether an address is in the stack. *)
+  (* The Code and Stack maps tell us about the initial layout of memory, as determined
+     by the compiler. They will help us build our initial DomainMap and identify
+     calls and returns in the code, in the form of annotations. *)
+
+  Variable cdm : CodeMap'.
+  Variable sm : Addr -> bool.
   Variable pOf : MachineState -> PolicyState. (* Policy initialization function. *)
 
   (* We will use the machinery defined at the end of Machine.v to extend traces of the
      machine with context that will inform our properties. In this case the context is a
-     pair of a Domain Map and a natural number representing the depth of the stack. *)
+     pair of a DomainMap and a natural number representing the depth of the stack. *)
 
   Definition context : Type := DomainMap * nat.
 
@@ -44,18 +56,16 @@ Section WITH_MAPS.
                 | _ => Outside
                 end in
     (dm, O).
-  
-  (* Our update function checks an "annotation" on the code being executed.
-     Annotations are defined in Machine.v as an alternative to a million different
-     maps, and the ones that matter here are call and return.
 
-     Annotations are given by the compiler. We assume that the compiler can tell us
-     which instructions represent calls and returns. *)
+  (* Our update function checks an "annotation" on the code being executed.
+     Annotations are defined in Machine.v, and the ones that matter here are call and return. *)
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, d) := prev in
     match AnnotationOf cdm (m (Reg PC)) with
-    | Some call => (* A call adjusts the domain map by marking the caller's frame "inactive" *)
-                   (* and wrapping the remaining stack in a new instance of "active" *)
+    | Some call => (* In our calling convention, the caller claims its frame by setting the stack pointer.
+                      Then at the instruction that completes a call, everything below the SP that wasn't
+                      already claimed becomes Claimed with the current depth. Everything above retains
+                      its prior status, presumably Unclaimed. Finally, the current depth is incremented. *)
       let dm' := fun k =>
                     match k, dm k with
                     | _, Outside => Outside
@@ -66,11 +76,14 @@ Section WITH_MAPS.
                     | _, _ => Outside
                     end in
       (dm', d+1)
-    | Some ret => (* A return unwraps the outermost domain of all components in the initial stack *)
+    | Some ret => (* On a return, we decrement the current depth, for a new current depth of
+                     d-1. Then d-1 no longer needs to have claimed any memory, so anything it had
+                     claimed is returned to the unclaimed pool (i.e., it can adjust the stack pointer
+                     to claim more or less memory on its next call.) *)
       let dm' := fun k =>
                     match dm k with
                     | Claimed d' =>
-                      if d =? d'
+                      if d-1 =? d'
                       then Unclaimed
                       else Claimed d'
                     | _ => dm k
@@ -93,7 +106,7 @@ Section WITH_MAPS.
   
   (* Now it's quite simple to define an "ultra eager" integrity property:
      if we run from any initial state, updating the context as above, then
-     at any particular state where a component k is in an Inaccessible domain,
+     at any particular state where a component k is in an Claimed domain,
      k has the same value in the following state (if any.) We term this property
      ultra eager because it "checks" at each step that components that are inaccessible
      don't change, the most frequent it is possible to check. *)
@@ -103,18 +116,26 @@ Section WITH_MAPS.
       fst (cstate mcp) k = Claimed d ->
       mstate mcp k = mstate mcp' k.
 
-    (* We can do a similar ultra eager style property with confidentiality, and since we're
-       not allowing sharing it is straightforward. But some preliminaries on confidentiality.
-       Firstly: confidentiality is expressed in terms of "variant" states. A K-variant
-       state of m is a state that agrees with m at every component not in the set K. It may also
-       agree at some components in K. The intuition is that if the step from a state changes the
-       state in the same way as the step from its K-variant, we can't tell from that step what
-       value a component in K was, so K is secret. *)
+  (* Confidentiality is a little more complicated. There are two contexts in which stack data
+     should be secret: when it has been claimed by a caller, it should always be secret. And
+     when it has not yet been initialized by the current callee, it should be secret until that
+     happens. (This means that, for example, returned functions do not leak their data to future
+     calls by leaving it behind in memory.)
+
+     The former is easy to do in an Ultra Eager style; the latter requires additional machinery
+     to track initialization. Let's focus on just the side of confidentiality that protects
+     Claimed memory. Some preliminaries are in order.
+
+     Firstly: confidentiality is expressed in terms of "variant" states. A K-variant
+     state of m is a state that agrees with m at every component not in the set K. It may also
+     agree at some components in K. The intuition is that if the step from a state changes the
+     state in the same way as the step from its K-variant, we can't tell from that step what
+     value a component in K was, so K is secret. *)
   Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
     forall k, ~ K k -> m k = n k.
   
-  (* "Changing the state in the same way" means that any component that changed is
-     one trace ends with the same value in the other. *)
+  (* Above we say that each step should change the state in the same way regardless of variation;
+     this means that any component that changed is one trace ends with the same value in the other. *)
   Definition sameDifference (m m' n n' : MachineState) :=
     forall k,
       (m k <> m' k \/ n k <> n' k) ->
@@ -123,9 +144,9 @@ Section WITH_MAPS.
   (* Once again, we take adjacent pairs of states in the trace from an arbitrary
      start state and check that a property holds between them. In this case, that
      in any K-variant of the first state where K is the set of components that are
-     Inacessible in that state, the step has the same observable behavior and makes
+     Claimed in that state, the step has the same observable behavior and makes
      the same changes to state. *)
-  Definition SimpleStackConfidentialityUE : Prop :=
+  Definition ClaimedConfidentialityUE : Prop :=
     forall minit m dm d p m' dm' d' p' n o n' p'' o',
       FindSegmentMP (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,(dm,d),p) (finished (m',(dm',d'),p'))) ->
       variantOf (fun k => dm k = Claimed d) m n ->
@@ -133,16 +154,19 @@ Section WITH_MAPS.
       mpstep (n,p) = Some (n',p'',o') ->
       sameDifference m m' n n' /\ p = p'' /\ o = o'.
 
-  (* There's a problem with this ultra-eager confidentiality property that will become
-     apparent: it doesn't deal with Unclaimed memory that is uninitialized from the perspective
-     of a callee, which should also not be read until initialized. *)
+  (* Some things to note: we have hypotheses that both (m,p) and (n,p) step. So we do not consider
+     variant states in which (n,p) has a policy violation. We also require that the policy states
+     match after the step. This might not be necessary.
+
+     Again, we are not protecting uninitialized memory - it will turn out that when we leave behind
+     the Ultra Eager properties, that protection will come naturall. *)
 
   (* For integrity, ultra eager properties are significantly stronger than we actually
      need. In fact, we want to consider lazy policies that allow illegal writes at times
      in the name of efficiency. So we should consider what our actual goal is here - what
      use are these properties? Here is an example of how we might think of a program logic
      call rule that lets us guarantee that from a call point, if execution returns to the
-     caller, Inaccessible components are preserved. *)
+     caller, Claimed components are preserved. *)
   Definition CallRule : Prop :=
     forall minit MCP mcall dmcall dcall pcall,
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
@@ -185,8 +209,9 @@ Section WITH_MAPS.
   (* We can make a similar argument about confidentiality, though it may be odd to
      think of a confidentiality call rule. We can at least think of the following as
      the "caller's view" of confidentiality: that the behavior of the callee does not
-     depend on any of the caller's state. The exception, of course, would be state that
-     is part of the interface, which we are not yet modeling. *)
+     depend on any of the stack state at the call, whether or not the caller claimed it.
+     Since we aren't modeling any sharing of memory yet, this means that the functions
+     communicate only through registers. *)
   Definition ConfRule : Prop :=
     forall minit MCP mcall dmcall dcall pcall n MCP' N MO NO,
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
