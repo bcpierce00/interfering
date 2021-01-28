@@ -7,37 +7,26 @@ Require Import Machine.
 Require Import ObsTrace.
 Require Import TraceProperties.
 
-(* A Domain is an annotation on a component or set of components reflecting its
-   relationship to the program state. Domains are nested, so a domain can be subsumed by
-   a higher domain, and all of its components with it. For instance, a stack in a coroutine
-   system has a domain containing all of the addresses in the stack's range, and the frames
-   pushed on the stack each have their own, as described below. *)
+(* We add coroutines with multiple stacks, defined with static extents (see Machine.v).
+   Our domain model uses the same stack domain as previous, but now a top-level domain
+   combines a stack identity and the domains of that stack. Outside is now a top domain. *)
 Section DOMAIN_MODEL.
 
-  Inductive ShareStatus :=
-  | Local
-  | Shared
-  | Passed
-  .
-  
   Inductive StackDomain :=
-  | Claimed (d:nat)
-  | Unclaimed
+  | Sealed (d:nat)
+  | Shared (d:nat)
+  | Passed (d:nat)
+  | Unsealed
   .
 
   Inductive TopDomain :=
-  | Instack (sid:StackID) (sd:StackDomain) (ss:ShareStatus)
-  | Other
+  | Instack (sid:StackID) (sd:StackDomain)
+  | Outside
   .
 
-  Definition statusOf td :=
-    match td with
-    | Instack _ _ ss => Some ss
-    | Other => None
-    end.
-
-  (* Finally we need a way to map components to the domain they belong to. *)
   Definition DomainMap := Component -> TopDomain.
+
+  (* We will additionally track the depths of all the stack simultaneously. *)
   Definition DepthMap := StackID -> nat.
   Definition initDepM : DepthMap := fun sid => O.
   Definition push (depm: DepthMap) (sid: StackID) :=
@@ -57,6 +46,9 @@ Section WITH_MAPS.
   Variable sm : StackMap.
   Variable pOf : MachineState -> PolicyState.
 
+  Definition SealingConvention : Type := MachineState -> Addr -> bool.
+  Variable sc : SealingConvention.
+
   Definition context : Type := DomainMap * DepthMap.
   
   Definition initC : DomainMap * DepthMap :=
@@ -64,88 +56,85 @@ Section WITH_MAPS.
                 match k with
                 | Mem a =>
                   match findStack sm a with
-                  | Some sid => Instack sid Unclaimed Local
-                  | None => Other
+                  | Some sid => Instack sid Unsealed
+                  | None => Outside
                   end
-                | Reg r => Other
+                | Reg r => Outside
                 end in
     (dm,initDepM).
   
-  (* Our update function checks an "annotation" on the code being executed.
-     Annotations are defined in Machine.v as an alternative to a million different
-     maps, and the ones that matter are call, return, yield, and share.
-
-     Annotations are given by the compiler. We assume that the compiler can tell us
-     which instructions represent calls, returns, and yields. Shares are more complicated;
-     the compiler cannot directly tell us which component(s) are being shared, because sharing
-     is often dynamic. What it can do is identify a relation between the machine state
-     and the component(s) being shared.
-     
-     For an example, suppose that a caller is sharing an address as an argument to its callee.
-     It executes a store instruction that the compiler identifies as a share; the target of
-     the share is the address to which the argument is being stored, held within the appropriate
-     register. So, we would relate a given machine state to the contents of the register in that
-     state.
-     
-     This is a much stronger assumption of information from the compiler than we had before!
-     We now fully rely on the compiler to recognize returns, for instance. Relating returns
-     to the actual program state is the job of control flow property, WBCF.
-
-     Note that yields don't actually change the domain map, as they don't change which
-     addresses belong to which stacks. *)
-  
+  (* Once again we need an update function for out context. Note that yields don't
+     actually change the domain map, as they don't change which addresses belong to which
+     stacks. So we still only consider sharing, calls, and returns. *)
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, depm) := prev in
-    match AnnotationOf cdm (m (Reg PC)), findStack sm (m (Reg SP)) with
-    | Some (share f), Some sid =>
+    let sid := activeStack sm m in
+    let d := depm sid in
+    match AnnotationOf cdm (m (Reg PC)) with
+    | Some (share f) =>
       let dm' := fun k =>
                    match k with
                    | Mem a =>
                      match f m a, dm k with
-                     | Some true, Instack sid' Unclaimed Local =>
-                       if stack_eqb sid sid'
-                       then Instack sid Unclaimed Passed
+                     | Some true, Instack sid' Unsealed =>
+                       if stack_eqb sid sid' 
+                       then Instack sid (Passed d)
                        else dm k
-                     | Some false, Instack sid' Unclaimed ss =>
-                       if stack_eqb sid sid'
-                       then Instack sid Unclaimed Shared
+                     | Some false, Instack sid' Unsealed =>
+                       if stack_eqb sid sid' 
+                       then Instack sid (Shared d)
                        else dm k
                      | _, _ => dm k
                      end
                    | _ => dm k
                    end in
       (dm', depm)
-    | Some call, Some sid =>
+    | Some call =>
       let dm' := fun k =>
-                   match k, dm k with
-                   | Mem a, Instack sid' Unclaimed ss =>
-                     if andb (wlt a (m (Reg SP))) (stack_eqb sid sid')
-                     then Instack sid (Claimed (depm sid)) ss
-                     else dm k
-                   | _, _ => dm k
-                   end in
+                    match k, dm k with                      
+                    | _, Instack sid' (Sealed d) => Instack sid' (Sealed d)
+                    | _, Outside => Outside
+                    | Mem a, Instack sid' _ =>
+                      if sc m a && stack_eqb sid sid'
+                      then Instack sid (Sealed d)
+                      else Instack sid Unsealed (* If addresses are marked to be shared but the sealing convention
+                                       wants them unsealed, the sealing convention takes precedence *)
+                    | _, _ => dm k
+                    end in
       (dm', push depm sid)
-    | Some ret, Some sid =>
+    | Some ret => 
       let dm' := fun k =>
-                   match dm k with
-                   | Instack sid' (Claimed d) ss =>
-                     if andb (stack_eqb sid sid') (d =? (depm sid)-1)
-                     then Instack sid Unclaimed Local
-                     else dm k
-                   | _ => dm k
-                   end in
+                    match dm k with
+                    | Instack sid' (Sealed d') =>
+                      if (d-1 =? d') && stack_eqb sid sid'
+                      then Instack sid Unsealed
+                      else dm k
+                    | Instack sid' (Passed d') =>
+                      if (d-1 =? d') && stack_eqb sid sid'
+                      then Instack sid Unsealed
+                      else dm k
+                    | Instack sid' (Shared d') =>
+                      if (d =? d') && stack_eqb sid sid'
+                      then Instack sid Unsealed
+                      else dm k
+                    | _ => dm k
+                    end in
       (dm', pop depm sid)
-    | _,_ => (dm,depm)
+    | _ => (dm, depm)
     end.
 
   Definition StackInaccessible (c:context) (k:Component) : Prop :=
     exists sid d,
-      fst c k = Instack sid (Claimed d) Local \/
-      (fst c k = Instack sid (Claimed d) Passed /\ d < (snd c sid)-1).
+      fst c k = Instack sid (Sealed d) \/
+      (fst c k = Instack sid (Passed d) /\ d < (snd c sid)-1).
 
+  (* We split up our inaccessibility criterion into stack and coroutine variations.
+     The coroutine version takes the active stack, and prohibits accessing other stacks
+     except for shared objects. *)
   Definition CoroutineInaccessible (c:context) (sid:StackID) (k:Component) : Prop :=
-    exists sd ss,
-      fst c k = Instack sid sd ss /\ ss <> Shared.
+    forall sid' sd d,
+      fst c k = Instack sid' sd ->
+      (sid <> sid /\ sd <> Shared d).
   
   Definition StackIntegrityUE : Prop :=
     forall minit k mcp mcp',
@@ -158,15 +147,10 @@ Section WITH_MAPS.
       FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
       CoroutineInaccessible (cstate mcp) sid k ->
       mstate mcp k = mstate mcp' k.
-  
-  Definition StackConfidentialityUE : Prop :=
-    forall minit m c p m' c' p' p'' n n' o o',
-      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,c,p) (finished (m',c',p'))) ->
-      variantOf (fun k => StackInaccessible c k) m n ->
-      mpstep (m,p) = Some (m',p',o) ->
-      mpstep (n,p) = Some (n',p'',o') ->
-      sameDifference m m' n n' /\ p = p'' /\ o = o'.
 
+  (* We can actually do ultra eager confidentiality for coroutines without any more complexity,
+     because coroutine properties don't care about allocation. That only comes when subroutine properties
+     are layered in. *)
   Definition CoroutineConfidentialityUE : Prop :=
     forall minit sid m c p m' c' p' p'' n n' o o',
       FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,c,p) (finished (m',c',p'))) ->
@@ -185,16 +169,11 @@ Section WITH_MAPS.
       FindSegmentMP updateC (fun m c => activeStack sm m = sid) (minit, pOf minit) initC MCP ->
       TraceIntegrityEager (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) MCP.
   
-  Definition Stuck (MCP : @MCPTrace (DomainMap * DepthMap)) : Prop :=
-    exists m c p,
-      Last MCP (m,c,p) ->
-      mpstep (m,p) = None.
-
   Definition StackConfidentialityEager : Prop :=
     forall minit MCP d sid,
       let P := (fun m c => snd c sid = d) in
       let K := (fun k => StackInaccessible (cstate (head MCP)) k \/
-                         exists ss, (fst (cstate (head MCP)) k = Instack sid Unclaimed ss)) in
+                         fst (cstate (head MCP)) k = Instack sid Unsealed) in
       FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
       TraceConfidentialityEager updateC K P MCP.
 
@@ -206,6 +185,9 @@ Section WITH_MAPS.
       TraceConfidentialityEager updateC K P MCP.
 
   (* ***** Control Flow Properties ***** *)
+
+  (* Finally, we also need to consider control flow properties. These are included here because
+     they don't really change in interesting ways between the different models. *)
   
   Definition ControlSeparation : Prop :=
     forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,
@@ -247,5 +229,7 @@ Section WITH_MAPS.
     ReturnIntegrity /\
     YieldBackIntegrity /\
     EntryIntegrity.
+
+  (* Coming soon: lazy properties. *)
 
 End WITH_MAPS.
