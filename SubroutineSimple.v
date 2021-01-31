@@ -9,12 +9,17 @@ Require Import ObsTrace.
 Section DOMAIN_MODEL.
 
   (* In general, a domain is a coherent logical division of the state that
-     has meaning in one or more of our security properties. Domain models will get
-     complicated, but let's start with a simple one: the simple stack.
+     has meaning in one or more of our security properties. 
+APT:  Note that state includes both registers and memory (right?)
+     Domain models will get
+     complicated, but let's start with a simple one: the simple stack. 
+APT:  Identify this as simple subroutines with no arguments passed on the stack
+     and no sharing.
 
      Here the state is divided into "Outside" - anything that isn't part of the
      stack - and Sealed and Unsealed portions of the stack. Sealed and Unsealed
-     can be thought of as a contract between the active function and its caller.
+     can be thought of as a contract between the active function and its caller.  
+APT: or callers, plural?
      The first contract of stack safety is: the caller identifies memory that
      it will need after the call, and that memory is expected to remain unchanged.
      This is, in security terms, integrity - the callee cannot subvert the caller's
@@ -34,9 +39,12 @@ Section DOMAIN_MODEL.
      +======================================
        Other          Sealed (0)   Unsealed
 
+APT: Explain the depth annotation briefly here.
+
      B can use unsealed memory however it likes without violating A's contract. It can
      also modify other memory and registers without violating stack safety. When it makes
      a call, however, say to another instance of A, (A0), it may seal some memory for its own
+APT: Is it important that A0 is another instance of A? Otherwise it would be clearer to use C,D.
      future use after the return.
 
                                              sp
@@ -46,6 +54,7 @@ Section DOMAIN_MODEL.
        Other          Sealed (0)   Sealed (1)  Unsealed
 
      When A0 returns, B's frame will be unsealed. Perhaps B will deallocate additional data,
+APT: "additional" to what?
      then call another function C; it will reseal the data it still needs, and only that data.
 
                                           sp
@@ -61,9 +70,14 @@ Section DOMAIN_MODEL.
      integrity marker, and confidentiality is stronger: a given function activation should not
      be able to read any stack memory that it did not itself initialize.
 
+APT: I'm not sure what you mean by "marker." Are you saying that the notion of sealing is 
+     not relevant for defining confidentiality?  If so, why are we discussing the latter in this section at all?
+
      So the domains of this simplified model are Other, Unsealed, and Sealed indexed with
      the depth of the owning call; as only one caller can have a given depth at a time
      this is sufficient to uniquely identify it.
+APT: I don't follow the logic of "So" 
+
  *)
 
   Inductive StackDomain :=
@@ -71,6 +85,8 @@ Section DOMAIN_MODEL.
   | Unsealed
   | Outside
   .
+(* APT: Do we need to distinguish Unsealed from Outside? *)
+
 
   (* All components belong to domain, and a domain map tells us which. *)
   Definition DomainMap := Component -> StackDomain.
@@ -84,7 +100,9 @@ Section WITH_MAPS.
      calls and returns in the code, in the form of annotations. *)
 
   Variable cdm : CodeMap'.
-  Variable sm : Addr -> bool.
+(* APT: Move below to where it is explained? *)
+  Variable sm : Addr -> bool.   
+(* APT : explain what sm means *)
   Variable pOf : MachineState -> PolicyState. (* Policy initialization function. *)
 
   (* The stack pointer is by far the most typical, but technically other mechanisms could be
@@ -93,6 +111,7 @@ Section WITH_MAPS.
      and attempting to re-seal already sealed addresses is a no-op. *)
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
   Variable sc : SealingConvention.
+(* APT: How about instantiating this to a concrete function matching the description in updateC below? Would help clarify exposition. *)
 
   (* We will use the machinery defined at the end of Machine.v to extend traces of the
      machine with context that will inform our properties. In this case the context is a
@@ -122,6 +141,7 @@ Section WITH_MAPS.
                       Then at the instruction that completes a call, everything below the SP that wasn't
                       already claimed becomes Claimed with the current depth. Everything above retains
                       its prior status, presumably Unsealed. Finally, the current depth is incremented. *)
+(* APT: Claimed => Sealed ? *)
       let dm' := fun k =>
                     match k, dm k with
                     | _, Outside => Outside
@@ -136,6 +156,7 @@ Section WITH_MAPS.
                      d-1. Then d-1 no longer needs to have claimed any memory, so anything it had
                      claimed is returned to the unclaimed pool (i.e., it can adjust the stack pointer
                      to claim more or less memory on its next call.) *)
+(* APT: Claimed => Sealed ? *)
       let dm' := fun k =>
                     match dm k with
                     | Sealed d' =>
@@ -150,6 +171,7 @@ Section WITH_MAPS.
 
   (* Here are some helper relations to combine the addition of context to a trace,
      and the segmenting of the resulting trace by a proposition P.*)
+(* APT: Could these be described in words? *)
   Definition FindSegmentMP P mp c MCP :=
     exists MCP',
       WithContextMP updateC c (MPTraceOf mp) MCP' /\
@@ -165,7 +187,10 @@ Section WITH_MAPS.
      at any particular state where a component k is in an Sealed domain,
      k has the same value in the following state (if any.) We term this property
      ultra eager because it "checks" at each step that components that are inaccessible
-     don't change, the most frequent it is possible to check. *)
+     don't change, the most frequently it is possible to check. *)
+(* APT: Could this first be stated more simply just in terms of mstep? 
+   At the least, state explicitly that the segment here is of length 2, so
+   we are essentially looking at single steps. *)
   Definition SimpleStackIntegrityUE : Prop :=
     forall minit k d mcp mcp',
       FindSegmentMP (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
@@ -174,6 +199,7 @@ Section WITH_MAPS.
 
   (* Full confidentiality is not amenable to an ultra eager property under this model - see
      ExplicitInitialization.v for an ultra eager property of this sort. Instead we will introduce
+(* APT: That file doesn't seem to exist? *)
      the notion of confidentiality using a weaker property that only protects Sealed memory.
      This will show us the tools we need to implement all sorts of confidentiality properties.
 
@@ -186,7 +212,8 @@ Section WITH_MAPS.
     forall k, ~ K k -> m k = n k.
   
   (* Above we say that each step should change the state in the same way regardless of variation;
-     this means that any component that changed is one trace ends with the same value in the other. *)
+     this means that any component that changed in one trace ends with the same value in the other. *)
+(* APT Could be clearer *)
   Definition sameDifference (m m' n n' : MachineState) :=
     forall k,
       (m k <> m' k \/ n k <> n' k) ->
@@ -197,6 +224,7 @@ Section WITH_MAPS.
      in any K-variant of the first state where K is the set of components that are
      Sealed in that state, the step has the same observable behavior and makes
      the same changes to state. *)
+(* APT: Here, why do we need FindSegmentMP at all, since we've used mstep ? *)
   Definition SealedConfidentialityUE : Prop :=
     forall minit m dm d p m' dm' d' p' n o n' p'' o',
       FindSegmentMP (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,(dm,d),p) (finished (m',(dm',d'),p'))) ->
@@ -230,6 +258,8 @@ Section WITH_MAPS.
       forall a,
         sc mcall a = true ->
         mcall (Mem a) = m' (Mem a).      
+(* APT: Would be good to write text that walks through this in detail. *)
+
 
   (* We could use this as our ultimate specification, or just to guide our trace
      properties. Note that this rule cares nothing for what happens to the state of
@@ -249,11 +279,14 @@ Section WITH_MAPS.
     CallRule.
   Proof.
   Admitted.
+(* APT: Won't we need something more to prove justRet ? *)
+
   
   (* We can make a similar argument about confidentiality, though it may be odd to
      think of a confidentiality call rule. We can at least think of the following as
      the "caller's view" of confidentiality: that the behavior of the callee does not
      depend on any of the stack state at the call, whether or not the caller claimed it.
+(* APT: Claimed => Sealed ? *)
      Since we aren't modeling any sharing of memory yet, this means that the functions
      communicate only through registers. *)
   Definition ConfRule : Prop :=
@@ -284,6 +317,8 @@ Section WITH_MAPS.
       FindSegmentMP P (minit, pOf minit) initC M ->
       head M = (m,(dm,d),p) ->
       variantOf (fun k => dm k = Sealed d' \/ dm k = Unsealed) m n ->
+(* APT: I think this needs to be (fun k => exists d', dm k = Sealed d' \/ ...).  
+      Anyhow, why not just say (fun k => dmcall k <> Outside),  as above ?*)
       FindSegmentMP P (n,p) (dm,d) N ->
       ObsOfMCP M MO ->
       ObsOfMCP N NO ->

@@ -186,8 +186,11 @@ Section WITH_MAPS.
 
   (* ***** Control Flow Properties ***** *)
 
+
   (* Finally, we also need to consider control flow properties. These are included here because
      they don't really change in interesting ways between the different models. *)
+(* APT: Suggest moving these into SubroutineSimpl.v instead, esp. since ReturnIntegrity is
+  (implicitly) part of your call rule. *)
   
   Definition ControlSeparation : Prop :=
     forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,

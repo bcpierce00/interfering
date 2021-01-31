@@ -12,6 +12,7 @@ Require Import TraceProperties.
    to allow the immediate callee to access it. Shared indicates memory that has been
    explicitly exempted from the sealing convention; once shared, it cannot be sealed
    until the function activation that sealed it has returned.
+(* APT: "sealed" -> "shared" ? *)
 
    Unlike sealing, sharing and passing require compiler input to identify instructions
    that share or pass a location. A typical passing instruction is a write to the end
