@@ -1,25 +1,22 @@
 Require Import List.
 Import ListNotations.
 Require Import Bool.
-Require Import Omega.
+Require Import Nat.
 Require Import Trace.
 Require Import Machine.
 Require Import ObsTrace.
 
 Section DOMAIN_MODEL.
 
-  (* In general, a domain is a coherent logical division of the state that
-     has meaning in one or more of our security properties. 
-APT:  Note that state includes both registers and memory (right?)
-     Domain models will get
-     complicated, but let's start with a simple one: the simple stack. 
-APT:  Identify this as simple subroutines with no arguments passed on the stack
-     and no sharing.
+  (* In general, a domain is a coherent logical division of the state (both memory and registers)
+     that has meaning in one or more of our security properties. Domain models will get
+     complicated, but let's start with a simple one: the simple stack, in which we have 
+     subroutines with no arguments passed on the stack and no sharing.
 
      Here the state is divided into "Outside" - anything that isn't part of the
      stack - and Sealed and Unsealed portions of the stack. Sealed and Unsealed
-     can be thought of as a contract between the active function and its caller.  
-APT: or callers, plural?
+     can be thought of as a contract between the active function and its caller(s).
+
      The first contract of stack safety is: the caller identifies memory that
      it will need after the call, and that memory is expected to remain unchanged.
      This is, in security terms, integrity - the callee cannot subvert the caller's
@@ -39,12 +36,12 @@ APT: or callers, plural?
      +======================================
        Other          Sealed (0)   Unsealed
 
-APT: Explain the depth annotation briefly here.
+     The Sealed mark on A's frame is annotated with the depth of the call that sealed it,
+     in this case 0.
 
      B can use unsealed memory however it likes without violating A's contract. It can
      also modify other memory and registers without violating stack safety. When it makes
-     a call, however, say to another instance of A, (A0), it may seal some memory for its own
-APT: Is it important that A0 is another instance of A? Otherwise it would be clearer to use C,D.
+     a call, however, say to another function C, it may seal some memory for its own
      future use after the return.
 
                                              sp
@@ -53,9 +50,8 @@ APT: Is it important that A0 is another instance of A? Otherwise it would be cle
      +==================================================
        Other          Sealed (0)   Sealed (1)  Unsealed
 
-     When A0 returns, B's frame will be unsealed. Perhaps B will deallocate additional data,
-APT: "additional" to what?
-     then call another function C; it will reseal the data it still needs, and only that data.
+     When C returns, B's frame will be unsealed. Perhaps B will deallocate some data,
+     then call another function D; it will reseal the data it still needs, and only that data.
 
                                           sp
      +===============================================
@@ -64,10 +60,10 @@ APT: "additional" to what?
             O          S (0)       S (1)     U
 
      Now consider the possibility that B has some secret data, say a capability on some
-     system critical resource, that A and C should not access. Clearly, A0 should not read
+     system critical resource, that A, C and D should not access. Clearly, D should not read
      B's sealed memory to find it. But it is possible that it could be left behind in the
-     memory B deallocated, so that to C, it is not sealed. So "sealed" is inherently an
-     integrity marker, and confidentiality is stronger: a given function activation should not
+     memory B deallocated, so that to D, it is not sealed. So "sealed" is inherently
+     related to integrity, and confidentiality is stronger: a given function activation should not
      be able to read any stack memory that it did not itself initialize.
 
 APT: I'm not sure what you mean by "marker." Are you saying that the notion of sealing is 
@@ -137,11 +133,11 @@ Section WITH_MAPS.
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, d) := prev in
     match AnnotationOf cdm (m (Reg PC)) with
-    | Some call => (* In our calling convention, the caller claims its frame by setting the stack pointer.
-                      Then at the instruction that completes a call, everything below the SP that wasn't
-                      already claimed becomes Claimed with the current depth. Everything above retains
-                      its prior status, presumably Unsealed. Finally, the current depth is incremented. *)
-(* APT: Claimed => Sealed ? *)
+    | Some call => (* On a call, we check what the sealing convention wants to seal.
+                      If a component is Sealed, it can't be sealed again under the new depth.
+                      Everything else retains its old status, presumably Unsealed. In the standard,
+                      stack pointer-based sealing convention, sc seals everything below the stack
+                      pointer, but previously sealed frames retain their old owners. *)
       let dm' := fun k =>
                     match k, dm k with
                     | _, Outside => Outside
@@ -152,11 +148,8 @@ Section WITH_MAPS.
                     | _, _ => Outside
                     end in
       (dm', d+1)
-    | Some ret => (* On a return, we decrement the current depth, for a new current depth of
-                     d-1. Then d-1 no longer needs to have claimed any memory, so anything it had
-                     claimed is returned to the unclaimed pool (i.e., it can adjust the stack pointer
-                     to claim more or less memory on its next call.) *)
-(* APT: Claimed => Sealed ? *)
+    | Some ret => (* On a return, we unseal everything sealed by the highest sealed depth. That will
+                     always be one less than the current depth. Everything else remains. *)
       let dm' := fun k =>
                     match dm k with
                     | Sealed d' =>
@@ -169,18 +162,13 @@ Section WITH_MAPS.
     | _ => (dm, d)
     end.
 
-  (* Here are some helper relations to combine the addition of context to a trace,
-     and the segmenting of the resulting trace by a proposition P.*)
-(* APT: Could these be described in words? *)
-  Definition FindSegmentMP P mp c MCP :=
+  (* Here are some helper relations that take an initial mp state, initial context,
+     and a predicate P on states and contexts, and finds a segment MCP where P holds on all contexts
+     except the last one, if any. *)
+  Definition FindSegmentMP (P : MachineState -> context -> Prop) (mp : MPState) c MCP :=
     exists MCP',
       WithContextMP updateC c (MPTraceOf mp) MCP' /\
       ContextSegment P MCP' MCP.
-
-  Definition FindSegmentM P m c MC :=
-    exists MC',
-      WithContextM updateC c (MTraceOf m) MC' /\
-      ContextSegmentM P MC' MC.
   
   (* Now it's quite simple to define an "ultra eager" integrity property:
      if we run from any initial state, updating the context as above, then
@@ -197,11 +185,11 @@ Section WITH_MAPS.
       fst (cstate mcp) k = Sealed d ->
       mstate mcp k = mstate mcp' k.
 
-  (* Full confidentiality is not amenable to an ultra eager property under this model - see
-     ExplicitInitialization.v for an ultra eager property of this sort. Instead we will introduce
-(* APT: That file doesn't seem to exist? *)
-     the notion of confidentiality using a weaker property that only protects Sealed memory.
-     This will show us the tools we need to implement all sorts of confidentiality properties.
+  (* Full confidentiality is not amenable to an ultra eager property under this model.
+     Instead we will introduce the notion of confidentiality using a weaker property that
+     only protects Sealed memory. This will show us the tools we need to implement all sorts
+     of confidentiality properties. The full ultra eager property would require us to explicitly
+     track all writes, to determine when a location has been initialized.
 
      Confidentiality is expressed in terms of "variant" states. A K-variant
      state of m is a state that agrees with m at every component not in the set K. It may also

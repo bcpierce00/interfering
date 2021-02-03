@@ -537,7 +537,7 @@ Section WITH_MAPS.
   Definition ReturnIntegrity : Prop :=
     forall s d minit MCP MCP' m c p m' c' p',
       WithContext updateD initD (MPTraceOf (minit, pOf minit)) MCP ->
-      ContextSegment (fun m dm => exists k sd, dm k = stack s sd /\ depth sd >= d) MCP MCP' ->
+      ContextSegment (fun m '(dm,d') => d' >= d) MCP MCP' ->
       head MCP' = (m,c,p) ->
       Last MCP' (m',c',p') ->
       justRet m m'.
