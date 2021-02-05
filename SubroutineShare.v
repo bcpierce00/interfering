@@ -11,8 +11,7 @@ Require Import TraceProperties.
    Passed indicates memory that is sealed by a function but explicitly designated
    to allow the immediate callee to access it. Shared indicates memory that has been
    explicitly exempted from the sealing convention; once shared, it cannot be sealed
-   until the function activation that sealed it has returned.
-(* APT: "sealed" -> "shared" ? *)
+   until the function activation that shared it has returned.
 
    Unlike sealing, sharing and passing require compiler input to identify instructions
    that share or pass a location. A typical passing instruction is a write to the end
@@ -132,12 +131,15 @@ Section WITH_MAPS.
   Definition CallRule : Prop :=
     forall minit MCP mcall dmcall dcall pcall mp o m' c' p' MCP',
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
-      InTrace (mcall,(dmcall,dcall),pcall) MCP ->
-      AnnotationOf cdm (mcall (Reg PC)) = Some call ->
-      mpstep (mcall,pcall) = Some (mp,o) ->
+      InTrace (mcall,(dmcall,dcall),pcall) MCP -> (* From any state that is a call *)
+      AnnotationOf cdm (mcall (Reg PC)) = Some call -> (* As determined by the code annotations *)
+      mpstep (mcall,pcall) = Some (mp,o) -> (* That has a successful step, i.e. doesn't immediately fail-stop *)
+
+      (* We can look ahead to the next state whose depth is <= dcall, and take the intervening trace,
+         or an infinite trace if there is no such state. *)
       FindSegmentMP updateC (fun m '(dm,d) => d > dcall) mp (updateC mcall (dmcall,dcall)) MCP' ->
       Last MCP' (m',c',p') ->
-      justRet (ms mp) m' /\
+      (* And that state will maintain the values of all sealed addresses. *)
       forall a,
         sc mcall a = true ->
         mcall (Mem a) = m' (Mem a).      
@@ -160,18 +162,22 @@ Section WITH_MAPS.
      confidentiality rule. We now allow reading of shared memory, and passed by the
      appropriate function. *)
   Definition ConfRule : Prop :=
-    forall minit MCP mcall dmcall dcall pcall n MCP' N MO NO,
+    forall minit MCP mcall dmcall dcall pcall m p o n MCP' N MO NO,
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
-      InTrace (mcall,(dmcall,dcall),pcall) MCP ->
+      InTrace (mcall,(dmcall,dcall),pcall) MCP -> (* Once again we consider each successful call *)
       AnnotationOf cdm (mcall (Reg PC)) = Some call ->
-      variantOf (fun k => dmcall k = Unsealed \/ Inaccessible (dmcall,dcall) k) mcall n ->
-      (* Clause 1: output up to return identical *)
-      PrefixUpTo (fun '(_,(dm,d),_) => d = dcall) MCP MCP' ->
-      FindSegmentMP updateC (fun _ '(dm,d) => d = dcall) (n,pcall) (dmcall,dcall) N ->
+      mpstep (mcall,pcall) = Some (m,p,o) ->
+
+      (* And take any variant state of the first state within it *)
+      variantOf (fun k => dmcall k <> Outside) m n ->
+      (* If we trace from both states until they each return... *)
+      FindSegmentMP updateC (fun _ '(dm,d) => d = dcall) (m,p) (dmcall,dcall) MCP' ->
+      FindSegmentMP updateC (fun _ '(dm,d) => d = dcall) (n,p) (dmcall,dcall) N ->
+      (* They should have the same observable behavior *)
       ObsOfMCP MCP' MO ->
       ObsOfMCP N NO ->
       ObsOfMP MO ~=_O ObsOfMP NO /\
-      (* Clause 2: if return, then state changes the same *)
+      (* And when they return, the states should have changed in identical ways. *)
       (forall m' dm' p',
           Last MCP' (m',(dm',dcall),p') ->
           exists n' dm'',

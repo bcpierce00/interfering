@@ -25,7 +25,8 @@ Section DOMAIN_MODEL.
      The second contract of stack safety is that given fixed arguments, the callee
      always behaves the same regardless of the calling context. In the simple stack,
      all arguments are Outside the stack itself. In security terms, this is confidentiality,
-     and we express it as a noninterference property.
+     and we express it as a noninterference property. We will come back to it after
+     the domain model, which is only relevant to integrity.
 
      For example, consider a function A that calls another function, B. At the
      point of entry to B, A has identified some memory that it expects to remain
@@ -58,22 +59,6 @@ Section DOMAIN_MODEL.
      | Other memory | A's frame  | B's fr | Available
      +===============================================
             O          S (0)       S (1)     U
-
-     Now consider the possibility that B has some secret data, say a capability on some
-     system critical resource, that A, C and D should not access. Clearly, D should not read
-     B's sealed memory to find it. But it is possible that it could be left behind in the
-     memory B deallocated, so that to D, it is not sealed. So "sealed" is inherently
-     related to integrity, and confidentiality is stronger: a given function activation should not
-     be able to read any stack memory that it did not itself initialize.
-
-APT: I'm not sure what you mean by "marker." Are you saying that the notion of sealing is 
-     not relevant for defining confidentiality?  If so, why are we discussing the latter in this section at all?
-
-     So the domains of this simplified model are Other, Unsealed, and Sealed indexed with
-     the depth of the owning call; as only one caller can have a given depth at a time
-     this is sufficient to uniquely identify it.
-APT: I don't follow the logic of "So" 
-
  *)
 
   Inductive StackDomain :=
@@ -95,10 +80,8 @@ Section WITH_MAPS.
      by the compiler. They will help us build our initial DomainMap and identify
      calls and returns in the code, in the form of annotations. *)
 
-  Variable cdm : CodeMap'.
-(* APT: Move below to where it is explained? *)
-  Variable sm : Addr -> bool.   
-(* APT : explain what sm means *)
+  (* sm is a simplified stack map that merely identifies whether an address is in the stack *)
+  Variable sm : Addr -> bool.
   Variable pOf : MachineState -> PolicyState. (* Policy initialization function. *)
 
   (* The stack pointer is by far the most typical, but technically other mechanisms could be
@@ -106,8 +89,8 @@ Section WITH_MAPS.
      the machine state (e.g., by comparing them to the stack pointer)
      and attempting to re-seal already sealed addresses is a no-op. *)
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
-  Variable sc : SealingConvention.
-(* APT: How about instantiating this to a concrete function matching the description in updateC below? Would help clarify exposition. *)
+  Definition sc : SealingConvention :=
+    fun m a => wlt a (m (Reg SP)).
 
   (* We will use the machinery defined at the end of Machine.v to extend traces of the
      machine with context that will inform our properties. In this case the context is a
@@ -129,7 +112,10 @@ Section WITH_MAPS.
     (dm, O).
 
   (* Our update function checks an "annotation" on the code being executed.
-     Annotations are defined in Machine.v, and the ones that matter here are call and return. *)
+     Annotations are defined in Machine.v, and the ones that matter here are call and return.
+     The annotations are carried by a Code Map, which also tells us which addresses are code. *)
+  Variable cdm : CodeMap'.
+  
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, d) := prev in
     match AnnotationOf cdm (m (Reg PC)) with
@@ -176,20 +162,28 @@ Section WITH_MAPS.
      k has the same value in the following state (if any.) We term this property
      ultra eager because it "checks" at each step that components that are inaccessible
      don't change, the most frequently it is possible to check. *)
-(* APT: Could this first be stated more simply just in terms of mstep? 
-   At the least, state explicitly that the segment here is of length 2, so
-   we are essentially looking at single steps. *)
   Definition SimpleStackIntegrityUE : Prop :=
-    forall minit k d mcp mcp',
-      FindSegmentMP (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
-      fst (cstate mcp) k = Sealed d ->
-      mstate mcp k = mstate mcp' k.
+    forall minit k d m c p m' p' o MCP,
+      WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
+      InTrace (m,c,p) MCP ->
+      mpstep (m,p) = Some (m',p',o) ->
+      fst c k = Sealed d ->
+      m k = m' k.
 
-  (* Full confidentiality is not amenable to an ultra eager property under this model.
-     Instead we will introduce the notion of confidentiality using a weaker property that
-     only protects Sealed memory. This will show us the tools we need to implement all sorts
-     of confidentiality properties. The full ultra eager property would require us to explicitly
-     track all writes, to determine when a location has been initialized.
+  (* In addition to integrity, we have a confidentiality property. Consider in our
+     example when B called C and then D. Suppose that B has some secret data, say a capability on some
+     system critical resource, that A, C and D should not access. Clearly, D should not read
+     B's sealed memory to find it. But it is possible that it could be left behind in the
+     memory B deallocated, so that to D, it is not sealed. So we could use "sealedness" to determine
+     when something should be confidential, but it is not sufficient.
+
+     Confidentiality requires that we protect the entire stack from being read until it's initialized.
+     This is not amenable to an ultra eager property under this model. Instead we will introduce
+     the notion of confidentiality using a separate property that only protects Sealed memory, whether or
+     not it has been initialized. We'll call it Sealed Confidentiality. This will show us the tools
+     we need to implement all sorts of confidentiality properties. The full ultra eager property would
+     require us to explicitly track all writes, to determine when a location has been initialized.
+     That is beyond our scope at present.
 
      Confidentiality is expressed in terms of "variant" states. A K-variant
      state of m is a state that agrees with m at every component not in the set K. It may also
@@ -199,9 +193,8 @@ Section WITH_MAPS.
   Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
     forall k, ~ K k -> m k = n k.
   
-  (* Above we say that each step should change the state in the same way regardless of variation;
-     this means that any component that changed in one trace ends with the same value in the other. *)
-(* APT Could be clearer *)
+  (* The idea is that when variant states step, the resulting states should agree on any component
+     that changed. *)
   Definition sameDifference (m m' n n' : MachineState) :=
     forall k,
       (m k <> m' k \/ n k <> n' k) ->
@@ -212,11 +205,11 @@ Section WITH_MAPS.
      in any K-variant of the first state where K is the set of components that are
      Sealed in that state, the step has the same observable behavior and makes
      the same changes to state. *)
-(* APT: Here, why do we need FindSegmentMP at all, since we've used mstep ? *)
   Definition SealedConfidentialityUE : Prop :=
-    forall minit m dm d p m' dm' d' p' n o n' p'' o',
-      FindSegmentMP (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,(dm,d),p) (finished (m',(dm',d'),p'))) ->
-      variantOf (fun k => dm k = Sealed d) m n ->
+    forall minit m c p m' p' d n o n' p'' o' MCP,
+      WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
+      InTrace (m,c,p) MCP ->
+      variantOf (fun k => fst c k = Sealed d) m n ->
       mpstep (m,p) = Some (m',p',o) ->
       mpstep (n,p) = Some (n',p'',o') ->
       sameDifference m m' n n' /\ p = p'' /\ o = o'.
@@ -237,16 +230,18 @@ Section WITH_MAPS.
   Definition CallRule : Prop :=
     forall minit MCP mcall dmcall dcall pcall mp o m' c' p' MCP',
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
-      InTrace (mcall,(dmcall,dcall),pcall) MCP ->
-      AnnotationOf cdm (mcall (Reg PC)) = Some call ->
-      mpstep (mcall,pcall) = Some (mp,o) ->
+      InTrace (mcall,(dmcall,dcall),pcall) MCP -> (* From any state that is a call *)
+      AnnotationOf cdm (mcall (Reg PC)) = Some call -> (* As determined by the code annotations *)
+      mpstep (mcall,pcall) = Some (mp,o) -> (* That has a successful step, i.e. doesn't immediately fail-stop *)
+
+      (* We can look ahead to the next state whose depth is <= dcall, and take the intervening trace,
+         or an infinite trace if there is no such state. *)
       FindSegmentMP (fun m '(dm,d) => d > dcall) mp (updateC mcall (dmcall,dcall)) MCP' ->
       Last MCP' (m',c',p') ->
-      justRet (ms mp) m' /\
+      (* And that state will maintain the values of all sealed addresses. *)
       forall a,
         sc mcall a = true ->
         mcall (Mem a) = m' (Mem a).      
-(* APT: Would be good to write text that walks through this in detail. *)
 
 
   (* We could use this as our ultimate specification, or just to guide our trace
@@ -267,29 +262,31 @@ Section WITH_MAPS.
     CallRule.
   Proof.
   Admitted.
-(* APT: Won't we need something more to prove justRet ? *)
-
   
   (* We can make a similar argument about confidentiality, though it may be odd to
      think of a confidentiality call rule. We can at least think of the following as
      the "caller's view" of confidentiality: that the behavior of the callee does not
-     depend on any of the stack state at the call, whether or not the caller claimed it.
-(* APT: Claimed => Sealed ? *)
+     depend on any of the stack state at the call.
+
      Since we aren't modeling any sharing of memory yet, this means that the functions
      communicate only through registers. *)
   Definition ConfRule : Prop :=
-    forall minit MCP mcall dmcall dcall pcall n MCP' N MO NO,
+    forall minit MCP mcall dmcall dcall pcall m p o n MCP' N MO NO,
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
-      InTrace (mcall,(dmcall,dcall),pcall) MCP ->
+      InTrace (mcall,(dmcall,dcall),pcall) MCP -> (* Once again we consider each successful call *)
       AnnotationOf cdm (mcall (Reg PC)) = Some call ->
-      variantOf (fun k => dmcall k <> Outside) mcall n ->
-      (* Clause 1: output up to return identical *)
-      PrefixUpTo (fun '(_,(dm,d),_) => d = dcall) MCP MCP' ->
-      FindSegmentMP (fun _ '(dm,d) => d = dcall) (n,pcall) (dmcall,dcall) N ->
+      mpstep (mcall,pcall) = Some (m,p,o) ->
+
+      (* And take any variant state of the first state within it *)
+      variantOf (fun k => dmcall k <> Outside) m n ->
+      (* If we trace from both states until they each return... *)
+      FindSegmentMP (fun _ '(dm,d) => d = dcall) (m,p) (dmcall,dcall) MCP' ->
+      FindSegmentMP (fun _ '(dm,d) => d = dcall) (n,p) (dmcall,dcall) N ->
+      (* They should have the same observable behavior *)
       ObsOfMCP MCP' MO ->
       ObsOfMCP N NO ->
       ObsOfMP MO ~=_O ObsOfMP NO /\
-      (* Clause 2: if return, then state changes the same *)
+      (* And when they return, the states should have changed in identical ways. *)
       (forall m' dm' p',
           Last MCP' (m',(dm',dcall),p') ->
           exists n' dm'',
@@ -393,6 +390,40 @@ Section WITH_MAPS.
   Proof.
   Admitted.
 
+  (* ***** Control Flow Properties ***** *)
+
+    Definition ControlSeparation : Prop :=
+    forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,
+      InTrace (m1,p1) (MPTraceOf (minit, pOf minit)) ->
+      mpstep (m1,p1) = Some (m2, p2,o) ->
+      cdm (m1 (Reg PC)) = inFun f1 ann1 ->
+      cdm (m2 (Reg PC)) = inFun f2 ann2 ->
+      f1 <> f2 ->
+      AnnotationOf cdm (m1 (Reg PC)) = Some call \/
+      AnnotationOf cdm (m1 (Reg PC)) = Some ret.
+
+  Definition ReturnIntegrity : Prop :=
+    forall d minit MCP m c p m' c' p',
+      let P := fun m c => snd c >= d in
+      FindSegmentMP P (minit, pOf minit) initC MCP ->
+      head MCP = (m,c,p) ->
+      Last MCP (m',c',p') ->
+      justRet m m'.
+
+  Variable em:EntryMap.
+  
+  Definition EntryIntegrity : Prop :=
+  forall minit mp1 m2 p2 o,
+    InTrace mp1 (MPTraceOf (minit, pOf minit)) ->
+    mpstep mp1 = Some (m2,p2,o) ->
+    AnnotationOf cdm (ms mp1 (Reg PC)) = Some call ->
+    em (m2 (Reg PC)).
+
+  Definition WellBracketedControlFlow  : Prop :=
+    ControlSeparation /\
+    ReturnIntegrity /\
+    EntryIntegrity.
+  
   (* Continue to SubroutineShare.v, where we enhance the model with sharing between calls. *)
 
 End WITH_MAPS.

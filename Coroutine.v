@@ -149,8 +149,8 @@ Section WITH_MAPS.
       mstate mcp k = mstate mcp' k.
 
   (* We can actually do ultra eager confidentiality for coroutines without any more complexity,
-     because coroutine properties don't care about allocation. That only comes when subroutine properties
-     are layered in. *)
+     because coroutine properties don't care about allocation and initialization. That only comes
+     when subroutine properties are layered in. *)
   Definition CoroutineConfidentialityUE : Prop :=
     forall minit sid m c p m' c' p' p'' n n' o o',
       FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,c,p) (finished (m',c',p'))) ->
@@ -158,6 +158,23 @@ Section WITH_MAPS.
       mpstep (m,p) = Some (m',p',o) ->
       mpstep (n,p) = Some (n',p'',o') ->
       sameDifference m m' n n' /\ p = p'' /\ o = o'.
+
+  (* We presumably want a Yield Rule that is equivalent to the Call Rule. *)
+  Definition CallRule : Prop :=
+    forall minit MCP sid my cy py mp o m' c' p' MCP',
+      WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
+      InTrace (my,cy,py) MCP -> (* From any state that is a yield *)
+      AnnotationOf cdm (my (Reg PC)) = Some yield -> (* As determined by the code annotations *)
+      activeStack sm my = sid -> (* With active stack sid *)
+      mpstep (my,py) = Some (mp,o) -> (* That has a successful step, i.e. doesn't immediately fail-stop *)
+
+      (* We can look ahead to the next state whose stack is sid *)
+      FindSegmentMP updateC (fun m c => activeStack sm m <> sid) mp (updateC my cy) MCP' ->
+      Last MCP' (m',c',p') ->
+      (* And that state will maintain the values of all addresses in sid. *)
+      forall a sd,
+        fst cy (Mem a) = Instack sid sd ->
+        my (Mem a) = m' (Mem a).      
   
   Definition StackIntegrityEager : Prop :=
     forall minit MCP d,
@@ -168,6 +185,30 @@ Section WITH_MAPS.
     forall minit MCP sid,
       FindSegmentMP updateC (fun m c => activeStack sm m = sid) (minit, pOf minit) initC MCP ->
       TraceIntegrityEager (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) MCP.
+
+  (* We can do a confidentiality rule similarly *)
+  Definition ConfRule : Prop :=
+    forall minit MCP sid my cy py m p o n MCP' N MO NO,
+      WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
+      InTrace (my,cy,py) MCP -> (* Once again we consider each successful call *)
+      AnnotationOf cdm (my (Reg PC)) = Some yield ->
+      mpstep (my,py) = Some (m,p,o) ->
+
+      (* And take any variant state of the first state within it *)
+      variantOf (fun k => forall sd, fst cy k <> Instack sid sd) m n ->
+      (* If we trace from both states until they each return... *)
+      FindSegmentMP updateC (fun m c => activeStack sm m <> sid) (m,p) cy MCP' ->
+      FindSegmentMP updateC (fun m c => activeStack sm m <> sid) (n,p) cy N ->
+      (* They should have the same observable behavior *)
+      ObsOfMCP MCP' MO ->
+      ObsOfMCP N NO ->
+      ObsOfMP MO ~=_O ObsOfMP NO /\
+      (* And when they return, the states should have changed in identical ways. *)
+      (forall m' c' p',
+          Last MCP' (m',c',p') ->
+          exists n' c'',
+            Last N (n',c'',p') /\
+            sameDifference my m' n n').
   
   Definition StackConfidentialityEager : Prop :=
     forall minit MCP d sid,
@@ -189,8 +230,6 @@ Section WITH_MAPS.
 
   (* Finally, we also need to consider control flow properties. These are included here because
      they don't really change in interesting ways between the different models. *)
-(* APT: Suggest moving these into SubroutineSimpl.v instead, esp. since ReturnIntegrity is
-  (implicitly) part of your call rule. *)
   
   Definition ControlSeparation : Prop :=
     forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,
