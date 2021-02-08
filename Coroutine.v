@@ -160,7 +160,7 @@ Section WITH_MAPS.
       sameDifference m m' n n' /\ p = p'' /\ o = o'.
 
   (* We presumably want a Yield Rule that is equivalent to the Call Rule. *)
-  Definition CallRule : Prop :=
+  Definition YieldRule : Prop :=
     forall minit MCP sid my cy py mp o m' c' p' MCP',
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
       InTrace (my,cy,py) MCP -> (* From any state that is a yield *)
@@ -187,7 +187,7 @@ Section WITH_MAPS.
       TraceIntegrityEager (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) MCP.
 
   (* We can do a confidentiality rule similarly *)
-  Definition ConfRule : Prop :=
+  Definition YieldConfRule : Prop :=
     forall minit MCP sid my cy py m p o n MCP' N MO NO,
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
       InTrace (my,cy,py) MCP -> (* Once again we consider each successful call *)
@@ -246,7 +246,7 @@ Section WITH_MAPS.
     forall mp mp1 mp2 MPout,
       InTrace mp1 (MPTraceOf mp) ->
       AnnotationOf cdm (ms mp1 (Reg PC)) = Some yield ->
-      SplitInclusive (fun mp2 => sm (ms mp1 (Reg PC)) = sm (ms mp (Reg PC))) (MPTraceOf mp) MPout (MPTraceOf mp2) ->
+      SplitInclusive (fun mp2 => sm (ms mp1 (Reg SP)) = sm (ms mp (Reg SP))) (MPTraceOf mp) MPout (MPTraceOf mp2) ->
       justRet (ms mp1) (ms mp2).
 
   Definition ReturnIntegrity : Prop :=

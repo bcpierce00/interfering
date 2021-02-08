@@ -35,7 +35,7 @@ Section DOMAIN_MODEL.
      +======================================
      | Other memory | A's frame  | Available
      +======================================
-       Other          Sealed (0)   Unsealed
+       Outside        Sealed (0)   Unsealed
 
      The Sealed mark on A's frame is annotated with the depth of the call that sealed it,
      in this case 0.
@@ -49,7 +49,7 @@ Section DOMAIN_MODEL.
      +==================================================
      | Other memory | A's frame  | B's frame | Available
      +==================================================
-       Other          Sealed (0)   Sealed (1)  Unsealed
+       Outside        Sealed (0)   Sealed (1)  Unsealed
 
      When C returns, B's frame will be unsealed. Perhaps B will deallocate some data,
      then call another function D; it will reseal the data it still needs, and only that data.
@@ -127,10 +127,10 @@ Section WITH_MAPS.
       let dm' := fun k =>
                     match k, dm k with
                     | _, Outside => Outside
-                    | Mem a, sd =>
+                    | Mem a, Unsealed =>
                       if sc m a
                       then Sealed d
-                      else sd
+                      else Unsealed
                     | _, _ => Outside
                     end in
       (dm', d+1)
@@ -212,7 +212,7 @@ Section WITH_MAPS.
       variantOf (fun k => fst c k = Sealed d) m n ->
       mpstep (m,p) = Some (m',p',o) ->
       mpstep (n,p) = Some (n',p'',o') ->
-      sameDifference m m' n n' /\ p = p'' /\ o = o'.
+      sameDifference m m' n n' /\ p' = p'' /\ o = o'.
 
   (* Some things to note: we have hypotheses that both (m,p) and (n,p) step. So we do not consider
      variant states in which (n,p) has a policy violation. We also require that the policy states
@@ -251,7 +251,7 @@ Section WITH_MAPS.
      change, it guarantees that they are unchanged if and when the function returns. *)
   Definition SimpleStackIntegrityEager : Prop :=
     forall minit MCP d d' k mcp mcp',
-      FindSegmentMP  (fun m c => snd c = d) (minit, pOf minit) initC MCP ->
+      FindSegmentMP  (fun m c => snd c >= d) (minit, pOf minit) initC MCP ->
       mcp = head MCP ->
       fst (cstate mcp) k = Sealed d' ->
       Last MCP mcp' ->
@@ -280,8 +280,8 @@ Section WITH_MAPS.
       (* And take any variant state of the first state within it *)
       variantOf (fun k => dmcall k <> Outside) m n ->
       (* If we trace from both states until they each return... *)
-      FindSegmentMP (fun _ '(dm,d) => d = dcall) (m,p) (dmcall,dcall) MCP' ->
-      FindSegmentMP (fun _ '(dm,d) => d = dcall) (n,p) (dmcall,dcall) N ->
+      FindSegmentMP (fun _ '(dm,d) => d >= dcall) (m,p) (dmcall,dcall) MCP' ->
+      FindSegmentMP (fun _ '(dm,d) => d >= dcall) (n,p) (dmcall,dcall) N ->
       (* They should have the same observable behavior *)
       ObsOfMCP MCP' MO ->
       ObsOfMCP N NO ->
@@ -297,13 +297,11 @@ Section WITH_MAPS.
      representing calls. This only needs to be strong enough to support the caller-side
      reasoning, so here is an example of such an eager (but not ultra-eager) property. *)
   Definition SimpleStackConfidentialityEager : Prop :=
-    forall minit M MO d d' m dm p n N NO,
+    forall minit M MO d m dm p n N NO,
       let P := (fun m c => snd c = d) in
       FindSegmentMP P (minit, pOf minit) initC M ->
       head M = (m,(dm,d),p) ->
-      variantOf (fun k => dm k = Sealed d' \/ dm k = Unsealed) m n ->
-(* APT: I think this needs to be (fun k => exists d', dm k = Sealed d' \/ ...).  
-      Anyhow, why not just say (fun k => dmcall k <> Outside),  as above ?*)
+      variantOf (fun k => dm k <> Outside) m n ->
       FindSegmentMP P (n,p) (dm,d) N ->
       ObsOfMCP M MO ->
       ObsOfMCP N NO ->

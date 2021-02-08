@@ -82,7 +82,7 @@ Section WITH_MAPS.
     | Some call =>
       let dm' := fun k =>
                     match k, dm k with                      
-                    | _, Sealed d => Sealed d
+                    | _, Sealed d => Sealed d (* Fix alll this *)
                     | _, Outside => Outside
                     | Mem a, _ =>
                       if sc m a
@@ -148,7 +148,7 @@ Section WITH_MAPS.
      context types) to implement the integrity property. *)
   Definition StackIntegrityEager : Prop :=
     forall minit MCP d,
-      FindSegmentMP updateC (fun m c => snd c = d) (minit, pOf minit) initC MCP ->
+      FindSegmentMP updateC (fun m c => snd c >= d) (minit, pOf minit) initC MCP ->
       TraceIntegrityEager (Inaccessible (cstate (head MCP))) MCP.
 
   (* And it ought to imply the call rule. *)
@@ -186,7 +186,7 @@ Section WITH_MAPS.
 
   Definition StackConfidentialityEager : Prop :=
     forall minit MCP d m dm p,
-      let P := (fun m c => snd c = d) in
+      let P := (fun m c => snd c >= d) in
       let K := (fun k => Inaccessible (dm,d) k \/ dm k = Unsealed) in
       FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
       head MCP = (m,(dm,d),p) ->
