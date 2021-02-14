@@ -1452,11 +1452,11 @@ Each component will be assigned to a {\em domain}, which may be {\em Outside} of
 stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed} by a particular
 depth.
 
-\[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{n}\]
+\[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth}\]
 \[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
-  \times (n \in \mathbb{N}) \]
+  \times (\depth \in \mathbb{N}) \]
 
-An initial context \(\context_0 = \domMap_0 \times 0\) where \(\domMap_0\) maps
+An initial context \(\context_0 = \domMap_0, 0\) where \(\domMap_0\) maps
 the stack to \(\unsealed\) and all other addresses and all registers to \(\outside\).
 Then at each step we update the context according to the context-step function,
 \(\stepsto_C\), which we will define in terms of the operations
@@ -1466,15 +1466,15 @@ and \(\pop{\domMap}{n}\), pronounced ``push'' and ``pop'' and defined as follows
 \[
 (\push{\domMap}{n}{\components}) ~ \component =
 \begin{cases}
-  \sealed{n} & \text{if } \domMap ~ \component = \unsealed
-               \text{ and } \component \in \components \\
+  \sealed{\depth} & \text{if } \domMap ~ \component = \unsealed
+                    \text{ and } \component \in \components \\
   \domMap ~ \component & \text{else} \\
 \end{cases}
 \]
 \[
 (\pop{\domMap}{n}) ~ \component =
 \begin{cases}
-  \unsealed & \text{if } \domMap ~ \component = \sealed{n-1} \\
+  \unsealed & \text{if } \domMap ~ \component = \sealed{\depth-1} \\
   \domMap ~ \component & \text{else} \\
 \end{cases}
 \]
@@ -1487,13 +1487,13 @@ the stack pointer. The {\sc Default} rule applies only if neither of the others 
 \begin{minipage}{.4\textwidth}
   \judgmenttwo{\(\mach \stepsto \mach'\)}
               {\(\codemap ~ (\mach ~ \PCname) = \funid, \mathbf{Some} ~ \callmap\)}
-              {\(\mach,(\domMap,n) \stepsto_C \mach',(\push{\domMap}{n}{\sealcon ~ \mach},n+1)\)}
+              {\(\mach,(\domMap,\depth) \stepsto_C \mach',(\push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1)\)}
 \end{minipage}
 \hspace*{0.1\textwidth}
 \begin{minipage}{.4\textwidth}
   \judgmenttwo{\(\mach \stepsto \mach'\)}
               {\(\codemap ~ (\mach ~ \PCname) = \funid, \mathbf{Some} ~ \retmap\)}
-              {\(\mach,(\domMap,n) \stepsto_C \mach',(\pop{\domMap}{n},n-1)\)}
+              {\(\mach,(\domMap,\depth) \stepsto_C \mach',(\pop{\domMap}{\depth},\depth-1)\)}
 \end{minipage}
 \end{center}
 
@@ -1505,9 +1505,52 @@ the stack pointer. The {\sc Default} rule applies only if neither of the others 
 
 \subsection{Ultra-eager Integrity}
 
+Our first property will be {\em ultra eager}, meaning that it will be quantified over each step
+of execution from any initial state. The criterion for integrity is simple: sealed components do not
+change.
+
+\definition A system enjoys {\em ultra-eager integrity} if, for any initial state \(\mach_0\),
+its initial context \(\context_0\), and its initial policy state \(\pol_0\), and each
+pair of adjacent states \(\mach,(\domMap,\depth),\pol \stepsto_C \mach',\context',\pol'\) in
+the induced trace from \(\mach_0,\context_0,\pol_0\), if \(\domMap ~ \component = \sealed{\depth'}\)
+for any \(\depth'\), then \(\mach(\component) = \mach'(\component)\).
+
+
 \subsection{Eager Integrity and the Call Rule}
 
+\definition Call Rule goes here.
+
+\definition A system enjoys {\em eager integrity} if, for any initial state \(\mach_0\), initial
+context \(\context_0\), and initial policy state \(\pol_0\) and any call depth \(\depth\), each segment
+\(\MCPTrace\) taken from the induced trace from \(\mach_0,\context_0,\pol_0\) by
+\(\prop (\domMap,\depth') = \depth' \geq \depth\) satisfies \(\pi_m(\head ~ \MCPTrace) \component =
+\pi_m(\last ~ \MCPTrace) \component\) for all \(\component\) where \(\domMap ~ \component = \sealed{\depth''}\)
+for any \(\depth''\).
+
 \subsection{Eager Confidentiality and the Transparency Rule}
+
+\definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if, for
+all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\). We write
+this \(\mach \approx_\components \nach\).
+
+\definition Machine state pairs \(\mach,\mach'\) and \(\nach,\nach'\) have the {\em same differences}
+if for all components \(\component\) such that \(\mach ~ \component \not = \mach' ~ \component\) or
+\(\nach ~ \component \not = \nach' ~ \component\), \(\mach' ~ \component = \nach' ~ \component\).
+This is written \(\mach,\mach' \diamond \nach,\nach'\).
+
+\definition Transparency Rule
+
+\definition A system enjoys {\em eager confidentiality} if, for any initial state \(\mach_0\), initial
+context \(\context_0\), and initial policy state \(\pol_0\) and any call depth \(\depth\), each segment
+\(\MCPTrace\) taken from the induced trace from \(\mach_0,\context_0,\pol_0\) by
+\(\prop (\domMap,\depth') = \depth' \geq \depth\) behaves the same as any \(\components\)-variant
+as follows.
+
+\begin{itemized}
+\item
+\item
+\item
+\end{itemized}
 
 \section{Stack Safety with Sharing}
 
