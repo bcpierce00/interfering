@@ -1414,108 +1414,106 @@ an external observer looking at two machine runs cannot (computably)
 distinguish between a machine that steps forever and a machine that
 steps for a long time before producing some output.
 
-\section{Stack Safety, Formally}
-\label{sec:lse-and-wbcf}
+\section{Simple Stack Safety, Formally}
+\label{sec:sss}
 
 We are finally ready for our definition of stack safety. We begin
 by describing how we model knowledge about the program structure,
 then dive into the formal definitions of local state encapsulation and
 well-bracketed control flow, which together constitute stack safety.
+Initially we will focus on a simple stack model, with a single stack
+that doesn't share between caller and callee. All arguments are passed
+in registers.
 
 \subsection{Program Structure}
 
 Our properties and policies assume that the program is annotated
-with various information about its structure.
+by the compiler with information about its structure. At minimum,
+we need to know which addresses contain instructions, which instructions
+constitute calls and returns, and to which function an instruction
+belongs.
 
-\paragraph*{Function Map}
+This information is represented by a {\em code map}, a partial function from
+addresses to pairs consisting of a function identifier and an {\em annotation}.
+An annotation may be {\em call} or {\em return}.
 
-A {\em function map} identifies some addresses as code and assigns
-each to a function. Formally, a function map is a
-partial function from addresses to a function
-identifier drawn from the set \(\FUNIDS\).
-  %
-\[\codemap \in \CODEMAPS = \WORDS \rightharpoonup \FUNIDS\]
-%
-In our running example, instructions 1-13 correspond to {\tt main},
-instructions 20-36 correspond to {\tt f}, and instructions 40-47
-correspond to {\tt g}, which means that the function map would be:
+\[\ann \in \ANNS ::= \callmap + \retmap\]
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \FUNIDS \times \option{\ann}\]
 
-\[ \codemap(w) =
-  \begin{cases}
-    \texttt{main} & \text{if } 1 \leq w \leq 13 \\
-    \texttt{f} & \text{if } 20 \leq w \leq 36 \\
-    \texttt{g} & \text{if } 40 \leq w \leq 47 \\
-    \mathit{undefined} & \text {otherwise}\\
-  \end{cases}
+\paragraph*{Call Depth and Domains}
+
+At any given step of a program, some number of callers have pushed their frames
+onto the stack, ``sealing'' that memory for later use; this number is the current
+{\em call depth}. The call depth, as well as the association between stack addresses
+and sealed frames, are dynamic and cannot be deduced from the state alone, so we will
+track them over the course of an execution as additional context that informs the property.
+
+Each component will be assigned to a {\em domain}, which may be {\em Outside} of the
+stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed} by a particular
+depth.
+
+\[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{n}\]
+\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
+  \times (n \in \mathbb{N}) \]
+
+An initial context \(\context_0 = \domMap_0 \times 0\) where \(\domMap_0\) maps
+the stack to \(\unsealed\) and all other addresses and all registers to \(\outside\).
+Then at each step we update the context according to the context-step function,
+\(\stepsto_C\), which we will define in terms of the operations
+\(\push{\domMap}{n}{\components}\), in which \(\components \subseteq \COMPONENTS\),
+and \(\pop{\domMap}{n}\), pronounced ``push'' and ``pop'' and defined as follows. 
+
+\[
+(\push{\domMap}{n}{\components}) ~ \component =
+\begin{cases}
+  \sealed{n} & \text{if } \domMap ~ \component = \unsealed
+               \text{ and } \component \in \components \\
+  \domMap ~ \component & \text{else} \\
+\end{cases}
+\]
+\[
+(\pop{\domMap}{n}) ~ \component =
+\begin{cases}
+  \unsealed & \text{if } \domMap ~ \component = \sealed{n-1} \\
+  \domMap ~ \component & \text{else} \\
+\end{cases}
 \]
 
-\paragraph*{Call Map}
+Then we can define the context update relation. Let \(\sealcon\) be the sealing convention
+that maps a machine state to a set of components, typically the set of addresses below
+the stack pointer. The {\sc Default} rule applies only if neither of the others do.
 
-A {\em call map} identifies addresses that complete a call sequence,
-abstracting away from any concrete calling convention. Formally, it is
-a partial function from addresses to a natural number, the number of
-arguments and return values of the call.
-  %
-\[\callmap \in \CALLMAPS = \WORDS \rightharpoonup \mathbb{N}\]
-%
-In our running example, the callmap contains two entries: the word 7
-corresponding to the call to {\tt f} which has one argument and one
-return value; and the word 26 corresponding to the call to {\tt g},
-also with a single argument and return value:
-\[ \callmap = \{ 7 \mapsto 2, 26 \mapsto 2\}\]
+\begin{center}
+\begin{minipage}{.4\textwidth}
+  \judgmenttwo{\(\mach \stepsto \mach'\)}
+              {\(\codemap ~ (\mach ~ \PCname) = \funid, \mathbf{Some} ~ \callmap\)}
+              {\(\mach,(\domMap,n) \stepsto_C \mach',(\push{\domMap}{n}{\sealcon ~ \mach},n+1)\)}
+\end{minipage}
+\hspace*{0.1\textwidth}
+\begin{minipage}{.4\textwidth}
+  \judgmenttwo{\(\mach \stepsto \mach'\)}
+              {\(\codemap ~ (\mach ~ \PCname) = \funid, \mathbf{Some} ~ \retmap\)}
+              {\(\mach,(\domMap,n) \stepsto_C \mach',(\pop{\domMap}{n},n-1)\)}
+\end{minipage}
+\end{center}
 
-For concreteness, in a typical calling convention, the call map will
-identify the locations of the $\jal$ instructions representing calls.
-% APT: I found this more confusing than helpful...
-%, in which
-%space for arguments is already allocated, but the mechanism is more
-%general.
-A state in which a call map is defined on the program counter
-is referred to as a {\it call state}.
+\begin{center}
+  \judgment[Default]
+           {\(\mach \stepsto \mach'\)}
+           {\(\mach,\context \stepsto_C \mach',\context\)}
+\end{center}
 
-\paragraph*{Return Map}
-Similarly, a {\em return map} identifies addresses that complete a
-return sequence. Formally, it is a set of words; each one
-is the address of the final jump corresponding to a function return:
-%
-\[\retmap \in \RETMAPS \subseteq \WORDS\]
-%
-In our running example, the return map identifies the $\jalr$
-instructions 36 and 47:
-\[ \retmap = \{36, 47\} \]
+\subsection{Ultra-eager Integrity}
 
-\paragraph*{Entry Map}
-Finally, the entry map identifies valid entry points to a
-function and is also a set:
-\[\entmap \in \ENTMAPS \subseteq \WORDS\]
-%
-In our running example, the entry map contains the entry
-points of {\tt f} and {\tt g}:
-\[ \entmap = \{20, 40\} \]
+\subsection{Eager Integrity and the Call Rule}
 
-\paragraph*{What is a return?}
+\subsection{Eager Confidentiality and the Transparency Rule}
 
-We separately identify, for any call state, what it means to have
-correctly returned from that call. We consider the call to have
-returned when control returns to the instruction following
-the $\jal$ with the stack restored. Formally, this is a predicate on
-states that says when the machine has just returned from a specified call state
-(where $\nextPC$ gives the address of the next instruction after a given address):
-\[%\begin{split}
-    \ret{\mach_c} \triangleq  \lambda \mach_r . \mach_r(\PCname) =
-    \nextPC(\mach_c(\PCname)) \land  \mach_r(\SP) = \mach_c(\SP)
-%\end{split}
-\]
-There are two such return points in our running example, both of which
-are depicted in the figure: the state before the execution of
-instruction 27 corresponding to the return from {\tt f} and the state
-before instruction 8 corresponding to the return from {\tt g}.
+\section{Stack Safety with Sharing}
 
-\medskip
+\subsection{Trace Properties}
 
-In the rest of this section we implicitly parameterize all
-definitions by a function map $\codemap$, a call map $\callmap$, a return
-map $\retmap$ and an entry map $\entmap$.
+\section{Coroutine Safety}
 
 \subsection{Local State Encapsulation}
 \label{sec:lse}
