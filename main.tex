@@ -1131,27 +1131,24 @@ The return address is spilled to the stack even by leaf functions such as
 
 We next describe our machine model. To make our definition of stack safety
 as generic as possible, this section proposes an abstract interface to a
-machine model plus some kind of
-% static or dynamic,
-(software- or
-hardware-enforced) policy monitor. In~\cref{sec:enforcement}, we will
-instantiate this model with a concrete dynamic policy enforcement mechanism
-based on \citet{DBLP:conf/sp/RoesslerD18}.
+machine model plus some kind of (software- or hardware-enforced) policy monitor.
+In~\cref{sec:enforcement}, we will instantiate this model with a concrete dynamic
+policy enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
 
 \subsection{Values, States, and Observations}
 
 The basic building blocks of the machine are {\em values} and {\em
   addresses}. Both are drawn from some set of {\em words}
-$\WORDS$, ranged over by $\word$.
+\(\WORDS\), ranged over by \(\word\).
 %
-Our machine states are composed of {\em components} $k$, addressed either by
-words (memory addresses) or by register names ($r$) drawn from some set
-$\REGS$.
+Our machine states are composed of {\em components} \(\component\), addressed either by
+words (memory addresses) or by register names (\(\reg\)) drawn from some set
+\(\REGS\).
 %
     \[\component \in \COMPONENTS = \WORDS + \REGS \]
 %
 The register names are assumed to include two special purpose registers: the
-program counter {\PCname} and the stack pointer \SP.
+program counter {\PCname} and the stack pointer \(\SP\).
 
 A {\em machine state} is a map from components to values:
 %
@@ -1159,7 +1156,7 @@ A {\em machine state} is a map from components to values:
 
 The step function of the machine takes a machine state and produces a
 pair of a machine state and an {\em observation}, which may be either
-silent (written $\tau$) or a word of data\ifaftersubmission\bcp{This is a rather concrete
+silent (written \(\tau\)) or a word of data\ifaftersubmission\bcp{This is a rather concrete
   choice!  Why not leave the set of observations abstract?}\fi that the machine
 communicates to the outside world:
 %
@@ -1169,8 +1166,7 @@ communicates to the outside world:
 This step function is total, so the machine's execution traces
 (defined in \cref{sec:traces}) are infinite.
 
-We choose to model observations explicitly, rather than simply
-treating
+We choose to model observations explicitly, rather than simply treating
 a subset of registers or memory as being observable.  This choice gives
 us the flexibility to treat programs as observationally equivalent even when
 their internal states may differ.
@@ -1193,15 +1189,13 @@ written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
 
 \subsection{Policies}
 
-We now present our model of enforcement, which we introduced
-informally in \Cref{sec:threat}.  A policy is a general model of an
-enforcement mechanism, consisting of a set of policy states \(\pol \in
-\POLS\), a policy step function \((\mach, \pol) \polstep \pol' \in
+We now present our model of enforcement, which we introduced informally in \Cref{sec:threat}.
+A policy is a general model of an enforcement mechanism, consisting of a set of policy
+states \(\pol \in \POLS\) and a policy step function \((\mach, \pol) \polstep \pol' \in
 \MACHS \times \POLS \rightharpoonup \POLS\). This step function is partial;
-it is undefined on input configurations that correspond to a policy fault.
-We assume that the
-compiler provides an initial policy state $\pol_0$ to accompany
-the initial machine state.
+it is undefined on input configurations that correspond to a policy fault. The policy
+can see the machine state, but cannot modify it. We assume that the
+compiler provides an initial policy state \(\pol_0\) to accompany the initial machine state.
 %
 A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
 \Cref{sec:enforcement}.
@@ -1222,16 +1216,31 @@ by combining it with the regular step function for machine states.
 This combined step function is also partial, and traces of the machine-with-policy
 will be finite iff a policy fault occurs.
 
+\subsection{Contexts}
+
+Separate from the machine state, our formal properties will keep track of additional context
+information representing the history of the run. The following definitions are parameterized
+over an arbitrary set of context states, \(\CONTEXTS\), an initial context state \(\context_0
+\in \CONTEXTS\), and a context step function \(\mach, \context \constep \context' \in
+\MACHS \times \CONTEXTS \rightarrow \CONTEXTS\).
+
+We lift contexts into an MP trace in the same way as we lifted policy states to get
+a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times \CONTEXTS\).
+
+\judgmenttwo{\(\mpstate{\mach_1}{\pol_1} \stepstopol{\obs} \mpstate{\mach_2}{\pol_2}\)}
+            {\(\mach_1, \context_1 \constep \context_2\)}
+            {\(\mpcstate{\mach_1}{\pol_1}{\context_1} \stepstocon{\obs}
+               \mpcstate{\mach_2}{\pol_2}{\context_2}\)}
+
 \subsection{Traces}
 \label{sec:traces}
 
-A trace over a type $\TRACEELEMS$ is a nonempty, finite or infinite sequence of
-$\TRACEELEMS$s; we write $\TRACE{\TRACEELEMS}$ for the set of traces over
-$\TRACEELEMS$. We will mostly be concerned with sequences of pairs of
-machine states
-and observations, called \emph{machine traces} and denoted $\machT \in \MOTRACE$,
-and with sequences of triples of a machine state, a policy state, and an
-observation, called \emph{MP-traces} and denoted $\MPT \in \MPOTRACE$.
+A trace over a type \(\TRACEELEMS\) is a nonempty, finite or infinite sequence of
+\(\TRACEELEMS\)s; we write \(\TRACE{\TRACEELEMS}\) for the set of traces over
+\(\TRACEELEMS\). We will mostly be concerned with sequences of pairs of machine states
+and observations, called \emph{machine traces} and denoted \(\machT \in \MOTRACE\),
+and with sequences of 4-tuples of a machine state, a policy state, a context, and an
+observation, called \emph{MPC-traces} and denoted \(\MPCT \in \MPCOTRACE\).
 
 \paragraph*{Trace-Of}
 
@@ -1340,15 +1349,14 @@ through the first state where some condition holds on the machine state.
 This can easily be implemented using \(\PUT\), and we provide special notation
 for convenience.
 %
-If \(f\) be a predicate on machine states, we define \(\mach
+If \(f\) a predicate on machine states, we define \(\mach
 \hookrightarrow \machT | f\) (read ``\(\machT\) is the prefix of
 running \(\mach\) up to \(f\)'') and similarly for traces with policies:
 
 \begin{center}
 \begin{minipage}{.3\textwidth}
 \judgmenttwo{\(\mach \hookrightarrow \machT'\)}
-            {\(\PUT~(f,\machT')
-              = \machT\)}
+            {\(\PUT~(f,\machT') = \machT\)}
             {\(\mach \hookrightarrow \machT | f\)}
 \end{minipage}
 \begin{minipage}{.6\textwidth}
