@@ -1301,10 +1301,10 @@ states.
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
 
-\judgmenttwo{\(\mach_1 \stepstoobs{\obs} \mach_2\)}{\((\mach_1, \pol_1)
-               \polstep \pol_2\)}
-            {\(\mpstate{\mach_1}{\pol_1} \stepstopol{\obs}
-               \mpstate{\mach_2}{\pol_2}\)}
+\judgmenttwo{\(\mach \stepstoobs{\obs} \mach'\)}{\((\mach, \pol)
+               \polstep \pol'\)}
+            {\(\mpstate{\mach}{\pol} \stepstopol{\obs}
+               \mpstate{\mach'}{\pol'}\)}
 
 This combined step function is also partial, and traces of the machine-with-policy
 will be finite iff a policy fault occurs.
@@ -1320,10 +1320,10 @@ over an arbitrary set of context states, \(\CONTEXTS\), an initial context state
 We lift contexts into an MP trace in the same way as we lifted policy states to get
 a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times \CONTEXTS\).
 
-\judgmenttwo{\(\mpstate{\mach_1}{\pol_1} \stepstopol{\obs} \mpstate{\mach_2}{\pol_2}\)}
-            {\(\mach_1, \context_1 \constep \context_2\)}
-            {\(\mpcstate{\mach_1}{\pol_1}{\context_1} \stepstocon{\obs}
-               \mpcstate{\mach_2}{\pol_2}{\context_2}\)}
+\judgmenttwo{\(\mpstate{\mach}{\pol} \stepstopol{\obs} \mpstate{\mach'}{\pol'}\)}
+            {\(\mach, \context \constep \context'\)}
+            {\(\mpcstate{\mach}{\pol}{\context} \stepstocon{\obs}
+               \mpcstate{\mach'}{\pol'}{\context'}\)}
 
 \subsection{Traces}
 \label{sec:traces}
@@ -1339,11 +1339,15 @@ observation, called \emph{MPC-traces} and denoted \(\MPCT \in \MPCOTRACE\).
 
 The ``trace-of'' operator, written \(\mach \hookrightarrow \machT\),
 coinductively relates a machine state with the trace of machine states
-and observations produced by repeated application of step:
+and observations produced by repeated application of step. It's defined in
+terms of a coinductive helper, \(\mathit{obs-forward}\):
 
-\judgmenttwo{\(\mach_0 \stepstoobs{\obs} \mach_1\)}{\(\mach_1 \hookrightarrow \machT\)}
-            {\(\mach_0 \hookrightarrow (\mach_0,\obs) \machT\)}%
+\judgmenttwo{\(\mach \stepstoobs{\obs'} \mach'\)}
+            {\(\mathit{obs-forward} ~ \mach' ~ \obs' = \machT\)}
+            {\(\mathit{obs-forward} ~ \mach ~ \obs = (\mach,\obs) \machT\)}%
 %
+\judgment{\(\mathit{obs-forward} ~ \mach ~ \tau = \machT\)}
+         {\(\mach \hookrightarrow \machT\)}
 \noindent
 (We use juxtaposition of an element and a sequence to represent ``cons.'')
 Since the step function is total, if \(\mach \hookrightarrow \machT\),
@@ -1357,28 +1361,24 @@ state at the very top, each instruction leads to a new machine state
 for instructions 31 and 13, which are writes to $\rout$
 where the observations are $0$ and $60$, respectively.
 
-In a similar fashion, we define \(\mpstatename \hookrightarrow \MPT\)
-to relate a machine-policy state pair to the MP-trace
-induced by the step function on $\MPS$. Unlike the $\MOTRACE$ above, this trace can
-be finite as the policy can cause a fault, in which case the final observation is
-a \(\tau\):
+In a similar fashion, we define \(\mpcstatename \hookrightarrow \MPCT\)
+to relate a machine-policy-context state triple to the MPCO-trace
+induced by the step function.
 
-\begin{minipage}{.4\textwidth}
-\judgment{\(\neg \exists \pol_1 . \mpstate{\mach_0}{\pol_0} \polstep \pol_1\)}
-         {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \mpostate{\mach_0}{\pol_0}{\tau}\)}
-\end{minipage}
-\begin{minipage}{.55\textwidth}
-  \judgmenttwo{\(\mpstate{\mach_0}{\pol_o} \stepstopol{\obs}
-                 \mpstate{\mach_1}{\pol_1}\)}
-              {\(\mpstate{\mach_1}{\pol_1} \hookrightarrow \MPT\)}
-              {\(\mpstate{\mach_0}{\pol_0} \hookrightarrow
-                 \mpostate{\mach_0}{\pol_0}{\obs} \MPT\)}
-\end{minipage}
+\judgment{\(\neg \exists \pol' . \mpcstate{\mach}{\pol} \polstep \pol'\)}
+         {\(\mathit{obs-forward} ~ \mpcstate{\mach}{\pol}{\context} ~ \obs =
+           \mpcstate{\mach}{\pol}{\context},\obs\)}
+%
+\judgmenttwo{\(\mpcstate{\mach}{\pol}{\context} \stepstoobs{\obs'} \mpcstate{\mach'}{\pol'}{\context'}\)}
+            {\(\mathit{obs-forward} ~ \mpcstate{\mach'}{\pol'}{\context'} ~ \obs' = \machT\)}
+            {\(\mathit{obs-forward} ~ \mpcstate{\mach}{\pol}{\context} ~ \obs =
+              (\mpcstate{\mach}{\pol}{\context},\obs) \machT\)}%
+%
+\judgment{\(\mathit{obs-forward} ~ \mpcstatename ~ \tau = \machT\)}
+         {\(\mpcstatename \hookrightarrow \machT\)}
 
-We will also use \(\pi_m\) to project the trace of machine states
-out of a trace, \(\pi_p\) to project the trace of policy states, and
-\(\pi_o\) to project the observations, with \(\pi_m\) and \(\pi_o\) overloaded
-for machine traces and MP-traces.
+We will also use \(\pi_m\), \(\pi_p\), \(\pi_c\), and \(\pi_o\) to project the components out of an
+MPC state, and overload them to project a trace of the components out of an MPC trace.
 
 \paragraph*{Head and Last}
 
@@ -1387,44 +1387,30 @@ function since traces are non-empty, and the final element (if one exists) with
 \(\last(\Trace)\), which is partial.
 
 \paragraph*{Until}
-The operation \(\PUT~(f,\Trace)\)
-%\bcp{Wouldn't
-%``While'' be more mnemonic?} \sna{Appealing, but it's more of a
-%``while-not''? Trying out ``until''. In any case... moving away
-%from doing joins means this needs to get some work to eliminate
-%the trailing observation. Here's an attempt.}
-takes a trace
-%% \bcp{I changed a : here to $\in$.  We should check if there are
-%% any more to fix.}
-\(\Trace \in \TRACE{\TRACEELEMS} \times \OBSS\) and a predicate
+The operation \(\PUT ~ f ~ \Trace\) takes a trace
+\(\Trace \in \TRACE{\TRACEELEMS \times \OBSS}\) and a predicate
 on elements \(f \subset \TRACEELEMS\) and gives the prefix of
 \(\Trace\) ending with the first element on which \(f\) holds.
-One subtlety is that, because the observation associated with some element
-in a trace
-represents what can be observed when this element is executed (i.e., the
-observation on that step), when we take a prefix from a trace containing
-observations
-we must replace the final observation with a \(\tau\).
 
-  \begin{center}
+\begin{center}
   \begin{minipage}{.3\textwidth}
-    \judgment{\(f\ \traceelem\)}
-             {\(\PUT~(f,(\traceelem,\obs)\Trace) = (\traceelem,\tau)\)}
+    \judgment{\(f ~ \traceelem\)}
+             {\(\PUT ~ f ~ \traceelem\Trace = \traceelem\)}
   \end{minipage}
 %
   \begin{minipage}{.3\textwidth}
-  \judgment{}
-           {\(\PUT~(f,(\traceelem,\obs)) = (\traceelem,\tau)\)}
+    \judgment{}
+             {\(\PUT ~ f ~ \traceelem = \traceelem\)}
 %
   \end{minipage}
   \begin{minipage}{.3\textwidth}
-  \judgmenttwo{\(\neg f\ \traceelem\)}{\(\PUT~(f,\Trace) = \Trace'\)}
-              {\(\PUT~(f,(\traceelem,\obs)\Trace) = (\traceelem,\obs)\Trace'\)}
+    \judgmenttwo{\(\neg f ~ \traceelem\)}{\(\PUT ~ f ~ \Trace = \Trace'\)}
+                {\(\PUT ~ f ~ \traceelem\Trace = \traceelem\Trace'\)}
   \end{minipage}
-  \end{center}
+\end{center}
 %
 If the resulting trace is a strict prefix of the parameter, then the
-predicate must hold on its final element. If the predicate never holds, then
+predicate must hold on its final element. If the predicate always holds, then
 \(\PUT\) is the identity function.
 
 % The {\it join} operation, written \(T_1 \cdot T_2\) is the reverse of
@@ -1442,29 +1428,51 @@ through the first state where some condition holds on the machine state.
 This can easily be implemented using \(\PUT\), and we provide special notation
 for convenience.
 %
-If \(f\) a predicate on machine states, we define \(\mach
-\hookrightarrow \machT | f\) (read ``\(\machT\) is the prefix of
-running \(\mach\) up to \(f\)'') and similarly for traces with policies:
+If \(f\) is a predicate on machine states, we define \(\mpcstatename
+\hookrightarrow \MPCT | f\) (read ``\(\MPCT\) is the prefix of
+running \(\mpcstatename\) up to \(f\)'') and similarly for traces with policies:
 
 \begin{center}
-\begin{minipage}{.3\textwidth}
-\judgmenttwo{\(\mach \hookrightarrow \machT'\)}
-            {\(\PUT~(f,\machT') = \machT\)}
-            {\(\mach \hookrightarrow \machT | f\)}
-\end{minipage}
-\begin{minipage}{.6\textwidth}
-\judgmenttwo{\(\mpstatename \hookrightarrow \MPT'\)}
-            {\(\PUT~(\lambda \mpstate{\mach}{\pol}.f\ \mach,\MPT') = \MPT\)}
-         {\(\mpstatename \hookrightarrow \MPT | f\)}
-\end{minipage}
+\judgmenttwo{\(\mpcstatename \hookrightarrow \MPCT'\)}
+            {\(\PUT ~ f ~ \mpcstatename ~ \MPCT' = \MPCT\)}
+            {\(\mpcstatename \hookrightarrow \MPCT | f\)}
 \end{center}
 
-%    \COQ{this operation steps until it reaches a state on which \(f\) holds,
-%    and is infinite if it doesn't. It doesn't compute the observation of the step after the final,
-%    which coq would. So coq may need a ``step until'' relation rather than ``prefix up to''.
-%    Still thinking about this.}\leo{So this is strictly weaker than the one we have in Coq, right?
-%      So its only the Eager implies Lazy direction that might need tweaking, but not the Test implies Eager one?}
-%    \leo{Also, it steps until it reaches an f-state or if the policy raises a fault}
+\paragraph*{Context Segments}
+
+In particular, we wish to formulate properties around consecutive subtraces
+in which the context obeys a given predicate. This will commonly be used to extract
+individual calls from a trace by taking subtraces in which the stack is
+at or below a given depth. If \(f \subseteq \MACHS \times \CONTEXTS\), then
+we have \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
+``\(\mpcstatename\) segmented by \(f\) yields a subtrace \(\MPCT\).''
+
+\begin{center}
+  \judgmenttwo[Now]
+              {\(f ~ \mach ~ \context\)}
+              {\(\mach,\pol,\context \hookrightarrow \MPCT | \neg f\)}
+              {\(\mach,\pol,\context \hookrightarrow \MPCT \langle f \rangle\)}
+%
+  \judgmentthree[Skip]
+                {\(f ~ \mach ~ \context\)}
+                {\(\mach,\pol,\context \hookrightarrow \MPCT | \neg f\)}
+                {\(\last(\MPCT) \hookrightarrow \MPCT' \langle f \rangle\)}
+                {\(\mach,\pol,\context \hookrightarrow \MPCT' \langle f \rangle\)}
+%
+  \judgmentthree[Search]
+                {\(\neg f ~ \mach ~ \context\)}
+                {\(\mach,\pol,\context \hookrightarrow \MPCT | f\)}
+                {\(\last(\MPCT) \hookrightarrow \MPCT' \langle f \rangle\)}
+                {\(\mach,\pol,\context \hookrightarrow \MPCT' \langle f \rangle\)}
+\end{center}
+
+\paragraph*{Reachability}
+
+We often want to quantify over all traces from any initial state so that our
+properties apply to the system as a whole. We say that a state \(\mpcstatename'\)
+is {\em reachable} if for some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT\)
+and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
+such that from some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
 
 \paragraph*{Observational Similarity}
 
@@ -1565,7 +1573,7 @@ Then at each step we update the context according to the context-step function,
 and \(\pop{\domMap}{n}\), pronounced ``push'' and ``pop'' and defined as follows. 
 
 \[
-(\push{\domMap}{n}{\components}) ~ \component =
+(\push{\domMap}{\depth}{\components}) ~ \component =
 \begin{cases}
   \sealed{\depth} & \text{if } \domMap ~ \component = \unsealed
                     \text{ and } \component \in \components \\
@@ -1573,7 +1581,7 @@ and \(\pop{\domMap}{n}\), pronounced ``push'' and ``pop'' and defined as follows
 \end{cases}
 \]
 \[
-(\pop{\domMap}{n}) ~ \component =
+(\pop{\domMap}{\depth}) ~ \component =
 \begin{cases}
   \unsealed & \text{if } \domMap ~ \component = \sealed{\depth-1} \\
   \domMap ~ \component & \text{else} \\
@@ -1588,20 +1596,20 @@ the stack pointer. The {\sc Default} rule applies only if neither of the others 
 \begin{minipage}{.4\textwidth}
   \judgmenttwo{\(\mach \stepsto \mach'\)}
               {\(\codemap ~ (\mach ~ \PCname) = \funid, \mathbf{Some} ~ \callmap\)}
-              {\(\mach,(\domMap,\depth) \stepsto_C \mach',(\push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1)\)}
+              {\(\mach,(\domMap,\depth) \stepstocon \mach',(\push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1)\)}
 \end{minipage}
 \hspace*{0.1\textwidth}
 \begin{minipage}{.4\textwidth}
   \judgmenttwo{\(\mach \stepsto \mach'\)}
               {\(\codemap ~ (\mach ~ \PCname) = \funid, \mathbf{Some} ~ \retmap\)}
-              {\(\mach,(\domMap,\depth) \stepsto_C \mach',(\pop{\domMap}{\depth},\depth-1)\)}
+              {\(\mach,(\domMap,\depth) \stepstocon \mach',(\pop{\domMap}{\depth},\depth-1)\)}
 \end{minipage}
 \end{center}
 
 \begin{center}
   \judgment[Default]
            {\(\mach \stepsto \mach'\)}
-           {\(\mach,\context \stepsto_C \mach',\context\)}
+           {\(\mach,\context \stepstocon \mach',\context\)}
 \end{center}
 
 \subsection{Ultra-eager Integrity}
@@ -1610,23 +1618,28 @@ Our first property will be {\em ultra eager}, meaning that it will be quantified
 of execution from any initial state. The criterion for integrity is simple: sealed components do not
 change.
 
-\definition A system enjoys {\em ultra-eager integrity} if, for any initial state \(\mach_0\),
-its initial context \(\context_0\), and its initial policy state \(\pol_0\), and each
-pair of adjacent states \(\mach,(\domMap,\depth),\pol \stepsto_C \mach',\context',\pol'\) in
-the induced trace from \(\mach_0,\context_0,\pol_0\), if \(\domMap ~ \component = \sealed{\depth'}\)
-for any \(\depth'\), then \(\mach(\component) = \mach'(\component)\).
+\definition A system enjoys {\em ultra-eager integrity} if for any reachable state
+\(\mpcstatename\), \(\mpcstatename'\) such that \(\mpcstatename \stepstocon{} \mpcstatename'\),
+and component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) and
+\(\domMap ~ \component = \sealed{\_}\), then \(\pi_\mach(\mpcstatename) ~ \component =
+\pi_\mach(\mpcstatename') ~ \component\).
 
 
 \subsection{Eager Integrity and the Call Rule}
 
-\definition Call Rule goes here.
+\definition Let \(\mpcstatename\) be a reachable state whose next instruction is annotated
+as a call and whose call depth is \(\depth\). Let \(f ~ \mach ~ \context\) hold when \(\context = \_,\depth\),
+and \(\components\) be the set of components \(\component\) such that
+\(\sealcon ~ \pi_\mach(\mpcstatename) ~ \component\) holds. Then the {\em Call Rule} says that if
+\(\mpcstatename \stepstocon \mpcstatename'\), it is sound to assume that
+\(\mpcstatename' \hookrightarrow \MPCT | f\) and if \(\last(\MPCT) = \mach'\), then
+\(\pi_\mach(\mpcstatename) ~ \component = \mach' ~ \component\).
 
-\definition A system enjoys {\em eager integrity} if, for any initial state \(\mach_0\), initial
-context \(\context_0\), and initial policy state \(\pol_0\) and any call depth \(\depth\), each segment
-\(\MCPTrace\) taken from the induced trace from \(\mach_0,\context_0,\pol_0\) by
-\(\prop (\domMap,\depth') = \depth' \geq \depth\) satisfies \(\pi_m(\head ~ \MCPTrace) \component =
-\pi_m(\last ~ \MCPTrace) \component\) for all \(\component\) where \(\domMap ~ \component = \sealed{\depth''}\)
-for any \(\depth''\).
+\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \depth')\) hold when
+\(\depth' \geq \depth\). A system enjoys {\em eager integrity} if each reachable segment
+\(\MPCT \langle f_\depth \rangle\) satisfies \(\pi_m(\head(\MPCT)) ~ \component =
+\pi_m(\last(\MPCT)) ~ \component\) for all \(\component\) where \(\domMap ~ \component =
+\sealed{\_}\).
 
 \subsection{Eager Confidentiality and the Transparency Rule}
 
@@ -1641,17 +1654,33 @@ This is written \(\mach,\mach' \diamond \nach,\nach'\).
 
 \definition Transparency Rule
 
-\definition A system enjoys {\em eager confidentiality} if, for any initial state \(\mach_0\), initial
-context \(\context_0\), and initial policy state \(\pol_0\) and any call depth \(\depth\), each segment
-\(\MCPTrace\) taken from the induced trace from \(\mach_0,\context_0,\pol_0\) by
-\(\prop (\domMap,\depth') = \depth' \geq \depth\) behaves the same as any \(\components\)-variant
-as follows.
+\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \depth')\) hold for
+\(\depth' \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\depth),\_\) and
+\(\components\) be the set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
+Then take any \(\nach\) such that \(\mach \approx_\components \nach\). \(\MPCT\) corresponds to the
+trace of a subroutine from its call to its return.
 
-\begin{itemized}
-\item
-\item
-\item
-\end{itemized}
+If we take the induced trace from this variant until a return,
+\(\nach,\pol,\context \hookrightarrow \NPCT | \neg f_\depth\), we get a subtrace corresponding
+to the same subrouting called with the same (register) arguments but with a potentially different
+state at the call-site. A system enjoys {\em eager confidentiality} if for all such pairs of traces,
+they correspond according to one of four cases:
+
+\begin{enumerate}
+\item \(\MPCT\) may be finite and \(\pi_\context(\last(\MPCT)) = (\_,\depth')\) with \(\depth' < \depth\),
+  and \(\pi_\context(\last(\NPCT)) = (\_,\depth')\) with \(\depth' < \depth\). That is, both traces end
+  having left the call of depth \(\depth\). Further:
+  \begin{itemize}
+  \item They have the same observable behavior, \(\pi_\obs(\MPCT) \simeq \pi_\obs(\NPCT)\)
+  \item Their final states have the same differences, \(\pi_\mach(\head(\MPCT)), \pi_\mach(\last(\MPCT)) \diamond
+  \pi_\mach(\head(\MPCT)), \pi_\mach(\last(\NPCT))\)
+  \end{itemize}
+\item \(\MPCT\) and \(\NPCT\) may both be infinite, with \(\pi_\obs(\MPCT) \simeq \pi_\obs(\NPCT)\)
+\item \(\MPCT\) may be finite but end without returning -- which can only have happened if it fail-stopped --
+  and its observable behavior prefixes that of \(\NPCT\), \(\pi_\obs(\MPCT) \lesssim \pi_\obs(\NPCT)\)
+\item \(\NPCT\) may end with a fail-stop as in case 3, with \(\pi_\obs(\NPCT) \lesssim \pi_\obs(\MPCT)\)
+\end{enumerate}
 
 \section{Stack Safety with Sharing}
 
