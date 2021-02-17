@@ -278,47 +278,139 @@ These properties are formalized by defining a capability-based machine
 that ``satisfies [stack safety] by construction.''
 %
 While this work represents an important step in the right direction, we believe
-there is still room to craft a more abstract characterization
+there is still room to craft an operational characterization
 of stack safety that is independent of capabilities or any other specific
-enforcement
-technique.  In other words, we seek formal criteria that can be applied
+enforcement technique.  In other words, we seek formal criteria that can be applied
 to a mechanism for protecting stack-based low-level programs to judge
 whether or not it actually ``guarantees stack safety.''
 %
-Our key contribution is an abstract
-presentation of local state encapsulation using the technical
-framework of language-based security, together with a simple
+Our key contribution is an abstract presentation of local state encapsulation
+using the technical framework of language-based security, together with a simple
 characterization of well-bracketed control flow.
 
-The intuition behind \citeauthor{Skorstengaard+19}'s {\em
-  local state encapsulation} is that callers should be protected from
-callees: a callee should not be able to access or overwrite private data
-in the caller's stack frame.
-%
-We formalize this intuition in (1) a {\em stack-confidentiality}
-property, which promises that a callee's observable behavior is not affected
-by memory outside its stack frame (e.g., a caller's private data or
-uninitialized memory), plus (2) a {\em stack-integrity} property,
-which promises that, if a function call ever returns, the caller's stack
-data at the point of return will be identical to what it was before the
-call.
+\begin{figure}[b]
+    \begin{minipage}{.3\textwidth}
+\begin{verbatim}
+main = {
+  int x = 42;
+  f();
+  print(x);
+}
+\end{verbatim}
+    \end{minipage}
+    \begin{minipage}{.3\textwidth}
+\begin{verbatim}
+main = {
+  int x = 1;
+  f();
+  if(x)
+    g();
+  else
+    h();
+}
+\end{verbatim}
+    \end{minipage}
+    \begin{minipage}{.3\textwidth}
+\begin{verbatim}
+main = {
+  int x = 1;
+  f();
+  x = -x;
+  f();
+  print(x);
+}
+\end{verbatim}
+  \end{minipage}
+  \caption{Integrity Examples}
+  \label{fig:intexamples}
+\end{figure}
 
-The intuition behind \citeauthor{Skorstengaard+19}'s {\em
-  well-bracketed control flow} is the need to protect the call graph
-itself: a callee should pass control back to the caller only by
-transferring control to the instruction
-following the call; it should not be allowed to jump back into the
-caller's code at an arbitrary point, either directly (via a jump
-instruction) or indirectly (by corrupting stack data and
-returning). Well-bracketed control flow establishes safety between
-functions: each instruction is uniquely owned by some function, and
-all jumps between functions are either calls that enter at a marked
-entry point or returns that re-enter just after their associated call
-in the standard nested call structure.
 
-To phrase local state encapsulation as a
-security property requires an explicit attacker model: a clear
-understanding of who is being protected and from what. Most existing
+\begin{figure}[b]
+    \begin{minipage}{.3\textwidth}
+\begin{verbatim}
+main = {
+  int key = get_key();
+  f();
+  use_key(key);
+}
+\end{verbatim}
+    \end{minipage}
+    \begin{minipage}{.3\textwidth}
+\begin{verbatim}
+main = {
+  int x = get_secret();
+  if(x)
+    g();
+  else
+    h();
+  f();
+}
+\end{verbatim}
+    \end{minipage}
+    \begin{minipage}{.3\textwidth}
+\begin{verbatim}
+main = {
+  int x = 0;
+  int y = get_secret();
+  f();
+  print(x);
+}
+\end{verbatim}
+  \end{minipage}
+  \caption{Confidentiality Examples}
+  \label{fig:confexamples}
+\end{figure}
+
+\paragraph*{The Use of Stack Safety}
+
+When does the programmer rely on stack safety? The most natural example is the first
+in figure \ref{fig:intexample}, in which {\tt main} calls stores 42 to a local variable {\tt x},
+calls {\tt f}, and then prints {\tt x}. Here the programmer should be able to expect that
+{\tt main} will print 42, but in C such an assumption may be wrong, if {\tt f} should
+overwrite it's caller's stack data. To this end, our properties support a
+{\em call rule} that can be used to reason that on return from {\tt f}, {\tt x} still
+contains the same value. This is not only useful for the programmer: consider the second
+example, where the call to {\tt h} should be unreachable and therefore subject to dead code
+elimination, if only the compiler can soundly reason that {\tt x} does not change.
+The property that enables the call rule is, in security terms, {\em integrity}: callers'
+data is protected from modification by callees.
+
+Alongside integrity, we have {\em confidentiality}, in which callers' data is protected
+from leakage by their callees. Consider the first example in figure \ref{fig:confexamples},
+in which {\tt main} recieves a key, then calls {\tt f}. If {\tt f} is an untrusted function,
+it would be bad if it could just read {\tt key}. But there are more subtle examples,
+such as the second one, where a secret value controls which function of {\tt g} and
+{\tt h} are called prior to calling {\tt f}. Here, if {\tt g} or {\tt h} leaves behind
+identifying information in unused stack space, {\tt f} could still deduce information
+about the secret. So our confidentiality properties also support a {\em transparency rule},
+that each function's behavior is independent of the state of its caller, other than arguments.
+This also makes it easier, though not trivial, to prove idempotence: the channels through
+which a callee can remember its own history are limited to those outside the stack.
+
+Together, integrity and confidentiality comprise \citeauthor{Skorstengaard+19}'s
+{\em local state encapsulation} property. But LSE alone is not sufficient to fully protect
+callers from their callees. Consider the last example in figure \ref{fig:intexample},
+a variant of the famous ``awkward example,'' in which {\tt f} is called twice and may not
+be idempotent. It should be the case that {\tt main} prints -1, but if
+{\tt f}'s first activation stores its return address somewhere accessible, the second
+activation can return to before {\tt x} is negated, cause {\tt x} to be set to
+1 again before a third activation that would return normally. Then {\tt main} would print 1.
+
+Preventing this form of reentrancy attack is the intuition behind
+\citeauthor{Skorstengaard+19}'s {\em well-bracketed control flow}, which protects
+the call graph itself. A callee should pass control back to the caller only by
+transferring control to the instruction following the call; it should not be allowed
+to jump back into the caller's code at an arbitrary point, either directly (via a jump
+instruction) or indirectly (by corrupting stack data and returning). It also maintains
+the integrity of the stack structure; otherwise a callee could leak data in the third
+example of \ref{fig:conf-example} by failing to properly restore the stack pointer.
+As {\tt x} is accessed by its offset from the stack pointer, an adversary could leave
+the stack pointer so that {\tt x}'s offset now points to {\tt y}, and trick {\tt main}
+into printing its secret.
+
+To phrase LSE and WBCF as security properties requires an explicit attacker model:
+a clear understanding of who is being protected and from what. Most existing
 stack protection mechanisms envisage scenarios where a callee is
 influenced by external inputs to corrupt the stack in some way. To
 avoid getting into the details of exactly how this happens when
@@ -332,11 +424,19 @@ setting is that integrity and confidentiality are ``nested'' properties: not
 only does a given caller need to be protected from its callee, but the callee
 also needs to be protected from {\em its} callees, and so on. That is, the notion
 of ``attacker'' changes at many points throughout the execution of the program.
-We address
-this issue by introducing a dynamically changing notion of {\em accessibility} for
-the different components of the machine state and adjusting the integrity
-and confidentiality levels of different stack locations and registers at
-every transition (call or return) between functions.
+We address this issue by introducing a dynamically model of {\em domains} for
+the different components of the machine state, in which some stack locations are
+sealed by the caller that needs to preserve them while the rest are unsealed and
+available for use.
+
+First we introduce this model for a single simple stack with no sharing between callers and
+callee. Then we expand it to allow components to be passed, granting a callee one time
+access to the caller's data, or shared, allowing components to be outright
+exempted from the stack safety properties. Shared components could model objects whose
+addresses are passed and whose security must be modeled by a separate property, such as
+memory safety enforced by capabilities.
+
+\sna{Rewriting done up to here, then skips down to property details (sections 4/5).}
 
 After formally defining stack safety, we show that the definition is
 enforceable using an existing tag-based enforcement
@@ -371,13 +471,6 @@ but would if enhanced (at some performance cost).
 %\bcp{I worry that we are being a little
 %  dishonest here: the stated advantage of the lazy policy is that it is more
 %efficient, but our variant is {\em not} efficient!}
-
-\sna{There's been some inconsistency in ``stack safety'' vs.
-     ``stack-safety,'' I'm fixing on the former.}
-\bcp{Be careful: When a compound phrase is used as an adjective to modify a
-  following noun, it gets hyphenated; otherwise it does not.  This is
-  correct grammar, not inconsistency!  :-)}
-\sna{Aha, I forgot that. Corrected, and I've added it in more places.}
 
 In summary, we offer the following contributions:
 \begin{itemize}
