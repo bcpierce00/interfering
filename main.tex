@@ -436,18 +436,17 @@ exempted from the stack safety properties. Shared components could model objects
 addresses are passed and whose security must be modeled by a separate property, such as
 memory safety enforced by capabilities.
 
-\sna{Rewriting done up to here, then skips down to property details (sections 4/5).}
-
 After formally defining stack safety, we show that the definition is
 enforceable using an existing tag-based enforcement
 mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider
-\citeauthor{DBLP:conf/sp/RoesslerD18}'s
-conservative Depth Isolation policy, which not only enforces our basic
-stack-safety property, but also an alternative lockstep property that
-checks for integrity and confidentiality violations at every step of
-an execution trace. The advantage of this property is that it ``fails
+\citeauthor{DBLP:conf/sp/RoesslerD18}'s conservative Depth Isolation policy. 
+We give {\em eager} properties that this policy enforces, in which each
+callee, at the point of its return, can be seen to respect the integrity
+and confidentiality of its caller. Additionally we have an
+{\em ultra-eager} integrity property which guarantees that integrity
+is respected at each step. The advantage of this property is that it ``fails
 faster'' and is therefore more suitable for efficient testing. We prove (in
-Coq) that this ``lockstep'' property implies our original definition of stack
+Coq) that the ultra-eager property implies our original definition of stack
 safety.
 
 The downside of the Depth Isolation policy is that it is rather
@@ -455,19 +454,25 @@ expensive to implement. In the same work,
 \citeauthor{DBLP:conf/sp/RoesslerD18} propose a different mechanism
 that is more efficient by virtue of being lazy in its enforcement.
 Instead of enforcing the integrity and confidentiality of the stack at the
-exact moment
-when a callee returns, this policy signals violations when the
+exact moment when a callee returns, this policy signals violations when the
 caller actually accesses data that the callee has written into its stack
 frame\ifaftersubmission\bcp{We could also hint at the lazy confidentiality
   property in the same way...}\fi.
 The lazy policy does not enforce our original integrity and confidentiality
 properties, and to our knowledge there is no formal statement of the properties that
-it ought to enforce. We propose ``observable'' versions of integrity and
-confidentiality property, which capture the desired behavior of a policy that
-detects violations between when they occur and when they make a visible impact.
-Unfortunately \citeauthor{DBLP:conf/sp/RoesslerD18}'s existing ``Lazy Tagging
-and Clearing'' policy does not quite enforce these properties,
-but would if enhanced (at some performance cost).
+it ought to enforce. We propose a {\em lazy} integrity property, which capture the
+desired behavior of a policy that detects violations between when they occur and when
+they make a visible impact. Unfortunately \citeauthor{DBLP:conf/sp/RoesslerD18}'s
+existing ``Lazy Tagging and Clearing'' policy does not quite enforce these properties,
+but formalizing the ideal property allows us to see how it falls short.
+We provide a variant of ``Lazy Tagging and Clearing'' that does enforce lazy integrity
+at some performance cost.
+
+We extend our properties to allow sharing, both in the form of arguments passed
+on the stack and of objects shared widely beyond their owning function. In the latter
+case, restricting access the shared objects is beyond the scope of stack safety,
+but our model delimits them from other objects in the same frame.
+
 %\bcp{I worry that we are being a little
 %  dishonest here: the stated advantage of the lazy policy is that it is more
 %efficient, but our variant is {\em not} efficient!}
@@ -1690,379 +1695,6 @@ they correspond according to one of four cases:
 
 \subsection{Local State Encapsulation}
 \label{sec:lse}
-
-The first part of stack safety is {\em local state encapsulation}.
-Informally, it captures the notion that a caller's data is
-protected from a callee's actions. We formalize this notion
-as a security property with an integrity and a confidentiality
-component, where the former protects the caller's data from being
-written and the latter from being read.
-
-As is standard with security properties, we associate with each
-component of the machine a {\em label}: a pair of security levels
-denoting high or low confidentiality and high or low integrity.
-%
-\[\mathit{label} ::= \{\HIGHSEC,\LOWSEC\} \times \{\HIGHINT,\LOWINT\}\]
-%
-In a traditional setting, integrity would enforce that the contents of
-$\HIGHINT$ locations remain unchanged, while confidentiality would
-enforce that the contents of $\HIGHSEC$ locations do not influence the
-observable behavior of the machine. However, when dealing with nested
-calls and returns, stack safety needs to enforce integrity and
-confidentiality for {\em every} function call in a trace; that is, we
-must treat the security level of data dynamically.
-%
-To that end, we introduce the notion of a {\em contour}, a map from
-components to labels:
-%
-\[\contour \in \CONTOURS ::= \COMPONENTS \rightarrow \mathit{label}\]
-
-When \(\mach_c\) is a call state (\(\callmap(\mach_c(\PCname)) = n\) for some $n$) and
-\(\mach_c \stepstoobs{\obs} \mach_e\) for some
-$\mach_e$ and $\obs$, we can construct a contour based on the bounds of the
-callee's stack frame.
-%
-The private state of the callee is the entire area of the memory from
-stack base to stack pointer, with the exception of the $n$ locations
-corresponding to the arguments and result locations of the
-call. Private components are marked high confidentiality and high
-integrity: the callee should be able to neither read nor write them.
-%
-Everything above the stack pointer at the point of the call is
-``uninitialized'' memory that can be written into but should not be
-read. To protect the callee itself from such reads, these components
-are marked high confidentiality and low integrity.
-%
-The same is true for the designated output location: it can be
-freely written into but should not be read.
-%
-Code is always high integrity and low confidentiality.
-%
-Finally, registers and the frame of arguments and results are free
-for the callee to use, and are therefore tagged with low integrity and
-low confidentiality.
-
- \[\mathit{Cof}(\mach,n)(\component) =
-  \begin{cases}
-    (\LOWSEC,\HIGHINT) & \text{if } \component \in \WORDS
-                         \text{ and } \codemap(\component) = \funid \text{ for some }\funid\\
-    (\HIGHSEC,\LOWINT) & \text{else if } \component \in \WORDS
-                          \text{ and } \component \geq \mach(\SP)
-                          \text{ or } \component = \rout\\
-    (\HIGHSEC,\HIGHINT) & \text{else if } \component \in \WORDS
-                          \text{ and } \component \leq \mach(\SP) \negate  n \\
-    (\LOWSEC,\LOWINT) & \text{else} \\
-  \end{cases}\]
-
-Going back to our running example, here is the state of the machine at
-the call from {\tt main} to {\tt f}, showing addresses annotated with their
-corresponding labels:
-\vspace*{0.2em}
-% At Call to G
-% Memory Layout
-\begin{center}
-\MemoryLabel{4em}{2em}{0}
-\MemoryLabel{21em}{2em}{99}
-\MemoryLabel{43.5em}{2em}{\SP}
-\memory{3}{\instrc}[{\makebox[0pt]{$(\LOWSEC,\HIGHINT)$}}]%
-\hspace*{3pt}
-$\cdots$
-\memory{1}{\emptyoutc}[{\makebox[0pt]{$(\HIGHSEC, \LOWINT)$}}]%
-\memory{2}{\fprivc}[{\makebox[0pt]{$(\HIGHSEC, \HIGHINT)$}}]%
-\memory{2}{\fcallc}[{\makebox[0pt]{$(\LOWSEC, \LOWINT)$}}]%
-\memory{6}{\unusedc}[{\makebox[0pt]{$(\HIGHSEC, \LOWINT)$}}]
-~$\cdots$
-\MemoryLabel{-46.5em}{0.75em}{42}
-\MemoryLabel{-42.5em}{0.75em}{0}
-\MemoryLabel{-38.5em}{0.75em}{0}
-\MemoryLabel{-34.5em}{0.75em}{0}
-\\
-\end{center}
-
-%If $\mach$ is the state at this call, the corresponding contour would
-%be:
-%\[
-%\mathit{Cof}(\mach,2) = \left \{
-%\begin{array}{l}
-%  0\ldots98\} \mapsto (\LOWSEC, \HIGHINT)\\
-%  99 \mapsto (\HIGHSEC, \LOWINT)\\
-%  100, 101 \mapsto (\HIGHSEC, \HIGHINT)\\
-%  102, 103 \mapsto (\LOWSEC, \LOWINT)\\
-%  104\ldots \mapsto (\HIGHSEC, \LOWINT)\\
-%  r \mapsto (\LOWSEC, \LOWINT)\\
-%\end{array}
-%\right .
-%\]
-
-
-\subsubsection{Stack Integrity}
-
-The first component of local state encapsulation is an integrity
-property: it ensures that the caller's data is never overwritten by a
-callee. We will formally define integrity in two steps: first, we will
-define integrity as a trace property over the trace corresponding to a
-single call (from its entry point to its corresponding return), and
-then we will lift that to a property for every such subtrace of a
-callee.
-
-\definition
-
-Let \(\contour\) be a contour and \(\MPT\) be a (potentially infinite)
-MP-trace. say \(\MPT\) satisfies {\em trace integrity} with
-respect to \(\contour\) if its final state (if any) agrees with its
-initial one on all components marked \(\HIGHSEC\) in \(\contour\):\bcp{I've
-  fixed some problems with not enough space around $\triangleq$, but I see
-  another here --- should check carefully for more.}
-%
-\[\begin{split}
-  \propdef{TraceInt} ~ \contour ~ \MPT \triangleq &
-    \head(\MPT) = \mpostate{\mach_e}{\_}{\_} \land
-    \last(\MPT) = \mpostate{\mach_r}{\_}{\_} \Rightarrow \\
-  & \forall \component. ~ \contour(\component) = \HIGHSEC \Rightarrow
-    \mach_e(\component) = \mach_r(\component) \\
-\end{split}\]
-
-Intuitively, the caller expects to find their private data untouched
-after the callee returns. That means that if the callee never returns,
-integrity is trivially satisfied. Similarly, the callee is allowed to
-temporarily overwrite the caller's private locations,
-as long as their values are restored
-by the time the callee returns. We will see variations of this later on: a
-stronger, inductive integrity property that ensures that the caller's
-private data is never overwritten, even during the callee's execution
-(which leads to easier reasoning and more effective testing);
-and a weaker, lazy integrity property that only ensures the preservation
-of locations that subsequently affect the program's observable actions
-(which allows for a more efficient enforcement mechanism).
-
-\begin{figure}
-  \integrityexample
-  \caption{Failing Trace Integrity}
-  \label{fig:intex}
-\end{figure}
-
-Trace integrity characterizes the trace corresponding to a single
-callee.
-Going back to our running example, such a trace would be, for
-instance, the entire trace of {\tt g} from instruction 40 to
-instruction 47.
-As an example of an integrity violation affecting this trace, \cref{fig:intex} shows what happens
-if we change line 44 of the example program to $[\rsp - 5] \leftarrow r_4$.
-Instead of storing data to the return value slot,
-the changed version overwrites {\tt f}'s local variable {\tt z}.
-The figure shows the modified trace, with snapshots of the initial
-and final states colored to show the contour; high
-integrity memory is in \high, while low integrity is in \low.
-At the end of the trace high integrity address 103 should match the initial
-state, and does not. So trace integrity is violated.
-
-We now lift this definition to an integrity property for a complete
-execution trace. We do this by requiring that trace integrity holds
-for every subtrace delimited by a call and its corresponding return.
-
-\definition Given a trace \(\MPT\), % and a call map \(\callmap\)
-%and a function map \(\codemap\),
-an \(n\)-{\em transition} is a pair of
-machine-policy state pairs \(\mpstate{\mach_c}{\pol_c}\) and
-\(\mpstate{\mach_e}{\pol_e}\) in \(\MPT\) such that
-\(\mach_c\) is a valid call with \(n\) arguments, and
-\(\mpstate{\mach_c}{\pol_c}\) steps to \(\mpstate{\mach_e}{\pol_e}\).
-
-%and \(\mach_e\) is an entry point for some function \(f\):
-
-  \[\begin{split}
-    \mathit{Tr}_n ~ \MPT ~ \mpstate{\mach_c}{\pol_c} ~ \mpstate{\mach_e}{\pol_e}
-    \triangleq & \exists \obs.
-    ~ \mpstate{\mach_c}{\pol_c} \stepstopol{\obs} \mpstate{\mach_e}{\pol_e} \\
-    & \land \callmap(\mach_c(\PCname)) = n
-      %\land \codemap(\mach_e(\PCname)) = f
-  \end{split}\]
-
-\definition
-
-We say that a system enjoys {\em stack integrity} if for every initial
-state $(\mach_0,\pol_0)$ and its corresponding induced trace $\MPT$ (with
-$\mpstate{\mach_0}{\pol_0} \hookrightarrow \MPT$), and for every
-$n$-transition from $\mpstate{\mach_c}{\pol_c}$ to
-$\mpstate{\mach_e}{\pol_e}$ in $\MPT$, if we take the prefix of the
-call until its corresponding return $\mpstate{\mach_e}{\pol_e}
-\hookrightarrow \MPT_{\mathit{call}} ~ | ~ \ret{\mach_c}$, then $\MPT_{\mathit{call}}$ must
-satisfy trace integrity:
-\[\propdef{TraceInt} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{\mathit{call}}\]
-\apt{This could still be clearer. Interleaving informal and mathy in the
-same sentence doesn't work so well.}
-
-%{\em Stack integrity} is a property of a system with respect to a call map
-%\(\callmap\) that holds when every \(n\)-transition  in every legal trace exhibits trace integrity
-%on the prefix up to its return, if any. For any initial state \(\mach_0\)
-%we take the induced trace. For each \(n\)-transition \(\mathit{Tr}_n ~ \MPT ~
-%\mpstate{\mach_c}{\pol_c} ~ \mpstate{\mach_e}{\pol_e}\) we take the prefix of
-%the call up to its return, \(\mpstate{\mach_e}{\pol_e} \hookrightarrow
-%\MPT_{call} | \ret{\mach_c}\). If for any such call trace \(\MPT_{call}\),
-%\(\propdef{TraceInt} ~ \mathit{Cof}(\mach_c,n) ~ \MPT_{call}\), then the
-%system as a whole enjoys stack integrity with respect to \(\callmap\).
-%
-%\apt{Some more words needed here to smooth the technicalities.}
-%\sna{Attempt...}
-%Rewrote for clarity
-
-\subsubsection{Stack Confidentiality}
-
-The second component of local state encapsulation is a confidentiality
-property: just like integrity ensures that a caller's data is never
-overwritten by a callee, confidentiality ensures that the caller's data never
-influences the callee's observable behavior. Again, we will formally define
-confidentiality in two steps: a trace version and a system
-version.
-
-Unlike integrity, confidentiality is a noninterference-style property,
-comparing the behavior of a machine with an arbitrary variation that
-preserves low confidentiality data.
-
-\definition%{Variations}
-Two machine states \(\mach\) and \(\mach'\) are {\em variations}
-of one another given a contour \(\contour\) if they agree on low
-confidentiality data:
-%
-\[
-\mach \approx_\contour \mach' \triangleq \forall \component .
-\contour(\component) = \LOWSEC \Rightarrow \mach(\component) =
-\mach'(\component)
-\]
-%
-Then, the trace version of confidentiality operates on two traces: the
-``original'' trace $\MPT \in \MPOTRACE$ that corresponds to a callee $f$
-and a ``variant'' trace $\machT \in \MOTRACE$ that corresponds to how $f$
-would behave if it were started from a variant initial machine state.
-%
-As an example of variations, consider the top of \Cref{fig:confex}
-which shows a snapshot of the state as in the running example (top
-memory layout) and a variation of it (bottom).
-%
-The ``Effect'' column shows differences between the two runs by writing values
-in the original run in {\high} and values in the variant run in {\varied}
-separated by a slash.
-%
-This example will end up with a violation of confidentiality, as a
-variation in a confidential location (\textcolor{cyan}{42} vs
-\textcolor{magenta}{$-5$} in location 100) leads to a visible
-difference in return value.
-
-\definition
-\label{def:trace-conf}
-
-{\em Trace confidentiality} will be a property of two traces, \(\MPT\) and
-\(\machT\), with respect to a return predicate \(R \subset \MACHS\) that
-reflects the states that are considered to have returned. We abstract over
-\(R\) because what it means to return depends on the state from which
-\(f\) was called. There are three cases in which \(\MPT\) and \(\machT\)
-enjoy trace confidentiality with respect to \(R\).
-
-\begin{itemize}
-  \item If \(\MPT\) has a final state \(\last(\MPT) = \mpostate{\mach_r}
-    {\_}{\_}\) and \(R\ \mach_r\), then \(\machT\) is also finite with
-    some final state \(\mach_r'\) and any changes from the initial states are
-    matched between \(\mach_r\) and \(\mach_r'\). In addition their
-    observations are similar.
-    \[\begin{split}
-      \mathit{ReturnCase} ~ R ~ \MPT ~ \machT \triangleq &
-      \last(\MPT) =
-        \mpostate{\mach_r}{\_}{\_} ~ \land ~ R ~ \mach_r \Rightarrow \\
-      & \exists \mach_r' . \last(\machT) = (\mach_r',\_)
-        \land \pi_o(\MPT) \eqsim \pi_o(\machT) ~ \land \\
-      & \forall ~ \component . (\mach_e(\component) \not = \mach_r(\component)
-        \lor \mach_e'(\component) \not = \mach_r'(\component)) \Rightarrow
-      \mach_r(\component) = \mach_r'(\component)
-    \end{split}\]
-  \item If \(\MPT\) is infinite, then \(\machT\) is also infinite and their
-  observations are similar.
-    \[\begin{split}
-      \mathit{InfCase} ~ \MPT ~ \machT \triangleq
-      & \neg (\exists mpo . \last(\MPT) = mpo) \Rightarrow \\
-      & \neg (\exists mo . \last(\machT) = mo)
-        \land \pi_o(\MPT) \eqsim \pi_o(\machT)
-    \end{split}\]
-\item If \(\MPT\) ends prematurely without fulfilling \(R\), then
-  its observations are a prefix of those of \(\machT\).
-    \[\begin{split}
-      \mathit{FailCase} ~ R ~ \MPT ~ \machT \triangleq
-      & \forall \mach_r .
-        \last(\MPT) = \mpostate{\mach_r}{\_}{\_} ~ \land ~ \neg ~ R ~ \mach_r \Rightarrow \\
-      & \pi_o(\MPT) \lesssim \pi_o(\machT)
-    \end{split}\]
-\end{itemize}
-
-Putting it all together:
-
-\[  \propdef{TraceConf} ~ R ~ \MPT ~ \machT \triangleq
-   \mathit{ReturnCase} ~ R ~ \MPT ~ \machT ~ \land
-   \mathit{InfCase} ~ \MPT ~ \machT \land
-    \mathit{FailCase} ~ R ~ \MPT ~ \machT
-\]
-
-In the non-return cases, we only care that the traces exhibit the same
-observable behavior (or a prefix if the trace halts prematurely), as changes
-in the state will not affect the caller absent a return.  In the return case
-we must additionally guarantee that no changes were made based on secret data
-that could corrupt the caller upon return.
-
-Consider the result of modifying line 42 of our running example to $r_4 \leftarrow [\rsp - 9]$.
-Instead of reading the proper argument {\tt v}, {\tt g} now reads directly from the
-secret value of {\tt x} that belongs to {\tt main}. \Cref{fig:confex}
-shows \(\mach_e\), the entry state of {\tt g}, with high confidentiality memory
-in {\high} and low confidentiality in {\low}. Below it, the variant state
-\(\mach_e'\) agrees on low confidentiality memory, but all other addresses
-hold $-5$, in {\varied}.  After the last step, the return states \(\mach_r\) and
-\(\mach_r'\) should agree on every component that changed since \(\mach_e\) or
-\(\mach_e'\). Addresses 108 and 109 have changed, shown in light {\low}, and while 109
-had changed in a consistent way (independent of the variation), 108 holds either 43 or $-4$, so the trace does not obey trace confidentiality.
-%\rb{Color name macros}
-%\apt{Explain slash notation in effects column.}
-%\rb{Wrote some words to explain after def. 5.4 (variations).}
-
-As another example, changing instruction 30 of the running example to
-$r_5 \leftarrow [\rsp - 6]$ would cause {\tt f} to read the value of
-{\tt main}'s local variable {\tt x} and then immediately output it,
-violating the internal observation clause of the confidentiality
-definition.
-
-\begin{figure}
-  \confidentialityendexample
-  \caption{Failing Trace Confidentiality}
-  \label{fig:confex}
-\end{figure}
-
-To lift trace confidentiality to a system property, we follow the same
-pattern as in stack integrity:
-
-\definition%{Stack Confidentiality}
-%Let $\callmap$ be a call map and $\codemap$ a function map.
-For every initial state \((\mach_0,\pol_0)\), we take the induced trace
-\(\mpstate{\mach_0}{\pol_0} \hookrightarrow \MPT\). Then for
-any \(n\)-transition from $\mpstate{\mach_c}{\pol_c}$ to
-$\mpstate{\mach_e}{\pol_e}$ in $\MPT$, we take the prefix of the trace
-from the entry point until its corresponding return:
-%
-\[\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} ~ | ~ \ret{\mach_c}\]
-%
-We also take the corresponding trace from any variant \(\mach_e'
-\approx_{\mathit{Cof}(\mach_c,n)} \mach_e\):
-%
-\[\mach_e' \hookrightarrow \machT_{\mathit{call}} ~ | ~ \ret{\mach_c}\]
-%
-%For all such pairs of traces, \(\propdef{TraceConf} ~
-%\ret{\mach_c} ~ \MPT_{\mathit{call}} ~ \machT{\mathit{call}}\) must hold.
-%Trace confidentiality must also hold on the trace as a whole, so that
-%unallocated memory is still secret. Let \(\mach_0'
-%\approx_{\mathit{Cof}(\mach_0),0} \mach_0\) and \(\mach_0' \hookrightarrow
-%\machT\). Then \(\propdef{TraceConf} ~ \emptyset ~ \MPT ~ \machT\) must hold.
-%
-If trace confidentiality holds for all such traces,
-\(\propdef{TraceConf} ~ \ret{\mach_c} ~ \MPT_{\mathit{call}} ~
-\machT_{\mathit{call}}\), and it also holds for the toplevel execution
-trace to account for unallocated memory, \(\propdef{TraceConf} ~
-\emptyset ~ \MPT ~ \machT\) , then the system as a whole enjoys {\em
-  stack confidentiality} with respect to \(\callmap\).
 
 \subsection{Well-bracketed Control Flow}
 \label{sec:wbcf}
