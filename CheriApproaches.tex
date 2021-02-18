@@ -98,53 +98,93 @@ them occur.
 
 \section{Handling Variations in Security Content}
 
-Either way the question becomes: should the variant trace be one with a policy active, or no? Let's
-look at a concrete example.
+Lets consider a very simple machine with three addresses and an external feed of instructions
+(instructions are not in memory.) An address can be marked either secret or public. Let's start with
+the following configuration (top rows are addresses marked S or P, bottom are contents):
 
-\begin{verbatim}
-main() {
-  int[2] x = {0,0};
-  int* y = &x+secret();
-  f(&x);
-}
+\begin{tabular}{| c | c | c |}
+  \hline
+  0(S) & 1(P) & 2(P) \\
+  \hline
+  0 & 0 & 0 \\
+  \hline
+\end{tabular}
 
-f() {
-  int** z = guess_y_addr();
-  print(z**);
-}
-\end{verbatim}
+We have a register \(r\), initialized to 0, and an output {\sc Out} that can be loaded to like a register.
+We want to apply our confidentiality model by varying secret locations and determining if programs
+differ in output between the original state and a variant. I'm using the simplified format from our
+examples in the paper. Assume that loads use the address modulo three so that the step operation is
+total. Consider the program:
 
-Here {\tt main} has an array {\tt x} and saves a pointer to one of its elements, but which one is secret.
-Then it passes the address to  {\tt f}, so that {\tt f} can access {\tt x} legally according to sharing.
-{\tt x} has a tag that marks it permissible for anyone to access it, but {\tt f} has actually accessed {\tt x}
-via reading the hidden information in {\tt y}. Suppose that our policy contains an error such that the access
-of {\tt y} is successful - then {\tt f} always ends up printing 0 regardless, so we haven't violated
-confidentiality. But we would if we printed {\tt y} outright or if the values in {\tt x[0]} and
-{\tt x[1]} differed.
+\vspace{\abovedisplayskip}
 
-Consider the variant states that we can have. {\tt x} does not vary, but {\tt y} can point to {\tt x[0]},
-{\tt x[1]}, or a location beyond {\tt x} entirely. In the first two cases, our output is 0,
-so confidentiality is maintained. What do we do with that case? We can:
+\begin{tabular}{l l l}
+  Line & Instr & Description \\
+  \hline
+  1 & \(r \leftarrow [0]\) & Load from address 0 \\
+  2 & {\sc Out} \(\leftarrow [r]\) & Load from the resulting address and output it \\
+  3 & \(r \leftarrow 0\) & Reset \(r\) to 0 \\
+\end{tabular}
+
+\vspace{\belowdisplayskip}
+
+At the end of this program, 0 has been printed. In any variant when address 0 mods to a 1 or a 2, it
+will also print 0. And since the final instruction clears \(r\), the final state is identical as well.
+So we would not say that this program violates confidentiality of address 0, even though it was read.
+
+Now suppose that we also make address 1 secret. The variation might vary both 0 and 1, so that the
+program reads address 1 and outputs a non-zero result. Now, confidentiality is violated, because this
+variation produces a different output. Suppose we consider some possible security properties to
+prevent this from occurring. The property we come up with attaches to the load instruction and,
+if the source register contains an address that is marked secret, fail-stops the machine. But we forget
+to implement a similar rule for loading through immediate values, oops! So the load on line 1 never failstops.
+Let's look at that second start state and the same program:
+
+\begin{tabular}{| c | c | c |}
+  \hline
+  0(S) & 1(S) & 2(P) \\
+  \hline
+  0 & 0 & 0 \\
+  \hline
+\end{tabular}
+
+Now the primary execution will load from address 0, then attempt to do so again and fail-stop. The variant
+might instead try to read from a different location, but we are termination insensitive, so even if it reads
+from 2 (successfully) the property holds. But what about this start state?
+
+\begin{tabular}{| c | c | c |}
+  \hline
+  0(S) & 1(S) & 2(P) \\
+  \hline
+  2 & 0 & 0 \\
+  \hline
+\end{tabular}
+
+Here the primary execution loads from 2 and prints 0. But a variant in which address 0 holds 0 or 1 will
+load from those addresses, which would violate the policy and cause a failstop. So the question is, how do
+we handle those variants? We can:
 
 \begin{enumerate}
-\item Recognize that the variant should fail-stop, and treat that as a violation
-\item Recognize that the variant should fail-stop, and ignore this variant
-\item Do not check for a variant fail-stop, and therefore likely get a violation
+\item Recognize that the variant should fail-stop, and since the primary execution does not,
+  treat that as a violation.
+\item Recognize that the variant should fail-stop, and since we are termination insensitive,
+  treat that as acceptable and look for another variant that actually produces different output.
+\item Do not check whether the variant fail-stops. So when we vary address 0 to 1 and address 1 to 1,
+  the program prints 1. Thus the property is violated.
 \end{enumerate}
 
-I argue for option 2, because either some other variation that doesn't create an illegal pointer
-will be a violation, or the particular trace has not leaked any information. In this case,
-the error will be detected if we ever run the comparable case where {\tt x = {0,1}}, but if the compiler
-somehow only produced traces where this issue is invisible, we need not consider it. Still, option 1
-could be fine, since our policies are meant to prevent {\tt y} from being read in the first place.
+Options 1 and 2, in testing, will let us stop short and either move on to a different test or
+declare a failure. Option 1 seems at odds with the notion of termination-insensitivity; so does option 3
+in its own way, with the added downside that it's hard to predict whether a given case might fail. Option
+2 is similar to only doing variants that maintain the legality of pointers. I've been leaning toward option
+2, and I tend not to like option 3 because our variant run can show behavior that is infeasible in the
+target machine.
 
-Option 3 is clearly bad because if the contents of {\tt y} are used in some other way, its behavior
-could be radically different from the primary trace. Whether it fails or not is virtually unrelated to
-the initial potential violation. This seems very bad.
-
-Considering the same situation in Cheri, we also have the possibility to get additional tag failures
-by varying not just the address pointed to, but the permissions bits on a capability. But the fundamental
-question remains the same: what to do with fail-stop variants.
+This small example illustrates a scenario that can come up in HOPE and Cheri, when pointers and capabilities
+being varied introduces fail-stop behavior in the variant trace when none was present in the primary. This
+is an edge case, of course, because in any such scenario the program could instead print the pointer and thus
+violate the property immediately. But we do need to decide how to approach it. We could imagine a policy that
+prevents printing the pointer directly (via taint-tracking, say) but does not prevent dereferencing it.
 
 \section{Cheri Implementation}
 
