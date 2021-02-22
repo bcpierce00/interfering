@@ -1,0 +1,288 @@
+\label{sec:running-example}
+
+\begin{figure}[b]
+    \begin{minipage}{.3\textwidth}
+\begin{verbatim}
+main = {
+  int x = 42, y = 0;
+  y = f(10);
+  print (x + y);
+}
+\end{verbatim}
+    \end{minipage}
+    \begin{minipage}{.3\textwidth}
+\begin{verbatim}
+f(z) = {
+  print z;
+  return (2*z);
+}
+\end{verbatim}
+    \end{minipage}
+\caption{A Simple Call}
+\label{fig:simple-program}
+\end{figure}
+
+
+\newcommand*{\add}{\textsc{add}}
+\newcommand*{\addi}{\textsc{addi}}
+\newcommand*{\sw}{\textsc{sw}}
+\newcommand*{\lw}{\textsc{lw}}
+\newcommand*{\jal}{\textsc{jal}}
+\newcommand*{\jalr}{\textsc{jalr}}
+%\newcommand*{\rsp}{\textsc{sp}}
+\newcommand*{\rra}{\textsc{ra}}
+\newcommand*{\rout}{\textsc{out}}
+
+\newcommand*{\tagInstr}{\textsc{instr}}
+\newcommand*{\tagCall}{\textsc{call}}
+\newcommand*{\tagHa}{\textsc{h1}}
+\newcommand*{\tagHb}{\textsc{h2}}
+\newcommand*{\tagRa}{\textsc{r1}}
+\newcommand*{\tagRb}{\textsc{r2}}
+\newcommand*{\tagRc}{\textsc{r3}}
+\newcommand*{\tagNoDepth}{\textsc{unused}}
+\newcommand*{\tagStackDepth}[1]{\textsc{stack} ~ #1}
+\newcommand*{\tagPCDepth}[1]{\textsc{pc} ~ #1}
+\newcommand*{\tagSP}{\textsc{sp}}
+
+\newcounter{pcctr}
+\setcounter{pcctr}{0}
+%  \thepcctr & \stepcounter{pcctr} #1 & #2 & #3 & \text{#4}\\
+\newcommand*{\row}[4]{
+  \thepcctr & \stepcounter{pcctr} #2 & #3 & \text{#4}\\
+}
+\newcommand*{\tracerow}[5]{
+  #1 & #2 & #3 & #4 & \text{#5}\\
+}
+\newcommand*{\summary}[6]{
+\[
+\begin{array}{cccccc}
+  \PCname = #1 & r_0 = #2 & \rra = #3 & \rsp = #4 & r_4 = #5 & r_5 = #6
+\end{array}
+\]
+}
+\newcommand{\negate}{\textrm{-}}
+
+\colorlet{lgray}{gray!40}
+
+\newcommand{\instrc}{lgray}
+\newcommand{\mainsealc}{cyan}
+\newcommand{\fsealc}{green}
+\newcommand{\unsealc}{gray}
+\newcommand{\emptyoutc}{white} % or gray for consistency with unusedc ?
+\newcommand{\fulloutc}{white}
+
+\begin{figure}
+
+%Starting Memory Layout
+\begin{center}
+\memoryaddrs{25em}
+\memory{3}{\instrc}[{\makebox[0pt]{Instructions}}]%
+\hspace*{3pt}
+$\cdots$
+\memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
+\memory{10}{\unsealc}[{\makebox[0pt]{Unsealed}}]
+~$\cdots$
+\\
+\end{center}
+% Starting Register File
+\summary{0}{0}{?}{100}{?}{?}
+\vspace*{0.2em}
+\ifaftersubmission\bcp{A very small nit: Change
+  $\rsp-2$ to $\rsp\mathord{-}2$}\apt{??}\bcp{I meant remove spaces around +
+and $-$ when then are used inside brackets.  I think it will look better.
+But not critical.}\fi
+\[
+  \begin{array}{l|l|l|l}
+    PC & \mathit{Instruction} & \mathit{Effect} & \\
+    \hline
+    \row{\addi ~ \rsp ~ \rsp ~ 2}{\rsp \leftarrow \rsp + 2}{\rsp \leftarrow 102}
+        {Allocate private data for {\tt main}}
+    \row{\addi ~ r_4 ~ r_0 ~ 42}{r_4 \leftarrow r_0 + 42}{r_4 \leftarrow 42}
+        {Load 42 into $r_4$}
+    \row{\sw ~ \rsp ~ r_4 ~ \negate 2}{[\rsp-2] \leftarrow r_4}{[100] \leftarrow 42}
+        {Set {\tt x} to 42}
+    \row{\sw ~ \rsp ~ r_0 ~ \negate 1}{[\rsp-1] \leftarrow r_0}{[101] \leftarrow 0}
+        {Set {\tt y} to 0}
+    \row{\addi ~ r_4 ~ r_0 ~ 10}{r_4 \leftarrow r_0 + 10}{r_4 \leftarrow 10}
+        {Load 10 in \(r_4\) as argument}
+    \row{\jal ~ \rra ~ 20}{\rra \leftarrow \PCname + 1; ~ \PCname \leftarrow 20}{\rra \leftarrow \thepcctr; ~ \PCname \leftarrow 20}
+        {Call ($\jal$ to) {\tt f}}
+  \end{array}
+  \]
+  ~ \\
+  ~\\
+%  \apt{How's that description for last line?}
+%  \apt{Where did these RISC-V insruction formats come from? I think some of them are just wrong, e.g.
+%    $\jal$ takes a PC-relative argument, not an absolute one, and the proper way to code a return to $\rra$ is $\jalr  ~ \rra ~ r_0$.
+%  But also the instruction operand ordering is awkward. Why not use standard AT\&T syntax?}
+% At Call to G
+% Memory Layout
+\begin{center}
+\memoryaddrs{35em}
+\memory{3}{\instrc}[{\makebox[0pt]{Instructions}}]%
+\hspace*{3pt}
+$\cdots$
+\memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
+\memory{2}{\mainsealc}[{\makebox[0pt]{Sealed 0}}]%
+\memory{8}{\unsealc}[{\makebox[0pt]{Unsealed}}]
+~$\cdots$
+\\
+\end{center}
+% Starting Register File
+\summary{20}{0}{\thepcctr}{102}{10}{?}
+%\vspace*{0.2em}
+\setcounter{pcctr}{20}%
+% G - Body - 1
+\vspace*{0.2em}
+  \[
+  \begin{array}{l|l|l|l}
+    \row{\addi ~ \rsp ~ \rsp ~ + 1}{\rsp \leftarrow \rsp + 1}{\rsp \leftarrow \rra}
+        {Allocate space for return address}
+    \row{\sw ~ \rsp ~ \rra ~ \negate 1}{[\rsp - 1] \leftarrow \rra}{[103] \leftarrow 6}
+        {Save return address}
+    \row{\sw ~ \rout ~ r_4}{[\rout] \leftarrow r_4}{[\rout] \leftarrow 10}
+        {Print argument}
+        % Zero out z?
+    \row{\addi ~ r_4 ~ r_4 ~ r_4}{r_4 \leftarrow r_4 + r_4}{r_4 \leftarrow 20}
+        {Double the argument}
+    \row{\lw ~ \rra ~ \rsp ~ \negate 2}{\rra \leftarrow [\rsp - 1]}{\rra \leftarrow 8}
+        {Load return address}
+    \row{\addi ~ \rsp ~ \rsp ~ \negate 1}{\rsp \leftarrow \rsp - 1}{\rsp \leftarrow 102}
+        {Deallocate return address}
+    \row{\jalr ~ \rra ~ \rra ~ 0\apt{wrong}}{\PCname \leftarrow \rra}{\PCname \leftarrow 6}{Return to {\tt main} ($\jalr$)}
+  \end{array}
+  \]
+  ~ \\
+  ~ \\
+\begin{center}
+\memoryaddrs{25em}
+\memory{3}{\instrc}[{\makebox[0pt]{Instructions}}]%
+\hspace*{3pt}
+$\cdots$
+\memory{1}{\emptyoutc}[{\makebox[0pt]{Output}}]%
+\memory{10}{\unsealc}[{\makebox[0pt]{Unsealed}}]
+~$\cdots$
+\MemoryLabel{-46.5em}{0.75em}{42}
+\MemoryLabel{-42.5em}{0.75em}{0}
+\\
+\end{center}
+
+\setcounter{pcctr}{6}
+
+% Register File
+\summary{\thepcctr}{0}{\thepcctr}{102}{20}{?}
+%\vspace*{0.2em}
+\[
+\begin{array}{l|l|l|l}
+  \row{\sw ~ \rsp ~ r_4 ~ \negate 1}{[\rsp - 1] \leftarrow r_4}{[101] \leftarrow 20}
+      {Store the result to {\tt y}}
+  \row{\lw ~ \rsp ~ r_4 ~ \negate 2}{r_4 \leftarrow [\rsp - 2]}{r_4 \leftarrow 42}
+      {Load {\tt x} to \(r_4\)}
+  \row{\lw ~ \rsp ~ r_5 ~ \negate 1}{r_5 \leftarrow [\rsp - 1]}{r_5 \leftarrow 20}
+      {Load {\tt y} to \(r_5\)}
+  \row{\addi ~ r_5 ~ r_4 ~ r_5}{r_5 \leftarrow r_4 + r_5}{r_5 \leftarrow 62}
+      {Add {\tt x} to {\tt y}}
+  \row{\sw ~ \rout ~ r_5 ~ 0}{[\rout] \leftarrow r_5}{[99] \leftarrow 62}
+      {Print {\tt x + y}}
+\end{array}
+\]
+\vspace*{0.2em}
+% Return to main
+% Memory Layout
+% Starting Register File
+\caption{Detailed Execution Trace
+%  \rb{A suggestion for the description of $\jal$ and $\jalr$:
+%    call(function label) [if labels are added next to the entrypoints]
+%    or call(address of entrypoint) and return()?}
+}
+\label{fig:simple-trace}
+\end{figure}
+
+\Cref{fig:simple-program} shows a high-level view of a running example,
+written in C-like pseudo-code.  It consists of a {\tt main} function that
+performs a call to a function {\tt f}, which prints its argument, performs
+arithmetic, and returns a result. \Cref{fig:simple-trace} shows an
+execution trace of the corresponding machine instructions. These might have
+been generated from the high-level code by a (rather simple-minded) compiler,
+but we focus on the behavior of the machine instructions. Note that for this
+simple example, arguments and return values are passed on the stack.
+
+To streamline the example, we use a small instruction set reminiscent of
+RISC-V and make a few simplifying assumptions about the organization of
+memory.
+%
+First, as noted above, since our goal is to formalize stack safety, we
+ignore the heap and assume that all variables are stack allocated.
+%
+We also assume that the machine is word- (not byte-) addressed, that program
+instructions start from location 0, that the machine communicates with the
+outside world through a single memory-mapped output port at address 99 (so
+a {\tt print} statement will be compiled to a store to this
+location), and that the stack begins at location 100 and grows upwards.
+% \leo{Explain more?  How to connect to realistic one? Observations? DMA?
+%   Interrupt handlers?}\bcp{Yes.}
+
+A sketch of the initial memory layout appears at the top of
+\Cref{fig:simple-trace}: the instructions for {\tt main} begin at 0,
+and the (uninitialized) stack begins at 100. The entire stack is currently
+{\em unsealed}, meaning that it is eligible to be written to.
+Directly below the memory sketch, we summarize the parts
+of the register file that are relevant at this point in the example.
+
+The rest of \Cref{fig:simple-trace} traces the execution of the
+program, showing the machine state at call and return points.
+Instructions are intended to be similar to RISC-V, but are described
+in a (hopefully more readable) ad-hoc notation rather than assembler
+syntax. The $\jal$ (jump-and-link) instruction used for calls atomically
+stores the return address in a register and jumps to a specified new $\PCname$;
+the $\jalr$ (jump-and-link-via-register) instruction used for returns jumps
+to the address stored in a register. Register $r_0$ is hardwired to zero,
+so that, e.g., instruction 3 stores $0$ into address 101.
+
+At the call from {\tt main} to {\tt f}, {\tt main}'s locals (as
+designated by the stack pointer) are {\em sealed} and labeled with the depth
+of their owner, which is 0. Sealing is the fundamental integrity contract
+between the caller and callee: {\tt main} expects that {\tt x} and {\tt y}
+will be unchanged when it gets control back. This gives us our simple,
+intuitive statements of integrity, in their {\em eager} and {\em ultra-eager}
+forms, either of which supports a {\em call rule}.
+
+\begin{itemize}
+\item {\bf Eager Integrity}: on entry to a subroutine, whichever components are
+  sealed will have the same values when the subroutine returns
+\item {\bf Ultra-eager Integrity}: at any step, whichever components are sealed
+  will be invariant
+\item {\bf Call Rule}: from the \(\jal\) instruction of a call, if the step is
+  successful and there is eventually a corresponding return, that return is to
+  the appropriate return address and all sealed components are unchanged
+\end{itemize}
+
+Meanwhile confidentiality intuitively states that the callee, {\tt f}, is unaware
+of the context of its call (with the exception, of course, of its arguments).
+We state this in terms of noninterference: if we say ``components \(\components\)
+interfere with the call to {\tt f},'' we mean that at some point up to when it returns,
+{\tt f} would display different behavior if called from a state with a different
+assignment of values to \(\components\). Here behavior encompasses uses of {\tt print},
+return values, and changes to state that will persist beyond the return.
+For instance, if {\tt f} computed the offset to access {\tt x} and branched on its value
+to decide whether to double or triple its argument, a change in {\tt x} could translate
+to a change in {\tt f}'s return value, making {\tt x} interfere with {\tt f}.
+
+Note that it is not sufficient to prevent sealed memory from interfering: unsealed
+memory that is, from the callee's perspective, uninitialized is also part of the calling
+context. Our model therefore does not support an ultra-eager confidentiality property.
+We have only eager confidentiality, which supports a {\em transparency rule}. But the
+notion of non-interference also lets us weaken integrity to make a {\em lazy} property
+for use with lazy tag policies.
+
+\begin{itemize}
+\item {\bf Eager Confidentiality}: the state of the stack on entry to a subroutine
+  does not interfere with its behavior up to the point that it returns
+\item {\bf Transparency Rule}: from the \(\jal\) instruction of a call, if the step is
+  successful, the entry state can be arbitrarily scrambled without changing the callee's
+  behavior up to return
+\item {\bf Lazy Integrity}:  on entry to a subroutine, whichever components are
+  sealed will either have the same values when the subroutine returns, {\em or} they will
+  not interfere with the caller's behavior up to its own return
+\end{itemize}
