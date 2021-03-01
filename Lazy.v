@@ -6,39 +6,72 @@ Require Import Trace.
 Require Import Machine.
 Require Import ObsTrace.
 Require Import TraceProperties.
+Require Import Coroutine.
 
-(* We add coroutines with multiple stacks, defined with static extents (see Machine.v).
-   Our domain model uses the same stack domain as previous, but now a top-level domain
-   combines a stack identity and the domains of that stack. Outside is now a top domain. *)
-Section DOMAIN_MODEL.
+(* A lazy integrity property is one that doesn't care directly about the state
+   of the machine, but focuses on whether an adversary can cause changes in the
+   visible behavior of another domain. We offer two such properties. The first
+   attempts to consider, for any changes to sealed components, a hypothetical
+   world in which they do not change.
 
-  Inductive StackDomain :=
-  | Sealed (d:nat)
-  | Shared (d:nat)
-  | Passed (d:nat)
-  | Unsealed
-  .
+   The second is slightly stronger, and treats a change to sealed state as a
+   secret that should never become observable at all. Its strength avoids certain
+   cases where the first property has difficult intuition.
+*)
+Section LAZY_TRACE_PROPS.
+  Variable context : Type.
+  Variable updateC : MachineState -> context -> context.
 
-  Inductive TopDomain :=
-  | Instack (sid:StackID) (sd:StackDomain)
-  | Outside
-  .
+  Definition rollback (m m':MachineState) (K : Component -> Prop) (m'': MachineState) : Prop :=
+    forall k,
+      K k ->
+      m k <> m' k ->
+      m'' k = m k /\
+      (K k \/ m k = m' k) ->
+      m'' k = m' k.
 
-  Definition DomainMap := Component -> TopDomain.
+  Definition TraceIntegrityLaziest
+             (K : Component -> Prop)
+             (MCP:@MCPTrace context) : Prop :=
+    forall m c p m' MCP' MCP'' MO MO',
+      Last MCP (m,c,p) ->
+      rollback m (mstate (head MCP)) K m' ->
+      WithContextMP updateC c (MPTraceOf (m,p)) MCP' ->
+      WithContextMP updateC c (MPTraceOf (m',p)) MCP'' ->
+      ObsOfMCP MCP' MO ->
+      ObsOfMCP MCP'' MO' ->
+      ObsOfMP MO ~=_O ObsOfMP MO'.
 
-  (* We will additionally track the depths of all the stack simultaneously. *)
-  Definition DepthMap := StackID -> nat.
-  Definition initDepM : DepthMap := fun sid => O.
-  Definition push (depm: DepthMap) (sid: StackID) :=
-    fun sid' => if stack_eqb sid sid'
-                then (depm sid)+1
-                else depm sid.
-  Definition pop (depm: DepthMap) (sid: StackID) :=
-    fun sid' => if stack_eqb sid sid'
-                then (depm sid)-1
-                else depm sid.
-  
-End DOMAIN_MODEL.
+  (* The second property identifies the subset of protected components that
+     changed between the beginning and the end of the trace. The property holds
+     if that subset remains confidential permanently, defined in terms of trace
+     confidentiality holding on the trace from the final state.*)
+  Definition TraceIntegrityLazy
+             (K : Component -> Prop)
+             (MCP:@MCPTrace context) : Prop :=
+    forall m c p MCP',
+      Last MCP (m,c,p) ->
+      let K' := fun k => K k /\ mstate (head MCP) k <> mstate (m,c,p) k in
+      let P := fun _ _ => False in
+      WithContextMP updateC c (MPTraceOf (m,p)) MCP' ->
+      TraceConfidentialityEager updateC K' P MCP'.
+
+  (* Distinguishing example
+     f() {
+       int x = 0;
+       if(x)
+         print x;
+       else
+         print 1;
+     }
+
+     g() {
+       x = 1 // through arithmetic from the stack pointer, set x to 1
+     }
+   *)
+
+
+End LAZY_TRACE_PROPS.
 
 Section WITH_MAPS.
 
@@ -136,31 +169,8 @@ Section WITH_MAPS.
       fst c k = Instack sid' sd ->
       (sid <> sid /\ sd <> Shared d).
   
-  Definition StackIntegrityUE : Prop :=
-    forall minit k mcp mcp',
-      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
-      StackInaccessible (cstate mcp) k ->
-      mstate mcp k = mstate mcp' k.
-
-  Definition CoroutineIntegrityUE : Prop :=
-    forall minit k sid mcp mcp',
-      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
-      CoroutineInaccessible (cstate mcp) sid k ->
-      mstate mcp k = mstate mcp' k.
-
-  (* We can actually do ultra eager confidentiality for coroutines without any more complexity,
-     because coroutine properties don't care about allocation and initialization. That only comes
-     when subroutine properties are layered in. *)
-  Definition CoroutineConfidentialityUE : Prop :=
-    forall minit sid m c p m' c' p' p'' n n' o o',
-      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,c,p) (finished (m',c',p'))) ->
-      variantOf (fun k => CoroutineInaccessible c sid k) m n ->
-      mpstep (m,p) = Some (m',p',o) ->
-      mpstep (n,p) = Some (n',p'',o') ->
-      sameDifference m m' n n' /\ p = p'' /\ o = o'.
-
   (* We presumably want a Yield Rule that is equivalent to the Call Rule. *)
-  Definition YieldRule : Prop :=
+(*  Definition YieldRule : Prop :=
     forall minit MCP sid my cy py mp o m' c' p' MCP',
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
       InTrace (my,cy,py) MCP -> (* From any state that is a yield *)
@@ -175,7 +185,7 @@ Section WITH_MAPS.
       forall a sd,
         fst cy (Mem a) = Instack sid sd ->
         my (Mem a) = m' (Mem a).      
-  
+*)  
   Definition StackIntegrityEager : Prop :=
     forall minit MCP sid d,
       let P := fun m (c:context) => snd c sid = d in

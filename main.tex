@@ -383,7 +383,7 @@ it would be bad if it could just read {\tt key}. But there are more subtle examp
 such as the second one, where a secret value controls which function of {\tt g} and
 {\tt h} are called prior to calling {\tt f}. Here, if {\tt g} or {\tt h} leaves behind
 identifying information in unused stack space, {\tt f} could still deduce information
-about the secret. So our confidentiality properties also support a {\em transparency rule},
+about the secret. So our confidentiality properties also support a {\em insensitivity rule},
 that each function's behavior is independent of the state of its caller, other than arguments.
 This also makes it easier, though not trivial, to prove idempotence: the channels through
 which a callee can remember its own history are limited to those outside the stack.
@@ -789,7 +789,7 @@ silent (written \(\tau\)) or a word of data\ifaftersubmission\bcp{This is a rath
 communicates to the outside world:
 %
 \[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
-\[\mach \stepstoobs{\obs} \mach' \in \MACHS \rightarrow \MACHS \times \OBSS \]
+\[\mach \stepstoobs[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS \]
 %
 This step function is total, so the machine's execution traces
 (defined in \cref{sec:traces}) are infinite.
@@ -836,9 +836,9 @@ states.
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
 
-\judgmenttwo{\(\mach \stepstoobs{\obs} \mach'\)}{\((\mach, \pol)
+\judgmenttwo{\(\mach \stepstoobs[\obs] \mach'\)}{\((\mach, \pol)
                \polstep \pol'\)}
-            {\(\mpstate{\mach}{\pol} \stepstopol{\obs}
+            {\(\mpstate{\mach}{\pol} \stepstopol[\obs]
                \mpstate{\mach'}{\pol'}\)}
 
 This combined step function is also partial, and traces of the machine-with-policy
@@ -875,13 +875,13 @@ observation, called \emph{MPC-traces} and denoted \(\MPCT \in \MPCOTRACE\).
 The ``trace-of'' operator, written \(\mach \hookrightarrow \machT\),
 coinductively relates a machine state with the trace of machine states
 and observations produced by repeated application of step. It's defined in
-terms of a coinductive helper, \(\mathit{obs-forward}\):
+terms of a coinductive helper, \(\mathit{obsforward}\):
 
-\judgmenttwo{\(\mach \stepstoobs{\obs'} \mach'\)}
-            {\(\mathit{obs-forward} ~ \mach' ~ \obs' = \machT\)}
-            {\(\mathit{obs-forward} ~ \mach ~ \obs = (\mach,\obs) \machT\)}%
+\judgmenttwo{\(\mach \stepstoobs[\obs'] \mach'\)}
+            {\(\mathit{obsforward} ~ \mach' ~ \obs' = \machT\)}
+            {\(\mathit{obsforward} ~ \mach ~ \obs = (\mach,\obs) \machT\)}%
 %
-\judgment{\(\mathit{obs-forward} ~ \mach ~ \tau = \machT\)}
+\judgment{\(\mathit{obsforward} ~ \mach ~ \tau = \machT\)}
          {\(\mach \hookrightarrow \machT\)}
 \noindent
 (We use juxtaposition of an element and a sequence to represent ``cons.'')
@@ -901,15 +901,15 @@ to relate a machine-policy-context state triple to the MPCO-trace
 induced by the step function.
 
 \judgment{\(\neg \exists \pol' . \mpcstate{\mach}{\pol} \polstep \pol'\)}
-         {\(\mathit{obs-forward} ~ \mpcstate{\mach}{\pol}{\context} ~ \obs =
+         {\(\mathit{obsforward} ~ \mpcstate{\mach}{\pol}{\context} ~ \obs =
            \mpcstate{\mach}{\pol}{\context},\obs\)}
 %
-\judgmenttwo{\(\mpcstate{\mach}{\pol}{\context} \stepstoobs{\obs'} \mpcstate{\mach'}{\pol'}{\context'}\)}
-            {\(\mathit{obs-forward} ~ \mpcstate{\mach'}{\pol'}{\context'} ~ \obs' = \machT\)}
-            {\(\mathit{obs-forward} ~ \mpcstate{\mach}{\pol}{\context} ~ \obs =
+\judgmenttwo{\(\mpcstate{\mach}{\pol}{\context} \stepstoobs[\obs'] \mpcstate{\mach'}{\pol'}{\context'}\)}
+            {\(\mathit{obsforward} ~ \mpcstate{\mach'}{\pol'}{\context'} ~ \obs' = \machT\)}
+            {\(\mathit{obsforward} ~ \mpcstate{\mach}{\pol}{\context} ~ \obs =
               (\mpcstate{\mach}{\pol}{\context},\obs) \machT\)}%
 %
-\judgment{\(\mathit{obs-forward} ~ \mpcstatename ~ \tau = \machT\)}
+\judgment{\(\mathit{obsforward} ~ \mpcstatename ~ \tau = \machT\)}
          {\(\mpcstatename \hookrightarrow \machT\)}
 
 We will also use \(\pi_m\), \(\pi_p\), \(\pi_c\), and \(\pi_o\) to project the components out of an
@@ -1058,8 +1058,8 @@ an external observer looking at two machine runs cannot (computably)
 distinguish between a machine that steps forever and a machine that
 steps for a long time before producing some output.
 
-\section{Simple Stack Safety, Formally}
-\label{sec:sss}
+\section{Local State Encapsulation, Formally}
+\label{sec:lse}
 
 We are finally ready for our definition of stack safety. We begin
 by describing how we model knowledge about the program structure,
@@ -1081,7 +1081,7 @@ This information is represented by a {\em code map}, a partial function from
 addresses to pairs consisting of a function identifier and an {\em annotation}.
 An annotation may be {\em call} or {\em return}.
 
-\[\ann \in \ANNS ::= \callmap + \retmap\]
+\[\ann \in \ANNS ::= \mathscr{P}(\{\callmap, \retmap\})\]
 \[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \FUNIDS \times \option{\ann}\]
 
 \paragraph*{Call Depth and Domains}
@@ -1162,12 +1162,13 @@ and component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) an
 
 \subsection{Eager Integrity and the Call Rule}
 
-\definition Let \(\mpcstatename\) be a reachable state whose next instruction is annotated
-as a call and whose call depth is \(\depth\). Let \(f ~ \mach ~ \context\) hold when \(\context = \_,\depth\),
-and \(\components\) be the set of components \(\component\) such that
-\(\sealcon ~ \pi_\mach(\mpcstatename) ~ \component\) holds. Then the {\em Call Rule} says that if
-\(\mpcstatename \stepstocon \mpcstatename'\), it is sound to assume that
-\(\mpcstatename' \hookrightarrow \MPCT | f\) and if \(\last(\MPCT) = \mach'\), then
+\definition Let \(\mpcstatename\) be a reachable state whose PC value is annotated
+as a call and whose call depth is \(\depth\). Assume \(\mpcstatename \stepstocon \mpcstatename'\).
+Let \(\MPCT\) be the trace ending after the corresponding return, if any, defined by
+\(\mpcstatename' \hookrightarrow \MPCT | f\) with \(f ~ \mach ~ \context\) holding when
+\(\context = \_,\depth\). Finally let \(\components\) be the set of components \(\component\)
+such that \(\sealcon ~ \pi_\mach(\mpcstatename) ~ \component\) holds. Then by the {\em Call Rule},
+it is sound to assume that if \(\last(\pi_\mach(\MPCT)) = \mach'\), then
 \(\pi_\mach(\mpcstatename) ~ \component = \mach' ~ \component\).
 
 \definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \depth')\) hold when
@@ -1176,7 +1177,7 @@ and \(\components\) be the set of components \(\component\) such that
 \pi_m(\last(\MPCT)) ~ \component\) for all \(\component\) where \(\domMap ~ \component =
 \sealed{\_}\).
 
-\subsection{Eager Confidentiality and the Transparency Rule}
+\subsection{Eager Confidentiality and the Insensitivity Rule}
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if, for
 all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\). We write
@@ -1187,7 +1188,12 @@ if for all components \(\component\) such that \(\mach ~ \component \not = \mach
 \(\nach ~ \component \not = \nach' ~ \component\), \(\mach' ~ \component = \nach' ~ \component\).
 This is written \(\mach,\mach' \diamond \nach,\nach'\).
 
-\definition Transparency Rule
+\definition Let \(\mpcstatename\) be a reachable call state. Assume the that the call is successful
+and \(\mpcstatename \stepstocon \mpcstatename'\). Then let \(\npcstatename'\) be a \(\components\)-variant
+where \(\components\) is the set of all addresses in the stack. Then by the {\em Insensitivity Rule},
+if the trace from \(\mpcstatename'\) eventually returns, so does that from \(\npcstatename'\),
+their states after the return have the same differences, and up to return their traces are observationally
+equivalent.
 
 \definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \depth')\) hold for
 \(\depth' \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
@@ -1217,14 +1223,32 @@ they correspond according to one of four cases:
 \item \(\NPCT\) may end with a fail-stop as in case 3, with \(\pi_\obs(\NPCT) \lesssim \pi_\obs(\MPCT)\)
 \end{enumerate}
 
-\section{Stack Safety with Sharing}
+\subsection{Stack Safety with Sharing}
+\[\ann \in \ANNS ::= \mathscr{P}(\{\callmap, \retmap\} \cup
+\{\sharemap ~ P | P \subseteq \MACHS \times \COMPONENTS \} \cup
+\{\passmap ~ P | P \subseteq \MACHS \times \COMPONENTS \})\]
+
 
 \subsection{Trace Properties}
 
-\section{Coroutine Safety}
-
 \subsection{Local State Encapsulation}
-\label{sec:lse}
+
+\definition A system enjoys {\em local state encapsulation} if it enjoys eager integrity and
+eager confidentiality.
+
+\definition A system enjoys {\em lazy local state encapsulation} if it enjoys lazy integrity
+and eager confidentiality.
+
+We do not give a confidentiality equivalent to lazy integrity, because the family of lazy
+enforcement mechanisms that we consider under the HOPE system in fact enforce eager confidentiality.
+A policy based on taint-tracking might require such a lazy confidentiality, and it would be constructed
+by replacing the ``same-difference'' condition with one that requires any differences to produce
+observationally equivalent states. But for our purposes it is irrelevant.
+
+\section{Coroutine Safety}
+\[\ann \in \ANNS ::= \mathscr{P}(\{\callmap, \retmap, \yieldmap\} \cup
+\{\sharemap ~ P | P \subseteq \MACHS \times \COMPONENTS \} \cup
+\{\passmap ~ P | P \subseteq \MACHS \times \COMPONENTS \})\]
 
 \subsection{Well-bracketed Control Flow}
 \label{sec:wbcf}
@@ -1232,30 +1256,37 @@ they correspond according to one of four cases:
 Both the integrity and confidentiality components of local state
 encapsulation concern themselves only with the accessibility of data,
 and may still hold on a wide range of programs that violate expected
-control flow. For instance, if {\tt f} managed to jump in the middle of
-the code of {\tt g} with its call, confidentiality and integrity would
-still be satisfied.
-%
-However, that is still unwanted behavior: for example, a caller (or a
-callee) should not be able to bypass a password check by jumping (or
-returning) in the middle of a block of code --- even if such an execution
-would ostensibly satisfy local state encapsulation.
+control flow. The archetypal example of this is the {\em awkward example},
+in which an adversarial callee stores a return address and returns to it
+on a subsequent call, thus violating the expected control flow of the
+caller without actually violating the caller's integrity. But it also
+encompasses simpler violations, such as a function bypassing a password
+check by jumping (or returning) in the middle of a block of code.
 %
 Stack safety enforcement mechanisms like \citet{Skorstengaard+19}
 usually aim to prevent such unwanted flows: every jump between
 functions should either be a call or a return, and each return should
 be to the instruction after its corresponding call.
 
-To formally capture this aspect of stack safety, we introduce three
-security properties that rely on the underlying knowledge of the
-program structure (call map $\callmap$, function map $\codemap$, return map $\retmap$, and entry
-map $\entmap$): {\em control separation} ensures the validity of transition
-sources between functions, {\em entry integrity} ensures the validity
-of call targets, and {\em return integrity} ensures that of
-return targets.
+To formally capture this aspect of stack safety, we introduce some more
+security properties. {\em Control separation} restricts transitions between
+functions to follow the interfaces set out by call, return, and yield, forming
+a foundation for all of the other properties that rely on those interfaces for
+meaning. {\em Entry integrity} ensures the validity of call targets,
+{\em return integrity} ensures that of return targets, and
+{\em yield-back integrity} ensures that of yield targets.
+
+Recall that our properties use a compiler-derived code-map determine
+which addresses are instructions and which functions they belong to, as well
+as annotating them as calls, returns, and yields, as well as sharing information.
+We now extend it with an annotation for valid entry points:
+\[\ann \in \ANNS ::= \mathscr{P}(\{\callmap, \retmap, \yieldmap, \entrymap\} \cup
+\{\sharemap ~ P | P \subseteq \MACHS \times \COMPONENTS \} \cup
+\{\passmap ~ P | P \subseteq \MACHS \times \COMPONENTS \})\]
 
 \definition%{Control Separation}
-A system enjoys {\em control separation}
+A system enjoys {\em control separation} when each reachable step \(\mpcstatename\)
+where 
 % with respect to a function map
 %\(\codemap\), a call map \(\callmap\), and a return map \(\retmap\),
 if, for any initial state \((\mach_0, \pol_0)\) and any adjacent pair of states
@@ -1289,59 +1320,6 @@ because the target (instruction 42) of the new $\jalr$ is not an established
 entry point according to the entry map. Our properties do not enforce which
 call points jump to which entry points, however; that would require a stronger
 notion of control flow integrity.
-
-\newcommand*{\Unmatched}{\mathit{um}}
-
-Return integrity captures the expected behavior of marked returns with
-respect to their call points. Intuitively, it says that the marked return
-matching a call $\mach_c$ should satisfy $\ret{\mach_c}$.
-Observe that, given an MP-trace $\mpstate{\mach_c}{\pol}\MPT$, if $\mach_c$ is
-a call state then the matching return will be the first \emph{unmatched} return
-in $\MPT$. So we begin by defining an auxiliary ``unmatched'' relation between
-two traces.
-
-\definition
-We write $\Unmatched~\MPT~\MPT'$ if $\MPT'$ is
-obtained from $\MPT$ by dropping elements until we reach the first unmatched return
-(according to the return map).  Formally, $\Unmatched$ is defined coinductively as follows:
-\begin{itemize}
-\item A trace that starts with a return is related to itself:
-
-\begin{center}
-\begin{minipage}{.3\textwidth}
-  \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
-              {\(\retmap(\mach(\PCname))\)}
-              {\(\Unmatched ~ \mpstate{\mach}{\pol} ~ \mpstate{\mach}{\pol}\)}
-\end{minipage}
-\hspace*{0.1\textwidth}
-\begin{minipage}{.3\textwidth}
-  \judgmenttwo{\(\callmap(\mach(\PCname)) = \bot\)}
-              {\(\retmap(\mach(\PCname))\)}
-              {\(\Unmatched ~ \mpstate{\mach}{\pol}\MPT ~ \mpstate{\mach}{\pol}\MPT\)}
-\end{minipage}
-\end{center}
-
-\item If a trace \(\MPT\) starts with a non-call, non-return state,
-  its unmatched return must come later:
-
-  \judgment{\(\callmap(\mach(\PCname)) = \bot
-              \hspace{.5cm} \neg \retmap(\mach(\PCname))
-              \hspace{.5cm}\Unmatched ~ \MPT ~ \MPT'\)}
-           {\(\Unmatched ~ \mpstate{\mach}{\pol}\MPT ~ \MPT'\)}
-
-\item Finally, if a trace starts with a call, then we must discard the first
-  unmatched return from its tail to get to the real one:
-
-
-  \judgmentbr{\(\callmap(\mach(\PCname)) = n \hspace{.5cm} \neg \retmap(\mach(\PCname)) \)}
-             {\(\MPT = (m,p)\MPT_{\mathit{call}}\) \quad \(\Unmatched ~ \MPT_{\mathit{call}} ~ \MPT_{\mathit{matched}}\)}
-             {\(\MPT_{\mathit{matched}} = \mpstate{\mach'}{\pol'} \MPT_{\mathit{tail}}\) \quad
-              \(\Unmatched ~ \MPT_{\mathit{tail}} ~ \MPT_{\mathit{unmatched}}\)}
-            {\(\Unmatched ~ \MPT ~ \MPT_{\mathit{unmatched}}\)}
-\end{itemize}
-\ifspace
-\apt{Could cut formal definition for space.}
-\fi
 
 \definition%{Return Integrity}
 A system enjoys {\em return integrity} if all of its returns match prior calls
@@ -1639,7 +1617,7 @@ these steps are equal:
 \begin{array}{rl}
   \mathit{conf}_T ~ \mach_1 ~ \mach_2 ~ \triangleq &
   \exists \obs_1 ~ \obs_2 ~ \mach_1' ~ \mach_2'. ~
-  \mach_1 \stepstoobs{\obs_1} \mach_1' \wedge \mach_2 \stepstoobs{\obs_2} \mach_2' \Rightarrow \\
+  \mach_1 \stepstoobs[\obs_1] \mach_1' \wedge \mach_2 \stepstoobs[\obs_2] \mach_2' \Rightarrow \\
 &    \obs_1 = \obs_2 \wedge \forall \component . ~
    (     \mach_1(\component) \neq \mach_1'(\component)
     \vee \mach_2(\component) \neq \mach_2'(\component))
@@ -1720,11 +1698,11 @@ We also need two auxiliary notations that relate to variant stacks.
 %
 First, lockstep stack safety will check that the basic tests above hold for every
 machine in the variant stack.  Given a machine that steps $(\mach,
-\pol) \stepstopol{\obs} (\mach', \pol')$, say that a variant
+\pol) \stepstopol[\obs] (\mach', \pol')$, say that a variant
 stack $\vs$ satisfies the \emph{variant stack test} if for each
 variant element $\vm{C}$ (which is a variation of $\mach$ for $C$),
-$\vm{C}$ can take a step, denoted $\vm{C} \stepstoobs{\obs} \mach'$,
-while satisfying the stack integrity test $\testInt{C}{\mach}{\mach'}$
+$\vm{C}$ can take a step, denoted \(\vm{C} \stepstoobs[\obs] \mach'\),
+while satisfying the stack integrity test \(\testInt{C}{\mach}{\mach'}\)
 and stack confidentiality test $\testConf{\mach}{\mach'}$ with regard
 to the original machine state. We will write $\testVS{(\mach,
   \pol)}{\vs}$ for this compound check.
@@ -1764,7 +1742,7 @@ following conditions are satisfied:
   the call
   %% \rb{Corrected the step function here, or should it be
   %% $\hookrightarrow$ and give the rest of the induced trace?}
-  \[(\mach, \pol) \stepstopol{\obs} (\mach', \pol') \wedge \callmap(\mach) = n,\]
+  \[(\mach, \pol) \stepstopol[\obs] (\mach', \pol') \wedge \callmap(\mach) = n,\]
 %
   then the variant stack test must be
   satisfied
@@ -1785,7 +1763,7 @@ following conditions are satisfied:
 \item
 %
   If the machine $\mach$ takes a \emph{return step},
-  \[(\mach, \pol) \stepstopol{\obs} (\mach', \pol') \wedge \retmap(\mach),\]
+  \[(\mach, \pol) \stepstopol[\obs] (\mach', \pol') \wedge \retmap(\mach),\]
   %
   then the top of the variant stack also returns,
   the tail of $\vs$ satisfies the stack safety test
