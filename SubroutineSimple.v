@@ -66,7 +66,6 @@ Section DOMAIN_MODEL.
   | Unsealed
   | Outside
   .
-(* APT: Do we need to distinguish Unsealed from Outside? *)
 
 
   (* All components belong to domain, and a domain map tells us which. *)

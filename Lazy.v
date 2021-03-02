@@ -59,6 +59,7 @@ Section LAZY_TRACE_PROPS.
   (* Distinguishing example
      f() {
        int x = 0;
+       g();
        if(x)
          print x;
        else
@@ -186,16 +187,16 @@ Section WITH_MAPS.
         fst cy (Mem a) = Instack sid sd ->
         my (Mem a) = m' (Mem a).      
 *)  
-  Definition StackIntegrityEager : Prop :=
+  Definition StackIntegrityLazy : Prop :=
     forall minit MCP sid d,
       let P := fun m (c:context) => snd c sid = d in
       FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
-      TraceIntegrityEager (StackInaccessible (cstate (head MCP))) MCP.
+      TraceIntegrityLazy (StackInaccessible (cstate (head MCP))) MCP.
 
-  Definition CoroutineIntegrityEager : Prop :=
+  Definition CoroutineIntegrityLazy : Prop :=
     forall minit MCP sid,
       FindSegmentMP updateC (fun m c => activeStack sm m = sid) (minit, pOf minit) initC MCP ->
-      TraceIntegrityEager (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) MCP.
+      TraceIntegrityLazy (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) MCP.
 
   (* We can do a confidentiality rule similarly *)
   Definition YieldConfRule : Prop :=
