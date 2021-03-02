@@ -764,9 +764,10 @@ A {\em machine state} is a map from components to values:
 
 The step function of the machine takes a machine state and produces a
 pair of a machine state and an {\em observation}, which may be either
-silent (written \(\tau\)) or a word of data\ifaftersubmission\bcp{This is a rather concrete
-  choice!  Why not leave the set of observations abstract?}\fi that the machine
+silent (written \(\tau\)) or a word of data that the machine
 communicates to the outside world:
+\ifaftersubmission\bcp{This is a rather concrete
+  choice!  Why not leave the set of observations abstract?}\fi
 %
 \[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
 \[\mach \stepstoobs[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS \]
@@ -835,9 +836,9 @@ over an arbitrary set of context states, \(\CONTEXTS\), an initial context state
 We lift contexts into an MP trace in the same way as we lifted policy states to get
 a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times \CONTEXTS\).
 
-\judgmenttwo{\(\mpstate{\mach}{\pol} \stepstopol{\obs} \mpstate{\mach'}{\pol'}\)}
+\judgmenttwo{\(\mpstate{\mach}{\pol} \stepstopol[\obs] \mpstate{\mach'}{\pol'}\)}
             {\(\mach, \context \constep \context'\)}
-            {\(\mpcstate{\mach}{\pol}{\context} \stepstocon{\obs}
+            {\(\mpcstate{\mach}{\pol}{\context} \stepstocon[\obs]
                \mpcstate{\mach'}{\pol'}{\context'}\)}
 
 \subsection{Traces}
@@ -853,20 +854,20 @@ called \emph{machine traces} and denoted \(\MPCT \in \TRACE{\MPCS}\), and of obs
 The ``trace-of'' operator, written \(\mpcstatename \hookrightarrow \MPCT\),
 coinductively relates an initial state with the trace of states
 produced by repeated application of step, and potentially cut short by
-the policy component.
+the policy component. The {\sc Default} rule applies only if the other does not.
+(We use juxtaposition of an element and a trace to represent ``cons.'')
 
-\judgment{\(\neg \exists \pol' . \mpcstate{\mach}{\pol} \polstep \pol'\)}
-         {\(\mathit{obsforward} ~ \mpcstate{\mach}{\pol}{\context} ~ \obs =
-           \mpcstate{\mach}{\pol}{\context},\obs\)}
+\begin{minipage}{.4\textwidth}
+\judgmenttwo{\(\mpcstatename \stepstocon \mpcstatename'\)}
+            {\(\mpcstatename' \hookrightarrow \MPCT\)}
+            {\(\mpcstatename \hookrightarrow \mpcstatename' \MPCT\)}%
+\end{minipage}
+\begin{minipage}{.4\textwidth}
+\judgment[Default]
+         {}
+         {\(\mpcstatename \hookrightarrow \mpcstatename\)}
+\end{minipage}
 %
-\judgmenttwo{\(\mpcstate{\mach}{\pol}{\context} \stepstoobs[\obs'] \mpcstate{\mach'}{\pol'}{\context'}\)}
-            {\(\mathit{obsforward} ~ \mpcstate{\mach'}{\pol'}{\context'} ~ \obs' = \machT\)}
-            {\(\mathit{obsforward} ~ \mpcstate{\mach}{\pol}{\context} ~ \obs =
-              (\mpcstate{\mach}{\pol}{\context},\obs) \machT\)}%
-%
-\judgment{\(\mathit{obsforward} ~ \mpcstatename ~ \tau = \machT\)}
-         {\(\mpcstatename \hookrightarrow \machT\)}
-
             
 \paragraph*{Projections}
 
@@ -882,7 +883,7 @@ creates a trace of observations corresponding to the observations of each step i
 the trace. It uses a coinductive helper \(\mathit{obsforward}\) that relates an
 initial observation, a machine-trace, and an observation trace:
 
-\judgmentthree{\(\pi_\mach ~ \mpcstatename \stepstoobs[\obs'] \pi_\mach ~ \mpcstatename'\)}
+\judgmentthree{\(\mpcstatename \stepstocon[\obs'] \mpcstatename'\)}
               {\(\mpcstatename' \hookrightarrow \MPCT\)}
               {\(\mathit{obsforward} ~ \obs' ~ \MPCT = \obsT\)}
               {\(\mathit{obsforward} ~ \obs ~ \mpcstatename \MPCT = \obs\obsT\)}%
@@ -892,9 +893,8 @@ initial observation, a machine-trace, and an observation trace:
 Then to take the observations from any particular trace, we start with a \(\tau\) observation:
 
 \judgment{\(\mathit{obsforward} ~ \tau ~ \MPCT = \obsT\)}
-         {\(\pi_\obs ~ \MPCT = \obsT\)}
+         {\(\pi_\obs(\MPCT) = \obsT\)}
 \noindent
-(We use juxtaposition of an element and a sequence to represent ``cons.'')
 
 In a similar fashion, we define \(\mpcstatename \hookrightarrow \MPCT\)
 to relate a machine-policy-context state triple to the MPCO-trace
@@ -1212,7 +1212,6 @@ they correspond according to one of four cases:
 \[\ann \in \ANNS ::= \powerset(\{\callmap, \retmap\} \cup
 \{\sharemap ~ P | P \subseteq \MACHS \times \COMPONENTS \} \cup
 \{\passmap ~ P | P \subseteq \MACHS \times \COMPONENTS \})\]
-
 
 \subsection{Trace Properties}
 
