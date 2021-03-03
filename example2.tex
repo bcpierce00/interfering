@@ -1,13 +1,15 @@
 \begin{figure}[b]
-    \begin{minipage}{.25\textwidth}
+    \begin{minipage}{.35\textwidth}
 \begin{verbatim}
 int main() {
-  long int x = 42;
-  print f(x);
+  long int x = 42, y = 0;
+  print &y;
+  y = f(x);
+  return y;
 }
 \end{verbatim}
     \end{minipage}
-    \begin{minipage}{.4\textwidth}
+    \begin{minipage}{.35\textwidth}
 \begin{verbatim}
 long int f(long int z) {
   print g();
@@ -23,7 +25,7 @@ int g() {
 \end{verbatim}
     \end{minipage}
 \caption{A Simple Call}
-\label{fig:simple-program}
+\label{fig:share-program}
 \end{figure}
 
 \colorlet{lgray}{gray!40}
@@ -32,6 +34,7 @@ int g() {
 \newcommand{\mainsealc}{cyan}
 \newcommand{\mainpassc}{magenta}
 \newcommand{\fsealc}{green}
+\newcommand{\sharec}{lgray}
 \newcommand{\unsealc}{gray}
 \newcommand{\emptyoutc}{white} % or gray for consistency with unusedc ?
 \newcommand{\fulloutc}{white}
@@ -52,46 +55,71 @@ $\cdots$
 \\ \\
 Call to {\tt f}
  &
-\memoryaddrs{35em}
+\memoryaddrs{52em}
 \memory{3}{\instrc}%
 \hspace*{3pt}
 $\cdots$
 \memory{1}{\emptyoutc}%
 \memory{2}{\unsealc}[{\makebox[0pt]{Unsealed}}]%
+\memory{2}{\sharec}[{\makebox[0pt]{Shared}}]%
 \memory{2}{\mainpassc}[{\makebox[0pt]{Passed(0)}}]%
-\memory{4}{\unsealc}[{\makebox[0pt]{Unsealed}}]
+\memory{2}{\unsealc}[{\makebox[0pt]{Unsealed}}]
 ~$\cdots$
-\MemoryLabel{-37.5em}{0.75em}{0\(\ldots\)}
+\MemoryLabel{-37.5em}{0.75em}{\(\ldots\)}
 \MemoryLabel{-33.5em}{0.75em}{42}
-\MemoryLabel{-29.5em}{0.75em}{0\(\ldots\)}
-\MemoryLabel{-25.5em}{0.75em}{42}
+\MemoryLabel{-29.5em}{0.75em}{\(\ldots\)}
+\MemoryLabel{-25.5em}{0.75em}{0}
+\MemoryLabel{-21.5em}{0.75em}{\(\ldots\)}
+\MemoryLabel{-17.5em}{0.75em}{42}
 \\ \\
 Entry to {\tt f} &
-\memoryaddrs{35em}
+\memoryaddrs{52em}
 \memory{3}{\instrc}%
 \hspace*{3pt}
 $\cdots$
 \memory{1}{\emptyoutc}%
 \memory{2}{\mainsealc}[{\makebox[0pt]{Sealed(0)}}]%
+\memory{2}{\sharec}[{\makebox[0pt]{Shared}}]%
 \memory{2}{\mainpassc}[{\makebox[0pt]{Passed(0)}}]%
-\memory{4}{\unsealc}[{\makebox[0pt]{Unsealed}}]
+\memory{2}{\unsealc}[{\makebox[0pt]{Unsealed}}]
 ~$\cdots$
-\MemoryLabel{-29em}{0.75em}{0\(\ldots\)}
-\MemoryLabel{-24em}{0.75em}{42}
+\MemoryLabel{-29.5em}{0.75em}{\(\ldots\)}
+\MemoryLabel{-25.5em}{0.75em}{0}
+\MemoryLabel{-21.5em}{0.75em}{\(\ldots\)}
+\MemoryLabel{-17.5em}{0.75em}{42}
 \\ \\
-Return to {\tt main}
- &
-\memoryaddrs{25em}
+Entry to {\tt g} &
+\memoryaddrs{61em}
 \memory{3}{\instrc}%
 \hspace*{3pt}
 $\cdots$
 \memory{1}{\emptyoutc}%
-\memory{8}{\unsealc}
+\memory{2}{\mainsealc}[{\makebox[0pt]{Sealed(0)}}]%
+\memory{2}{\sharec}[{\makebox[0pt]{Shared}}]%
+\memory{2}{\mainpassc}[{\makebox[0pt]{Passed(0)}}]%
+\memory{2}{\fsealc}[{\makebox[0pt]{Sealed(1)}}]%
+%\memory{2}{\unsealc}[{\makebox[0pt]{Unsealed}}]
 ~$\cdots$
-\MemoryLabel{-37.5em}{0.75em}{0\(\ldots\)}
+\MemoryLabel{-29.5em}{0.75em}{\(\ldots\)}
+\MemoryLabel{-25.5em}{0.75em}{0}
+\\ \\
+Return to {\tt main}
+ &
+\memoryaddrs{52em}
+\memory{3}{\instrc}%
+\hspace*{3pt}
+$\cdots$
+\memory{1}{\emptyoutc}%
+\memory{2}{\unsealc}%
+\memory{2}{\sharec}[{\makebox[0pt]{Shared}}]%
+\memory{4}{\unsealc}
+~$\cdots$
+\MemoryLabel{-37.5em}{0.75em}{\(\ldots\)}
 \MemoryLabel{-33.5em}{0.75em}{42}
-\MemoryLabel{-29.5em}{0.75em}{0\(\ldots\)}
-\MemoryLabel{-25.5em}{0.75em}{42}
+\MemoryLabel{-29.5em}{0.75em}{\(\ldots\)}
+\MemoryLabel{-25.5em}{0.75em}{0}
+\MemoryLabel{-21.5em}{0.75em}{\(\ldots\)}
+\MemoryLabel{-17.5em}{0.75em}{84}
 \\
 \end{tabular}
 \end{center}
@@ -105,3 +133,34 @@ $\cdots$
 }
 \label{fig:share-trace}
 \end{figure}
+
+In our second example, we have a more complicated program with nested calls
+and shared stack memory. Assuming that a long int takes two words, {\tt main}
+can't pass {\tt x} by value via a register, but must pass it on the stack. This
+is one way that memory might be shared: {\tt z} is in memory that would be sealed
+by {\tt main} but should be accessible by {\tt f}. We would not expect that {\tt g}
+should be able to access {\tt z}, however.
+
+By contrast, {\tt main} has taken the address of {\tt y}. This is commonly a precursor
+to intentionally sharing access to {\tt y}, and unless we can determine statically that
+the address does not escape, we must treat {\tt y} as shared. This form of sharing is
+more permissive than passing, as once the pointer escapes, {\tt main} has no way of knowing
+how far it will be passed. We therefore make no restrictions on {\tt y} for the remainder
+of its life.
+
+There are many ways that we might want to restrict access to a shared address. For instance,
+since in principle our sharing is related to the passing of an address, it would be standard
+to restrict access to only those callees that actually recieve the address, as in a capability
+system. This model typically works by enforcing the memory safety of all objects, including
+addressed stack variables. Or, we could imagine a mandatory access control approach in which
+the code is annotated to specifically identify which functions may access the shared memory.
+Whatever restrictions we desire, they are orthogonal to stack safety.
+
+Note that both passing and sharing are already visible at the point that {\tt main} calls
+{\tt f}, before the remainder of its frame is sealed. The compiler annotations telling
+us that passing and sharing occur are tied, respectively, to the copying of {\tt x} into
+{\tt z}, and to the taking of {\tt y}'s address. Then as before, everything below the stack
+pointer that is not passed or shared is sealed. Later, when {\tt f} calls {\tt g}, it also
+seals its own frame with its depth (1). We skip ahead to when we return to {\tt main} to note
+that while {\tt z} is no longer passed, {\tt y} is still shared, and will be until {\tt main}
+returns.
