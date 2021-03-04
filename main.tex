@@ -833,9 +833,9 @@ will be finite iff a policy fault occurs.
 
 Separate from the machine state, our formal properties will keep track of additional context
 information representing the history of the run. The following definitions are parameterized
-over an arbitrary set of context states, \(\CONTEXTS\), an initial context state \(\context_0
-\in \CONTEXTS\), and a context step function \(\mach, \context \constep \context' \in
-\MACHS \times \CONTEXTS \rightarrow \CONTEXTS\).
+over an arbitrary set of context states, \(\CONTEXTS\), annotations \(\ANNS\),
+an initial context state \(\context_0 \in \CONTEXTS\), and a context step function
+\(\mach, \context, \ann \constep \context' \in \MACHS \times \CONTEXTS \times \ANNS \rightarrow \CONTEXTS\).
 
 We lift contexts into an MP trace in the same way as we lifted policy states to get
 a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times \CONTEXTS\).
@@ -1070,8 +1070,8 @@ This information is represented by a {\em code map}, a partial function from
 addresses to pairs consisting of a function identifier and an {\em annotation}.
 An annotation may be {\em call} or {\em return}.
 
-\[\ann \in \ANNS ::= \powerset(\{\callmap, \retmap\})\]
-\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \FUNIDS \times \option{\ann}\]
+\[\ann \in \ANNS ::= \callmap + \retmap\]
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \FUNIDS \times \option(\ann)\]
 
 \paragraph*{Call Depth and Domains}
 
@@ -1143,7 +1143,7 @@ of execution from any initial state. The criterion for integrity is simple: seal
 change.
 
 \definition A system enjoys {\em ultra-eager integrity} if for any reachable state
-\(\mpcstatename\), \(\mpcstatename'\) such that \(\mpcstatename \stepstocon{} \mpcstatename'\),
+\(\mpcstatename\), \(\mpcstatename'\) such that \(\mpcstatename \stepstocon \mpcstatename'\),
 and component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) and
 \(\domMap ~ \component = \sealed{\_}\), then \(\pi_\mach(\mpcstatename) ~ \component =
 \pi_\mach(\mpcstatename') ~ \component\).
@@ -1186,7 +1186,7 @@ equivalent.
 
 \definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \depth')\) hold for
 \(\depth' \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\depth),\_\) and
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\depth)\) and
 \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
 Then take any \(\nach\) such that \(\mach \approx_\components \nach\). \(\MPCT\) corresponds to the
 trace of a subroutine from its call to its return.
@@ -1212,12 +1212,105 @@ they correspond according to one of four cases:
 \item \(\NPCT\) may end with a fail-stop as in case 3, with \(\pi_\obs(\NPCT) \lesssim \pi_\obs(\MPCT)\)
 \end{enumerate}
 
-\subsection{Stack Safety with Sharing}
-\[\ann \in \ANNS ::= \powerset(\{\callmap, \retmap\} \cup
-\{\sharemap ~ P | P \subseteq \MACHS \times \COMPONENTS \} \cup
-\{\passmap ~ P | P \subseteq \MACHS \times \COMPONENTS \})\]
-
 \subsection{Trace Properties}
+
+Having seen instances of eager confidentiality and integrity, defined in terms of reachable trace
+segments, we can generalize them to properties of the trace segments themselves. Then as we expand
+our model, our further properties will be defined in terms of the trace properties.
+
+\definition Let \(\MPCT\) be a reachable segment and \(\components\) be any set of components.
+\(\MPCT\) enjoys {\em trace integrity} when \(\last(\MPCT) ~ \component = \head(\MPCT) ~ \component\)
+for all \(\component \in \components\), and when \(\last(\MPCT)\) is undefined.
+
+\definition Let \(\MPCT \langle f \rangle\) be a reachable segment delimited by the predicate \(f\)
+and the \(\components\) be any set of components. Let \(\head(\MPCT) = \mpcstate{\mach}{\pol}{\context}\)
+and \(\nach\) be a machine state such that \(\mach \approx_\components \nach\). Suppose we take the
+induced trace from \(\npcstatename = \mpcstate{\nach}{\pol}{\context}\) that corresponds to \(\MPCT\),
+\(\npcstatename \hookrightarrow \NPCT | \neg f\). The trace \(\MPCT\) enjoys {\em trace confidentiality}
+with respect to \(f\) and \(P\) if, for all such \(\NPCT\), they correspond according to the four cases
+above:
+
+\begin{enumerate}
+\item \(\MPCT\) may be finite and \(\pi_\context(\last(\MPCT)) = (\_,\depth')\) with \(\depth' < \depth\),
+  and \(\pi_\context(\last(\NPCT)) = (\_,\depth')\) with \(\depth' < \depth\). That is, both traces end
+  having left the call of depth \(\depth\). Further:
+  \begin{itemize}
+  \item They have the same observable behavior, \(\pi_\obs(\MPCT) \simeq \pi_\obs(\NPCT)\)
+  \item Their final states have the same differences, \(\pi_\mach(\head(\MPCT)), \pi_\mach(\last(\MPCT)) \diamond
+  \pi_\mach(\head(\MPCT)), \pi_\mach(\last(\NPCT))\)
+  \end{itemize}
+\item \(\MPCT\) and \(\NPCT\) may both be infinite, with \(\pi_\obs(\MPCT) \simeq \pi_\obs(\NPCT)\)
+\item \(\MPCT\) may be finite but end without returning -- which can only have happened if it fail-stopped --
+  and its observable behavior prefixes that of \(\NPCT\), \(\pi_\obs(\MPCT) \lesssim \pi_\obs(\NPCT)\)
+\item \(\NPCT\) may end with a fail-stop as in case 3, with \(\pi_\obs(\NPCT) \lesssim \pi_\obs(\MPCT)\)
+\end{enumerate}
+
+\subsection{Stack Safety with Sharing}
+
+Next we introduce sharing. We will need to extend the set of annotations to include
+sharing and passing, and now the code map may map a single instruction to multiple
+annotations, because in some calling conventions a single instruction might carry
+meaning as both a call and a pass. But we will never have a single instruction annotated
+as both a call and a return.
+
+\[\ann \in \ANNS ::= \callmap, \retmap + (\sharemap ~ P \in \MACHS \times \COMPONENTS) +
+(\passmap ~ P \in \MACHS \times \COMPONENTS)\]
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \FUNIDS \times \powerset(\ann)\]
+
+And we extend the set of domains to include shared and passed components, the latter of
+which are labeled with the depth of the caller that has passed them.
+
+\[\stackDom \in \STKDOMS ::= \outside + \unsealed + \shared{\depth} + \sealed{\depth} + \passed{\depth}\]
+\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
+\times (\depth \in \mathbb{N}) \]
+
+What it means to push the stack is similar to above, but two details are worth noting.
+First, shared and passed components are not sealed by the sealing convention, and second, anything
+not touched by the sealing convention must be unsealed. Sharing and passing cannot apply to memory
+the callee could otherwise use.
+
+\[
+(\push{\domMap}{\depth}{\components}) ~ \component =
+\begin{cases}
+  \sealed{\depth} & \text{if } \domMap ~ \component = \unsealed
+                    \text{ and } \component \in \components \\
+  \domMap ~ \component & \text{else if } \component \in \components \\
+  \unsealed & \text{else} \\                  
+\end{cases}
+\]
+
+Popping is simpler, but note that while passed components are unsealed on return to their
+passer, shared ones are unsealed on return {\em from} their sharer - on deallocation, in other words.
+
+\[
+(\pop{\domMap}{\depth}) ~ \component =
+\begin{cases}
+  \unsealed & \text{if } \domMap ~ \component = \sealed{\depth-1}
+              \text{ or } \domMap ~ \component = \passed{\depth-1}
+              \text{ or } \domMap ~ \component = \shared{\depth} \\
+  \domMap ~ \component & \text{else} \\
+\end{cases}
+\]
+
+Now we can inductively define the context update function; as these could be ambiguous assume that
+they apply in the order presented.
+
+\begin{center}
+  \judgmenttwo{\(\mach \stepsto \mach'\)}
+              {\(\codemap ~ (\mach ~ \PCname) = \funid, \callmap \cup \passmap \cup \_\)}
+              {\(\mach,(\domMap,\depth) \stepstocon (\push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1)\)}
+\hspace*{0.1\textwidth}
+
+  \judgmenttwo{\(\mach \stepsto \mach'\)}
+              {\(\codemap ~ (\mach ~ \PCname) = \funid, \mathbf{Some} ~ \retmap\)}
+              {\(\mach,(\domMap,\depth) \stepstocon \mach',(\pop{\domMap}{\depth},\depth-1)\)}
+\end{center}
+
+\begin{center}
+  \judgment[Default]
+           {\(\mach \stepsto \mach'\)}
+           {\(\mach,\context \stepstocon \mach',\context\)}
+\end{center}
 
 \subsection{Local State Encapsulation}
 
