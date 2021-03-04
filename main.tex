@@ -559,14 +559,11 @@ $\rsp$). \ifaftersubmission\bcp{This implicitly amounts to choosing a caller-sav
 Our stack-safety concepts depend critically on the notions of ``call'' and ``return,''
 which are not fully explicit in machine code (the same instruction opcode may be
 used in some places as part of a call or return sequence and in other places
-for other purposes).  We define a call to be
-any instruction declared as such in the compiler-provided call structure.
-If a call occurs at $\PCname = a$ and $\rsp = s$, then the \emph{corresponding
-  return} has occurred when the $\PCname$ points to the next instruction after $a$ and $\rsp = s$. (Our definition
-of well-bracketed control flow relates this definition of return to the program's
-declared set of return points.)
-Our property definitions make no other detailed assumptions about call or return sequences, although
-some of the enforcement mechanisms we consider do.
+for other purposes). We assume the compiler's cooperation in labeling instructions
+with a variety of annotations, and in fact in identifying them as instructions.
+A {\em call-map} is a partial map from addresses to pairs of a function identifier --
+every instruction belongs to a function -- and a set of annotations. This gives
+us flexibility to have instructions simultaneously play multiple roles.
 
 Enforcement mechanisms are modeled as {\em policies} (borrowing the
 terminology from tag-based mechanisms) that add some auxiliary policy
@@ -749,9 +746,8 @@ policy enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
 
 \subsection{Values, States, and Observations}
 
-The basic building blocks of the machine are {\em values} and {\em
-  addresses}. Both are drawn from some set of {\em words}
-\(\WORDS\), ranged over by \(\word\).
+The basic building blocks of the machine are {\em values} and {\em addresses}.
+Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\).
 %
 Our machine states are composed of {\em components} \(\component\), addressed either by
 words (memory addresses) or by register names (\(\reg\)) drawn from some set
@@ -835,15 +831,19 @@ Separate from the machine state, our formal properties will keep track of additi
 information representing the history of the run. The following definitions are parameterized
 over an arbitrary set of context states, \(\CONTEXTS\), annotations \(\ANNS\),
 an initial context state \(\context_0 \in \CONTEXTS\), and a context step function
-\(\mach, \context, \ann \constep \context' \in \MACHS \times \CONTEXTS \times \ANNS \rightarrow \CONTEXTS\).
+\(\mach, \context, \ann \in \powerset \ANNS \constep \context' \in \MACHS \times \CONTEXTS
+\times \ANNS \rightarrow \CONTEXTS\). We also assume for any set of annotations that we have
+code maps, with \(\FUNIDS\) a set of function identifiers:
+\[\codemap \in \WORDS \rightharpoonup \FUNIDS \times \powerset(\ANNS)\]
 
-We lift contexts into an MP trace in the same way as we lifted policy states to get
+We lift contexts into an MP trace in much the same way as we lifted policy states to get
 a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times \CONTEXTS\).
 
-\judgmenttwo{\(\mpstate{\mach}{\pol} \stepstopol[\obs] \mpstate{\mach'}{\pol'}\)}
-            {\(\mach, \context \constep \context'\)}
-            {\(\mpcstate{\mach}{\pol}{\context} \stepstocon[\obs]
-               \mpcstate{\mach'}{\pol'}{\context'}\)}
+\judgmentthree{\(\mpstate{\mach}{\pol} \stepstopol[\obs] \mpstate{\mach'}{\pol'}\)}
+              {\(\codemap ~ (\mach ~ \PCname) = \funid, \ann\)}
+              {\(\mach, \context, \ann \constep \context'\)}
+              {\(\mpcstate{\mach}{\pol}{\context} \stepstocon[\obs]
+                \mpcstate{\mach'}{\pol'}{\context'}\)}
 
 \subsection{Traces}
 \label{sec:traces}
@@ -1058,20 +1058,11 @@ Initially we will focus on a simple stack model, with a single stack
 that doesn't share between caller and callee. All arguments are passed
 in registers.
 
-\subsection{Program Structure}
-
-Our properties and policies assume that the program is annotated
-by the compiler with information about its structure. At minimum,
-we need to know which addresses contain instructions, which instructions
-constitute calls and returns, and to which function an instruction
-belongs.
-
-This information is represented by a {\em code map}, a partial function from
-addresses to pairs consisting of a function identifier and an {\em annotation}.
-An annotation may be {\em call} or {\em return}.
+We begin with our only annotations being {\em call} or {\em return}, and
+define our code map accordingly.
 
 \[\ann \in \ANNS ::= \callmap + \retmap\]
-\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \FUNIDS \times \option(\ann)\]
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \FUNIDS \times \powerset(\ANNS)\]
 
 \paragraph*{Call Depth and Domains}
 
@@ -1092,9 +1083,9 @@ depth.
 An initial context \(\context_0 = \domMap_0, 0\) where \(\domMap_0\) maps
 the stack to \(\unsealed\) and all other addresses and all registers to \(\outside\).
 Then at each step we update the context according to the context-step function,
-\(\stepsto_C\), which we will define in terms of the operations
+\(\stepsto_C\). We will define this in terms of the operations
 \(\push{\domMap}{n}{\components}\), in which \(\components \subseteq \COMPONENTS\),
-and \(\pop{\domMap}{n}\), pronounced ``push'' and ``pop'' and defined as follows. 
+and \(\pop{\domMap}{n}\), pronounced ``push'' and ``pop'' and defined as follows.
 
 \[
 (\push{\domMap}{\depth}{\components}) ~ \component =
@@ -1118,22 +1109,22 @@ the stack pointer. The {\sc Default} rule applies only if neither of the others 
 
 \begin{center}
 \begin{minipage}{.4\textwidth}
-  \judgmenttwo{\(\mach \stepsto \mach'\)}
-              {\(\codemap ~ (\mach ~ \PCname) = \funid, \mathbf{Some} ~ \callmap\)}
-              {\(\mach,(\domMap,\depth) \stepstocon \mach',(\push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1)\)}
+  \judgment{}
+           {\(\mach,(\domMap,\depth),\{\callmap\} \stepstocon
+             \push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1\)}
 \end{minipage}
 \hspace*{0.1\textwidth}
 \begin{minipage}{.4\textwidth}
-  \judgmenttwo{\(\mach \stepsto \mach'\)}
-              {\(\codemap ~ (\mach ~ \PCname) = \funid, \mathbf{Some} ~ \retmap\)}
-              {\(\mach,(\domMap,\depth) \stepstocon \mach',(\pop{\domMap}{\depth},\depth-1)\)}
+  \judgment{}
+           {\(\mach,(\domMap,\depth),\{\retmap\} \stepstocon
+             \pop{\domMap}{\depth},\depth-1\)}
 \end{minipage}
 \end{center}
 
 \begin{center}
   \judgment[Default]
-           {\(\mach \stepsto \mach'\)}
-           {\(\mach,\context \stepstocon \mach',\context\)}
+           {}
+           {\(\_,\context,\_ \stepstocon \context\)}
 \end{center}
 
 \subsection{Ultra-eager Integrity}
@@ -1253,9 +1244,8 @@ annotations, because in some calling conventions a single instruction might carr
 meaning as both a call and a pass. But we will never have a single instruction annotated
 as both a call and a return.
 
-\[\ann \in \ANNS ::= \callmap, \retmap + (\sharemap ~ P \in \MACHS \times \COMPONENTS) +
-(\passmap ~ P \in \MACHS \times \COMPONENTS)\]
-\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \FUNIDS \times \powerset(\ann)\]
+\[\ann \in \ANNS ::= \callmap + \retmap + \sharemap(P \subseteq \MACHS \times \COMPONENTS) +
+\passmap(P \subseteq \MACHS \times \COMPONENTS)\]
 
 And we extend the set of domains to include shared and passed components, the latter of
 which are labeled with the depth of the caller that has passed them.
@@ -1265,9 +1255,9 @@ which are labeled with the depth of the caller that has passed them.
 \times (\depth \in \mathbb{N}) \]
 
 What it means to push the stack is similar to above, but two details are worth noting.
-First, shared and passed components are not sealed by the sealing convention, and second, anything
-not touched by the sealing convention must be unsealed. Sharing and passing cannot apply to memory
-the callee could otherwise use.
+First, shared and passed components are not sealed by the sealing convention, and second,
+anything not touched by the sealing convention must be unsealed. Sharing and passing cannot
+apply to memory the callee could otherwise use.
 
 \[
 (\push{\domMap}{\depth}{\components}) ~ \component =
@@ -1280,7 +1270,8 @@ the callee could otherwise use.
 \]
 
 Popping is simpler, but note that while passed components are unsealed on return to their
-passer, shared ones are unsealed on return {\em from} their sharer - on deallocation, in other words.
+passer, shared ones are unsealed on return {\em from} their sharer - on deallocation,
+in other words.
 
 \[
 (\pop{\domMap}{\depth}) ~ \component =
@@ -1292,25 +1283,59 @@ passer, shared ones are unsealed on return {\em from} their sharer - on dealloca
 \end{cases}
 \]
 
+Finally we introduce a more direct update. If \(P\) is a relation between machine states and
+components, we write \(\domMap[P ~ \mach \mapsto \stackDom]\) to say \(\domMap\) updated
+so that each component \(\component\) where \(P ~ \mach ~ \component\) holds is mapped to
+\(\stackDom\).
+
 Now we can inductively define the context update function; as these could be ambiguous assume that
 they apply in the order presented.
 
 \begin{center}
-  \judgmenttwo{\(\mach \stepsto \mach'\)}
-              {\(\codemap ~ (\mach ~ \PCname) = \funid, \callmap \cup \passmap \cup \_\)}
-              {\(\mach,(\domMap,\depth) \stepstocon (\push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1)\)}
-\hspace*{0.1\textwidth}
-
-  \judgmenttwo{\(\mach \stepsto \mach'\)}
-              {\(\codemap ~ (\mach ~ \PCname) = \funid, \mathbf{Some} ~ \retmap\)}
-              {\(\mach,(\domMap,\depth) \stepstocon \mach',(\pop{\domMap}{\depth},\depth-1)\)}
+  \judgment{\(\mach,\context,\ann \stepstocon (\domMap,\depth)\)}
+           {\(\mach,\context,(\{\callmap\} \cup \ann) \stepstocon
+             (\push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1)\)}
+  \judgment{\(\mach,\context,\ann \stepstocon (\domMap,\depth)\)}
+           {\(\mach,\context,(\{\retmap\} \cup \ann) \stepstocon
+             \mach',(\pop{\domMap}{\depth},\depth-1)\)}
+  \judgment{\(\mach,\context,\ann \stepstocon (\domMap,\depth)\)}
+           {\(\mach,\context,(\{\passmap ~ P\} \cup \ann) \stepstocon
+             \domMap[P ~ \mach \mapsto \passed{\depth}], \depth)\)}
+  \judgment{\(\mach,\context,\ann \stepstocon (\domMap,\depth)\)}
+           {\(\mach,\context,(\{\sharemap ~ P\} \cup \ann) \stepstocon
+             \domMap[P ~ \mach \mapsto \shared{\depth}], \depth)\)}
+  \judgment{}
+           {\(\mach,\context,\_ \stepstocon \context\)}
 \end{center}
 
-\begin{center}
-  \judgment[Default]
-           {\(\mach \stepsto \mach'\)}
-           {\(\mach,\context \stepstocon \mach',\context\)}
-\end{center}
+\definition Let \(\MPCT\) be a reachable trace segment of the form
+\(\mpcstatename ~ \mpcstatename'\), where \(\pi_\context(\mpcstatename) = (\domMap,\depth)\).
+Let \(\components\) be the set of components \(\component\) such that either
+\(\domMap ~ \component = \sealed{\_}\) or \(\domMap ~ \component = \passed{\depth'}\) for
+some depth \(\depth' < \depth-1\). If any such \(\MPCT\) obeys trace integrity with respect
+to \(\components\), then the system enjoys {\em ultra-eager confidentiality} in the sharing
+model.
+
+\definition Let \(\MPCT \langle f \rangle\) be a reachable trace segment where \(f\) holds
+on contexts whose depth is less than or equal to some \(\depth\). Let \(\head(\MPCT) =
+\mpcstate{\mach}{\pol}{(\domMap,\depth')}\) and \(\components\) be the set of components
+\(\component\) such that either \(\domMap ~ \component = \sealed{\_}\) or
+\(\domMap ~ \component = \passed{\depth''}\) for some depth \(\depth'' < \depth'-1\).
+Then the system enjoys {\em eager integrity} in the sharing model if \(\MPCT\) obeys
+trace integrity with respect to \(\components\).
+
+\definition Let \(\MPCT \langle f \rangle\) be a reachable trace segment where \(f\) holds
+on contexts whose depth is less than or equal to some \(\depth\). Let \(\head(\MPCT) =
+\mpcstate{\mach}{\pol}{(\domMap,\depth')}\) and \(\components\) be the set of components
+\(\component\) such that either \(\domMap ~ \component = \outside\) or
+\(\domMap ~ \component = \shared{\_}\). Then the system enjoys {\em eager confidentiality}
+in the sharing model if \(\MPCT\) obeys trace confidentiality with respect to \(\components\)
+and \(f\).
+
+\subsection{Coroutine Safety}
+\[\ann \in \ANNS ::= \powerset(\{\callmap, \retmap, \yieldmap\} \cup
+\{\sharemap ~ P | P \subseteq \MACHS \times \COMPONENTS \} \cup
+\{\passmap ~ P | P \subseteq \MACHS \times \COMPONENTS \})\]
 
 \subsection{Local State Encapsulation}
 
@@ -1325,11 +1350,6 @@ enforcement mechanisms that we consider under the HOPE system in fact enforce ea
 A policy based on taint-tracking might require such a lazy confidentiality, and it would be constructed
 by replacing the ``same-difference'' condition with one that requires any differences to produce
 observationally equivalent states. But for our purposes it is irrelevant.
-
-\subsection{Coroutine Safety}
-\[\ann \in \ANNS ::= \powerset(\{\callmap, \retmap, \yieldmap\} \cup
-\{\sharemap ~ P | P \subseteq \MACHS \times \COMPONENTS \} \cup
-\{\passmap ~ P | P \subseteq \MACHS \times \COMPONENTS \})\]
 
 \section{Well-bracketed Control Flow}
 \label{sec:wbcf}
