@@ -23,13 +23,13 @@ Module Type MachineSpec.
   Definition Addr : Type := Word.
 
 Parameter Register : Type.
-Parameter PC : Register.
 Parameter SP : Register.
 Parameter regEq : Register -> Register -> bool.
 
 Inductive Component:=
 | Mem (a:Addr)
-| Reg (r:Register).
+| Reg (r:Register)
+| PC.
 
 Parameter keqb : Component -> Component -> bool.
 Axiom keqb_implies_eq :
@@ -43,7 +43,10 @@ Axiom not_keqb_implies_neq :
 Definition Value : Type := Word.
 
 (* A Machine State is just a map from Components to Values. *)
-Definition MachineState := Component -> Value.
+Parameter MachineState : Type.
+Definition View := Component -> Value.
+Parameter proj : MachineState -> View.
+
 
 (* Observations are values, or silent (tau) *)
 Inductive Observation : Type := 
@@ -115,13 +118,13 @@ Definition isCode' (cdm : CodeMap') (a:Addr) : bool :=
   cm (m (Reg PC)) = Some lay.*)
 
 Definition justRet (mc m: MachineState) : Prop :=
-  m (Reg PC) = wplus (mc (Reg PC)) 4 /\ m (Reg SP) = mc (Reg SP).
+  proj m PC = wplus (proj mc PC) 4 /\ proj m (Reg SP) = proj mc (Reg SP).
 
 Definition justRet_dec mc m : {justRet mc m} + {~ justRet mc m}.
 Proof.
   unfold justRet.
-  destruct (WordEqDec (m (Reg PC)) (wplus (mc (Reg PC)) 4));
-    destruct (WordEqDec (m (Reg SP)) (mc (Reg SP)));
+  destruct (WordEqDec (proj m PC) (wplus (proj mc PC) 4));
+    destruct (WordEqDec (proj m (Reg SP)) (proj mc (Reg SP)));
     try solve [left; auto];
     right; intros [? ?]; auto.
 Qed.
