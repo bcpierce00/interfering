@@ -18,15 +18,15 @@ Module TraceProperties (M: MachineSpec).
     forall k (mcp':@MCPState context),
       K k->
       Last MCP mcp' ->
-      mstate (head MCP) k = mstate mcp' k.
+      proj (mstate (head MCP)) k = proj (mstate mcp') k.
   
   Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
-    forall k, ~ K k -> m k = n k.
+    forall k, ~ K k -> proj m k = proj n k.
 
   Definition sameDifference (m m' n n' : MachineState) :=
     forall k,
-      (m k <> m' k \/ n k <> n' k) ->
-      m' k = n' k.
+      (proj m k <> proj m' k \/ proj n k <> proj n' k) ->
+      proj m' k = proj n' k.
 
   Definition FindSegmentMP P mp c MCP :=
     exists MCP',
