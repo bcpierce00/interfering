@@ -29,11 +29,6 @@ Section WITH_CONTEXT.
       WithContextMP updateC c (MPTraceOf mp) MCP' /\
       ContextSegment P MCP' MCP.
 
-  Definition FindSegmentM P m c MC :=
-    exists MC',
-      WithContextM updateC c (MTraceOf m) MC' /\
-      ContextSegmentM P MC' MC.
-  
   Definition TraceConfidentialityEager
              (K : Component -> Prop)
              (P:MachineState -> context -> Prop)
@@ -41,25 +36,25 @@ Section WITH_CONTEXT.
     forall MCP MO m c p n N NO,
       head MCP = (m,c,p) ->
       variantOf K m n ->
-      FindSegmentM P n c N ->
+      FindSegmentMP P (n,p) c N ->
       ObsOfMCP MCP MO ->
-      ObsOfMC N NO ->
+      ObsOfMCP N NO ->
       (* Case 1 *)
       (forall mend dmend pend,
           Last MCP (mend,dmend,pend) ->
           ~ P mend c ->
           exists nend dnend,
-            Last N (nend,dnend) /\
-            ObsOfMP MO ~=_O ObsOfM NO /\
+            Last N (nend,dnend,pend) /\
+            ObsOfMP MO ~=_O ObsOfMP NO /\
             sameDifference m mend n nend)
     /\ (* Case 2 *)
     (Infinite MCP ->
-     ObsOfMP MO ~=_O ObsOfM NO)
+     ObsOfMP MO ~=_O ObsOfMP NO)
     /\ (* Case 3 *)
     (forall mend dmend pend,
         Last MCP (mend, dmend, pend) ->
         P mend c ->
-        ObsOfMP MO <=_O ObsOfM NO).
+        ObsOfMP MO <=_O ObsOfMP NO).
 
 End WITH_CONTEXT.
 

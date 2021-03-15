@@ -352,7 +352,6 @@ Add Parametric Morphism A (f:A->Prop) : (@ForallTrace A f)
     with signature (@TraceEq A) ==> Basics.impl as forall_mor.
 Proof.
   exact (@ForallTraceEq A f).                                                                                   Qed.                            
-
 Inductive Last {A} : TraceOf A -> A -> Prop :=
 | LastNow : forall a, Last (finished a) a
 | LastLater : forall T a a', Last T a -> Last (notfinished a' T) a

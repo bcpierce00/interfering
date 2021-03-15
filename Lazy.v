@@ -191,12 +191,12 @@ Section WITH_MAPS.
     forall minit MCP sid d,
       let P := fun m (c:context) => snd c sid = d in
       FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
-      TraceIntegrityLazy (StackInaccessible (cstate (head MCP))) MCP.
+      TraceIntegrityLazy context updateC (StackInaccessible (cstate (head MCP))) MCP.
 
   Definition CoroutineIntegrityLazy : Prop :=
     forall minit MCP sid,
       FindSegmentMP updateC (fun m c => activeStack sm m = sid) (minit, pOf minit) initC MCP ->
-      TraceIntegrityLazy (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) MCP.
+      TraceIntegrityLazy context updateC (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) MCP.
 
   (* We can do a confidentiality rule similarly *)
   Definition YieldConfRule : Prop :=
