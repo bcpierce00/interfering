@@ -71,7 +71,7 @@ Section WITH_MAPS.
   
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, d) := prev in
-    match AnnotationOf cdm (m (Reg PC)) with
+    match AnnotationOf cdm (proj m PC) with
     | Some (share f) =>
       let dm' := fun k =>
                    match k with
@@ -130,14 +130,14 @@ Section WITH_MAPS.
     forall minit k mcp mcp',
       FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
       Inaccessible (cstate mcp) k ->
-      mstate mcp k = mstate mcp' k.
+      proj (mstate mcp) k = proj (mstate mcp') k.
 
   (* The call rule equivalent is identical except for similar changes in scope. *)
   Definition CallRule : Prop :=
     forall minit MCP mcall dmcall dcall pcall mp o m' c' p' MCP',
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
       InTrace (mcall,(dmcall,dcall),pcall) MCP -> (* From any state that is a call *)
-      AnnotationOf cdm (mcall (Reg PC)) = Some call -> (* As determined by the code annotations *)
+      AnnotationOf cdm (proj mcall PC) = Some call -> (* As determined by the code annotations *)
       mpstep (mcall,pcall) = Some (mp,o) -> (* That has a successful step, i.e. doesn't immediately fail-stop *)
 
       (* We can look ahead to the next state whose depth is <= dcall, and take the intervening trace,
@@ -147,7 +147,7 @@ Section WITH_MAPS.
       (* And that state will maintain the values of all sealed addresses. *)
       forall a,
         sc mcall a = true ->
-        mcall (Mem a) = m' (Mem a).      
+        proj mcall (Mem a) = proj m' (Mem a).      
 
   (* We can use our nice trace properties (redefined in TraceProperties.v to handle different
      context types) to implement the integrity property. *)
@@ -170,7 +170,7 @@ Section WITH_MAPS.
     forall minit MCP mcall dmcall dcall pcall m p o n MCP' N MO NO,
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
       InTrace (mcall,(dmcall,dcall),pcall) MCP -> (* Once again we consider each successful call *)
-      AnnotationOf cdm (mcall (Reg PC)) = Some call ->
+      AnnotationOf cdm (proj mcall PC) = Some call ->
       mpstep (mcall,pcall) = Some (m,p,o) ->
 
       (* And take any variant state of the first state within it *)
