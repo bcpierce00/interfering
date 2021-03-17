@@ -65,6 +65,7 @@ Section WITH_MAPS.
                   | None => Outside
                   end
                 | Reg r => Outside
+                | PC => Outside
                 end in
     (dm,initDepM).
   
@@ -75,7 +76,7 @@ Section WITH_MAPS.
     let '(dm, depm) := prev in
     let sid := activeStack sm m in
     let d := depm sid in
-    match AnnotationOf cdm (m (Reg PC)) with
+    match AnnotationOf cdm (proj m PC) with
     | Some (share f) =>
       let dm' := fun k =>
                    match k with
@@ -145,13 +146,13 @@ Section WITH_MAPS.
     forall minit k mcp mcp',
       FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
       StackInaccessible (cstate mcp) k ->
-      mstate mcp k = mstate mcp' k.
+      proj (mstate mcp) k = proj (mstate mcp') k.
 
   Definition CoroutineIntegrityUE : Prop :=
     forall minit k sid mcp mcp',
       FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
       CoroutineInaccessible (cstate mcp) sid k ->
-      mstate mcp k = mstate mcp' k.
+      proj (mstate mcp) k = proj (mstate mcp') k.
 
   (* We can actually do ultra eager confidentiality for coroutines without any more complexity,
      because coroutine properties don't care about allocation and initialization. That only comes
@@ -169,7 +170,7 @@ Section WITH_MAPS.
     forall minit MCP sid my cy py mp o m' c' p' MCP',
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
       InTrace (my,cy,py) MCP -> (* From any state that is a yield *)
-      AnnotationOf cdm (my (Reg PC)) = Some yield -> (* As determined by the code annotations *)
+      AnnotationOf cdm (proj my PC) = Some yield -> (* As determined by the code annotations *)
       activeStack sm my = sid -> (* With active stack sid *)
       mpstep (my,py) = Some (mp,o) -> (* That has a successful step, i.e. doesn't immediately fail-stop *)
 
@@ -179,7 +180,7 @@ Section WITH_MAPS.
       (* And that state will maintain the values of all addresses in sid. *)
       forall a sd,
         fst cy (Mem a) = Instack sid sd ->
-        my (Mem a) = m' (Mem a).      
+        proj my (Mem a) = proj m' (Mem a).      
   
   Definition StackIntegrityEager : Prop :=
     forall minit MCP d,
@@ -196,7 +197,7 @@ Section WITH_MAPS.
     forall minit MCP sid my cy py m p o n MCP' N MO NO,
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
       InTrace (my,cy,py) MCP -> (* Once again we consider each successful call *)
-      AnnotationOf cdm (my (Reg PC)) = Some yield ->
+      AnnotationOf cdm (proj my PC) = Some yield ->
       mpstep (my,py) = Some (m,p,o) ->
 
       (* And take any variant state of the first state within it *)
@@ -240,18 +241,18 @@ Section WITH_MAPS.
     forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,
       InTrace (m1,p1) (MPTraceOf (minit, pOf minit)) ->
       mpstep (m1,p1) = Some (m2, p2,o) ->
-      cdm (m1 (Reg PC)) = inFun f1 ann1 ->
-      cdm (m2 (Reg PC)) = inFun f2 ann2 ->
+      cdm (proj m1 PC) = inFun f1 ann1 ->
+      cdm (proj m2 PC) = inFun f2 ann2 ->
       f1 <> f2 ->
-      AnnotationOf cdm (m1 (Reg PC)) = Some call \/
-      AnnotationOf cdm (m1 (Reg PC)) = Some ret \/
-      AnnotationOf cdm (m1 (Reg PC)) = Some yield.
+      AnnotationOf cdm (proj m1  PC) = Some call \/
+      AnnotationOf cdm (proj m1  PC) = Some ret \/
+      AnnotationOf cdm (proj m1  PC) = Some yield.
 
   Definition YieldBackIntegrity : Prop :=
     forall mp mp1 mp2 MPout,
       InTrace mp1 (MPTraceOf mp) ->
-      AnnotationOf cdm (ms mp1 (Reg PC)) = Some yield ->
-      SplitInclusive (fun mp2 => sm (ms mp1 (Reg SP)) = sm (ms mp (Reg SP))) (MPTraceOf mp) MPout (MPTraceOf mp2) ->
+      AnnotationOf cdm (proj (ms mp1) PC) = Some yield ->
+      SplitInclusive (fun mp2 => sm (proj (ms mp1) (Reg SP)) = sm (proj (ms mp) (Reg SP))) (MPTraceOf mp) MPout (MPTraceOf mp2) ->
       justRet (ms mp1) (ms mp2).
 
   Definition ReturnIntegrity : Prop :=
@@ -268,8 +269,8 @@ Section WITH_MAPS.
   forall minit mp1 m2 p2 o,
     InTrace mp1 (MPTraceOf (minit, pOf minit)) ->
     mpstep mp1 = Some (m2,p2,o) ->
-    AnnotationOf cdm (ms mp1 (Reg PC)) = Some call ->
-    em (m2 (Reg PC)).
+    AnnotationOf cdm (proj (ms mp1) PC) = Some call ->
+    em (proj m2 PC).
 
   Definition WellBracketedControlFlow  : Prop :=
     ControlSeparation /\
