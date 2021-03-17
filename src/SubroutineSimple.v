@@ -119,7 +119,7 @@ Section WITH_MAPS.
   (* Our update function checks an "annotation" on the code being executed.
      Annotations are defined in Machine.v, and the ones that matter here are call and return.
      The annotations are carried by a Code Map, which also tells us which addresses are code. *)
-  Variable cdm : CodeMap'.
+  Variable cdm : CodeMap.
   
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, d) := prev in
@@ -420,7 +420,7 @@ Section WITH_MAPS.
     InTrace mp1 (MPTraceOf (minit, pOf minit)) ->
     mpstep mp1 = Some (m2,p2,o) ->
     AnnotationOf cdm (proj (ms mp1) PC) = Some call ->
-    em (proj m2 PC).
+    em (proj m2 PC) = true.
 
   Definition WellBracketedControlFlow  : Prop :=
     ControlSeparation /\

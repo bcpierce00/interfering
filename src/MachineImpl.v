@@ -147,61 +147,46 @@ Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
 Definition FunID := nat.
 Definition StackID := nat.
 
-(*Definition Layout : Type := Addr -> bool.
+Definition EntryMap := Addr -> bool.
 
-Definition CallMap := Addr -> option Layout.
-
-Definition RetMap := Addr -> Prop.
-
-Parameter isRet : RetMap -> Addr -> bool.*)
-
-Definition EntryMap := Addr -> Prop.
-
-Definition CodeMap := Addr -> FunID -> Prop.
-
-(* TODO: This doesn't seem realizible. *)
-Definition isCode (cm: CodeMap) (a: Addr) : bool.
-admit.
-Admitted.
-
-Definition StackMap := Addr -> StackID -> Prop.
-
-Definition activeStack : StackMap -> MachineState -> StackID.
-Admitted.
-Definition findStack : StackMap -> Addr -> option StackID.
-Admitted.
-
-Definition stack_eqb : StackID -> StackID -> bool.
-Admitted.
-
-Definition optstack_eqb : option StackID -> option StackID -> bool.
-Admitted.
-
-(*Definition ProgramMap := CallMap * RetMap * EntryMap * CodeMap * YieldMap * StackMap : Type.*)
+Definition StackMap := Addr -> option StackID.
 
 Inductive CodeAnnotation :=
 | call
 | ret
 | yield
 | share (f: MachineState -> Addr -> option bool)
-| normal
-.
+| normal.
 
 Inductive CodeStatus :=
-| inFun : FunID -> CodeAnnotation -> CodeStatus
-| notCode : CodeStatus
-.
+| inFun   : FunID -> CodeAnnotation -> CodeStatus
+| notCode : CodeStatus.
 
-Definition CodeMap' := Addr -> CodeStatus.
+Definition CodeMap := Addr -> CodeStatus.
 
-Definition AnnotationOf (cdm : CodeMap') (a:Addr) : option CodeAnnotation :=
+(* Stack ID of stack pointer *)
+Definition activeStack (sm: StackMap) (m: MachineState) :
+  option StackID :=
+  sm (proj m (Reg SP)).
+
+Definition stack_eqb : StackID -> StackID -> bool :=
+  Nat.eqb.
+
+Definition optstack_eqb (o1 o2 : option StackID) : bool :=
+  match o1, o2 with
+  | Some n1, Some n2 => stack_eqb n1 n2
+  | None, None => true
+  | _, _ => false
+  end.
+
+Definition AnnotationOf (cdm : CodeMap) (a:Addr) : option CodeAnnotation :=
   match cdm a with
   | inFun f normal => None
   | inFun f ann => Some ann
   | notCode => None
   end.
 
-Definition isCode' (cdm : CodeMap') (a:Addr) : bool :=
+Definition isCode' (cdm : CodeMap) (a:Addr) : bool :=
   match cdm a with
   | inFun _ _ => true
   | notCode => false
