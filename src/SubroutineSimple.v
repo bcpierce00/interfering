@@ -95,7 +95,7 @@ Section WITH_MAPS.
      and attempting to re-seal already sealed addresses is a no-op. *)
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
   Definition sc : SealingConvention :=
-    fun m a => wlt a (m (Reg SP)).
+    fun m a => wlt a (proj m (Reg SP)).
 
   (* We will use the machinery defined at the end of Machine.v to extend traces of the
      machine with context that will inform our properties. In this case the context is a
@@ -119,11 +119,11 @@ Section WITH_MAPS.
   (* Our update function checks an "annotation" on the code being executed.
      Annotations are defined in Machine.v, and the ones that matter here are call and return.
      The annotations are carried by a Code Map, which also tells us which addresses are code. *)
-  Variable cdm : CodeMap'.
+  Variable cdm : CodeMap.
   
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, d) := prev in
-    match AnnotationOf cdm (m (Reg PC)) with
+    match AnnotationOf cdm (proj m PC) with
     | Some call => (* On a call, we check what the sealing convention wants to seal.
                       If a component is Sealed, it can't be sealed again under the new depth.
                       Everything else retains its old status, presumably Unsealed. In the standard,
@@ -173,7 +173,7 @@ Section WITH_MAPS.
       InTrace (m,c,p) MCP ->
       mpstep (m,p) = Some (m',p',o) ->
       fst c k = Sealed d ->
-      m k = m' k.
+      proj m k = proj m' k.
 
   (* In addition to integrity, we have a confidentiality property. Consider in our
      example when B called C and then D. Suppose that B has some secret data, say a capability on some
@@ -196,14 +196,14 @@ Section WITH_MAPS.
      state in the same way as the step from its K-variant, we can't tell from that step what
      value a component in K was, so K is secret. *)
   Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
-    forall k, ~ K k -> m k = n k.
+    forall k, ~ K k -> proj m k = proj n k.
   
   (* The idea is that when variant states step, the resulting states should agree on any component
      that changed. *)
   Definition sameDifference (m m' n n' : MachineState) :=
     forall k,
-      (m k <> m' k \/ n k <> n' k) ->
-      m' k = n' k.
+      (proj m k <> proj m' k \/ proj n k <> proj n' k) ->
+      proj m' k = proj n' k.
 
   (* Once again, we take adjacent pairs of states in the trace from an arbitrary
      start state and check that a property holds between them. In this case, that
@@ -236,7 +236,7 @@ Section WITH_MAPS.
     forall minit MCP mcall dmcall dcall pcall mp o m' c' p' MCP',
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
       InTrace (mcall,(dmcall,dcall),pcall) MCP -> (* From any state that is a call *)
-      AnnotationOf cdm (mcall (Reg PC)) = Some call -> (* As determined by the code annotations *)
+      AnnotationOf cdm (proj mcall PC) = Some call -> (* As determined by the code annotations *)
       mpstep (mcall,pcall) = Some (mp,o) -> (* That has a successful step, i.e. doesn't immediately fail-stop *)
 
       (* We can look ahead to the next state whose depth is <= dcall, and take the intervening trace,
@@ -246,7 +246,7 @@ Section WITH_MAPS.
       (* And that state will maintain the values of all sealed addresses. *)
       forall a,
         sc mcall a = true ->
-        mcall (Mem a) = m' (Mem a).      
+        proj mcall (Mem a) = proj m' (Mem a).      
 
 
   (* We could use this as our ultimate specification, or just to guide our trace
@@ -260,7 +260,7 @@ Section WITH_MAPS.
       mcp = head MCP ->
       fst (cstate mcp) k = Sealed d' ->
       Last MCP mcp' ->
-      mstate mcp k = mstate mcp' k.
+      proj (mstate mcp) k = proj (mstate mcp') k.
 
   Theorem EagerIntSufficient :
     SimpleStackIntegrityEager ->
@@ -279,7 +279,7 @@ Section WITH_MAPS.
     forall minit MCP mcall dmcall dcall pcall m p o n MCP' N MO NO,
       WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
       InTrace (mcall,(dmcall,dcall),pcall) MCP -> (* Once again we consider each successful call *)
-      AnnotationOf cdm (mcall (Reg PC)) = Some call ->
+      AnnotationOf cdm (proj mcall  PC) = Some call ->
       mpstep (mcall,pcall) = Some (m,p,o) ->
 
       (* And take any variant state of the first state within it *)
@@ -344,7 +344,7 @@ Section WITH_MAPS.
     forall k (mcp':@MCPState context),
       K k->
       Last MCP mcp' ->
-      mstate (head MCP) k = mstate mcp' k.
+      proj (mstate (head MCP)) k = proj (mstate mcp') k.
 
   (* The confidentiality trace property needs to know when the variant trace can be considered to have
      returned, for which it takes a predicate on states and contexts, P. *)
@@ -399,11 +399,11 @@ Section WITH_MAPS.
     forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,
       InTrace (m1,p1) (MPTraceOf (minit, pOf minit)) ->
       mpstep (m1,p1) = Some (m2, p2,o) ->
-      cdm (m1 (Reg PC)) = inFun f1 ann1 ->
-      cdm (m2 (Reg PC)) = inFun f2 ann2 ->
+      cdm (proj m1  PC) = inFun f1 ann1 ->
+      cdm (proj m2  PC) = inFun f2 ann2 ->
       f1 <> f2 ->
-      AnnotationOf cdm (m1 (Reg PC)) = Some call \/
-      AnnotationOf cdm (m1 (Reg PC)) = Some ret.
+      AnnotationOf cdm (proj m1 PC) = Some call \/
+      AnnotationOf cdm (proj m1 PC) = Some ret.
 
   Definition ReturnIntegrity : Prop :=
     forall d minit MCP m c p m' c' p',
@@ -419,8 +419,8 @@ Section WITH_MAPS.
   forall minit mp1 m2 p2 o,
     InTrace mp1 (MPTraceOf (minit, pOf minit)) ->
     mpstep mp1 = Some (m2,p2,o) ->
-    AnnotationOf cdm (ms mp1 (Reg PC)) = Some call ->
-    em (m2 (Reg PC)).
+    AnnotationOf cdm (proj (ms mp1) PC) = Some call ->
+    em (proj m2 PC) = true.
 
   Definition WellBracketedControlFlow  : Prop :=
     ControlSeparation /\

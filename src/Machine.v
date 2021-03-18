@@ -23,13 +23,13 @@ Module Type MachineSpec.
   Definition Addr : Type := Word.
 
 Parameter Register : Type.
-Parameter PC : Register.
 Parameter SP : Register.
 Parameter regEq : Register -> Register -> bool.
 
 Inductive Component:=
 | Mem (a:Addr)
-| Reg (r:Register).
+| Reg (r:Register)
+| PC.
 
 Parameter keqb : Component -> Component -> bool.
 Axiom keqb_implies_eq :
@@ -43,7 +43,10 @@ Axiom not_keqb_implies_neq :
 Definition Value : Type := Word.
 
 (* A Machine State is just a map from Components to Values. *)
-Definition MachineState := Component -> Value.
+Parameter MachineState : Type.
+Definition View := Component -> Value.
+Parameter proj : MachineState -> View.
+
 
 (* Observations are values, or silent (tau) *)
 Inductive Observation : Type := 
@@ -56,56 +59,45 @@ Parameter step : MachineState -> MachineState * Observation.
 Parameter FunID : Type.
 Parameter StackID : Type.
 
-(*Definition Layout : Type := Addr -> bool.
+Definition EntryMap := Addr -> bool.
 
-Definition CallMap := Addr -> option Layout.
-
-Definition RetMap := Addr -> Prop.
-
-Parameter isRet : RetMap -> Addr -> bool.*)
-
-Definition EntryMap := Addr -> Prop.
-
-Definition CodeMap := Addr -> FunID -> Prop.
-
-Parameter isCode : CodeMap -> Addr -> bool.
-
-(*Definition YieldMap := Addr -> Prop.
-
-Parameter isYield : YieldMap -> Addr -> bool.*)
-
-Definition StackMap := Addr -> StackID -> Prop.
-
-Parameter activeStack : StackMap -> MachineState -> StackID.
-Parameter findStack : StackMap -> Addr -> option StackID.
-Parameter stack_eqb : StackID -> StackID -> bool.
-Parameter optstack_eqb : option StackID -> option StackID -> bool.
-
-(*Definition ProgramMap := CallMap * RetMap * EntryMap * CodeMap * YieldMap * StackMap : Type.*)
+Definition StackMap := Addr -> option StackID.
 
 Inductive CodeAnnotation :=
 | call
 | ret
 | yield
 | share (f: MachineState -> Addr -> option bool)
-| normal
-.
+| normal.
 
 Inductive CodeStatus :=
-| inFun : FunID -> CodeAnnotation -> CodeStatus
-| notCode : CodeStatus
-.
+| inFun   : FunID -> CodeAnnotation -> CodeStatus
+| notCode : CodeStatus.
 
-Definition CodeMap' := Addr -> CodeStatus.
+Definition CodeMap := Addr -> CodeStatus.
 
-Definition AnnotationOf (cdm : CodeMap') (a:Addr) : option CodeAnnotation :=
+(* Stack ID of stack pointer *)
+Definition activeStack (sm: StackMap) (m: MachineState) :
+  option StackID :=
+  sm (proj m (Reg SP)).
+
+Parameter stack_eqb : StackID -> StackID -> bool.
+
+Definition optstack_eqb (o1 o2 : option StackID) : bool :=
+  match o1, o2 with
+  | Some n1, Some n2 => stack_eqb n1 n2
+  | None, None => true
+  | _, _ => false
+  end.
+
+Definition AnnotationOf (cdm : CodeMap) (a:Addr) : option CodeAnnotation :=
   match cdm a with
   | inFun f normal => None
   | inFun f ann => Some ann
   | notCode => None
   end.
 
-Definition isCode' (cdm : CodeMap') (a:Addr) : bool :=
+Definition isCode' (cdm : CodeMap) (a:Addr) : bool :=
   match cdm a with
   | inFun _ _ => true
   | notCode => false
@@ -115,13 +107,13 @@ Definition isCode' (cdm : CodeMap') (a:Addr) : bool :=
   cm (m (Reg PC)) = Some lay.*)
 
 Definition justRet (mc m: MachineState) : Prop :=
-  m (Reg PC) = wplus (mc (Reg PC)) 4 /\ m (Reg SP) = mc (Reg SP).
+  proj m PC = wplus (proj mc PC) 4 /\ proj m (Reg SP) = proj mc (Reg SP).
 
 Definition justRet_dec mc m : {justRet mc m} + {~ justRet mc m}.
 Proof.
   unfold justRet.
-  destruct (WordEqDec (m (Reg PC)) (wplus (mc (Reg PC)) 4));
-    destruct (WordEqDec (m (Reg SP)) (mc (Reg SP)));
+  destruct (WordEqDec (proj m PC) (wplus (proj mc PC) 4));
+    destruct (WordEqDec (proj m (Reg SP)) (proj mc (Reg SP)));
     try solve [left; auto];
     right; intros [? ?]; auto.
 Qed.

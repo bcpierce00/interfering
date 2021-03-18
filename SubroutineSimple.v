@@ -125,12 +125,13 @@ Section WITH_MAPS.
                       pointer, but previously sealed frames retain their old owners. *)
       let dm' := fun k =>
                     match k, dm k with
-                    | _, Outside => Outside
                     | Mem a, Unsealed =>
                       if sc m a
                       then Sealed d
                       else Unsealed
-                    | _, _ => Outside
+                    | Mem a, Sealed d =>
+                      Sealed d
+                    | _, _ => dm k
                     end in
       (dm', d+1)
     | Some ret => (* On a return, we unseal everything sealed by the highest sealed depth. That will

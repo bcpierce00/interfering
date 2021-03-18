@@ -680,9 +680,9 @@ Proof.
   intros mp m H(*; pfold*).
   destruct mp. simpl in *.  subst.
   rewrite idTrace_eq. pattern (ObsOfM (RunOf m)) at 1.  rewrite idTrace_eq.  simpl.
-  destruct (pstep (m,p)); simpl.
-  - destruct (step m).  simpl.
-    destruct o. 
+  destruct (mpstep (m,p)) eqn:E. 
+  - destruct p0. destruct m0. rewrite (mpstepCompat m p o m0 p0 E).  simpl.
+    destruct o.
     * constructor. (*right.*) apply COFIX. auto.
     * constructor. (*left. pfold.*) constructor. (*right.*) apply COFIX. auto.
   - destruct (step m). simpl.
@@ -699,20 +699,20 @@ Proof.
   intros mp m H H0(*; pfold*).
   destruct mp. simpl in *. subst.
   rewrite idTrace_eq. rewrite (idTrace_eq (ObsOfMP (MPRunOf (m,p)))).  simpl.
-  destruct (pstep (m,p)) eqn:?; simpl.
-  - destruct (step m) eqn:?.  simpl.
+  destruct (mpstep (m,p)) eqn:E; simpl.
+  - destruct p0. destruct m0. rewrite (mpstepCompat m p o m0 p0 E). simpl.
     assert (Q: infinite (MPRunOf (m0, p0))).
     { intro. intro. unfold infinite in H0.
       apply (H0 a).
       rewrite (idTrace_eq (MPRunOf (m,p))). simpl.
-      rewrite Heqo. rewrite Heqp1.  simpl.
+      rewrite E.
       constructor.  auto. }
     destruct o.
     + constructor. (*right.*) apply COFIX; auto.
     + constructor. (*left. pfold.*) constructor. (*right.*) apply COFIX; auto.
   - exfalso. unfold infinite in H0. eapply (H0 (m,p,Tau)).
     rewrite (idTrace_eq (MPRunOf (m,p))).  simpl.
-    rewrite Heqo.
+    rewrite E.
     constructor.
 Qed.
 
