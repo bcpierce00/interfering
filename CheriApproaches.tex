@@ -4,12 +4,177 @@
 
 \begin{document}
 
-This document deals with questions of the division between machine state and policy state.
-In existing models of our security properties, the state is divided into a machine state,
-which is a mapping from addresses and registers to data, and a policy state, which may be
-any arbitrary data. A machine state can step on its own, or in conjunction with a policy
-state; when states step together the machine state component always steps as it would on
-its own. A policy state may only cause the step to fail outright, never change the result.
+\section{A Stack-safe Calling Convention for Capabilities}
+
+This is Skorstengaard's calling convention from the worse of their papers, with a
+difference in that we use a single piece of code to handle the ``landing pad'' of a return.
+We must combine this with descriptions of how to adjust out model to support them. At the
+high level, we need to accept that their threat model is slightly incompatible with ours:
+adversarial code, defined as code whose dynamic behavior does not obey simple reasonableness
+properties, is exempt from the LSE and WBCF protections in its own calls. For instance, such
+a function might make a call in such a way that the return skips over it and returns straight
+to its caller, violating WBCF. Or it might create capabilities on its own data and pass them
+along, violating LSE. This latter piece of unreasonableness is easy to handle: we add a clause
+to integrity to assume that the caller is reasonable. Equivalent adjustments to confidentiality
+might be trickier, in that we should acknowledge the possibility of unreasonableness in either
+the callee or the caller. But the violations of WBCF are much more problematic, because our
+model of counting depths assumes that callers are never ``skipped'' by a multi-level return.
+
+\subsection{Updating Stack Safety to Support Unreasonable Functions}
+
+The solution given in StkTokens is, essentially, that unreasonable functions don't get to
+make ``real'' (protected) calls. Rather, they perform all the operations involved in a call,
+then jump into another function at its entry point. That function may then jump back -- which
+is not a ``real'' return -- or do an actual return to the original caller. The equivalent to
+this is in our model is for us to, on a call-annotated instruction, check that the current
+function is reasonable. If it is not, we do not update the depth, and given the callee an
+unsealed piece of stack to work with. Similarly, on return, we only update the context
+if we are returning to a reasonable function. That requires examining the program counter
+that we're returning to. The problem with this whole approach is that it doesn't play nice
+with the initialization side of confidentiality. The adversary gets to initialize its
+callee's frame before fake-calling it. A reasonable callee will not read those initialized
+variables, anyway, but the property will not capture that the protection is needed. We
+could potentially treat this as a special kind of call, obeying confidentiality but not
+integrity or WBCF, which gets us closer to the next approach.
+
+The more complex approach is to accept that unreasonable callers might get skipped or
+accessed, but otherwise model their calls and returns normally. That means extending
+our model with support for dynamic returns, which are then forbidden by WBCF in the case
+of reasonable callers. Specifically, the {\sc Ret} annotation is now parameterized by
+a function that takes a machine state and a context and returns an integer depth: the
+return target. Instead of only popping the top depth, we pop the depth
+we're returning to and every one above it, by the same mechanisms as in a single return.
+In the context of PIPE, where we always guarantee single returns, the function can simply
+subtract 1 from the current depth, as before. We will discuss how to implement this
+function for Cheri once we cover the calling convention.
+
+Now most of our properties are unaffected by this, even Return Integrity, which after
+all talks about what happens {\it when} we return to a caller. Then we simply need a second
+property, which I propose to call Return Guarantee, that if a caller is reasonable it
+will see a return {\it before} any caller with a lower depth does.
+
+\subsection{Calling Convention Details}
+
+First let's discuss our assumptions about the capability system, starting with basic
+capabilities.
+
+A {\em capability} is composed of a {\em base}, {\em offset}, and {\em bound}
+Each word of memory carries a 2-bit tag, the first bit indicated whether it is a
+{\em valid} capability and the second whether that capability is {\em local}
+A local capability can never be stored in memory outside of the stack. A load or store
+failstops if the capability used as its pointer does not have its offset within its
+bounds. A load or store using a non-capability pointer uses the bounds of one of the
+following special capabilities.
+
+There are three special capability registers. The {\em default data capability} ({\tt \$ddc}),
+is applied to reads and writes through non-capability pointers. The
+{\em program counter capability} ({\tt \$pcc}) is applied to instruction fetches.
+The {\em stack capability} ({\tt spc}) takes the place of the stack pointer and is used by
+compiler generated code. Basic capabilities are supported by the following instructions:
+
+\begin{tabular}{l l l}
+  {\tt st}      & Data Store       & Stores data, clearing any capability bits \\
+  {\tt ld}      & Data Load        & Loads data, clearing any capability bits \\
+  {\tt cst}     & Capability Store & Stores a capability, but failstops rather than store
+                                     a local one outside the stack \\
+  {\tt cld}     & Capability Load  & Loads a capability from memory \\
+  {\tt incbase} & Increment Base   & Increases the base of a capability by one and
+                                     decrements the offset \\
+  {\tt decbnd}  & Decrement Bound  & Decreases the bound of a capability by one \\
+\end{tabular}
+
+We will need to use {\em object capabilities}. Object capabilities come in twos:
+a code pointer and a memory capability. They are sealed with a matching identifier and
+can only be unsealed by invoking them together, simultaneously jumping to the code pointer
+and unsealing the memory capability. This way we ensure that the memory capability is
+only used by trusted code. These are supported by the following instructions:
+
+\begin{tabular}{l l l}
+  {\tt so} & Seal Object   & Takes a pair of capabilities and
+                                  seals them with matching identifiers \\
+  {\tt io} & Invoke Object & Takes matching sealed capabilities \(c\) and
+                                  \(p\), jumps to \(p\), and unseals \(c\) \\
+\end{tabular}
+
+Finally, we will use monotone capabilities.
+
+\subsection{The calling convention}
+
+From here on out, assume all capabilities are local. They can live in registers and stack
+memory only. In the interest of corresponding to out model, the {\tt \$ddc} is permissive
+and allows access to everything that isn't stack or code, and the {\tt \$pcc} allows access
+only to our code.
+
+{\bf Initially:} The {\tt \$stc} encompasses the full stack in its bounds. There is a
+special bit of code that has no function identifier that serves as a landing pad for
+functions, that takes a capability on a two-word block, loads the first word to {\tt \$stc}
+and jumps to the second. The jump is annotated as a return by the compiler.
+
+{\bf Caller:} To make a call, the caller allocates two extra words on the stack. It copies
+the current {\tt \$stc} and the address of the instruction after the call into these. Then
+it creates a capability restricted to this object and links it as an object capability with
+the address of the landing pad. The object capability is stored in a register. Then the
+caller increments the base of the {\tt \$stc} until its offset is zero, which will prevent
+access to its frame. Finally, the caller jumps to the call target -- this instruction is
+annotated as a call by the compiler.
+
+After a return, the caller immediately clears all non-return-value registers and the stack
+above the {\tt \$stc}'s offset. This prevents a copy of the object capability from being
+stashed somewhere for a multiple return attack.
+
+{\bf Callee:} On entry, the callee allocates memory by increasing the {\tt \$stc} and stores
+the object capability it was passed. To return, it invokes that capability, executing the
+landing pad and unsealing the data portion of the object capability. At the end of the
+landing pad sequence, there is a jump instruction, which is annotated as a return. As
+discussed above, to dynamically determine the target of the return, we must look at the
+machine state and contet: the data portion of the return capability points to the activation
+record of the caller, which is labeled {\it Passed(d)} for some depth \(d\) in the context.
+(That is, it lies with the frame of the activation at depth \(d\).) The return target is
+therefore \(d\). An intuitive way of describing this is that on return, we unseal layers of
+calls until the activation record we're using to return has been unsealed.
+
+\subsection{Analysis}
+
+This calling convention prevents the callee from accessing the caller's state. The caller
+guarantees that there is no additional object capability floating around somewhere that
+the callee could access, and the {\tt \$stc} has its bounds shrunk to exclude the caller's
+frame. It can only be restored with the object invocation.
+
+What it doesn't necessarily do is prevent the callee from reading its frame. An adversarial
+caller could write above its stack pointer before the call and there would be no protection.
+So we have ``sealed confidentiality'' instead of normal confidentiality that includes all
+uninitialized memory.
+
+Luckily, if we extend our model with the ``uninitialized capabilities'' of Georges et. al.
+we can once again enforce the confidentiality of uninitializes memory, as well. Then
+we have full local state encapsulation.
+
+The generic return code being shared between all functions is a little unfortunate, as it
+puts a hole in control separation. We'll need to describe the correct behavior carefully
+and adjust the property.
+
+We may have a problem with returns, in that a callee could potentially pass along its
+return object to a further callee, which could then bypass the first and return straight
+to the original caller. This appears to be a hazard of our attacker model.
+
+The caller would be happy enough, as its state would have been protected,
+but it messes up our whole model of depths and counting
+of returns. And the callee might rely on getting returned to.
+
+\section{Well-formedness, Reasonableness, and PIPE}
+
+As discussed above, Skortengaard et. al. impose static well-formedness conditions on
+all of their code, as well as certain 
+
+\section{The Question of Policy States}
+
+This half of the document deals with questions of the division between machine state and
+policy state. In existing models of our security properties, the state is divided into a
+machine state, which is a mapping from addresses and registers to data, and a policy state,
+which may be any arbitrary data. A machine state can step on its own, or in conjunction
+with a policy state; when states step together the machine state component always steps
+as it would on its own. A policy state may only cause the step to fail outright, never
+change the result.
 
 We are faced with the task of deciding 1) which parts of an architecture should be treated
 as machine, and which parts as policy; 2) what is to be done with the policy state in the
@@ -31,70 +196,75 @@ simplest such model simply makes the machine transition function partial, with f
 indicating a fail-stop. Here the enforcement is built directly into the machine. This applies to
 our three enforcement mechanisms as follows.
 
-\paragraph*{HOPE} The machine contains both ordinary registers and memory, and tag registers and memory.
-The transition function is parameterized by a tag rule table, and we must be careful to construct the model
-such that tags only be read and updated as described by the table. Fail-stops should occur only on tag
-rule failures.
+\paragraph*{HOPE} The machine contains both ordinary registers and memory, and tag registers
+and memory. The transition function is parameterized by a tag rule table, and we must be
+careful to construct the model such that tags only be read and updated as described by the
+table. Fail-stops should occur only on tag rule failures.
 
-\paragraph*{Cheri} The machine contains ordinary registers and memory, with some effort needed to model
-the extra space that capabilities take up. (Either words need to be larger to fit capabilities, or we
-need to model them being spread across multiple words.) It also contains the map of 1-bit tags marking
-capabilities as valid. The ISA is extended with the Cheri operations and the transition function handles
-the valid-capability tags appropriately. Here a fail-stop occurs whenever the Cheri architecture would
-trap to a failstate, mostly when reading or writing through an invalid capability or outside of a
-valid capability's authority.
+\paragraph*{Cheri} The machine contains ordinary registers and memory, with some effort needed
+to model the extra space that capabilities take up. (Either words need to be larger to fit
+capabilities, or we need to model them being spread across multiple words.) It also contains
+the map of 1-bit tags marking capabilities as valid. The ISA is extended with the Cheri
+operations and the transition function handles the valid-capability tags appropriately.
+Here a fail-stop occurs whenever the Cheri architecture would trap to a failstate, mostly
+when reading or writing through an invalid capability or outside of a valid capability's
+authority.
 
-\paragraph*{Software} Here the machine gets to be completely unchanged, and never failstops. Instead
-we restrict the set of initial states to those whose code comes from the compiler with the appropriate
-modifications, and it will simply never violate the policy - any errors will take it to some error
-state where it silently diverges, which is perfectly allowed.
+\paragraph*{Software} Here the machine gets to be completely unchanged, and never failstops.
+Instead we restrict the set of initial states to those whose code comes from the compiler
+with the appropriate modifications, and it will simply never violate the policy - any errors
+will take it to some error state where it silently diverges, which is perfectly allowed.
 
 \paragraph*{Implications for confidentiality} If everything lives in the machine state, then
-we need to think about what it means to vary it to create a confidentiality property. Take the HOPE
-example: does a variant include states with different tags, such that either the primary
-trace failstops and the variant does not, or the variant does and the primary does not? Similarly,
-in Cheri, do we vary the valid-capability bit? What about bounds information?
+we need to think about what it means to vary it to create a confidentiality property. Take
+the HOPE example: does a variant include states with different tags, such that either the
+primary trace failstops and the variant does not, or the variant does and the primary does
+not? Similarly, in Cheri, do we vary the valid-capability bit? What about bounds information?
 
 We can pretty firmly say that we do not need to vary tags, including the capability bit. That's
-because these can never be read, and therefore it is meaningless to talk about their confidentiality.
-But the bounds information in Cheri presents a bigger problem. We will revisit it as we start moving
-policy data out of the machine.
+because these can never be read, and therefore it is meaningless to talk about their
+confidentiality. But the bounds information in Cheri presents a bigger problem. We will
+revisit it as we start moving policy data out of the machine.
 
 \section{Separate Policy States}
 
 We have identified some kinds of data that can never be read and serve exclusively to inform
-the enforcement mechanism. We can think of data as having two meanings, its ``application content'' and its
-``security content.'' In HOPE, the distinction seems clear: tags have only security content, never application.
-So we can justify separating out security-only data into a separate part of the state, from which it cannot
-escape and therefore does not need to be varied to support confidentiality. Let's discuss how that
-works in HOPE and Cheri (in software methods, of course, everything has application content.)
+the enforcement mechanism. We can think of data as having two meanings, its ``application
+content'' and its ``security content.'' In HOPE, the distinction seems clear: tags have only
+security content, never application. So we can justify separating out security-only data
+into a separate part of the state, from which it cannot escape and therefore does not need
+to be varied to support confidentiality. Let's discuss how that works in HOPE and Cheri
+(in software methods, of course, everything has application content.)
 
-\paragraph*{HOPE} In HOPE, we put all tags in the policy state, along with any policy-specific machinery such as
-counters that give us the fresh tags. The machine step function can now be total, with failure only
-coming from the policy step function. But it turns out that some machine data still has security content.
-Consider a load instruction: its tag rule must take into account the tag at the target address, which
-means that the policy step function must be aware of the machine state.
+\paragraph*{HOPE} In HOPE, we put all tags in the policy state, along with any policy-specific
+machinery such as counters that give us the fresh tags. The machine step function can now be
+total, with failure only coming from the policy step function. But it turns out that some
+machine data still has security content. Consider a load instruction: its tag rule must
+take into account the tag at the target address, which means that the policy step function
+must be aware of the machine state.
 
-This gives us the same question of what we do in confidentiality with variant states that fail-stop
-when the original didn't.
+This gives us the same question of what we do in confidentiality with variant states that
+fail-stop when the original didn't.
 
-\paragraph*{Cheri} In Cheri, the valid-capability bit has no application content, so these can live in
-the policy state. But the application content of a capability is its bitwise value. We might argue
-that actually the base and offset are application content, while permissions and bounds information
-are security-only, but it is not feasible to separate the latter from the former. Even if we did, the
-base and bounds would give us the same issues as HOPE pointers.
+\paragraph*{Cheri} In Cheri, the valid-capability bit has no application content, so these can
+live in the policy state. But the application content of a capability is its bitwise value.
+We might argue that actually the base and offset are application content, while permissions
+and bounds information are security-only, but it is not feasible to separate the latter
+from the former. Even if we did, the base and bounds would give us the same issues as HOPE
+pointers.
 
-\paragraph*{Implications} The primary implication is that we no longer need to worry about what happens
-if we vary tags, whether that's the full HOPE tag or the 1-bit Cheri tag. But that doesn't save us
-from sometimes varying security content, because pointer values still have security content. In both systems,
-if we read a valid pointer that is supposed to be secret and then dereference it, there is a variant run
-in which the pointer is invalid and the variant fail-stops. This will always be the case no matter how we
-separate machine and policy.
+\paragraph*{Implications} The primary implication is that we no longer need to worry about
+what happens if we vary tags, whether that's the full HOPE tag or the 1-bit Cheri tag.
+But that doesn't save us from sometimes varying security content, because pointer values
+still have security content. In both systems, if we read a valid pointer that is supposed to
+be secret and then dereference it, there is a variant run in which the pointer is invalid and
+the variant fail-stops. This will always be the case no matter how we separate machine and
+policy.
 
-The advantages that we do get by separating them as much as possible are: it's easier to model the separate
-state than if we built it into the machine architecture, which matters more for HOPE but is a small concern for
-Cheri. And depending on how we handle these variant fail-stops, it may be more efficient to test if fewer of
-them occur.
+The advantages that we do get by separating them as much as possible are: it's easier to model
+the separate state than if we built it into the machine architecture, which matters more for
+HOPE but is a small concern for Cheri. And depending on how we handle these variant fail-stops,
+it may be more efficient to test if fewer of them occur.
 
 \section{Handling Variations in Security Content}
 
