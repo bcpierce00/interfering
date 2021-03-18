@@ -47,7 +47,7 @@ End DOMAIN_MODEL.
 
 Section WITH_MAPS.
 
-  Variable cdm : CodeMap'. (* Map of where code lives in memory and its annotation. *)
+  Variable cdm : CodeMap. (* Map of where code lives in memory and its annotation. *)
   Variable sm : Addr -> bool. (* Determines whether an address is in the stack. *)
   Variable pOf : MachineState -> PolicyState. (* Policy initialization function. *)
 
