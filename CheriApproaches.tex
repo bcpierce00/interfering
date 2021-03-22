@@ -69,18 +69,18 @@ following special capabilities.
 There are three special capability registers. The {\em default data capability} ({\tt \$ddc}),
 is applied to reads and writes through non-capability pointers. The
 {\em program counter capability} ({\tt \$pcc}) is applied to instruction fetches.
-The {\em stack capability} ({\tt spc}) takes the place of the stack pointer and is used by
+The {\em stack capability} ({\tt \$stc}) takes the place of the stack pointer and is used by
 compiler generated code. Basic capabilities are supported by the following instructions:
 
 \begin{tabular}{l l l}
   {\tt st}      & Data Store       & Stores data, clearing any capability bits \\
   {\tt ld}      & Data Load        & Loads data, clearing any capability bits \\
-  {\tt cst}     & Capability Store & Stores a capability, but failstops rather than store
+  {\tt stc}     & Capability Store & Stores a capability, but failstops rather than store
                                      a local one outside the stack \\
-  {\tt cld}     & Capability Load  & Loads a capability from memory \\
-  {\tt incbase} & Increment Base   & Increases the base of a capability by one and
-                                     decrements the offset \\
-  {\tt decbnd}  & Decrement Bound  & Decreases the bound of a capability by one \\
+  {\tt ldc}     & Capability Load  & Loads a capability from memory \\
+%  {\tt incbase} & Increment Base   & Increases the base of a capability by one and
+%                                     decrements the offset \\
+%  {\tt decbnd}  & Decrement Bound  & Decreases the bound of a capability by one \\
 \end{tabular}
 
 We will need to use {\em object capabilities}. Object capabilities come in twos:
@@ -90,81 +90,106 @@ and unsealing the memory capability. This way we ensure that the memory capabili
 only used by trusted code. These are supported by the following instructions:
 
 \begin{tabular}{l l l}
-  {\tt so} & Seal Object   & Takes a pair of capabilities and
-                                  seals them with matching identifiers \\
-  {\tt io} & Invoke Object & Takes matching sealed capabilities \(c\) and
+  {\tt seal}   & Seal Object    & Takes a pair of capabilities and a seal identifier and
+                                  seals them with the identifier \\
+  {\tt invoke} & Invoke Object  & Takes matching sealed capabilities \(c\) and
                                   \(p\), jumps to \(p\), and unseals \(c\) \\
 \end{tabular}
 
-Finally, we will use monotone capabilities.
+Finally, we will use {\em uninitialized capabilities}. These have a special permission structure
+where their offset only moves when written to. The portion of the capability below the offset,
+which is initialized, can be promoted into a normal capability. They support the following
+instructions:
 
-\subsection{The calling convention}
+\begin{tabular}{l l l}
+  {\tt stu}  & Data Store (Uninitialized) & Stores data and increments offset of Ucap \\
+  {\tt stuc} & Capability Store           & As {\tt stU} but stores a capability \\
+  {\tt prom} & Promote                    & Promote initialized part of an uninitialized capability
+                                            into a normal capability \\
+  {\tt morp} & Co-promote                 & Remove the initialized part of an uninitialized capability \\
+\end{tabular}
 
-From here on out, assume all capabilities are local. They can live in registers and stack
-memory only. In the interest of corresponding to out model, the {\tt \$ddc} is permissive
-and allows access to everything that isn't stack or code, and the {\tt \$pcc} allows access
-only to our code.
+\section{A Capability Machine}
 
-{\bf Initially:} The {\tt \$stc} encompasses the full stack in its bounds. There is a
-special bit of code that has no function identifier that serves as a landing pad for
-functions, that takes a capability on a two-word block, loads the first word to {\tt \$stc}
-and jumps to the second. The jump is annotated as a return by the compiler.
+Here I'll describe a simple machine implementing the operations above. Eventually. For now
+I mocked it up in CheriModel.v. It's pretty close to what's described above. The most interesting
+thing is the semantics of invoking a sealed object. A sealed object is a pair of a code capability
+and a data capability (though these are distinguished only by convention.) There is a special register,
+{\tt \$invdst}, in which the unsealed data capability is stored (and of course, the unsealed code capability
+is copied to the {\tt \$pcc}. The idea is that on entry to an invoked capability, we always need to know
+which register has the data capability, so it can't be dynamic.
 
-{\bf Caller:} To make a call, the caller allocates two extra words on the stack. It copies
-the current {\tt \$stc} and the address of the instruction after the call into these. Then
-it creates a capability restricted to this object and links it as an object capability with
-the address of the landing pad. The object capability is stored in a register. Then the
-caller increments the base of the {\tt \$stc} until its offset is zero, which will prevent
-access to its frame. Finally, the caller jumps to the call target -- this instruction is
-annotated as a call by the compiler.
+\subsection{A call}
 
-After a return, the caller immediately clears all non-return-value registers and the stack
-above the {\tt \$stc}'s offset. This prevents a copy of the object capability from being
-stashed somewhere for a multiple return attack.
+Here we will give an example of a call to a function at address {\tt 20} that takes an
+argument in register {\tt ra}. Let our call start at address {\tt 0}. Suppose that we have a piece
+of code at {\tt 50} that executes a ``landing pad'' for a return. Assume that all capabilities referenced
+here are local, and the stack capability is an uninitialized capability that can write locally. There
+could be nonlocal capabilities as well, for use in the heap, but to match our model we can also just assume
+that such capabilities are derived from a permissive {\tt $ddc}.
 
-{\bf Callee:} On entry, the callee allocates memory by increasing the {\tt \$stc} and stores
-the object capability it was passed. To return, it invokes that capability, executing the
-landing pad and unsealing the data portion of the object capability. At the end of the
-landing pad sequence, there is a jump instruction, which is annotated as a return. As
-discussed above, to dynamically determine the target of the return, we must look at the
-machine state and contet: the data portion of the return capability points to the activation
-record of the caller, which is labeled {\it Passed(d)} for some depth \(d\) in the context.
-(That is, it lies with the frame of the activation at depth \(d\).) The return target is
-therefore \(d\). An intuitive way of describing this is that on return, we unseal layers of
-calls until the activation record we're using to return has been unsealed.
+\begin{verbatim}
+<0: [clear all registers]
+0: mov 42 ra
+1: mov $stc r1
+2: morp $stc
+3: stuc r1 $stc               [PASS $stc]
+4: stuc [$pcc + 7] $stc       [PASS $stc]
+5: mov $stc r1
+6: prom r1
+7: morp $stc
+8: mov [$pcc + 42] r2
+9: seal s r1 r2
+10: jmp +10                   [CALL]
+11: ...
+\end{verbatim}
 
-\subsection{Analysis}
+We can walk through what this does step by step. First, to make sure that we don't have any extra
+capabilities laying around, we clear all of our registers. Then we set the argument in {\tt ra}.
+Now things get interesting: instructions 1-2 save the current stack capability and cut off
+the readable portion, leaving only the uninitialized portion. Instructions 3-4 construct an activation
+record containing the previous stack capability and the appropriate return address. Note that each {\tt stuc}
+instruction increments the stack pointer, so we are implicitly allocating these two variables.
+They will need to be accessible to the callee, so we annotate them as passed. Next, we create a capability
+that can only access them, in instructions 5-6: the promoted stack capability is a capability on
+only the written portion. Finally instruction 7 ensures that the stack capability cannot access
+them. Instructions 8 and 9 now seal together the data capability and a code capability on address
+50, where our ``landing pad'' code lives, and address 10 jumps us ahead to our function entry.
 
-This calling convention prevents the callee from accessing the caller's state. The caller
-guarantees that there is no additional object capability floating around somewhere that
-the callee could access, and the {\tt \$stc} has its bounds shrunk to exclude the caller's
-frame. It can only be restored with the object invocation.
+Now, what happens when we return? Let's look at the landing pad. Recall that we have a special
+register {\tt \$invdst} that is where the unsealed data capability lives.
 
-What it doesn't necessarily do is prevent the callee from reading its frame. An adversarial
-caller could write above its stack pointer before the call and there would be no protection.
-So we have ``sealed confidentiality'' instead of normal confidentiality that includes all
-uninitialized memory.
+\begin{verbatim}
+50: ldc $invdst $stk
+51: jalr [$invdst+1]          [RETURN]
+\end{verbatim}
 
-Luckily, if we extend our model with the ``uninitialized capabilities'' of Georges et. al.
-we can once again enforce the confidentiality of uninitializes memory, as well. Then
-we have full local state encapsulation.
+Pretty simple! Notice something interesting: if we invoke a (properly constructed) return capability,
+we {\it always} hit a {\tt jalr} labeled as a return two steps later. In other words, an adversary can't do
+something that looks like a return without it being labeled a return.
 
-The generic return code being shared between all functions is a little unfortunate, as it
-puts a hole in control separation. We'll need to describe the correct behavior carefully
-and adjust the property.
+Now it's pretty easy here to argue some of our properties. We should have that no unsealed capabilities are
+present unless they were passed as arguments, except the stack capability, which is completely uninitialized.
+So we should not be able to read anything without writing it or access a caller's frame at all.
 
-We may have a problem with returns, in that a callee could potentially pass along its
-return object to a further callee, which could then bypass the first and return straight
-to the original caller. This appears to be a hazard of our attacker model.
+When we've returned, we've restored the old stack capability, so the callee's frame is again uninitialized.
+But! We may have a capability on it that the callee returned. That's a potential problem, because the capability
+could then be passed to a future call in a way that allows it to persist. There's a solution to that, unpleasant
+though it is: clear every register on return except for the value being returned, and manually check that it
+isn't a capability that overlaps the uninitialize portion of the stack. Or indeed, any stack capability at all.
 
-The caller would be happy enough, as its state would have been protected,
-but it messes up our whole model of depths and counting
-of returns. And the callee might rely on getting returned to.
+\subsection{Friction points}
 
-\section{Well-formedness, Reasonableness, and PIPE}
+In this model we don't really have control separation. And if we did, the landing pad wouldn't
+actually belong to any one function, so it'd be a bit odd. We could get separation back by making
+the call an invocation of an object, with its own launchpad that handles all of the rest of the
+construction.
 
-As discussed above, Skortengaard et. al. impose static well-formedness conditions on
-all of their code, as well as certain 
+We still have the problem with returns, in that a callee could potentially pass along its
+return object as an argument to a further callee, which could then bypass the first and return
+straight to the original caller. We can model what happens in this case by checking, at the return point,
+where we are in the stack - that is the depth we are about to return to, and it may be more than one depth
+down (or zero, as the callee could always manufacture its own return object to ``return'' to itself).
 
 \section{The Question of Policy States}
 
