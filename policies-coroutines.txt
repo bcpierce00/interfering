@@ -1,0 +1,129 @@
+Tag Policies for Coroutine Stack Safety Properties
+--------------------------------------------------
+
+This document considers the design of micro-policies for the eager enforcement
+of stack safety extended to encompass a simple model of coroutines using PUMP
+tags for RISC-V.
+
+Start from a simple model of interaction where only coroutines (instead of both
+coroutines and subroutines) are present. Suppose moreover that all coroutines
+are declared at the top level.
+
+In a simple memory model, the layout after initialization could look like this,
+with a code segment followed by a "stack" segment as follows.
+
+  -------------------------------------
+   ... code ... | CC | CO1 | CO2 | ...
+  -------------------------------------
+
+Here, the code segment is followed by the data segment. At the bottom of the
+data segment we store a reference to the current coroutine (CC), i.e., the SP of
+the coroutine frame where control was last transferred.
+
+After the CC follow a number of "coroutine object frames" (CO1, CO2, etc.), each
+of which contains the state of a coroutine object. This includes the saved state
+of the execution (PC, registers and local variables for a given coroutine).
+
+The size of each of these "couroutine object frames" is constant and fixed in
+advance, so that we do not need to consider the added subtleties of more complex
+allocation schemes.
+
+[RB: Actually, do we need a CC in this simple scenario?]
+
+Individual coroutine objects are divided into metadata (saved PC, etc.), which
+like the CC can only be manipulated by dedicated instructions in the transfer
+convention, and proper coroutine data, which are tagged with a unique coroutine
+identifier that prevents access from any other coroutine.
+
+In the absence of interesting interactions with the stack, the transfer function
+is the sole component of interest. We consider a simple design that works for
+the simplified scenario described above.
+
+Register conventions:
+  RA = x1
+  SP = x2
+  Target argument (RTRG) = x10 (following standard convention)
+  Function argument (RARG) = x11 (following standard convention)
+  Assume the "caller" saves whatever it needs before transfer
+
+"Coroutine frame" structure:
+  SP + 0 -> initially, address of the initial instruction of the coroutine;
+            later, address at which to resume execution after control has been
+            transferred elsewhere (i.e., to another coroutine) -- this operates
+            as a "return address" of sorts
+  SP + 4 -> any other registers to be saved and restored between transfers to
+            the subroutine follow the "RA"
+  ...    -> additional space for the coroutine's own local data
+
+Transfer from one "couroutine frame" to another:
+  RA:   the transfer function should be jump-and-link'ed to, so the return
+        address points to the next instruction that should be executed in the
+        calling coroutine whenever control is transferred back to it
+  SP:   the stack pointer still points to the start of the "couroutine frame" of
+        the coroutine calling transfer
+  RTRG: should contain the coroutine object being targeted (or a reference to
+        it) which here points to the start of its "coroutine frame"
+  RARG: contains any value the "caller" wants to communicate to the "callee" as
+        the transfer argument
+
+  The "caller" JAL's or JALR's into the tranfer function.
+
+  SW   SP RA      -- Save RA to first slot in "caller's" couroutine frame (SP)
+                  -- ... And possibly additional registers (other than SP), as
+                  -- dictated by the "transfer convention"
+  MV   SP RTRG    -- Set SP to point to "callee's" coroutine frame, passed in
+                  -- argument
+                  -- ... And clear RTRG to avoid reuse?
+  LW   RA SP      -- Now set RA to be the saved RA at the top of the "callee's
+                  -- coroutine frame, set by a previous transfer from it
+                  -- ... And restore any other registers instructed by the
+                  -- "transfer convention"
+  JR   RA         -- "Return" to the "callee" and resume execution
+
+To protect these "coroutine object frames", suitable tagging schemes are needed.
+First, the contents of each stack frame are tagged with a unique activation id
+for the subroutine. The PC tag keeps track of the currently executing activation
+id, and limits memory accesses to addresses tagged with that id. Other memory
+accesses are prohibited.
+
+The address of the memory block that contains the data of a coroutine (that is,
+an instance of it) can be used as the coroutine object used by its "callers" to
+reference it and transfer control to it. This usage must be protected to ensure
+the integrity of these coroutine objects.
+
+First, coroutine objects should be distinguished by a special tag that may allow
+moves but must forbid manipulations of the address value itself: that is, jump
+targets cannot be forged.
+
+The policy must ensure that the sequence of instructions of the transfer
+function are executed in order and that its argument is a coroutine object
+capability. Reusing this value as the activation id of the coroutine establishes
+the link between "caller" and "callee".
+
+As in the case of the stack policies, the "stack pointer" may only be
+manipulated by privileged instructions, in this case those in the transfer
+function.
+
+Setup phase
+-----------
+
+Adding and mixing subroutines
+-----------------------------
+
+Basic idea:
+
+ - Each subroutine can be invoked multiple times, each time with a unique
+   activation id. Moreover, each subroutine activation is in the scope of a
+   given coroutine.
+
+ - Each coroutine owns its own separate data memory, which comprises its
+   coroutine frame, as described above, as well as space for its stack to grow
+   as new subroutines are invoked within its scope.
+
+ - Coroutine stacks are assumed to be non-overlapping, otherwise a subroutine
+   call will fail if it would need to allocate space past its declared size
+   limit (but this still needs to be checked by tags).
+
+ - Each coroutine frame stores both the PC and the current SP (which can no
+   longer be used as a direct proxy for coroutine ids, which need to be kept
+   separate).
