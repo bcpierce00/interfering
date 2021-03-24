@@ -127,99 +127,28 @@ Section WITH_MAPS.
 
   (* So we can do ultra eager integrity, like before. *)
   Definition StackIntegrityUE : Prop :=
-    forall minit k mcp mcp',
-      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
-      Inaccessible (cstate mcp) k ->
-      proj (mstate mcp) k = proj (mstate mcp') k.
-
-  (* The call rule equivalent is identical except for similar changes in scope. *)
-  Definition CallRule : Prop :=
-    forall minit MCP mcall dmcall dcall pcall mp o m' c' p' MCP',
-      WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
-      InTrace (mcall,(dmcall,dcall),pcall) MCP -> (* From any state that is a call *)
-      AnnotationOf cdm (proj mcall PC) = Some call -> (* As determined by the code annotations *)
-      mpstep (mcall,pcall) = Some (mp,o) -> (* That has a successful step, i.e. doesn't immediately fail-stop *)
-
-      (* We can look ahead to the next state whose depth is <= dcall, and take the intervening trace,
-         or an infinite trace if there is no such state. *)
-      FindSegmentMP updateC (fun m '(dm,d) => d > dcall) mp (updateC mcall (dmcall,dcall)) MCP' ->
-      Last MCP' (m',c',p') ->
-      (* And that state will maintain the values of all sealed addresses. *)
-      forall a,
-        sc mcall a = true ->
-        proj mcall (Mem a) = proj m' (Mem a).      
-
+    forall k m c p m' p' c' o,
+      Reachable updateC initC (m,p,c) ->
+      mpcstep updateC (m,p,c) = Some (m',p',c',o) ->
+      Inaccessible c  k ->
+      proj m k = proj m' k.
+  
   (* We can use our nice trace properties (redefined in TraceProperties.v to handle different
      context types) to implement the integrity property. *)
   Definition StackIntegrityEager : Prop :=
-    forall minit MCP d,
-      FindSegmentMP updateC (fun m c => snd c >= d) (minit, pOf minit) initC MCP ->
+    forall MCP d,
+      ReachableSegment updateC initC (fun '(m,p,c) => snd c >= d) MCP ->
       TraceIntegrityEager (Inaccessible (cstate (head MCP))) MCP.
-
-  (* And it ought to imply the call rule. *)
-  Theorem EagerIntSufficient :
-    StackIntegrityEager ->
-    CallRule.
-  Proof.
-  Admitted.
   
-  (* I won't rehash the ultra eager confidentiality here, but move on to the equivalent
-     confidentiality rule. We now allow reading of shared memory, and passed by the
-     appropriate function. *)
-  Definition ConfRule : Prop :=
-    forall minit MCP mcall dmcall dcall pcall m p o n MCP' N MO NO,
-      WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
-      InTrace (mcall,(dmcall,dcall),pcall) MCP -> (* Once again we consider each successful call *)
-      AnnotationOf cdm (proj mcall PC) = Some call ->
-      mpstep (mcall,pcall) = Some (m,p,o) ->
-
-      (* And take any variant state of the first state within it *)
-      variantOf (fun k => dmcall k <> Outside) m n ->
-      (* If we trace from both states until they each return... *)
-      FindSegmentMP updateC (fun _ '(dm,d) => d = dcall) (m,p) (dmcall,dcall) MCP' ->
-      FindSegmentMP updateC (fun _ '(dm,d) => d = dcall) (n,p) (dmcall,dcall) N ->
-      (* They should have the same observable behavior *)
-      ObsOfMCP MCP' MO ->
-      ObsOfMCP N NO ->
-      ObsOfMP MO ~=_O ObsOfMP NO /\
-      (* And when they return, the states should have changed in identical ways. *)
-      (forall m' dm' p',
-          Last MCP' (m',(dm',dcall),p') ->
-          exists n' dm'',
-            Last N (n',(dm'',dcall),p') /\
-            sameDifference mcall m' n n').
-
   Definition StackConfidentialityEager : Prop :=
-    forall minit MCP d m dm p,
-      let P := (fun m c => snd c >= d) in
+    forall MCP d m dm p,
+      let P := (fun '(m,p,c) => snd c >= d) in
       let K := (fun k => Inaccessible (dm,d) k \/ dm k = Unsealed) in
-      FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
-      head MCP = (m,(dm,d),p) ->
+      ReachableSegment updateC initC P MCP ->
+      head MCP = (m,p,(dm,d)) ->
       TraceConfidentialityEager updateC K P MCP.
 
-  Theorem EagerConfSufficient :
-    StackConfidentialityEager ->
-    ConfRule.
-  Proof.
-  Admitted.
-
-  Definition StackSafety :=
-    forall minit MCP m dm d p,
-      let P := (fun m '(dm, d') => d' >= d) in
-      FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
-      head MCP = (m,(dm,d),p) ->
-      let Ki := (fun k => Inaccessible (dm,d) k) in
-      TraceIntegrityEager Ki MCP /\
-      let Kc := (fun k => Inaccessible (dm,d) k) in
-      TraceConfidentialityEager updateC Kc P MCP.
-
-  Theorem StackSafetySufficient :
-    StackSafety ->
-    CallRule /\ ConfRule.
-  Proof.
-  Admitted.
-
-  (* Continued and (for now) concluded in Coroutine.v *)
+  (* Continued in Coroutine.v *)
   
 End WITH_MAPS.
 

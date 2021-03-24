@@ -43,6 +43,7 @@ Inductive Instr :=
 | stC (rs rp:nat)
 | stU (rs rp:nat)
 | stUC (rs rp:nat)
+| cca (rc ra:nat)
 | prom (rs rd:nat)
 | morp (rs rd:nat)
 | seal (σ:Seal) (r1 r2:nat)
@@ -162,6 +163,12 @@ Inductive step : MachineState -> MachineState -> Prop :=
     Store m c v = Some m' ->
     IncCap c = c' ->
     step m (updateMach m' (Reg rp) (ucap c'))
+| ccaStep : forall m m' rc ra ρ bs bnd o w,
+    Fetch m = Some (cca rc ra) ->
+    m (Reg rc) = cap (ρ, bs, bnd, o) ->
+    m (Reg ra) = v w ->
+    updateMach m (Reg rc) (cap (ρ, bs, bnd, o+w)) = m' ->
+    step m m'
 | promStep : forall m rs rd u c,
     Fetch m = Some (prom rs rd) ->
     m (Reg rs) = u ->

@@ -145,94 +145,56 @@ Section WITH_MAPS.
     forall sid' sd d,
       fst c k = Instack sid' sd ->
       (sid <> sid /\ sd <> Shared d).
-  
+
   Definition StackIntegrityUE : Prop :=
-    forall minit k mcp mcp',
-      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
-      StackInaccessible (cstate mcp) k ->
-      proj (mstate mcp) k = proj (mstate mcp') k.
-
+    forall k m c p m' p' c' o,
+      Reachable updateC initC (m,p,c) ->
+      mpcstep updateC (m,p,c) = Some (m',p',c',o) ->
+      StackInaccessible c k ->
+      proj m k = proj m' k.
+  
   Definition CoroutineIntegrityUE : Prop :=
-    forall minit k sid mcp mcp',
-      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished mcp (finished mcp')) ->
-      CoroutineInaccessible (cstate mcp) sid k ->
-      proj (mstate mcp) k = proj (mstate mcp') k.
-
+    forall sid k m c p m' p' c' o,
+      Reachable updateC initC (m,p,c) ->
+      mpcstep updateC (m,p,c) = Some (m',p',c',o) ->
+      CoroutineInaccessible c sid k ->
+      proj m k = proj m' k.
+    
   (* We can actually do ultra eager confidentiality for coroutines without any more complexity,
      because coroutine properties don't care about allocation and initialization. That only comes
      when subroutine properties are layered in. *)
-  Definition CoroutineConfidentialityUE : Prop :=
-    forall minit sid m c p m' c' p' p'' n n' o o',
-      FindSegmentMP updateC (fun _ _ => False) (minit, pOf minit) initC (notfinished (m,c,p) (finished (m',c',p'))) ->
+  Definition SealedConfidentialityUE : Prop :=
+    forall sid m p c m' p' c' n o n' p'' c'' o',
+      Reachable updateC initC (m,p,c) ->
+      mpcstep updateC (m,p,c) = Some (m',p',c',o) ->
       variantOf (fun k => CoroutineInaccessible c sid k) m n ->
-      mpstep (m,p) = Some (m',p',o) ->
-      mpstep (n,p) = Some (n',p'',o') ->
-      sameDifference m m' n n' /\ p = p'' /\ o = o'.
+      mpcstep updateC (n,p,c) = Some (n',p'',c'',o') ->
+      sameDifference m m' n n' /\ p' = p'' /\ o = o'.
 
-  (* We presumably want a Yield Rule that is equivalent to the Call Rule. *)
-  Definition YieldRule : Prop :=
-    forall minit MCP sid my cy py mp o m' c' p' MCP',
-      WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
-      InTrace (my,cy,py) MCP -> (* From any state that is a yield *)
-      AnnotationOf cdm (proj my PC) = Some yield -> (* As determined by the code annotations *)
-      activeStack sm my = Some sid -> (* With active stack sid *)
-      mpstep (my,py) = Some (mp,o) -> (* That has a successful step, i.e. doesn't immediately fail-stop *)
-
-      (* We can look ahead to the next state whose stack is sid *)
-      FindSegmentMP updateC (fun m c => activeStack sm m <> Some sid) mp (updateC my cy) MCP' ->
-      Last MCP' (m',c',p') ->
-      (* And that state will maintain the values of all addresses in sid. *)
-      forall a sd,
-        fst cy (Mem a) = Instack sid sd ->
-        proj my (Mem a) = proj m' (Mem a).      
-  
   Definition StackIntegrityEager : Prop :=
-    forall minit MCP d,
-      FindSegmentMP updateC (fun m c => snd c = d) (minit, pOf minit) initC MCP ->
+    forall MCP sid d,
+      ReachableSegment updateC initC (fun '(m,p,c) => snd c sid >= d) MCP ->
       TraceIntegrityEager (StackInaccessible (cstate (head MCP))) MCP.
 
   Definition CoroutineIntegrityEager : Prop :=
-    forall minit MCP sid,
-      FindSegmentMP updateC (fun m c => activeStack sm m = Some sid) (minit, pOf minit) initC MCP ->
+    forall MCP sid,
+      ReachableSegment updateC initC (fun '(m,p,c) => activeStack sm m = Some sid) MCP ->
       TraceIntegrityEager (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) MCP.
 
-  (* We can do a confidentiality rule similarly *)
-  Definition YieldConfRule : Prop :=
-    forall minit MCP (sid : StackID) my cy py m p o n MCP' N MO NO,
-      WithContextMP updateC initC (MPTraceOf (minit, pOf minit)) MCP ->
-      InTrace (my,cy,py) MCP -> (* Once again we consider each successful call *)
-      AnnotationOf cdm (proj my PC) = Some yield ->
-      mpstep (my,py) = Some (m,p,o) ->
-
-      (* And take any variant state of the first state within it *)
-      variantOf (fun k => forall sd, fst cy k <> Instack sid sd) m n ->
-      (* If we trace from both states until they each return... *)
-      FindSegmentMP updateC (fun m c => activeStack sm m <> Some sid) (m,p) cy MCP' ->
-      FindSegmentMP updateC (fun m c => activeStack sm m <> Some sid) (n,p) cy N ->
-      (* They should have the same observable behavior *)
-      ObsOfMCP MCP' MO ->
-      ObsOfMCP N NO ->
-      ObsOfMP MO ~=_O ObsOfMP NO /\
-      (* And when they return, the states should have changed in identical ways. *)
-      (forall m' c' p',
-          Last MCP' (m',c',p') ->
-          exists n' c'',
-            Last N (n',c'',p') /\
-            sameDifference my m' n n').
-  
   Definition StackConfidentialityEager : Prop :=
-    forall minit MCP d sid,
-      let P := (fun m c => snd c sid = d) in
+    forall sid MCP d m dm depm p,
+      let P := (fun '(m,p,c) => snd c sid >= d) in
       let K := (fun k => StackInaccessible (cstate (head MCP)) k \/
                          fst (cstate (head MCP)) k = Instack sid Unsealed) in
-      FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
+      ReachableSegment updateC initC P MCP ->
+      head MCP = (m,p,(dm,depm)) ->
       TraceConfidentialityEager updateC K P MCP.
-
+  
   Definition CoroutineConfidentialityEager : Prop :=
-    forall minit MCP sid,
-      let P := (fun m c => activeStack sm m = Some sid) in
+    forall MCP sid,
+      let P := (fun '(m,p,c) => activeStack sm m = Some sid) in
       let K := (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) in
-      FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
+      ReachableSegment updateC initC P MCP ->
       TraceConfidentialityEager updateC K P MCP.
 
   (* ***** Control Flow Properties ***** *)
@@ -241,7 +203,7 @@ Section WITH_MAPS.
   (* Finally, we also need to consider control flow properties. These are included here because
      they don't really change in interesting ways between the different models. *)
   
-  Definition ControlSeparation : Prop :=
+  (*Definition ControlSeparation : Prop :=
     forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,
       InTrace (m1,p1) (MPTraceOf (minit, pOf minit)) ->
       mpstep (m1,p1) = Some (m2, p2,o) ->
@@ -250,34 +212,35 @@ Section WITH_MAPS.
       f1 <> f2 ->
       AnnotationOf cdm (proj m1  PC) = Some call \/
       AnnotationOf cdm (proj m1  PC) = Some ret \/
-      AnnotationOf cdm (proj m1  PC) = Some yield.
+      AnnotationOf cdm (proj m1  PC) = Some yield. *)
 
   Definition YieldBackIntegrity : Prop :=
-    forall mp mp1 mp2 MPout,
-      InTrace mp1 (MPTraceOf mp) ->
-      AnnotationOf cdm (proj (ms mp1) PC) = Some yield ->
-      SplitInclusive (fun mp2 => sm (proj (ms mp1) (Reg SP)) = sm (proj (ms mp) (Reg SP))) (MPTraceOf mp) MPout (MPTraceOf mp2) ->
-      justRet (ms mp1) (ms mp2).
+    forall mpc1 mpc2,
+      let P := (fun mpc => sm (proj (mstate mpc1) (Reg SP)) = sm (proj (mstate mpc) (Reg SP))) in
+      Reachable updateC initC mpc1 ->
+      AnnotationOf cdm (proj (mstate mpc1) PC) = Some yield ->
+      StepsToWhen updateC P mpc1 mpc2 ->
+      justRet (mstate mpc1) (mstate mpc2).
 
   Definition ReturnIntegrity : Prop :=
-    forall sid d minit MCP m c p m' c' p',
-      let P := fun m c => activeStack sm m = Some sid /\ (snd c) sid >= d in
-      FindSegmentMP updateC P (minit, pOf minit) initC MCP ->
+    forall d sid MCP m c p m' c' p',
+      let P := fun '(m,p,c) => activeStack sm m = Some sid /\ (snd c) sid >= d in
+      ReachableSegment updateC initC P MCP ->
       head MCP = (m,c,p) ->
       Last MCP (m',c',p') ->
       justRet m m'.
-
-  Variable em:EntryMap.
   
-  Definition EntryIntegrity : Prop :=
-  forall minit mp1 m2 p2 o,
-    InTrace mp1 (MPTraceOf (minit, pOf minit)) ->
-    mpstep mp1 = Some (m2,p2,o) ->
-    AnnotationOf cdm (proj (ms mp1) PC) = Some call ->
-    em (proj m2 PC) = true.
+  Variable em:EntryMap.
 
-  Definition WellBracketedControlFlow  : Prop :=
-    ControlSeparation /\
+  Definition EntryIntegrity : Prop :=
+    forall mpc1 mpc2 o,
+      Reachable updateC initC mpc1 ->
+      mpcstep updateC mpc1 = Some (mpc2,o) ->
+      AnnotationOf cdm (proj (mstate mpc1) PC) = Some call ->
+      em (proj (mstate mpc2) PC) = true.
+
+  Definition WellStructuredControlFlow  : Prop :=
+    (*ControlSeparation /\ *)
     ReturnIntegrity /\
     YieldBackIntegrity /\
     EntryIntegrity.

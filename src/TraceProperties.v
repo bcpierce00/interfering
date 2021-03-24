@@ -14,11 +14,11 @@ Module TraceProperties (M: MachineSpec).
   Variable context : Type.
   Variable updateC : MachineState -> context -> context.
 
-  Definition TraceIntegrityEager (K : Component -> Prop) (MCP:MCPTrace) : Prop :=
-    forall k (mcp':@MCPState context),
+  Definition TraceIntegrityEager (K : Component -> Prop) (MPC:MPCTrace) : Prop :=
+    forall k (mcp':@MPCState context),
       K k->
-      Last MCP mcp' ->
-      proj (mstate (head MCP)) k = proj (mstate mcp') k.
+      Last MPC mcp' ->
+      proj (mstate (head MPC)) k = proj (mstate mcp') k.
   
   Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
     forall k, ~ K k -> proj m k = proj n k.
@@ -27,47 +27,36 @@ Module TraceProperties (M: MachineSpec).
     forall k,
       (proj m k <> proj m' k \/ proj n k <> proj n' k) ->
       proj m' k = proj n' k.
-
-  Definition FindSegmentMP P mp c MCP :=
-    exists MCP',
-      WithContextMP updateC c (MPTraceOf mp) MCP' /\
-      ContextSegment P MCP' MCP.
-
-  Definition FindSegmentM P m c MC :=
-    exists MC',
-      WithContextM updateC c (MTraceOf m) MC' /\
-      ContextSegmentM P MC' MC.
   
   Definition TraceConfidentialityEager
              (K : Component -> Prop)
-             (P:MachineState -> context -> Prop)
-             (MCP:@MCPTrace context) : Prop :=
-    forall MCP MO m c p n N NO,
-      head MCP = (m,c,p) ->
+             (P: MPCState -> Prop)
+             (MPC:@MPCTrace context) : Prop :=
+    forall MPC m c p n N Om On,
+      head MPC = (m,c,p) ->
       variantOf K m n ->
-      FindSegmentM P n c N ->
-      ObsOfMCP MCP MO ->
-      ObsOfMC N NO ->
+      MPCTraceToWhen updateC P (n,c,p) N ->
+      ObsOfMPC updateC MPC Om ->
+      ObsOfMPC updateC N On ->
       (* Case 1 *)
-      (forall mend dmend pend,
-          Last MCP (mend,dmend,pend) ->
-          ~ P mend c ->
-          exists nend dnend,
-            Last N (nend,dnend) /\
-            ObsOfMP MO ~=_O ObsOfM NO /\
-            sameDifference m mend n nend)
+      (forall mpcend,
+          Last MPC mpcend ->
+          ~ P mpcend ->
+          exists npcend,
+            Last N npcend /\
+            Om ~=_O On /\
+            sameDifference m (mstate mpcend) n (mstate npcend))
     /\ (* Case 2 *)
-    (Infinite MCP ->
-     ObsOfMP MO ~=_O ObsOfM NO)
+    (Infinite MPC ->
+     Om ~=_O On)
     /\ (* Case 3 *)
-    (forall mend dmend pend,
-        Last MCP (mend, dmend, pend) ->
-        P mend c ->
-        ObsOfMP MO <=_O ObsOfM NO).
+    (forall mpcend,
+        Last MPC mpcend ->
+        P mpcend ->
+        Om <=_O On).
 
 End WITH_CONTEXT.
 
-Arguments FindSegmentMP {_} _ _ _ _ _.
 Arguments TraceIntegrityEager {_} _ _.
 Arguments TraceConfidentialityEager {_} _ _ _ _.
 
