@@ -1,139 +1,228 @@
 From StackSafety Require Import Trace.
 
-(* Primitive Abstraction. *)
+Require Import coqutil.Word.Naive.
+Require Import coqutil.Word.Properties.
+Require Import riscv.Spec.Machine.
+Require Import riscv.Spec.Decode.
+Require Import Coq.ZArith.BinInt. Local Open Scope Z_scope.
 
-Module Type MachineSpec. 
+Require Import riscv.Spec.Machine.
+Require Import riscv.Utility.Utility.
+Require Import riscv.Platform.Memory.
+Require Import riscv.Platform.Minimal.
+Require Import riscv.Platform.MinimalLogging.
+Require Import riscv.Platform.Run.
+Require Import riscv.Utility.Monads.
+Require Import riscv.Utility.MkMachineWidth.
+Require Import coqutil.Map.Interface.
+Require Import riscv.Utility.Words32Naive.
+Require Import riscv.Utility.DefaultMemImpl32.
+Require Import coqutil.Map.Z_keyed_SortedListMap.
+Require Import coqutil.Z.HexNotation.
+Require coqutil.Map.SortedList.
 
-  Parameter Word : Type. 
-  Parameter wlt : Word -> Word -> bool.
-  Parameter weq : Word -> Word -> bool.
-  Axiom WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2}.
-  Axiom weq_implies_eq :
+Require Import Lia.
+
+  Definition Word := MachineInt.
+  (* Parameter Word *)
+
+  Definition wlt : Word -> Word -> bool := Z.ltb.
+  (*  Parameter wlt : Word -> Word -> bool. *)
+
+  Definition weq : Word -> Word -> bool := Z.eqb.
+  (* Parameter weq : Word -> Word -> bool. *)
+
+  Definition WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2} := Z.eq_dec.
+
+  Lemma weq_implies_eq :
     forall w1 w2,
       weq w1 w2 = true -> w1 = w2.
-  Axiom not_weq_implies_neq :
+    apply Z.eqb_eq.
+  Qed.
+
+  Lemma not_weq_implies_neq :
     forall w1 w2,
       weq w1 w2 = false -> w1 <> w2.
-  Definition wle (w1 w2: Word) : bool := orb (wlt w1 w2) (weq w1 w2).
-  Parameter wplus : Word -> nat -> Word.
-  Parameter wminus : Word -> nat -> Word.
+  Proof. 
+    intros w1 w2 HEqb HEq. unfold weq in *.
+    apply Z.eqb_eq in HEq.
+    rewrite HEq in HEqb.
+    congruence.
+  Qed.
+
+  Definition wle (w1 w2: Word) : bool :=
+    orb (wlt w1 w2) (weq w1 w2).
   
-  Parameter wplus_neq : forall w n, n > 0 -> w <> wplus w n.
+  (*
+    Parameter wplus : Word -> nat -> Word.
+    Parameter wminus : Word -> nat -> Word.
+   *)
+  Definition wplus (w : Word) (n : nat) : Word :=
+    w + Z.of_nat n.
+
+  Lemma wplus_neq : forall w (n : nat),
+      (n > O)%nat -> w <> wplus w n.
+  Proof.
+    intros w n H Contra.
+    unfold wplus in *.
+    lia.
+  Qed.
+
+  Definition wminus (w : Word) (n : nat) : Word :=
+    w - Z.of_nat n.
 
   Definition Addr : Type := Word.
+  
+  Definition Register : Type := Word.
 
-Parameter Register : Type.
-Parameter SP : Register.
-Parameter regEq : Register -> Register -> bool.
+  Definition SP := 2.
+  Definition regEq : Register -> Register -> bool := Z.eqb.
 
-Inductive Component:=
-| Mem (a:Addr)
-| Reg (r:Register)
-| PC.
+  Inductive Component:=
+  | Mem (a:Addr)
+  | Reg (r:Register)
+  | PC.
 
-Parameter keqb : Component -> Component -> bool.
-Axiom keqb_implies_eq :
-  forall k1 k2,
-    keqb k1 k2 = true -> k1 = k2.
-Axiom not_keqb_implies_neq :
-  forall k1 k2,
-    keqb k1 k2 = false -> k1 <> k2.
+  Definition keqb (k1 k2 : Component) : bool :=
+    match k1, k2 with
+    | Mem a1, Mem a2 => Z.eqb a1 a2
+    | Reg r1, Reg r2 => regEq r1 r2
+    | PC, PC => true
+    | _, _ => false
+    end.
 
-(* A Value is a Word. *)
-Definition Value : Type := Word.
+  Axiom keqb_implies_eq :
+    forall k1 k2,
+      keqb k1 k2 = true -> k1 = k2.
+  Axiom not_keqb_implies_neq :
+    forall k1 k2,
+      keqb k1 k2 = false -> k1 <> k2.
 
-(* A Machine State is just a map from Components to Values. *)
-Parameter MachineState : Type.
-Definition View := Component -> Value.
-Parameter proj : MachineState -> View.
+  (* A Value is a Word. *)
+  Definition Value : Type := Word.
 
+  (* We use a risc-v machine as our machine state and a view as a map from its
+     components to their values. *)
+  Definition MachineState := RiscvMachine.
+  Definition View := Component -> Value.
 
-(* Observations are values, or silent (tau) *)
-Inductive Observation : Type := 
-| Out (w:Value) 
-| Tau. 
+  (* Project what we care about from the RiscV state. *)
+  Definition proj (m:  MachineState) (k: Component):  Value :=
+    match k with
+    | Mem a =>
+      match (Spec.Machine.loadWord Spec.Machine.Execute (word.of_Z a)) m with
+      | (Some w, _) => regToZ_signed (int32ToReg w)
+      | (_, _) => 0
+      end
+    | Reg r =>
+      match (Spec.Machine.getRegister r) m with
+      | (Some w, _) => word.signed w
+      | (_, _) => 0
+      end
+    | PC =>
+      match (Spec.Machine.getPC) m with
+      | (Some w, _) => word.signed w
+      | (_, _) => 0
+      end
+    end.
 
-(* A Machine State can step to a new Machine State plus an Observation. *)
-Parameter step : MachineState -> MachineState * Observation.
+  (* Observations are values, or silent (tau) *)
+  Inductive Observation : Type := 
+  | Out (w:Value) 
+  | Tau. 
 
-Parameter FunID : Type.
-Parameter StackID : Type.
+  (* A Machine State can step to a new Machine State plus an Observation. *)
+  Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
+    (* returns option unit * state *)
+    (* TODO: What's an observation? *)
+    match Run.run1 RV32IM m with
+    | (_, s') => (s', Tau)
+    end
+  .
 
-Definition EntryMap := Addr -> bool.
+  Definition FunID := nat.
+  Definition StackID := nat.
 
-Definition StackMap := Addr -> option StackID.
+  Definition EntryMap := Addr -> bool.
 
-Inductive CodeAnnotation :=
-| call
-| ret
-| yield
-| share (f: MachineState -> Addr -> option bool)
-| normal
-.
+  Definition StackMap := Addr -> option StackID.
 
-Inductive CodeStatus :=
-| inFun : FunID -> CodeAnnotation -> CodeStatus
-| notCode : CodeStatus
-.
+  Inductive CodeAnnotation :=
+  | call
+  | ret
+  | yield
+  | share (f: MachineState -> Addr -> option bool)
+  | normal
+  .
 
-Definition CodeMap := Addr -> CodeStatus.
+  Inductive CodeStatus :=
+  | inFun   : FunID -> CodeAnnotation -> CodeStatus
+  | notCode : CodeStatus
+  .
+  
+  Definition CodeMap := Addr -> CodeStatus.
 
-(* Stack ID of stack pointer *)
-Definition activeStack (sm: StackMap) (m: MachineState) :
-  option StackID :=
-  sm (proj m (Reg SP)).
+  (* Stack ID of stack pointer *)
+  Definition activeStack (sm: StackMap) (m: MachineState) :
+    option StackID :=
+    sm (proj m (Reg SP)).
 
-Parameter stack_eqb : StackID -> StackID -> bool.
+  Definition stack_eqb : StackID -> StackID -> bool :=
+    Nat.eqb.
 
-Definition optstack_eqb (o1 o2 : option StackID) : bool :=
-  match o1, o2 with
-  | Some n1, Some n2 => stack_eqb n1 n2
-  | None, None => true
-  | _, _ => false
-  end.
+  Definition optstack_eqb (o1 o2 : option StackID) : bool :=
+    match o1, o2 with
+    | Some n1, Some n2 => stack_eqb n1 n2
+    | None, None => true
+    | _, _ => false
+    end.
 
-Definition AnnotationOf (cdm : CodeMap) (a:Addr) : option CodeAnnotation :=
-  match cdm a with
-  | inFun f normal => None
-  | inFun f ann => Some ann
-  | notCode => None
-  end.
+  Definition AnnotationOf (cdm : CodeMap) (a:Addr) : option CodeAnnotation :=
+    match cdm a with
+    | inFun f normal => None
+    | inFun f ann => Some ann
+    | notCode => None
+    end.
 
-Definition isCode' (cdm : CodeMap) (a:Addr) : bool :=
-  match cdm a with
-  | inFun _ _ => true
-  | notCode => false
-  end.
+  Definition isCode' (cdm : CodeMap) (a:Addr) : bool :=
+    match cdm a with
+    | inFun _ _ => true
+    | notCode => false
+    end.
 
-(*Definition isCall (cm: CallMap) (m: MachineState) (lay: Layout) : Prop :=
-  cm (m (Reg PC)) = Some lay.*)
+  Definition justRet (mc m: MachineState) : Prop :=
+    proj m PC = wplus (proj mc PC) 4 /\ proj m (Reg SP) = proj mc (Reg SP).
 
-Definition justRet (mc m: MachineState) : Prop :=
-  proj m PC = wplus (proj mc PC) 4 /\ proj m (Reg SP) = proj mc (Reg SP).
+  Definition justRet_dec mc m : {justRet mc m} + {~ justRet mc m}.
+  Proof.
+    unfold justRet.
+    destruct (WordEqDec (proj m PC) (wplus (proj mc PC) 4));
+      destruct (WordEqDec (proj m (Reg SP)) (proj mc (Reg SP)));
+      try solve [left; auto];
+      right; intros [? ?]; auto.
+  Qed.
 
-Definition justRet_dec mc m : {justRet mc m} + {~ justRet mc m}.
-Proof.
-  unfold justRet.
-  destruct (WordEqDec (proj m PC) (wplus (proj mc PC) 4));
-    destruct (WordEqDec (proj m (Reg SP)) (proj mc (Reg SP)));
-    try solve [left; auto];
-    right; intros [? ?]; auto.
-Qed.
-
-Parameter PolicyState : Type.
+(* TODO: More interesting state/abstract *)
+Definition PolicyState : Type := unit.
 
 (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.
 Definition ms (mp : MPState) := fst mp.
 Definition ps (mp : MPState) := snd mp.
 
-Parameter WFInitMPState : MPState -> Prop.
+(* TODO: Real policy. *)
+Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  match step (ms mp) with
+  | (m', o) => Some (m', tt, o)
+  end.
 
-Parameter mpstep : MPState -> option (MPState * Observation).
 Axiom mpstepCompat :
   forall m p o m' p',
     mpstep (m,p) = Some (m',p',o) ->
     step m = (m',o).
+
+(* TODO: More interesting well-formedness condition *)
+Definition WFInitMPState (mp:MPState) := True.
 
 (********* Steps and Traces ***********)
 
@@ -191,8 +280,6 @@ Qed.
 
 (* ******************* Trace stuff ********************* *)
 
-(* We need to associate domainmaps with a trace. Here is some helpful machinery for associating
-   states in general with a trace. *)
 Section WITH_STATE.
   Variable CtxState : Type.
   Variable CtxStateUpdate : MachineState -> CtxState -> CtxState.
@@ -279,14 +366,6 @@ Section WITH_STATE.
      there is no observation until a step occurs. *)
   Definition ObsOfMPC := WithObs Tau.
   
-  (* Segment relates two MCPTraces given a condition f on mpc states,
-     where the second is a longest subtrace of the first such that f holds on all elements
-     except the final. So, it will always have at least two elements, and its head will have been
-     preceded by one on which f does not hold, while the last (if any) also does not have f hold.
-     
-     We will use this machinery to clip out sections of a trace that we want to check
-     against a property, with the final state reflecting the state after some relevant execution.
-   *)
   Inductive Segment (f : MPCState -> Prop) : MPCTrace -> MPCTrace -> Prop :=
   | SegCurrent : forall MPC MPC' mpc,
       f mpc ->
@@ -345,4 +424,3 @@ Arguments StepsToWhen {_} _ _ _.
 Arguments ReachableSegment {_} _ _ _.
 Arguments NeverStepsToObs {_} _ _ _.
 
-End MachineSpec.

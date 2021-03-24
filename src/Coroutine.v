@@ -5,13 +5,14 @@ Require Import Bool.
 
 From StackSafety Require Import Trace Machine ObsTrace TraceProperties.
 
+(*
 Module Coroutine (M: MachineSpec).
   Import M.
   Module O := ObsTrace(M).
   Import O.
   Module TP := TraceProperties(M).
   Import TP.
-
+*)
 (* We add coroutines with multiple stacks, defined with static extents (see Machine.v).
    Our domain model uses the same stack domain as previous, but now a top-level domain
    combines a stack identity and the domains of that stack. Outside is now a top domain. *)
@@ -249,4 +250,6 @@ Section WITH_MAPS.
 
 End WITH_MAPS.
 
+(*
 End Coroutine.
+*)

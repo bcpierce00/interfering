@@ -6,10 +6,6 @@ Require Import Nat.
 From StackSafety Require Import Trace Machine ObsTrace.
 
 
-Module SubroutineSimple (M: MachineSpec).
-  Import M.
-  Module O := ObsTrace(M).
-  Import O.
 
   Section DOMAIN_MODEL.
 
@@ -343,6 +339,4 @@ Section WITH_MAPS.
   (* Continue to SubroutineShare.v, where we enhance the model with sharing between calls. *)
 
 End WITH_MAPS.
-
-End SubroutineSimple.
 

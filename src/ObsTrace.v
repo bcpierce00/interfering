@@ -1,8 +1,5 @@
 From StackSafety Require Import Trace Machine.
 
-Module ObsTrace (M : MachineSpec).
-
-  Import M.
 
   Definition ObsTrace := TraceOf Observation.
 
@@ -419,8 +416,8 @@ Lemma OTEE': forall T T', ObsTraceEq T T' -> ObsTraceEq' T T'.
 Proof.
   intros.
   split.
-  apply OTEE'1; auto. 
-  apply OTEE'2;  auto. 
+  - apply OTEE'1; auto. 
+  - apply OTEE'2;  auto. 
 Qed.
 
 
@@ -829,4 +826,4 @@ Proof.
 Qed.
 
  *)
-End ObsTrace.
+

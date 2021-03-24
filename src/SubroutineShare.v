@@ -5,13 +5,14 @@ Require Import Nat.
 
 From StackSafety Require Import Trace Machine ObsTrace TraceProperties.
 
+(*
 Module SubroutineShare (M: MachineSpec).
   Import M.
   Module O := ObsTrace(M).
   Import O.
   Module TP := TraceProperties(M).
   Import TP.
-
+*)
   (* To introduce sharing, we extend our domain model with two new domains:
    Passed indicates memory that is sealed by a function but explicitly designated
    to allow the immediate callee to access it. Shared indicates memory that has been
@@ -152,4 +153,6 @@ Section WITH_MAPS.
   
 End WITH_MAPS.
 
+(*
 End SubroutineShare.
+*)

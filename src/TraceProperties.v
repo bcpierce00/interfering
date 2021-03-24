@@ -4,10 +4,6 @@ Require Import Bool.
 
 From StackSafety Require Import Trace Machine ObsTrace.
 
-Module TraceProperties (M: MachineSpec).
-  Import M.
-  Module O := ObsTrace(M).
-  Import O.
 
   Section WITH_CONTEXT.
 
@@ -60,4 +56,3 @@ End WITH_CONTEXT.
 Arguments TraceIntegrityEager {_} _ _.
 Arguments TraceConfidentialityEager {_} _ _ _ _.
 
-End TraceProperties.
