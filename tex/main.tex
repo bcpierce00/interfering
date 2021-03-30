@@ -130,30 +130,28 @@
 %% Note: \begin{abstract}...\end{abstract} environment must come
 %% before \maketitle command
 \begin{abstract}
-What is stack safety? Numerous mechanisms have been proposed to guard
-against attacks that corrupt the call stacks of running programs,
-\ifaftersubmission
-and many
-others rely on a protected stack as an assumption to provide higher level
-guarantees,\bcp{this is a good point, but we don't pick it up anywhere in the
-  paper, do we?}\leo{No, should we delete this? it still makes sense in flow}
-\bcp{Let's delete for now; later, we can try to incorporate it in the body
-  of the paper.}
-\fi
-but a clear and precise definition of stack safety is missing
-from the literature.
-%
-We propose a formal definition phrased in the technical
-terminology of language-based security---as a combination of a
-confidentiality property (callees should not be able to read their caller's
-stack frames) and an integrity property (callees should not corrupt their
-caller's stack frames or control state), together with a straightforward
-well-bracketedness condition on the program's control flow.
+  What is stack safety? Numerous mechanisms have been proposed to guard against
+  attacks that corrupt the call stacks of running programs, including micro-policies
+  implemented using metadata tagging mechanisms such as PIPE. But for specification
+  these implementations largely appeal either to intuitive notions of the behavior
+  of a stack, or to specific examples of bad behavior.
   %
-We discuss how these properties are enforced or approximated by
-existing stack protection mechanisms and describe useful
-stronger and weaker variants.  \ifaftersubmission\bcp{should we mention stktokens here?}
-\leo{Not sure. We almost never cite stuff in the abstract, do we?}\fi
+  We propose a formal definition phrased in the technical terminology of language-based
+  security---as a combination of an integrity property (a caller's stack frame is
+  invariant over calls) and a confidentiality property (callees lack knowledge of the
+  contexts of their calls). These combine with a straightforward well-bracketedness
+  condition on the program's control flow that ensures that callers and callees remain
+  meaningfully distinct.
+  %
+  While our formalism is informed by the PIPE implementation, the primary properties reflect
+  general principles of stack safety. We define additional properties tailored for specific
+  contexts: a stronger property amenable to efficient testing and a weaker one that is
+  approximated by more efficient, lazy policies.
+
+  \ifaftersubmission\bcp{should we mention stktokens here?}
+  \leo{Not sure. We almost never cite stuff in the abstract, do we?}
+  \sna{On the same note, cite Nick and Andre?}
+  \fi
 \end{abstract}
 
 
@@ -258,11 +256,12 @@ and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \ifaftersubmission\apt{Mo
   nick; there could be more}\leo{Do we want to hunt for more refs here?}
 \bcp{Sure, but later!}
 \fi
+This last provides an array of micro-policies offering protection at various granularities,
+which offer a trade-off between protection and efficiently.
 
-But what {\em is} this stack safety of which people speak? Precise formal
-definitions are mostly lacking: rather, the notion
-is commonly defined in a negative way, by enumerating the bad things that a
-given enforcement mechanism
+But what {\em is} this stack safety of which they speak? Precise formal
+definitions are mostly lacking: rather, the notion is commonly defined in a
+negative way, by enumerating the bad things that a given enforcement mechanism
 prevents, such as corruption of return addresses, buffer overflows, or
 use of uninitialized variables.
 %\bcp{Does use of unitialized variables lead to stack safety attacks?\apt{sure, via buffer overflow}}
@@ -271,20 +270,19 @@ use of uninitialized variables.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
-Indeed, we are only aware of one quite recent attempt to frame a
-positive definition, by
-\citet{Skorstengaard+19}, which defines stack safety as
-the conjunction of two properties: {\em local state encapsulation} and
-{\em well-bracketed control flow}.
+Indeed, we are only aware of one quite recent attempt to frame a positive definition, by
+\citet{Skorstengaard+19}, which defines stack safety as the conjunction of two properties:
+{\em local state encapsulation} and {\em well-bracketed control flow}.
 These properties are formalized by defining a capability-based machine
 that ``satisfies [stack safety] by construction.''
 %
 While this work represents an important step in the right direction, we believe
 there is still room to craft an operational characterization
-of stack safety that is independent of capabilities or any other specific
-enforcement technique.  In other words, we seek formal criteria that can be applied
+of stack safety. In other words, we seek formal criteria that can be applied
 to a mechanism for protecting stack-based low-level programs to judge
-whether or not it actually ``guarantees stack safety.''
+whether or not it actually ``guarantees stack safety.'' While our criteria are
+designed with PIPE micro-policies in mind, they are agnostic about many implementation
+details and should be applicable to other systems with minor adjustment.
 %
 Our key contribution is an abstract presentation of local state encapsulation
 using the technical framework of language-based security, together with a simple
@@ -350,16 +348,14 @@ When does the programmer rely on stack safety? The most natural example is the f
 in figure \ref{fig:examples1}, in which {\tt main} calls stores 42 to a local variable {\tt x},
 calls {\tt f}, and then prints {\tt x}. Here the programmer should be able to expect that
 {\tt main} will print 42, but in C such an assumption may be wrong, if {\tt f} should
-overwrite it's caller's stack data. To this end, our properties support a
-{\em call rule} that can be used to reason that on return from {\tt f}, {\tt x} still
-contains the same value. This is not only useful for the programmer: consider the second
+overwrite {\tt main}'s stack data. This expectation is for {\em integrity}: that a
+caller's data is protected from modification by its callee.
+This is not only useful for the programmer: consider the second
 example, where the call to {\tt h} should be unreachable and therefore subject to dead code
 elimination, if only the compiler can soundly reason that {\tt x} does not change.
-The property that enables the call rule is, in security terms, {\em integrity}: callers'
-data is protected from modification by callees.
 
-Alongside integrity, we have {\em confidentiality}, in which callers' data is protected
-from leakage by their callees. Consider again the first example in figure \ref{fig:examples1},
+Alongside integrity, we have {\em confidentiality}, in which a caller's data is protected
+from leakage by its callee. Consider again the first example in figure \ref{fig:examples1},
 in which {\tt f}'s behavior should not depend on {\tt x} being 42. In fact suppose that the
 programmer had initialized {\tt x} after calling {\tt f} rather than before; such a change
 should not alter the behavior of {\tt main}, but if {\tt f} can directly read {\tt x}, it
@@ -367,27 +363,24 @@ may. But there are more subtle examples, such as the first in figure \ref{fig:ex
 where {\tt main} may call {\tt g} or {\tt h} are called prior to calling {\tt f}, depending on
 its argument. Here, if {\tt g} or {\tt h} leaves behind identifying information in unused stack
 space, {\tt f} could still deduce information about the argument and behave differently, violating
-the abstraction of its call. So our confidentiality properties also support a {\em insensitivity rule},
-that each function's behavior is independent of the state of its caller, other than arguments.
-This also makes it easier, though not trivial, to prove a function's idempotence: the channels through
-which a callee can remember its own history are limited to those outside the stack.
+the abstraction of its call.
 
 Together, integrity and confidentiality comprise \citeauthor{Skorstengaard+19}'s
 {\em local state encapsulation} property. But LSE alone is not sufficient to fully protect
 callers from their callees. Consider the last example in figure \ref{fig:examples2},
-a variant of the famous ``awkward example,'' in which {\tt f} is called twice and may not
-be idempotent. It should be the case that {\tt main} prints -1, but if
+a variant of the famous ``awkward example,'' in which {\tt f} is called twice and might store
+data outside the stack between calls. It should be the case that {\tt main} prints -1, but if
 {\tt f}'s first activation stores its return address somewhere accessible, the second
 activation can return to before {\tt x} is negated, causing {\tt x} to be set to
 1 again before a third activation that would return normally. Then {\tt main} would print 1.
-Once again this is rather unexpected behavior.
+This is rather unexpected behavior.
 
-Preventing this form of reentrancy attack is the intuition behind
+Preventing this form of control-flow attack is the intuition behind
 \citeauthor{Skorstengaard+19}'s {\em well-bracketed control flow}, which protects
 the call graph itself. A callee should pass control back to the caller only by
-transferring control to the instruction following the call; it should not be allowed
-to jump back into the caller's code at an arbitrary point, either directly (via a jump
-instruction) or indirectly (by corrupting stack data and returning).
+transferring control to the instruction following the call; otherwise it could
+subvert LSE by appearing to return -- thus restoring access to the caller's data --
+while causing the execution of arbitrary instructions on that data.
 
 To phrase LSE and WBCF as security properties requires an explicit attacker model:
 a clear understanding of who is being protected and from what. Most existing
@@ -397,37 +390,42 @@ avoid getting into the details of exactly how this happens when
 formalizing our properties, we use an even stronger model: when we
 state the protections that a function can rely on when it makes a
 call, we assume that the callee can execute arbitrary instructions
-until it returns.
+until it returns. Thus we have no need to differentiate safe code
+from adversarial - all functions, and indeed all activations of the same function,
+are mutually distrusting.
+%
+Even more fundamentally, we need to know when a call or a return is taking
+place. We assume that calls and returns are annotated in the code, so that
+we can track the point at which control transfers from the protected caller
+to the attacking callee -- and when that callee in turn becomes a protected
+caller in its own right.
 
-A key challenge in adapting the concepts of language-based security to this
-setting is that integrity and confidentiality are ``nested'' properties: not
-only does a given caller need to be protected from its callee, but the callee
-also needs to be protected from {\em its} callees, and so on. That is, the notion
-of ``attacker'' changes at many points throughout the execution of the program.
-We address this issue by introducing a dynamically model of {\em domains} for
-the different components of the machine state, in which some stack locations are
-sealed by the caller that needs to preserve them while the rest are unsealed and
-available for use.
+This ``nesting'' of properties is a key challenge in adapting the concepts
+of language-based security to the stack setting. We address this issue by
+turning any set of annotations into a dynamic model of {\em domains},
+in which some stack locations are sealed by the caller that needs to preserve
+them while the rest are unsealed and available for use by the active, attacking
+callee.
 
 First we introduce this model for a single simple stack with no sharing between callers and
 callee. Then we expand it to allow components to be passed, granting a callee one time
 access to the caller's data, or shared, allowing components to be outright
 exempted from the stack safety properties. Shared components could model objects whose
 addresses are passed and whose security must be modeled by a separate property, such as
-memory safety enforced by capabilities.
+memory safety enforced by capabilities. Finally, we extend the model to a coroutine
+system featuring finitely-bounded stacks.
 
 After formally defining stack safety, we show that the definition is
 enforceable using an existing tag-based enforcement
 mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider
 \citeauthor{DBLP:conf/sp/RoesslerD18}'s conservative Depth Isolation policy. 
-We give {\em eager} properties that this policy enforces, in which each
+This policy testably enforces our {\em eager} properties, in which each
 callee, at the point of its return, can be seen to respect the integrity
 and confidentiality of its caller. Additionally we have an
 {\em ultra-eager} integrity property which guarantees that integrity
 is respected at each step. The advantage of this property is that it ``fails
 faster'' and is therefore more suitable for efficient testing. We prove (in
-Coq) that the ultra-eager property implies our original definition of stack
-safety.
+Coq) that the ultra-eager property implies our original definition of integrity.
 
 The downside of the Depth Isolation policy is that it is rather
 expensive to implement. In the same work,
@@ -436,22 +434,18 @@ that is more efficient by virtue of being lazy in its enforcement.
 Instead of enforcing the integrity and confidentiality of the stack at the
 exact moment when a callee returns, this policy signals violations when the
 caller actually accesses data that the callee has written into its stack
-frame\ifaftersubmission\bcp{We could also hint at the lazy confidentiality
-  property in the same way...}\fi.
-The lazy policy does not enforce our original integrity and confidentiality
-properties, and to our knowledge there is no formal statement of the properties that
-it ought to enforce. We propose a {\em lazy} integrity property, which capture the
-desired behavior of a policy that detects violations between when they occur and when
-they make a visible impact. Unfortunately \citeauthor{DBLP:conf/sp/RoesslerD18}'s
-existing ``Lazy Tagging and Clearing'' policy does not quite enforce these properties,
-but formalizing the ideal property allows us to see how it falls short.
+frame. \ifaftersubmission\bcp{We could also hint at the lazy confidentiality
+  property in the same way...}\fi
+The lazy policy does not enforce our original integrity property, and to our
+knowledge there is no formal statement of the properties that it ought to enforce.
+We propose a {\em lazy} integrity property, which capture the desired behavior of a
+policy that detects integrity violations between when they occur and when they make
+a visible impact. Intuitively this can be phrased, ``No visible reads after dangerous
+writes.'' Unfortunately \citeauthor{DBLP:conf/sp/RoesslerD18}'s existing
+``Lazy Tagging and Clearing'' policy does not quite enforce this property, as shown in
+testing, but formalizing the ideal property allows us to see how it falls short.
 We provide a variant of ``Lazy Tagging and Clearing'' that does enforce lazy integrity
 at some performance cost.
-
-We extend our properties to allow sharing, both in the form of arguments passed
-on the stack and of objects shared widely beyond their owning function. In the latter
-case, restricting access the shared objects is beyond the scope of stack safety,
-but our model delimits them from other objects in the same frame.
 
 %\bcp{I worry that we are being a little
 %  dishonest here: the stated advantage of the lazy policy is that it is more
@@ -465,19 +459,30 @@ In summary, we offer the following contributions:
   intuitive concepts of strict local state encapsulation and well-bracketed
   control flow~(\cref{sec:lse-and-wbcf}).
   % These properties rule out common examples of stack memory abuse.
-  This property can be enforced by
-  the Depth Isolation policy of \citet{DBLP:conf/sp/RoesslerD18}, which is
-  based on hardware tagging~(\cref{sec:conservative}).
 \item
-  A {\em lockstep} variant of the stack-safety property that is also
-  enforced by the Depth Isolation policy
-  but is more efficient to test, plus a proof (in Coq) that this variant is
-  stronger than the original~(\cref{sec:lockstep}).
+  A property-based randomized testing framework that demonstrates that this
+  property can be enforced by the Depth Isolation policy of
+  \citet{DBLP:conf/sp/RoesslerD18}, which is based on hardware tagging~(\cref{sec:conservative}).
+\item
+  An {\em ultra-eager} variant of the stack-integrity property that is also
+  enforced by the Depth Isolation policy but is more efficient to test, plus a proof
+  (in Coq) that this variant is stronger than the original~(\cref{sec:lockstep}).
 \item
   A {\em lazy} variant of the stack-safety property that can be enforced if the
   Lazy Tagging and Clearing policy of \citet{DBLP:conf/sp/RoesslerD18} is enhanced
   with unique tags on each activation, plus a proof (in Coq) that this
   variant is weaker than the original~(\cref{sec:lazy}).
+\item
+  Standardized trace-based formulations of eager confidentiality and of ultra-eager,
+  eager, and lazy integrity, parameterizeable by arbitrary control-flow models and assignments
+  of machine components to {\em LSE domains}.
+\item
+  An LSE-domain model tracking the passing of function arguments on the stack and the sharing
+  of arbitrary stack data.
+\item
+  An extension of stack safety to a simple coroutine model with corresponding LSE
+  properties and a well-structured control flow property that subsumes WBCF for each
+  stack as well as guaranteeing legitimate coroutine crossings.
 %  This policy does not enforce our strict
 %  local state encapsulation property,
 %  but a modified version of it using unique per-activation tags enforces
@@ -515,11 +520,11 @@ We begin with a description of our threat model
 \label{sec:threat}
 
 Stack safety is meant to protect a caller from a confused or malicious callee's
-attempts to access private data or hijack its control flow. Our
-attacker model reflects this intention by assuming that the attacker
-can run arbitrary machine code to try to access or overwrite its caller's stack data
-or disrupt its control state.  Hardware and timing attacks are out of
-scope.
+attempts to access private data or hijack its control flow. And in fact the caller,
+while presumably not malicious, may itself be confused or erroneous. Our attacker
+model reflects this intention by assuming that both the attacker and the defender
+may run arbitrary machine code. Hardware and timing attacks are out of scope.
+
 %\leo{Anything else to add here?}
 %\leo{Maybe a good place to discuss calling conventions and that they
 %  are essentially enforced by the policy or sth?}
@@ -528,76 +533,96 @@ scope.
 
 \newcommand*{\rsp}{\textsc{sp}}
 
-We assume we are given a machine language program, together with some auxiliary information
-about its structure: the code footprint of each function and the locations of instructions
-representing calls, returns, and function entry points.
-Although this information would typically come from a compiler together with
-the machine code, we do not
-assume anything about their provenance.  We assume that the machine has a
-program counter $\PCname$
-and stack pointer $\rsp$; other details of the machine's ISA are unimportant.
+In this very strong attacker model, there is little obvious distinction between
+the attacker and the defender. They are separated only by the control transfer
+inherent in their calls and returns. Our stack-safety concepts therefore depend
+critically on the notions of ``call'' and ``return,'' which are not fully explicit
+in machine code (the same instruction opcode may be used in some places as part of
+a call or return sequence and in other places for other purposes).
+%
+We assume we are given a machine language program annotated with the locations of
+instructions representing calls, returns, and function entry points. Although this
+information would typically come from a compiler together with the machine code,
+we do not assume anything about their provenance. We do treat the execution of an
+annotated instruction as in some sense intentional on the part of the current
+function. No accidental calls or returns, and attackers control their own returns
+but cannot change the annotations on the caller's code.
 
-To make our stack safety definitions precise, we make some straightforward
-assumptions about
-memory layout; our definitions could easily be changed to be parametric over
-these assumptions, at the cost of some complexity in their statements.  Memory
-consists of an instruction region and a stack that grows upwards. (For simplicity,
+\paragraph{Well-formedness and Bad Annotations}
+
+Since we rely so heavily on code annotations, we must ask: what if the annotations
+are wrong? What if a call or return occurs that is not annotated, or an annotation
+fails to correspond to an actual return? In the former case, the answer is simple --
+there has been no call or return, only instruction resembling such an operation, and
+therefore no associated change in permissions. This is particularly interesting in the
+case of a false return, where control may appear to have returned to the caller, but
+the enforcement mechanism must still protect the caller's memory.
+
+The latter case depends on the enforcement mechanism and the nature of the false
+annotation. A given enforcement mechanism might place a static well-formedness criterion
+on the code it applies to. For instance, our micro-policies expect that call and return
+annotations occur on jump instructions. On the other hand, not all jumps are proper
+calls or returns, only those preceded by appropriate sequences: in these cases the
+bad annotation might appear well formed but the system should either respect the change
+in permissions or, if doing so would compromise security, fail-stop rather than
+execute the annotated instruction.
+
+\paragraph{System Assumptions}
+
+Our primary target is a RISC-V architecture extended with the PIPE architecture, but the
+model makes very few assumptions about the machine it applies to. We assume a register
+machine with a program counter \(\PCname\) and stack pointer \(\rsp\); other details of
+the machine's ISA are unimportant.
+
+Our definitions are largely parametric over the layout of the stack in memory, but for
+purposes of explanation we will describe a standard layout. Memory consists of an
+instruction region and a stack that grows upwards. (For simplicity,
 we do not consider the heap. Integrating a memory-safety property for the
-heap in the style of
-\citet{DBLP:conf/post/AmorimHP18} is a natural extension that we discuss
-in~\Cref{sec:relwork}.)  The stack has a conventional structure, with
+heap in the style of \citet{DBLP:conf/post/AmorimHP18} is a natural extension
+that we discuss in~\Cref{sec:relwork}.) The stack has a conventional structure, with
 contiguously allocated per-function frames.
+
 The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
-at the time of the call.  The stack can be used to
-pass arguments or return results in the usual way, by placing them
-at the top of the caller's frame. Callers and callees can also communicate
-via registers if they wish; indeed, our
-definitions say nothing at all about registers (except $\PCname$ and
-$\rsp$). \ifaftersubmission\bcp{This implicitly amounts to choosing a caller-saves register
+at the time of the call. The stack can be used to pass arguments or return results
+in the usual way, by placing them at the top of the caller's frame. This will be modeled
+as a form of sharing in section \sna{cite the sharing section}.
+Callers and callees can also communicate via registers if they wish; indeed, our
+definitions say nothing at all about registers (except $\PCname$ and $\rsp$).
+
+\ifaftersubmission\bcp{This implicitly amounts to choosing a caller-saves register
   convention, though, doesn't it?\apt{I think it is neutral; we could add separate caller register protection if we wanted.}}\fi
 
-Our stack-safety concepts depend critically on the notions of ``call'' and ``return,''
-which are not fully explicit in machine code (the same instruction opcode may be
-used in some places as part of a call or return sequence and in other places
-for other purposes). We assume the compiler's cooperation in labeling instructions
-with a variety of annotations, and in fact in identifying them as instructions.
-A {\em call-map} is a partial map from addresses to pairs of a function identifier --
-every instruction belongs to a function -- and a set of annotations. This gives
-us flexibility to have instructions simultaneously play multiple roles.
+\paragraph{Policies}
 
-Enforcement mechanisms are modeled as {\em policies} (borrowing the
-terminology from tag-based mechanisms) that add some auxiliary policy
-state to the ordinary machine state
-%\bcp{This may be surprising to people who are not thinking about micropolicies.\apt{added para below}}
-and a partial policy step function that refines the machine step
-function by allowing or disallowing a step to be taken based on its
-auxiliary state.  Enforcement works by halting the program before it
-can perform an action that would violate the security property; our
+We model the base machine as a step function over machine states, and a machine enhanced with
+an enforcement mechanism (in the language of tag-based enforcement, a {\em policy}) as 
+a partial step function over machine states extended with some auxiliary state, refining
+the base machine. When the policy-enhanced machine fails to step, this is a {\em failstop},
+halting the program before it can perform an action that would violate the security property; our
 properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
-We model ordinary program state and policy-enforcement state separately to make it
-easier to use well-established concepts from language-based security.
-In particular, confidentiality has an elegant extensional characterization in terms of
-\emph{noninterference}: a program preserves the confidentiality of certain data if
-\emph{varying} that data would not change the program's observable
-behavior~\citep{6234468}.
-In applying this idea to a system that incorporates policy enforcement, only
-ordinary program data should be varied, while any associated policy
-state should be left alone; our model makes this distinction obvious.
+%We model ordinary program state and policy-enforcement state separately to make it
+%easier to use well-established concepts from language-based security.
+%In particular, confidentiality has an elegant extensional characterization in terms of
+%\emph{noninterference}: a program preserves the confidentiality of certain data if
+%\emph{varying} that data would not change the program's observable
+%behavior~\citep{6234468}.
+%In applying this idea to a system that incorporates policy enforcement, only
+%ordinary program data should be varied, while any associated policy
+%state should be left alone; our model makes this distinction obvious.
 %That is, we compare the actual execution of the program with a \emph{hypothetical}
 %execution where data has been varied.
-We will also introduce a notion of {\em observational integrity} that relies on the idea of
-\emph{rolling back} program state; again, our model makes it easy to describe
-rollback of ordinary program data while leaving policy state alone.
+%We will also introduce a notion of {\em observational integrity} that relies on the idea of
+%\emph{rolling back} program state; again, our model makes it easy to describe
+%rollback of ordinary program data while leaving policy state alone.
 
 %% \leo{Policies of interest: null, micro, cherri, software-only}
 %% \leo{TODO: Write down carefully}
 
-This enforcement model directly describes
-micropolicies~\citep{pump_oakland2015}, and we believe that it is
-flexible enough to capture code-altering approaches (such as code rewriting
-or capability-based techniques).
+This enforcement model directly describes micropolicies~\citep{pump_oakland2015}.
+We believe that it is flexible enough to capture code-altering approaches, such as code
+rewriting or capability-based techniques, perhaps with less elegance.
 
 \newcommand{\TAGS}{\mathcal{T}}
 \newcommand{\tagname}{t}
@@ -625,44 +650,6 @@ ordinary machine state and policy state is very natural in this setting.
 %% \rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
 %%   policy? }
 
-\paragraph*{Capability machines}
-%
-%Other policies are implemented in hardware or built on hardware mechanisms.
-Capability machines such as CHERI \citep{Woodruff+14} extend conventional
-architectures to support efficient and fine-grained control over memory
-accesses, which can be used to implement security policies, including
-the stack protection policies of
-\citet{Skorstengaard+19b} and (with an extension to support linear capabilities) \citet{Skorstengaard+19}.
-%\bcp{I thought these policies used
-%  linear capabilities?}\leo{Only the second one AFAIK. What would you
-%  change to characterize it more accurately?}\rb{StkPointers uses linear
-%  capabilities, its predecessor users local capabilities (and unlike
-%  StkPointers could be implemented in CHERI)}.
-Capabilities package up pointers
-(ordinary data) with base and bounds information (policy data),
-and they require rewriting source code (e.g., to use capabilities in place
-of ordinary pointers), so separating ordinary machine state from policy
-state is delicate; we conjecture it can be done with some effort.
-
-%% Mapping the underlying protection
-%% mechanisms to policy states and step function would be a delicate operation, as
-%% those are tightly coupled to the hardware design. However, separating the
-%% enforcement aspects of a concrete policy (such as StkTokens, where policy state
-%% would encompass details like the abstract call stack, the capability sealing
-%% scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
-%% the machine would be relatively straightforward.  \bcp{Not sure that any of
-%%   this is comprehensible... :-(}
-
-\paragraph*{Software-only policies}
-%
-Some policies are implemented in software, by modifying code in the
-compiler, for example to perform bounds checking~\citep{NagarakatteZMZ09} or
-to insert stack canaries~\citep{Cowan+98}. Such approaches can, in principle,
-be evaluated in terms of our formal notion of stack safety with a trivial null
-policy. But any state maintained by the enforcement mechanism must be in normal
-memory and subject to the same confidentiality and integrity concerns (to be
-varied, rolled back, etc.), a heavy constraint. Alternately it can be stripped
-out as policy state provided that it can be proven to protect itself.
 
 \ifaftersubmission\apt{This still seems wrong to me. The policy part needs somehow to describe everything that isn't varied or rolled back.}\fi
 %These approaches are represented as policies that
@@ -1140,16 +1127,7 @@ and component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) an
 \pi_\mach(\mpcstatename') ~ \component\).
 
 
-\subsection{Eager Integrity and the Call Rule}
-
-\definition Let \(\mpcstatename\) be a reachable state whose PC value is annotated
-as a call and whose call depth is \(\depth\). Assume \(\mpcstatename \stepstocon \mpcstatename'\).
-Let \(\MPCT\) be the trace ending after the corresponding return, if any, defined by
-\(\mpcstatename' \hookrightarrow \MPCT | f\) with \(f ~ \mach ~ \context\) holding when
-\(\context = \_,\depth\). Finally let \(\components\) be the set of components \(\component\)
-such that \(\sealcon ~ \pi_\mach(\mpcstatename) ~ \component\) holds. Then by the {\em Call Rule},
-it is sound to assume that if \(\last(\pi_\mach(\MPCT)) = \mach'\), then
-\(\pi_\mach(\mpcstatename) ~ \component = \mach' ~ \component\).
+\subsection{Eager Integrity}
 
 \definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \depth')\) hold when
 \(\depth' \geq \depth\). A system enjoys {\em eager integrity} if each reachable segment
@@ -1157,7 +1135,7 @@ it is sound to assume that if \(\last(\pi_\mach(\MPCT)) = \mach'\), then
 \pi_m(\last(\MPCT)) ~ \component\) for all \(\component\) where \(\domMap ~ \component =
 \sealed{\_}\).
 
-\subsection{Eager Confidentiality and the Insensitivity Rule}
+\subsection{Eager Confidentiality}
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if, for
 all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\). We write
@@ -1167,13 +1145,6 @@ this \(\mach \approx_\components \nach\).
 if for all components \(\component\) such that \(\mach ~ \component \not = \mach' ~ \component\) or
 \(\nach ~ \component \not = \nach' ~ \component\), \(\mach' ~ \component = \nach' ~ \component\).
 This is written \(\mach,\mach' \diamond \nach,\nach'\).
-
-\definition Let \(\mpcstatename\) be a reachable call state. Assume the that the call is successful
-and \(\mpcstatename \stepstocon \mpcstatename'\). Then let \(\npcstatename'\) be a \(\components\)-variant
-where \(\components\) is the set of all addresses in the stack. Then by the {\em Insensitivity Rule},
-if the trace from \(\mpcstatename'\) eventually returns, so does that from \(\npcstatename'\),
-their states after the return have the same differences, and up to return their traces are observationally
-equivalent.
 
 \definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \depth')\) hold for
 \(\depth' \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
@@ -1430,8 +1401,6 @@ properties (with respect to a function map, call map, return map,
 and entry map) is said to enjoy
 {\em well-bracketed control flow} (with respect to those maps).
 
-\section{Programming Logic Perspective}
-
 \section{Enforcement}
 \label{sec:enforcement}
 
@@ -1634,7 +1603,7 @@ callee's stack frame.\rb{The policy would also need to control this, I think it
 
 \section{Randomized Testing}
 
-\section{Stack Safety Properties for Lazy Enforcement}
+\section{Stack Safety for Lazy Enforcement}
 \label{sec:lazy}
 
 The conservative policy described in the previous section, while
@@ -2058,50 +2027,89 @@ contours computed at each crossing between caller and callee.
   these cases. We also plan to develop a testing framework for quickly
   checking the validity of different enforcement mechanisms.
 
-  \paragraph{Stack-derived Pointers}
+  \paragraph*{Capability machines}
+  %
+  %Other policies are implemented in hardware or built on hardware mechanisms.
+  Capability machines such as CHERI \citep{Woodruff+14} extend conventional
+  architectures to support efficient and fine-grained control over memory
+  accesses, which can be used to implement security policies, including
+  the stack protection policies of
+  \citet{Skorstengaard+19b} and (with an extension to support linear capabilities) \citet{Skorstengaard+19}.
+  %\bcp{I thought these policies used
+  %  linear capabilities?}\leo{Only the second one AFAIK. What would you
+  %  change to characterize it more accurately?}\rb{StkPointers uses linear
+  %  capabilities, its predecessor users local capabilities (and unlike
+  %  StkPointers could be implemented in CHERI)}.
+  Capabilities package up pointers
+  (ordinary data) with base and bounds information (policy data),
+  and they require rewriting source code (e.g., to use capabilities in place
+  of ordinary pointers), so separating ordinary machine state from policy
+  state is delicate; we conjecture it can be done with some effort.
 
-    Common programming idioms involve a caller passing a pointer to
-    its local data into a callee. Using standard notions of pointer
-    provenance~\citep{provenance}, we can extend our model to
-    distinguish safe use of this idiom from true stack safety
-    violations. We require additional annotation to identify which
-    addresses within a function's stack frame correspond to distinct
-    objects. Then a valid pointer to an object is one derived through
-    legal arithmetic from its base address, and at each call point, an
-    object's addresses are marked low confidentiality and integrity if
-    a valid pointer exists in a register or in the transitive closure
-    of the callee's accessible memory. All pointers to an object cease
-    to be valid when it is deallocated along with its stack frame.
+  %% Mapping the underlying protection
+  %% mechanisms to policy states and step function would be a delicate operation, as
+  %% those are tightly coupled to the hardware design. However, separating the
+  %% enforcement aspects of a concrete policy (such as StkTokens, where policy state
+  %% would encompass details like the abstract call stack, the capability sealing
+  %% scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
+  %% the machine would be relatively straightforward.  \bcp{Not sure that any of
+  %%   this is comprehensible... :-(}
 
-  \paragraph{Non-stack control flow}
+  %\paragraph*{Software-only policies}
+  %
+  %Some policies are implemented in software, by modifying code in the
+  %compiler, for example to perform bounds checking~\citep{NagarakatteZMZ09} or
+  %to insert stack canaries~\citep{Cowan+98}. Such approaches can, in principle,
+  %be evaluated in terms of our formal notion of stack safety with a trivial null
+  %policy. But any state maintained by the enforcement mechanism must be in normal
+  %memory and subject to the same confidentiality and integrity concerns (to be
+  %varied, rolled back, etc.), a heavy constraint. Alternately it can be stripped
+  %out as policy state provided that it can be proven to protect itself.
+  
+%  \paragraph{Stack-derived Pointers}
 
-    Control structures beyond well-bracketed calls and returns require
-    modifications to the model. Tail calls, for instance, reuse the caller's
-    stack frame for its callee, and every nested tail call returns
-    simultaneously to the top non-tail-calling function. Under normal stack
-    integrity, the first function in a chain of tail calls returns and violates
-    integrity, while subsequent tail calls never actually return at all.
-    Instead we need a variant that treats the entry of a tail call as the
-    return of its caller.
+%    Common programming idioms involve a caller passing a pointer to
+%    its local data into a callee. Using standard notions of pointer
+%    provenance~\citep{provenance}, we can extend our model to
+%    distinguish safe use of this idiom from true stack safety
+%    violations. We require additional annotation to identify which
+%    addresses within a function's stack frame correspond to distinct
+%    objects. Then a valid pointer to an object is one derived through
+%    legal arithmetic from its base address, and at each call point, an
+%    object's addresses are marked low confidentiality and integrity if
+%    a valid pointer exists in a register or in the transitive closure
+%    of the callee's accessible memory. All pointers to an object cease
+%    to be valid when it is deallocated along with its stack frame.
 
-    More complex is the addition of a coroutine model, in which multiple stacks
-    respect stack safety internally, but might also yield to one another.
-    Here we must distinguish three levels of integrity: accessible, in the same
-    stack, and in another stack. Stack integrity requires that same-stack data
-    be unchanged when a function returns, but other-stack data may change. A
-    similar {\em yield integrity} property requires that, from a yield out of
-    a coroutine to the next yield back into it, all accessible and same-stack
-    data are unchanged. Confidentiality properties are split similarly.
+%  \paragraph{Non-stack control flow}
 
-  \paragraph{Random Testing}
+%    Control structures beyond well-bracketed calls and returns require
+%    modifications to the model. Tail calls, for instance, reuse the caller's
+%    stack frame for its callee, and every nested tail call returns
+%    simultaneously to the top non-tail-calling function. Under normal stack
+%    integrity, the first function in a chain of tail calls returns and violates
+%    integrity, while subsequent tail calls never actually return at all.
+%    Instead we need a variant that treats the entry of a tail call as the
+%    return of its caller.
 
-  Part of the motivation for the strong lockstep stack-safety property
-  is that it uncovers errors quickly, and therefore should be quicker
-  to test, just like the smarter testing properties
-  of~\citet{TestingNI:ICFP}. We have already developed a testing
-  framework for debugging our policy enforcement for this property, and
-  it would be interesting to explore whether a testing-amenable variant
-  of the lazy property also exists.
+%    More complex is the addition of a coroutine model, in which multiple stacks
+%    respect stack safety internally, but might also yield to one another.
+%    Here we must distinguish three levels of integrity: accessible, in the same
+%    stack, and in another stack. Stack integrity requires that same-stack data
+%    be unchanged when a function returns, but other-stack data may change. A
+%    similar {\em yield integrity} property requires that, from a yield out of
+%    a coroutine to the next yield back into it, all accessible and same-stack
+%    data are unchanged. Confidentiality properties are split similarly.
+
+%    \paragraph{Random Testing}
+
+%    Part of the motivation for the strong lockstep stack-safety property
+%    is that it uncovers errors quickly, and therefore should be quicker
+%    to test, just like the smarter testing properties
+%    of~\citet{TestingNI:ICFP}. We have already developed a testing
+%    framework for debugging our policy enforcement for this property, and
+%    it would be interesting to explore whether a testing-amenable variant
+%    of the lazy property also exists.
 
 % \rb{Notes from meeting:
 %   \begin{itemize}
