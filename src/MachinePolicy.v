@@ -215,19 +215,26 @@ Definition ps (mp : MPState) := snd mp.
 (* TODO: Real policy. *)
 (* ...
    TODO: Use [MonadNotations] *)
+(* Step as usual *)
+Definition mpstep_wrap (mp : MPState) : option (MPState * Observation) :=
+  match step (ms mp) with
+  | (m', o) => Some (m', ps mp, o)
+  end
+.
+
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
   (* Case analysis on instructions *)
   let m := ms mp in
   match loadWord (getMem m) (getPc m) with
   | Some w =>
-    (* Forbid [Jal]s *)
+    (* Forbid [J] instructions unless allowed by the policy *)
     match decode RV32IM (LittleEndian.combine 4 w) with
-    | IInstruction (Jal _ _) => None
-    | _ =>
-      (* Step as usual *)
-      match step (ms mp) with
-      | (m', o) => Some (m', ps mp, o)
+    | IInstruction (Jal 0 addr) =>
+      match List.find (reg_eqb (ZToReg addr)) (ps mp) with
+      | Some _ => mpstep_wrap mp
+      | None => None
       end
+    | _ => mpstep_wrap mp
     end
   | None => None
   end
