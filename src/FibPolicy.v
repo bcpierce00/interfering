@@ -57,6 +57,8 @@ Definition fib6_riscv : list Instruction :=
   IInstruction (Addi 20 0 0);
   IInstruction (Addi 18 0 1);
   IInstruction (Addi 9 0 0);
+  (* IInstruction (Addi SP 0 48); (* stack_init *) *)
+  (* IInstruction (Sw SP 18 0); (* [SP+0] <- R18 *) *)
   IInstruction (Jal 0 20);
   IInstruction (Add 21 20 18);
   IInstruction (Addi 20 18 0);
@@ -74,10 +76,12 @@ Goal False.
   cbv in l'.
 Abort.
 
+Definition stack_init := 100.
+
 (* This example uses the memory only as instruction memory
    TODO make an example which uses memory to store data *)
 Definition zeroedRiscvMachine: RiscvMachine := {|
-  getRegs := map.empty;
+  getRegs := map.put map.empty SP (wrap stack_init);
   getPc := ZToReg 0;
   getNextPc := ZToReg 4;
   getMem := map.empty;
@@ -86,7 +90,7 @@ Definition zeroedRiscvMachine: RiscvMachine := {|
 |}.
 
 Definition initialRiscvMachine(insts: list Instruction): RiscvMachine :=
-  let words := map (@wrap 32) (map encode insts) in
+  let words := map (@wrap 32) (map encode insts) ++ repeat (wrap 0) 32 in
   let imem := map unsigned words in
   putProgram imem (ZToReg 0) zeroedRiscvMachine.
 
