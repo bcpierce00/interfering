@@ -5,8 +5,6 @@ Require Import Nat.
 
 From StackSafety Require Import Trace Machine ObsTrace.
 
-
-
   Section DOMAIN_MODEL.
 
   (* In general, a domain is a coherent logical division of the state (both memory and registers)
@@ -191,32 +189,39 @@ Section WITH_MAPS.
       (proj m k <> proj m' k \/ proj n k <> proj n' k) ->
       proj m' k = proj n' k.
 
+  (* When we have same-difference, we can talk about traces being in lockstep. Intuitively
+     what this means is that, whatever the relationship between their initial states,
+     their states evolve in concert according to same-difference. *)
+  Inductive Lockstep : @MPCTrace context -> @MPCTrace context -> Prop :=
+  | bothDone : forall m p c n,
+      Lockstep (finished (m,p,c)) (finished (n,p,c))
+  | bothStep : forall m p c m' n n' M N,
+      mstate (head M) = m' ->
+      mstate (head N) = n' ->
+      sameDifference m m' n n' ->
+      Lockstep M N ->
+      Lockstep (notfinished (m,p,c) M) (notfinished (n,p,c) N)
+  .
+
   (* Once again, we take adjacent pairs of states in the trace from an arbitrary
      start state and check that a property holds between them. In this case, that
      in any K-variant of the first state where K is the set of components that are
      Sealed in that state, the step has the same observable behavior and makes
      the same changes to state. *)
-  Definition SealedConfidentialityUE : Prop :=
-    forall m p c m' p' c' d n o n' p'' c'' o',
-      Reachable updateC initC (m,p,c) ->
-      mpcstep updateC (m,p,c) = Some (m',p',c',o) ->
+  Definition SimpleStackConfidentialityUE : Prop :=
+    forall d m p c n M N,
+      let P := fun '(_,_,c) => snd c > d in
+      ReachableSegment updateC initC P M ->
+      head M = (m,p,c) ->
       variantOf (fun k => fst c k = Sealed d) m n ->
-      mpcstep updateC (n,p,c) = Some (n',p'',c'',o') ->
-      sameDifference m m' n n' /\ p' = p'' /\ o = o'.
-
-  (* Some things to note: we have hypotheses that both (m,p) and (n,p) step. So we do not consider
-     variant states in which (n,p) has a policy violation. We also require that the policy states
-     match after the step. This might not be necessary.
-
-     Again, we are not protecting uninitialized memory - it will turn out that when we leave behind
-     the Ultra Eager properties, that protection will come naturally. *)
+      MPCTraceToWhen updateC P (n,p,c) N ->
+      Lockstep M N.
 
   (* For integrity, ultra eager properties are significantly stronger than we actually
      need. In fact, we want to consider lazy policies that allow illegal writes at times
      in the name of efficiency. So we should consider what our actual goal is here - what
-     use are these properties? Well, suppose we want to take a programming logic perspective
-     and implement a call rule that lets us skip from a call point to its return. Clearly,
-     what matters is the state at return, not before.
+     use are these properties? We want to reason about what a caller sees happen to the
+     state when control returns to it. So what matters is the state at return, not before.
 
      Our eager property reflects this; instead of guaranteeing that components never
      change, it guarantees that they are unchanged if and when the function returns. *)

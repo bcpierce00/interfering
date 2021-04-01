@@ -8,15 +8,5 @@ ifeq ($(USER),bcpierce)
 	chmod a-w bcp.bib
 endif
 
-coq:
-	coqc -R . "" Trace.v
-	coqc -R . "" Machine.v
-	coqc -R . "" ObsTrace.v
-	coqc -R . "" SubroutineSimple.v
-	coqc -R . "" TraceProperties.v
-	coqc -R . "" SubroutineShare.v
-	coqc -R . "" Coroutine.v
-	coqc -R . "" Lazy.v
-
 clean:
-	rm -f *.aux *.vio *.vo* *.glob
+	rm -f *.aux *.blg *.out *.bbl *.pdf *.log
