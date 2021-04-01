@@ -102,5 +102,5 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
   end.
 
 Compute (run 50 (initialRiscvMachine fib6_riscv) [] nil). (* can't jump *)
-Compute (run 50 (initialRiscvMachine fib6_riscv) [ZToReg 20] nil).
+Compute (run 50 (initialRiscvMachine fib6_riscv) [ZToReg 36] nil).
 (* reg 18 *)

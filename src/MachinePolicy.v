@@ -225,12 +225,13 @@ Definition mpstep_wrap (mp : MPState) : option (MPState * Observation) :=
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
   (* Case analysis on instructions *)
   let m := ms mp in
-  match loadWord (getMem m) (getPc m) with
+  let pc := getPc m in
+  match loadWord (getMem m) pc with
   | Some w =>
     (* Forbid [J] instructions unless allowed by the policy *)
     match decode RV32IM (LittleEndian.combine 4 w) with
     | IInstruction (Jal 0 addr) =>
-      match List.find (reg_eqb (ZToReg addr)) (ps mp) with
+      match List.find (reg_eqb (word.add (ZToReg addr) pc)) (ps mp) with
       | Some _ => mpstep_wrap mp
       | None => None
       end
