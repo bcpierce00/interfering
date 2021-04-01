@@ -15,6 +15,7 @@ Require Import riscv.Platform.Run.
 Require Import riscv.Utility.Monads.
 Require Import riscv.Utility.MkMachineWidth.
 Require Import coqutil.Map.Interface.
+Require Import coqutil.Word.LittleEndian.
 Require Import riscv.Utility.Words32Naive.
 Require Import riscv.Utility.DefaultMemImpl32.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
@@ -203,7 +204,8 @@ Require Import Lia.
   Qed.
 
 (* TODO: More interesting state/abstract *)
-Definition PolicyState : Type := unit.
+(* List of allowed call sites *)
+Definition PolicyState : Type := list word.
 
 (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.
@@ -211,10 +213,25 @@ Definition ms (mp : MPState) := fst mp.
 Definition ps (mp : MPState) := snd mp.
 
 (* TODO: Real policy. *)
+(* ...
+   TODO: Use [MonadNotations] *)
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
-  match step (ms mp) with
-  | (m', o) => Some (m', tt, o)
-  end.
+  (* Case analysis on instructions *)
+  let m := ms mp in
+  match loadWord (getMem m) (getPc m) with
+  | Some w =>
+    (* Forbid [Jal]s *)
+    match decode RV32IM (LittleEndian.combine 4 w) with
+    | IInstruction (Jal _ _) => None
+    | _ =>
+      (* Step as usual *)
+      match step (ms mp) with
+      | (m', o) => Some (m', ps mp, o)
+      end
+    end
+  | None => None
+  end
+.
 
 Axiom mpstepCompat :
   forall m p o m' p',

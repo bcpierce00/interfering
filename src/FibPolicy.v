@@ -20,7 +20,7 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Z.HexNotation.
 Require coqutil.Map.SortedList.
 
-From StackSafety Require Import Trace Machine.
+From StackSafety Require Import Trace MachinePolicy.
 
 Definition fib6_riscv: list MachineInt := [ (* TODO should be "word32", not MachineInt *)
   Ox"00600993";         (* li s3,6 *)
@@ -75,5 +75,5 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-Compute (run 50 (initialRiscvMachine fib6_riscv) tt nil).
+Compute (run 50 (initialRiscvMachine fib6_riscv) [] nil).
 (* reg 18 *)
