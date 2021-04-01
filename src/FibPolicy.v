@@ -7,6 +7,7 @@ Require Import riscv.Spec.Machine.
 Require Import riscv.Spec.Decode.
 Require Import Coq.ZArith.BinInt. Local Open Scope Z_scope.
 Require Import riscv.Utility.Utility.
+Require Import riscv.Utility.Encode.
 Require Import riscv.Platform.Memory.
 Require Import riscv.Platform.Minimal.
 Require Import riscv.Platform.MinimalLogging.
@@ -22,7 +23,7 @@ Require coqutil.Map.SortedList.
 
 From StackSafety Require Import Trace MachinePolicy.
 
-Definition fib6_riscv: list MachineInt := [ (* TODO should be "word32", not MachineInt *)
+Definition fib6_riscv_concrete: list MachineInt := [ (* TODO should be "word32", not MachineInt *)
   Ox"00600993";         (* li s3,6 *)
   Ox"00000a13";         (* li s4,0 *)
   Ox"00100913";         (* li s2,1 *)
@@ -45,9 +46,32 @@ Notation s5 := (WO~1~0~1~0~1)%word.
 *)
 
 Goal False.
-  set (l := List.map (decode RV32IM) fib6_riscv).
+  set (l := List.map (decode RV32IM) fib6_riscv_concrete).
   cbv in l.
   (* decoder seems to work :) *)
+Abort.
+
+(* Writing programs more abstractly *)
+Definition fib6_riscv : list Instruction :=
+  [IInstruction (Addi 19 0 6);
+  IInstruction (Addi 20 0 0);
+  IInstruction (Addi 18 0 1);
+  IInstruction (Addi 9 0 0);
+  IInstruction (Jal 0 20);
+  IInstruction (Add 21 20 18);
+  IInstruction (Addi 20 18 0);
+  IInstruction (Addi 18 21 0);
+  IInstruction (Addi 9 9 1);
+  IInstruction (Blt 9 19 (-16))]
+.
+
+Goal False.
+  (* We can get the memory dump as before *)
+  set (l := map ZToReg (map encode fib6_riscv)).
+  cbv in l.
+  (* And it still decodes nicely *)
+  set (l' := map (decode RV32IM) (map unsigned l)).
+  cbv in l'.
 Abort.
 
 (* This example uses the memory only as instruction memory
@@ -61,7 +85,9 @@ Definition zeroedRiscvMachine: RiscvMachine := {|
   getLog := nil;
 |}.
 
-Definition initialRiscvMachine(imem: list MachineInt): RiscvMachine :=
+Definition initialRiscvMachine(insts: list Instruction): RiscvMachine :=
+  let words := map (@wrap 32) (map encode insts) in
+  let imem := map unsigned words in
   putProgram imem (ZToReg 0) zeroedRiscvMachine.
 
 (* success flag * final state *)
