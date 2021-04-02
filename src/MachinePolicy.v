@@ -76,6 +76,7 @@ Require Import Lia.
   
   Definition Register : Type := Word.
 
+  Definition RA := 1.
   Definition SP := 2.
   Definition regEq : Register -> Register -> bool := Z.eqb.
 

@@ -52,24 +52,40 @@ Goal False.
 Abort.
 
 (* Writing programs more abstractly *)
-Definition fib6_riscv : list Instruction :=
-  [IInstruction (Addi 19 0 6);
-  IInstruction (Addi 20 0 0);
-  IInstruction (Addi 18 0 1);
-  IInstruction (Addi 9 0 0);
-  (* IInstruction (Addi SP 0 48); (* stack_init *) *)
-  (* IInstruction (Sw SP 18 0); (* [SP+0] <- R18 *) *)
-  IInstruction (Jal 0 20);
-  IInstruction (Add 21 20 18);
-  IInstruction (Addi 20 18 0);
-  IInstruction (Addi 18 21 0);
-  IInstruction (Addi 9 9 1);
-  IInstruction (Blt 9 19 (-16))]
+Let RARG := 19.
+Let RRES := 18.
+Let RTMP := 20.
+
+Definition fib_riscv (n : Z) : list Instruction :=
+  (* Main *)
+  [IInstruction (Addi RARG 0 n);
+  IInstruction (Jal RA 8);
+  IInstruction (Jal RA 0); (* Finish execution (loop) *)
+  (* Fibonacci *)
+  IInstruction (Sw SP RA 4); (* H1 *)
+  IInstruction (Addi SP SP 8); (* H2 *)
+  IInstruction (Addi RTMP 0 2); (* Case selection *)
+  IInstruction (Blt RARG RTMP 44);
+  (* - Recursive case *)
+  IInstruction (Addi RARG RARG (-1)); (* Decrement arg *)
+  IInstruction (Sw SP RARG (-8)); (* Save arg in stack *)
+  IInstruction (Jal RA (-24)); (* First call *)
+  IInstruction (Lw RARG SP (-8)); (* Restore arg from stack *)
+  IInstruction (Sw SP RRES (-8)); (* Save res in stack *)
+  IInstruction (Addi RARG RARG (-1)); (* Decrement arg *)
+  IInstruction (Jal RA (-40)); (* Second call *)
+  IInstruction (Lw RTMP SP (-8)); (* Restore res from stack *)
+  IInstruction (Add RRES RRES RTMP); (* Add res *)
+  IInstruction (Beq 0 0 8); (* Jump to return *)
+  IInstruction (Addi RRES 0 1); (* Base case, cascades down to return *)
+  IInstruction (Lw RA SP (-4)); (* R1 *)
+  IInstruction (Addi SP SP (-8)); (* R2 *)
+  IInstruction (Jalr RA RA 0)] (* R3 *)
 .
 
 Goal False.
   (* We can get the memory dump as before *)
-  set (l := map ZToReg (map encode fib6_riscv)).
+  set (l := map ZToReg (map encode (fib_riscv 6))).
   cbv in l.
   (* And it still decodes nicely *)
   set (l' := map (decode RV32IM) (map unsigned l)).
@@ -105,6 +121,8 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-Compute (run 50 (initialRiscvMachine fib6_riscv) [] nil). (* can't jump *)
-Compute (run 50 (initialRiscvMachine fib6_riscv) [ZToReg 36] nil).
+Compute (run 310 (initialRiscvMachine (fib_riscv 6)) [ZToReg 12] nil).
+
+(* Compute (run 50 (initialRiscvMachine fib6_riscv) [] nil). (* can't jump *) *)
+(* Compute (run 50 (initialRiscvMachine fib6_riscv) [ZToReg 36] nil). *)
 (* reg 18 *)
