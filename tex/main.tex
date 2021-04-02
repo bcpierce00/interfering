@@ -948,13 +948,20 @@ the primary state and its variant will step in lockstep until they return. Any c
 whose values update and any printed values will be identical between the primary and variant
 traces.
 
+We alternatively could imagine a stepwise form of confidentiality in which we explicitly
+track which addresses may be read (i.e., which have been initialized), and at each step
+guarantee that the step alters state identically to a step from a variant state. Then we
+wouldn't need to divide up the execution by calls. But this is further from the normal
+framing of noninterference, requires explicitly tracking initializations, and would behave
+no differently relative to our policies.
+
 \begin{figure}
 
 \begin{subfigure}{.25\textwidth}
 \begin{verbatim}
 int main() {
 0[C]:  int t = f();
-1[R]:  return;
+1[R]:  return t;
 }
 \end{verbatim}
 \end{subfigure}
@@ -994,7 +1001,6 @@ int g() {
     \MemoryLabel{-8em}{0.75em}{6}
     \vspace{.5em}
   }
-  &
 \\
   {\tt 20} &
   \memoryaddrs{25em}
@@ -1052,7 +1058,7 @@ variable!
 
 \begin{figure}
   \centering
-  \begin{subfigure}[t]{.4\textwidth}
+  \begin{minipage}{.4\textwidth}
 \begin{verbatim}
 int stash = 0;
 
@@ -1063,36 +1069,14 @@ int main() {
 3[C]:  f();
 4[R]:  return x;
 }
-
-void f() {
-10:     if(!stash) {
-        // store return pointer
-11:       stash = $SP-1;
-12:     } else {
-13:       $SP-1 = stash;
-14:       stash = 0;
-15[R]:    return;
-        }
-}
 \end{verbatim}
-  \end{subfigure}
-\label{fig:WBCF1}
-  \begin{subfigure}[t]{.4\textwidth}
+  \end{minipage}
+  \begin{minipage}{.4\textwidth}
 \begin{verbatim}
-int stash = 0;
-
-int main() {
-0:     int x = 1;
-1[C]:  f();
-2:     x = -x;
-3[R]:  return x;
-}
-
 void f() {
 10:     if(!stash) {
         // store return pointer
 11:       stash = $SP-1;
-12[C]     main();
 12:     } else {
 13:       $SP-1 = stash;
 14:       stash = 0;
@@ -1100,13 +1084,42 @@ void f() {
         }
 }
 \end{verbatim}
-\label{fig:WBCF2}
-  \end{subfigure}
+  \end{minipage}
+\label{fig:WBCF1}
+%  \begin{subfigure}[t]{.4\textwidth}
+%\begin{verbatim}
+%int counter = 0;
+%int stash = 0;
+%
+%int main() {
+%0:     int x = 1;
+%1[C]:  f();
+%2:     x = -x;
+%3[C]:  f();
+%4[R]:  return x;
+%}
+%
+%void f() {
+%10:     switch(counter++) {
+%11:       case 0:
+%12[R]:      return;
+%13:       case 1:
+%14:         stash = $SP-1;
+%15[C]:      main();
+%16:         return;
+%17:       default:
+%18:         $SP-1 = stash;
+%19[R]:      return;
+%        }
+%}
+%\end{verbatim}
+%\label{fig:WBCF2}
+%  \end{subfigure}
   \caption{Control Flow Attacks}
   \label{fig:WBCF}
 \end{figure}
 
-Example \ref{fig:WBCF1} shows how control flow attacks can compromise integrity in principle
+Example \ref{fig:WBCF} shows how control flow attacks can compromise integrity in principle
 even when the attacker obeys LSE. In this case, the attacker hides a return pointer in a
 global variable and retrieves it the second time it is called, returning to the first call
 point rather than the second. A return was performed, so {\tt x} is no longer sealed, but
@@ -1125,11 +1138,99 @@ holds if:
   and the program counter is at the instruction following the jal ({\em return integrity})
 \end{itemize}
 
-Non-skipping comes into play for attacks such as seen in \ref{WBCF2}, where the calls are
-nested rather than sequential. \sna{The example isn't quite right; need to look at the
-  Towards Complete... paper again.}
+Non-skipping may seem strange -- surely the depth counter ought to decrease by one at a time
+as part of the property definition, and the problem comes when the return is to a shallower
+call's return pointer, violating return integrity? Yet some weaker enforcement mechanisms,
+such as those in which returns are implemented as invocation of a Cheri object capability,
+do allow skipping when adversarial code acts unreasonably by leaking its own return capability,
+reasoning that this is acceptable as long as only the unreasonable function is skipped
+(e.g. \citep{Skorstengaard+19b}). A variant of our model supports this weaker form of WBCF,
+but with tag-based policies we can enforce the non-skipping version entirely.
+\sna{Cite future work for details when the relevant section is finished.}
 
-\sna{Put sharing example here, or after the formalism?}
+\paragraph*{Pass by Reference and Stack Arguments}
+
+\newcommand{\mainpassc}{magenta}
+\newcommand{\sharec}{lgray}
+
+\begin{figure}[b]
+  \centering
+  \begin{subfigure}{.45\textwidth}
+\begin{verbatim}
+int stash;
+
+int main() {
+0:             int x = 42, y = 0;
+1[P(x)],2[C]:  f(&x);
+3:             x = 0;
+4[P(y)],5[C]:  f(&y);
+6[R]:          return 0;
+}
+
+void f(int* a) {
+10:  if(!stash)
+11:    stash = a;
+12:  *stash = 5;
+13:  return;
+}
+\end{verbatim}
+\end{subfigure}
+  \begin{subfigure}{.5\textwidth}
+    \begin{tabular}{l l}
+      {\tt 2} &
+      \memoryaddrs{12em}
+      \memory{1}{\mainpassc}[{\makebox[0pt]{Pass(0)}}]%
+      \memory{2}{\unsealc}[{\makebox[0pt]{Unsealed}}]
+      ~$\cdots$ \\
+      {\tt 10} &
+      \memoryaddrs{17em}
+      \memory{1}{\mainpassc}[{\makebox[0pt]{Pass(0)}}]%
+      \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
+      \memory{2}{\unsealc}
+      ~$\cdots$ \\
+      {\tt 3} &
+      \memoryaddrs{12em}
+      \memory{3}{\unsealc}
+      ~$\cdots$ \\
+      {\tt 5} &
+      \memoryaddrs{12em}
+      \memory{1}{\unsealc}
+      \memory{1}{\mainpassc}
+      \memory{1}{\unsealc}
+      ~$\cdots$ \\
+      {\tt 10} &
+      \memoryaddrs{17em}
+      \memory{1}{\mainsealc}
+      \memory{1}{\mainpassc}
+      \memory{2}{\unsealc}
+      ~$\cdots$ \\
+\end{tabular}
+\end{subfigure}
+
+\label{fig:passing}
+\end{figure}
+
+
+Up til now we have assumed that function arguments and returns are passed solely in registers.
+This is an oversimplication, which we will now correct. There are important stack safety concerns
+when passing arguments on the stack, as seen in example \ref{fig:passing}. In this example,
+{\tt main} passes a reference to {\tt x}, but then clears {\tt x} and instead passes one to
+{\tt y}. Before each call, when the address of a variable is taken, we add a new annotation
+\(P(x)\) or \(P(y)\) identifying the memory to be passed, and our stack model marks it in
+magenta. Then at the call, the caller's frame that is not passed is sealed, as usual. Passed
+memory also tracks which depth owns it, and it may only be accessed by the immediate callee
+(at its depth plus one).
+
+But because {\tt f} stashes the original pointer to {\tt x}, it will overwrite {\tt x} while
+{\tt x} is sealed, an integrity violation. This fits with the intuition of passing by reference,
+that the passed variable might be read or written during the call, not that it is permanently
+open to be read or written by all subsequent calls. This also applies to passing large objects
+by value in the stack: the caller allocates them, and the relevant instructions are annotated to
+indicate passing.
+
+We do not model cases where permanent sharing is desireable, because they are uninteresting
+and hard to motivate: we would expect to treat such sharing as completely unprotected, and
+perhaps attach a separate memory safety policy to add some protection to such variables.
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
