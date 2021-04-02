@@ -52,15 +52,15 @@ Goal False.
 Abort.
 
 (* Writing programs more abstractly *)
-Let RARG := 19.
-Let RRES := 18.
-Let RTMP := 20.
+Let RARG : Z := 19.
+Let RRES : Z := 18.
+Let RTMP : Z := 20.
 
 Definition fib_riscv (n : Z) : list Instruction :=
   (* Main *)
   [IInstruction (Addi RARG 0 n);
   IInstruction (Jal RA 8);
-  IInstruction (Jal RA 0); (* Finish execution (loop) *)
+  IInstruction (Beq 0 0 0); (* Finish execution (loop) *)
   (* Fibonacci *)
   IInstruction (Sw SP RA 4); (* H1 *)
   IInstruction (Addi SP SP 8); (* H2 *)
@@ -92,7 +92,8 @@ Goal False.
   cbv in l'.
 Abort.
 
-Definition stack_init := 100.
+Let stack_init : Z := 100.
+Let data_words : nat := 32.
 
 (* This example uses the memory only as instruction memory
    TODO make an example which uses memory to store data *)
@@ -106,7 +107,7 @@ Definition zeroedRiscvMachine: RiscvMachine := {|
 |}.
 
 Definition initialRiscvMachine(insts: list Instruction): RiscvMachine :=
-  let words := map (@wrap 32) (map encode insts) ++ repeat (wrap 0) 32 in
+  let words := map (@wrap 32) (map encode insts) ++ repeat (wrap 0) data_words in
   let imem := map unsigned words in
   putProgram imem (ZToReg 0) zeroedRiscvMachine.
 
