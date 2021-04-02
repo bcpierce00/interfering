@@ -231,7 +231,7 @@ Definition mpstep (mp : MPState) : option (MPState * Observation) :=
   | Some w =>
     (* Forbid [J] instructions unless allowed by the policy *)
     match decode RV32IM (LittleEndian.combine 4 w) with
-    | IInstruction (Jal 0 addr) =>
+    | IInstruction (Jal _ addr) =>
       match List.find (reg_eqb (word.add (ZToReg addr) pc)) (ps mp) with
       | Some _ => mpstep_wrap mp
       | None => None
