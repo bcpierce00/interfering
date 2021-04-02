@@ -52,6 +52,7 @@
                         %% http://ctan.org/pkg/subcaption
 \input{macros}
 \input{examples}
+\input{example1}
 
 \newcommand{\powerset}{\raisebox{.15\baselineskip}{\Large\ensuremath{\wp}}} 
 
@@ -284,107 +285,110 @@ While this work represents an important step in the right direction, we believe
 there is still room to craft an operational characterization
 of stack safety. In other words, we seek formal criteria that can be applied
 to a mechanism for protecting stack-based low-level programs to judge
-whether or not it actually ``guarantees stack safety.'' While our criteria are
-designed with PIPE micro-policies in mind, they are agnostic about many implementation
-details and should be applicable to other systems with minor adjustment.
+whether or not it actually ``guarantees stack safety.'' We begin with a strong
+local state encapsulation property that closely models the behavior of eager
+micro-policies from \citet{DBLP:conf/sp/RoesslerD18}. This ``eager'' property
+is too strong to characterize stack safety; reasonable enforcement mechanisms
+exist that violate it. One such mechanism is a ``lazy'' tag policy, similar to
+the one in \citet{DBLP:conf/sp/RoesslerD18}. We weaken local state encapsulation
+to support this technique and argue that the new property, defined relative to an
+arbitrary notion of observation, is weak enough to characterize stack safety.
+
+While our criteria are designed with PIPE micro-policies in mind, they are
+agnostic about many implementation details and should be applicable to other
+systems with minor adjustment.
 %
-Our key contribution is an abstract presentation of local state encapsulation
-using the technical framework of language-based security, together with a simple
-characterization of well-bracketed control flow.
+Our key contribution is an operational model of local state encapsulation
+using the technical framework of language-based security, with eager and lazy variants,
+together with a simple characterization of well-bracketed control flow.
 
-\begin{figure}[b]
-    \begin{minipage}{.4\textwidth}
-\begin{verbatim}
-int main() {
-  int x = 42;
-  f();
-  print(x);
-}
-\end{verbatim}
-    \end{minipage}
-    \begin{minipage}{.4\textwidth}
-\begin{verbatim}
-int main() {
-  int x = 1;
-  f();
-  if(x)
-    g();
-  else
-    h();
-}
-\end{verbatim}
-    \end{minipage}
-  \caption{Simple Examples}
-  \label{fig:examples1}
-\end{figure}
+%\begin{figure}[b]
+%    \begin{minipage}{.4\textwidth}
+%\begin{verbatim}
+%int main() {
+%  int x = 42;
+%  f();
+%  print(x);
+%}
+%\end{verbatim}
+%    \end{minipage}
+%    \begin{minipage}{.4\textwidth}
+%\begin{verbatim}
+%int main() {
+%  int x = 1;
+%  f();
+%  if(x)
+%    g();
+%  else
+%    h();
+%}
+%\end{verbatim}
+%    \end{minipage}
+%  \caption{Simple Examples}
+%  \label{fig:examples1}
+%\end{figure}
 
-\begin{figure}[b]
-    \begin{minipage}{.4\textwidth}
-\begin{verbatim}
-int main(int arg) {
-  if(arg)
-    g();
-  else
-    h();
-  f();
-}
-\end{verbatim}
-    \end{minipage}
-    \begin{minipage}{.4\textwidth}
-\begin{verbatim}
-int main() {
-  int x = 1;
-  f();
-  x = -x;
-  f();
-  print(x);
-}
-\end{verbatim}
-  \end{minipage}
-
-  \caption{More Examples}
-  \label{fig:examples2}
-\end{figure}
+%\begin{figure}[b]
+%    \begin{minipage}{.4\textwidth}
+%\begin{verbatim}
+%int main(int arg) {
+%  if(arg)
+%    g();
+%  else
+%    h();
+%  f();
+%}
+%\end{verbatim}
+%    \end{minipage}
+%    \begin{minipage}{.4\textwidth}
+%\begin{verbatim}
+%int main() {
+%  int x = 1;
+%  f();
+%  x = -x;
+%  f();
+%  print(x);
+%}
+%\end{verbatim}
+%  \end{minipage}
+%
+%  \caption{More Examples}
+%  \label{fig:examples2}
+%\end{figure}
 
 \paragraph*{The Use of Stack Safety}
 
-When does the programmer rely on stack safety? The most natural example is the first
-in figure \ref{fig:examples1}, in which {\tt main} calls stores 42 to a local variable {\tt x},
-calls {\tt f}, and then prints {\tt x}. Here the programmer should be able to expect that
-{\tt main} will print 42, but in C such an assumption may be wrong, if {\tt f} should
-overwrite {\tt main}'s stack data. This expectation is for {\em integrity}: that a
-caller's data is protected from modification by its callee.
-This is not only useful for the programmer: consider the second
-example, where the call to {\tt h} should be unreachable and therefore subject to dead code
-elimination, if only the compiler can soundly reason that {\tt x} does not change.
+How does the programmer rely on stack safety? The stack makes implicit promises about
+the behavior of function calls. First, that when a call is finished, the caller can continue
+from where it left off with its local state unchanged. And second, that the call is
+self-contained, its behavior determined only by a predictable interface -- at minimum
+parameters and global variables, but never local state.
+
+%The most natural example is the first
+%in figure \ref{fig:examples1}, in which {\tt main} calls stores 42 to a local variable {\tt x},
+%calls {\tt f}, and then prints {\tt x}. Here the programmer should be able to expect that
+%{\tt main} will print 42, but in C such an assumption may be wrong, if {\tt f} should
+%overwrite {\tt main}'s stack data.
+
+Implicit in both expectations are a predictable control flow, termed {\em well-bracketed
+control flow} (WBCF) by \citeauthor{Skorstengaard+19}. Calls jump to a consistent entry
+point and return to the call site. Then the data portion of the first expectation is for
+{\em integrity}: that a caller's local data is protected from modification by its callee.
+This is vital for local reasoning about the behavior of the caller. The security implications
+are significant: a caller that branches on a local variable could be manipulated by its
+callee into unexpected behavior without integrity.
 
 Alongside integrity, we have {\em confidentiality}, in which a caller's data is protected
-from leakage by its callee. Consider again the first example in figure \ref{fig:examples1},
-in which {\tt f}'s behavior should not depend on {\tt x} being 42. In fact suppose that the
-programmer had initialized {\tt x} after calling {\tt f} rather than before; such a change
-should not alter the behavior of {\tt main}, but if {\tt f} can directly read {\tt x}, it
-may. But there are more subtle examples, such as the first in figure \ref{fig:examples2},
-where {\tt main} may call {\tt g} or {\tt h} are called prior to calling {\tt f}, depending on
-its argument. Here, if {\tt g} or {\tt h} leaves behind identifying information in unused stack
-space, {\tt f} could still deduce information about the argument and behave differently, violating
-the abstraction of its call.
-
+from leakage by its callee. As a reasoning principle, confidentiality tells us that to
+predict the behavior of a call we need only consider a subset of the machine state.
+Rearranging local data will have no impact. And in security terms, we can guarantee
+the secrecy of local data that we haven't passed even when calling a badly behaved function.
 Together, integrity and confidentiality comprise \citeauthor{Skorstengaard+19}'s
-{\em local state encapsulation} property. But LSE alone is not sufficient to fully protect
-callers from their callees. Consider the last example in figure \ref{fig:examples2},
-a variant of the famous ``awkward example,'' in which {\tt f} is called twice and might store
-data outside the stack between calls. It should be the case that {\tt main} prints -1, but if
-{\tt f}'s first activation stores its return address somewhere accessible, the second
-activation can return to before {\tt x} is negated, causing {\tt x} to be set to
-1 again before a third activation that would return normally. Then {\tt main} would print 1.
-This is rather unexpected behavior.
+{\em local state encapsulation} (LSE) property.
 
-Preventing this form of control-flow attack is the intuition behind
-\citeauthor{Skorstengaard+19}'s {\em well-bracketed control flow}, which protects
-the call graph itself. A callee should pass control back to the caller only by
-transferring control to the instruction following the call; otherwise it could
-subvert LSE by appearing to return -- thus restoring access to the caller's data --
-while causing the execution of arbitrary instructions on that data.
+It must be reiterated that LSE is of little use without WBCF: without WBCF, a callee
+could subvert LSE by ``returning'' to arbitrary code; after the return LSE should permit
+accessing the caller's state, but the execution would remain under the callee's control.
 
 To phrase LSE and WBCF as security properties requires an explicit attacker model:
 a clear understanding of who is being protected and from what. Most existing
@@ -413,43 +417,44 @@ callee.
 
 First we introduce this model for a single simple stack with no sharing between callers and
 callee. Then we expand it to allow components to be passed, granting a callee one time
-access to the caller's data, or shared, allowing components to be outright
-exempted from the stack safety properties. Shared components could model objects whose
-addresses are passed and whose security must be modeled by a separate property, such as
-memory safety enforced by capabilities. Finally, we extend the model to a coroutine
-system featuring finitely-bounded stacks.
+access to the caller's data. We do not model more sophisticated sharing, because to do
+so realistically would require a separate protection scheme, such as a capability
+model. While this is quite feasible in a tag-based enforcement mechanism, it is properly
+a separate policy outside the scope of stack safety. (The combination of such policies is
+a strength of tag-based approaches.)
+
+Finally, we extend the model to a coroutine system featuring finitely-bounded stacks. Though
+simple, this extension is a step toward concurrency and demonstrates that the model is flexible
+enough to handle more sophisticated styles of control-flow.
 
 After formally defining stack safety, we show that the definition is
 enforceable using an existing tag-based enforcement
 mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider
 \citeauthor{DBLP:conf/sp/RoesslerD18}'s conservative Depth Isolation policy. 
-This policy testably enforces our {\em eager} properties, in which each
-callee, at the point of its return, can be seen to respect the integrity
-and confidentiality of its caller. Additionally we have an
-{\em ultra-eager} integrity property which guarantees that integrity
-is respected at each step. The advantage of this property is that it ``fails
-faster'' and is therefore more suitable for efficient testing. We prove (in
-Coq) that the ultra-eager property implies our original definition of integrity.
+This policy testably enforces our {\em eager} properties, in which integrity is respected
+at every step of a program, and each call respects integrity at each of its internal steps.
+These properties are very strong, and our policies enforce them; they also have the advantage
+that they ``fail faster'' and are therefore suitable for efficient testing.
 
-The downside of the Depth Isolation policy is that it is rather
-expensive to implement. In the same work,
-\citeauthor{DBLP:conf/sp/RoesslerD18} propose a different mechanism
+The downside of the Depth Isolation policy is that it is rather expensive to implement.
+In the same work, \citeauthor{DBLP:conf/sp/RoesslerD18} propose a different mechanism
 that is more efficient by virtue of being lazy in its enforcement.
 Instead of enforcing the integrity and confidentiality of the stack at the
 exact moment when a callee returns, this policy signals violations when the
 caller actually accesses data that the callee has written into its stack
 frame. \ifaftersubmission\bcp{We could also hint at the lazy confidentiality
   property in the same way...}\fi
-The lazy policy does not enforce our original integrity property, and to our
+The lazy policy does not enforce our eager integrity property, and to our
 knowledge there is no formal statement of the properties that it ought to enforce.
-We propose a {\em lazy} integrity property, which capture the desired behavior of a
+We propose {\em lazy} stack-safety properties, which capture the desired behavior of a
 policy that detects integrity violations between when they occur and when they make
 a visible impact. Intuitively this can be phrased, ``No visible reads after dangerous
 writes.'' Unfortunately \citeauthor{DBLP:conf/sp/RoesslerD18}'s existing
-``Lazy Tagging and Clearing'' policy does not quite enforce this property, as shown in
+``Lazy Tagging and Clearing'' policy does not quite enforce this property, as we show in
 testing, but formalizing the ideal property allows us to see how it falls short.
 We provide a variant of ``Lazy Tagging and Clearing'' that does enforce lazy integrity
-at some performance cost.
+at some performance cost. We prove (in Coq) that the eager property implies the lazy one.
+We argue that any system purporting to enforce stack safety ought to obey lazy stack safety.
 
 %\bcp{I worry that we are being a little
 %  dishonest here: the stated advantage of the lazy policy is that it is more
@@ -459,33 +464,29 @@ In summary, we offer the following contributions:
 \begin{itemize}
 \item
   % \leo{More? Extensional}\bcp{We might need to invent a word for this---''quasi-extensional''?}
-  A novel {\em stack-safety property} abstractly capturing the
-  intuitive concepts of strict local state encapsulation and well-bracketed
-  control flow~(\cref{sec:lse-and-wbcf}).
+  A novel {\em stack-safety property} capturing the intuitive concepts of strictly enforced
+  local state encapsulation and well-bracketed control flow~(\cref{sec:lse-and-wbcf}).
   % These properties rule out common examples of stack memory abuse.
 \item
   A property-based randomized testing framework that demonstrates that this
   property can be enforced by the Depth Isolation policy of
-  \citet{DBLP:conf/sp/RoesslerD18}, which is based on hardware tagging~(\cref{sec:conservative}).
-\item
-  An {\em ultra-eager} variant of the stack-integrity property that is also
-  enforced by the Depth Isolation policy but is more efficient to test, plus a proof
-  (in Coq) that this variant is stronger than the original~(\cref{sec:lockstep}).
+  \citet{DBLP:conf/sp/RoesslerD18}, which is based on hardware
+  tagging~(\cref{sec:conservative}).
 \item
   A {\em lazy} variant of the stack-safety property that can be enforced if the
   Lazy Tagging and Clearing policy of \citet{DBLP:conf/sp/RoesslerD18} is enhanced
   with unique tags on each activation, plus a proof (in Coq) that this
   variant is weaker than the original~(\cref{sec:lazy}).
 \item
-  Standardized trace-based formulations of eager confidentiality and of ultra-eager,
-  eager, and lazy integrity, parameterizeable by arbitrary control-flow models and assignments
-  of machine components to {\em LSE domains}.
+  Standardized trace-based formulations of both eager and lazy confidentiality and integrity,
+  parameterizeable by arbitrary control-flow models and assignments of machine components
+  to {\em LSE domains}.
 \item
-  An LSE-domain model tracking the passing of function arguments on the stack and the sharing
-  of arbitrary stack data.
+  An LSE-domain model enhanced with passing of function arguments on the stack, with which our
+  standardized trace properties extend stack safety with local sharing.
 \item
-  An extension of stack safety to a simple coroutine model with corresponding LSE
-  properties and a well-structured control flow property that subsumes WBCF for each
+  An LSE-domain model extending the stack to a simple coroutine model, with corresponding LSE
+  properties and a {\em well-structured control flow} property that subsumes WBCF for each
   stack as well as guaranteeing legitimate coroutine crossings.
 %  This policy does not enforce our strict
 %  local state encapsulation property,
@@ -721,10 +722,414 @@ ordinary machine state and policy state is very natural in this setting.
 
 \section{Stack Safety, Intuitively}
 \label{sec:running-example}
+\colorlet{lgray}{gray!40}
 
-\input{example1}
+\newcommand{\mainsealc}{cyan}
+\newcommand{\fsealc}{green}
+\newcommand{\unsealc}{lgray}
+\newcommand{\emptyoutc}{white} % or gray for consistency with unusedc ?
+\newcommand{\fulloutc}{white}
 
-%\input{example2}
+\begin{figure}
+
+\begin{subfigure}{.4\textwidth}
+\begin{verbatim}
+int main() {
+0:     int x = 42, y = 0;
+1[C]:  y = f(10);
+2:     print (x + y);
+}
+
+int f(int z) {
+10:     print z;
+11[R]:  return (z+z);
+}
+\end{verbatim}
+
+\caption{A Simple Call}
+\label{fig:simple-program}
+\end{subfigure}
+\begin{subfigure}{.4\textwidth}  
+\begin{center}
+\begin{tabular}{l l}
+{\tt 0} &
+\memoryaddrs{4em}
+\memory{2}{\unsealc}[{\makebox[0pt]{Unsealed}}]
+~$\cdots$
+\\
+{\tt 1} &
+\memoryaddrs{12em}
+\memory{3}{\unsealc}
+~$\cdots$
+\MemoryLabel{-14em}{0.75em}{42}
+\MemoryLabel{-10em}{0.75em}{0}
+\vspace{.5em}
+\\
+{\tt 10} &
+\memoryaddrs{17em}
+\memory{2}{\mainsealc}[{\makebox[0pt]{Sealed(0)}}]%
+\memory{2}{\unsealc}
+~$\cdots$
+\MemoryLabel{-10em}{0.75em}{2}
+\\
+{\tt 2} &
+\memoryaddrs{12em}
+\memory{3}{\unsealc}
+~$\cdots$
+\MemoryLabel{-14em}{0.75em}{42}
+\MemoryLabel{-10em}{0.75em}{0}
+\MemoryLabel{-7em}{0.75em}{2}
+\\
+\end{tabular}
+\end{center}
+
+\vspace{\abovedisplayskip}
+
+\caption{Trace of Stack Domains}
+
+\label{fig:simple-trace}
+\end{subfigure}
+\end{figure}
+
+This section will elucidate the intuition behind the properties through a series
+of examples. Existing stack safety enforcement work mostly refers directly to examples
+of bad behavior that it prevents; we will insert our model between the enforcement and
+the examples, arguing that:
+
+\begin{itemize}
+\item Examples that appear to violate stack safety, violate at least one of our properties
+\item We do not find desireable behaviors that appear stack-safe yet violate our properties
+\item Our properties are testably implemented by stack safety micro-policies from the literature,
+  and the micro-policies are not significantly more conservative (i.e., policy failstops tend to
+  correspond to imminent property violations)
+\end{itemize}
+
+\Cref{fig:simple-program} shows a simple example, written in C-like pseudo-code.
+It consists of a {\tt main} function that performs a call to a function {\tt f},
+which prints its argument, performs arithmetic, and returns a result.
+\Cref{fig:simple-trace} shows the stack as it is divided into domains throughout
+the program execution. We use high-level code for compactness, but reason about
+a standard compilation of each function. Line numbers correspond to the code
+addresses just before the code that implements the line, and annotations
+{\tt C} and {\tt R} indicate that an instruction is annotated as a call or
+return, respectively.
+
+We also assume that the machine is word- (not byte-) addressed and that the
+machine communicates with the outside world through a single memory-mapped
+output port whose address is elided (so a {\tt print} statement will be
+compiled to a store to this location), and that the stack grows upwards.
+
+In the initial memory layout the entire stack is currently {\em unsealed},
+meaning that it is eligible to be written to. At the call from {\tt main} to
+{\tt f}, {\tt main}'s locals (as designated by the stack pointer) are
+{\em sealed} and labeled with the depth of their owner, in this case 0.
+Sealing is the fundamental integrity contract between the caller and callee:
+{\tt main} expects that {\tt x} and {\tt y} will be unchanged when it gets control back.
+This gives us our simple, intuitive statement of {\em stepwise integrity}:
+if a component is sealed before a step, it will be unchanged afterward. Stepwise
+refers to the fact that the property must hold on every step. Later we will
+loosen this condition in the interest of extensionality -- the caller only
+cares about changes it can see after the return, not changes during execution.
+
+Suppose we insert an instruction after line 10, that stores 5 to the stack pointer - 1.
+Then we would be changing {\tt y}, which is sealed, in violation of stepwise integrity.
+
+\begin{figure}
+
+\begin{subfigure}{.33\textwidth}
+\begin{verbatim}
+int main() {
+0:     int x = 42, y = 0;
+1[C]:  y = f();
+2:     print (x + y);
+}
+
+int f() {
+10:     int z = *($SP-1);
+11[R]:  return (z+z);
+}
+\end{verbatim}
+\label{fig:conf1-program}
+\end{subfigure}
+\begin{subfigure}{.59\textwidth}
+\centering
+\begin{tabular}{l l l}
+  {\tt 0} &
+  \multicolumn{2}{c}{
+    \memoryaddrs{4em}
+    \memory{3}{\unsealc}
+    ~$\cdots$
+    \MemoryLabel{-14em}{0.75em}{a}
+    \MemoryLabel{-10em}{0.75em}{b}
+    \MemoryLabel{-7em}{0.75em}{c}
+    \vspace{.5em}
+  } \\
+  {\tt 1} &
+  \multicolumn{2}{c}{
+    \memoryaddrs{12em}
+    \memory{3}{\unsealc}
+    ~$\cdots$
+    \MemoryLabel{-14em}{0.75em}{42}
+    \MemoryLabel{-10em}{0.75em}{0}
+    \MemoryLabel{-7em}{0.75em}{c}
+    \vspace{.5em}
+  } \\
+  {\tt 10} &
+  \memoryaddrs{20em}
+  \memory{2}{\mainsealc}
+  \memory{2}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{42}
+  \MemoryLabel{-14em}{0.75em}{0}
+  \MemoryLabel{-10em}{0.75em}{2}
+  \MemoryLabel{-7em}{0.75em}{\bf d}
+ &
+  \memoryaddrs{20em}
+  \memory{2}{\mainsealc}
+  \memory{2}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{a'}
+  \MemoryLabel{-14em}{0.75em}{b'}
+  \MemoryLabel{-10em}{0.75em}{2}
+  \MemoryLabel{-7em}{0.75em}{\bf d'}
+  \\
+  {\tt 11} &
+  \memoryaddrs{20em}
+  \memory{2}{\mainsealc}
+  \memory{2}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{42}
+  \MemoryLabel{-14em}{0.75em}{0}
+  \MemoryLabel{-10em}{0.75em}{2}
+  \MemoryLabel{-7em}{0.75em}{\bf 0}
+  &
+  \memoryaddrs{20em}
+  \memory{2}{\mainsealc}
+  \memory{2}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{a'}
+  \MemoryLabel{-14em}{0.75em}{b'}
+  \MemoryLabel{-10em}{0.75em}{2}
+  \MemoryLabel{-7em}{0.75em}{\bf b'}
+  \\
+\end{tabular}
+
+\vspace{\abovedisplayskip}
+
+\label{fig:conf1-trace}
+\end{subfigure}
+\caption{A Confidentiality Violation}
+\end{figure}
+
+Meanwhile confidentiality intuitively states that the callee, {\tt f}, is unaware
+of the context of its call (with the exception, of course, of its arguments).
+We state this in a style similar to {\em noninterference}, a well-known concept in theoretical
+security. Noninterference describes knowledge: it states that for some component(s)
+that we do not know, we can substitute any values whatsoever without changing the results
+of our computation. If there exists some value for which we see different results, then
+in fact we can learn something about the components by observing those results, violating
+confidentiality.
+
+In example \ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
+by reading {\tt main}'s variable {\tt y}, which was not passed to it. The trace
+in figure \ref{fig:conf1-trace} shows how noninterference works. First, let \(a\),
+\(b\), and \(c\) be the unknown initial values at their locations. On entry to {\tt f}
+we again have 42 and 0 in {\tt x} and {\tt y}, and {\tt z} contains \(c\). We consider a
+{\em variant state} that replaces the values of components that should be secret with
+arbitrary values \(a'\), \(b'\), and \(c'\). After a step, we've copied 0 and \(c'\),
+respectively, into {\tt z}. Since {\tt z} changed value, for confidentiality to hold,
+its value should be the same in all variant states. But when \(c' \not = 0\), the
+states changes differently, which violates confidentiality. It would also be a violation
+to print the secret value.
+
+This form of confidentiality we will term {\em lockstep confidentiality}, defined informally
+as: for any state at the entry to a function, for any variant over the values in the stack,
+the primary state and its variant will step in lockstep until they return. Any components
+whose values update and any printed values will be identical between the primary and variant
+traces.
+
+\begin{figure}
+
+\begin{subfigure}{.25\textwidth}
+\begin{verbatim}
+int main() {
+0[C]:  int t = f();
+1[R]:  return;
+}
+\end{verbatim}
+\end{subfigure}
+\begin{subfigure}{.37\textwidth}
+\begin{verbatim}
+int f() {
+10:     int x, y = 5, z = 6;
+11:     print y+z;
+12:     $SP-=2;
+13[C]:  x = g();
+14[R]:  return x;
+}
+\end{verbatim}
+\end{subfigure}
+\begin{subfigure}{.32\textwidth}
+\begin{verbatim}
+int g() {
+20:     int z;
+21[R]:  return (z+z);
+}
+\end{verbatim}
+\end{subfigure}
+
+\begin{subfigure}{.8\textwidth}  
+\begin{center}
+\begin{tabular}{l l l}
+  {\tt 13} &
+  \multicolumn{2}{c}{
+    \memoryaddrs{16em}
+    \memory{1}{\mainsealc}
+    \memory{4}{\unsealc}
+    ~$\cdots$
+    \MemoryLabel{-23em}{0.75em}{a}
+    \MemoryLabel{-19em}{0.75em}{b}
+    \MemoryLabel{-15em}{0.75em}{1}
+    \MemoryLabel{-11em}{0.75em}{5}
+    \MemoryLabel{-8em}{0.75em}{6}
+    \vspace{.5em}
+  }
+  &
+\\
+  {\tt 20} &
+  \memoryaddrs{25em}
+  \memory{1}{\mainsealc}
+  \memory{2}{\fsealc}
+  \memory{2}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-23em}{0.75em}{a}
+  \MemoryLabel{-19em}{0.75em}{b}
+  \MemoryLabel{-15em}{0.75em}{1}
+  \MemoryLabel{-11em}{0.75em}{14}
+  \MemoryLabel{-8em}{0.75em}{\bf 6}
+  \vspace{.5em}
+  &
+  \memoryaddrs{25em}
+  \memory{1}{\mainsealc}
+  \memory{2}{\fsealc}
+  \memory{2}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-23em}{0.75em}{a'}
+  \MemoryLabel{-19em}{0.75em}{b'}
+  \MemoryLabel{-15em}{0.75em}{c'}
+  \MemoryLabel{-11em}{0.75em}{14}
+  \MemoryLabel{-8em}{0.75em}{\bf d'}
+  \vspace{.5em}
+\\
+\end{tabular}
+\end{center}
+
+\vspace{\abovedisplayskip}
+
+\end{subfigure}
+
+\caption{Another Confidentiality Violation}
+\label{fig:conf2}
+\end{figure}
+
+Two important details of confidentiality are reflected in figure \ref{fig:conf2}.
+First of all, it has multiple calls, and while we focus on the stack at the call
+from line 13 to line 20, it should be clear that we also need to consider a similar
+variant at the call from 0 to 10. Confidentiality is in this sense recursive: each
+nested call must obey confidentiality in its own right.
+
+More importantly, careful readers will have noticed that the informal definition
+of stack confidentiality refers to a variation of the entire stack, not just the
+sealed portion. In fact, we support temporal stack safety, in which values left behind
+by previous activations are also inaccessible. In this case, we connect temporal safety
+firmly to the caller-callee attacker model -- {\tt f} stored some data in the variables
+{\tt y} and {\tt z}, used it, then deallocated them by moving the stack pointer.
+After the stack pointer is written over {\tt y}, the value of {\tt z} is still
+left behind. Then {\tt g} can read it just by allocating and accessing an uninitialized
+variable!
+
+\paragraph*{Control Flow and Awkward Examples}
+
+\begin{figure}
+  \centering
+  \begin{subfigure}[t]{.4\textwidth}
+\begin{verbatim}
+int stash = 0;
+
+int main() {
+0:     int x = 1;
+1[C]:  f();
+2:     x = -x;
+3[C]:  f();
+4[R]:  return x;
+}
+
+void f() {
+10:     if(!stash) {
+        // store return pointer
+11:       stash = $SP-1;
+12:     } else {
+13:       $SP-1 = stash;
+14:       stash = 0;
+15[R]:    return;
+        }
+}
+\end{verbatim}
+  \end{subfigure}
+\label{fig:WBCF1}
+  \begin{subfigure}[t]{.4\textwidth}
+\begin{verbatim}
+int stash = 0;
+
+int main() {
+0:     int x = 1;
+1[C]:  f();
+2:     x = -x;
+3[R]:  return x;
+}
+
+void f() {
+10:     if(!stash) {
+        // store return pointer
+11:       stash = $SP-1;
+12[C]     main();
+12:     } else {
+13:       $SP-1 = stash;
+14:       stash = 0;
+15[R]:    return;
+        }
+}
+\end{verbatim}
+\label{fig:WBCF2}
+  \end{subfigure}
+  \caption{Control Flow Attacks}
+  \label{fig:WBCF}
+\end{figure}
+
+Example \ref{fig:WBCF1} shows how control flow attacks can compromise integrity in principle
+even when the attacker obeys LSE. In this case, the attacker hides a return pointer in a
+global variable and retrieves it the second time it is called, returning to the first call
+point rather than the second. A return was performed, so {\tt x} is no longer sealed, but
+line {\tt 2} is executed twice, so that {\tt main} returns 1 instead of -1.
+
+To prevent this, we define Well-bracketed Control Flow. Throughout the above examples, we
+have implicitly tracked the depth of the current call in order to seal memory at the correct
+depth. We also have a clear sense of where the entry points to functions are -- the top line,
+in our examples, and another instruction annotation in practice. Well-bracketed Control Flow
+holds if:
+
+\begin{itemize}
+\item All calls jump to entry points ({\em entry integrity})
+\item The depth counter decreases by exactly one on a return ({\em non-skipping})
+\item From a call at depth \(d\), the next state to have depth \(d\) matches the stack pointer,
+  and the program counter is at the instruction following the jal ({\em return integrity})
+\end{itemize}
+
+Non-skipping comes into play for attacks such as seen in \ref{WBCF2}, where the calls are
+nested rather than sequential. \sna{The example isn't quite right; need to look at the
+  Towards Complete... paper again.}
+
+\sna{Put sharing example here, or after the formalism?}
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
