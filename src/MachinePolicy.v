@@ -316,6 +316,16 @@ Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState
   | _, _ => None
   end.
 
+Definition policyJalr (p : PolicyState) (pc : word) (rd rs : Z) : option PolicyState :=
+  match pctags p, map.get (memtags p) (word.unsigned pc), map.get (regtags p) rs with
+  | [Tpc _; Tr3], Some [Tinstr; Tr3], Some [Tpc old] =>
+    Some {| nextid := nextid p;
+            pctags := [Tpc old];
+            regtags := map.put (regtags p) rd [];
+            memtags := memtags p |}
+  | _, _, _ => None
+  end.
+
 Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : option PolicyState :=
   tinstr <- map.get (memtags p) (word.unsigned pc);
   let addr := word.unsigned rsdata + imm in
@@ -344,21 +354,22 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   | _ => None
   end.
 
-Definition policyStore (p : PolicyState) (pc rddata : word) (rs imm : Z) : option PolicyState :=
+Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
   tinstr <- map.get (memtags p) (word.unsigned pc);
   let addr := word.unsigned rddata + imm in
-  taddr <- map.get (memtags p) addr;
+  (* taddr <- map.get (memtags p) addr; *)
   let tpc := pctags p in
   trs <- map.get (regtags p) rs;
-  (* trd <- map.get (regtags p) rd; *)
+  taddr <- map.get (regtags p) rd;
   match tinstr with
   | [Tinstr] =>
-    (* TODO: Probably wrong, no writing on instruction memory! *)
+    (* TODO: Probably wrong, no writing on instruction memory!
+       Also relaxed in order for program to work: no stack-indexed writes? *)
     match tpc, existsb (tag_eqb Tsp) taddr, trs with
-    | [Tpc depth], false, [] => Some  {| nextid := nextid p;
-                                         pctags := pctags p;
-                                         regtags := regtags p;
-                                         memtags := map.put (memtags p) addr [Tstack depth] |}
+    | [Tpc depth], (*false*)_, [] => Some {| nextid := nextid p;
+                                             pctags := pctags p;
+                                             regtags := regtags p;
+                                             memtags := map.put (memtags p) addr [Tstack depth] |}
     | _, _, _ => None
     end
   | [Tinstr; Th1] =>
@@ -394,13 +405,16 @@ Definition mpstep (mp : MPState) : option (MPState * Observation) :=
     (* ts' <- map.get p (word.unsigned pc'); *)
     (* List.find (tag_eqb calleeTag) ts';; *)
     mpstep_wrap (m, p') (* TODO: Refactor, clean function interface *)
+  | IInstruction (Jalr rd rs imm) =>
+    p' <- policyJalr p pc rd rs (*imm*);
+    mpstep_wrap (m, p')
   | IInstruction (Lw rd rs imm) =>
     rsdata <- map.get (getRegs m) rs;
     p' <- policyLoad p pc rsdata rd rs imm;
     mpstep_wrap (m, p')
   | IInstruction (Sw rd rs imm) =>
     rddata <- map.get (getRegs m) rd;
-    p' <- policyStore p pc rddata (*rd*) rs imm;
+    p' <- policyStore p pc rddata rd rs imm;
     mpstep_wrap (m, p')
   | _ => mpstep_wrap mp
   end.
