@@ -96,12 +96,13 @@ Definition fib_pump_bad : list (list Tag) :=
   [instrTags; callTags; instrTags; h1Tags] ++ repeat instrTags 17.
 
 Definition fib_pump : list (list Tag) :=
-  [instrTags; callTags; instrTags; h1Tags]
-    ++ repeat instrTags 5
+  [instrTags; callTags; instrTags; h1Tags; h2Tags]
+    ++ repeat instrTags 4
     ++ [callTags]
     ++ repeat instrTags 3
     ++ [callTags]
-    ++ repeat instrTags 7.
+    ++ repeat instrTags 4
+    ++ [r1Tags; r2Tags; r3Tags].
 
 Goal False.
   (* We can get the memory dump as before *)

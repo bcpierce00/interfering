@@ -218,7 +218,8 @@ Inductive Tag : Type :=
 | Tr1
 | Tr2
 | Tr3
-| Tsp (n : nat)
+| Tsp
+| Tstack (n : nat)
 .
 
 Definition tag_eqb (t1 t2 :  Tag) : bool :=
@@ -229,11 +230,15 @@ Definition tag_eqb (t1 t2 :  Tag) : bool :=
   | Tinstr, Tinstr
   | Tr1, Tr1
   | Tr2, Tr2
-  | Tr3, Tr3 => true
+  | Tr3, Tr3
+  | Tsp, Tsp => true
   | Tpc n1, Tpc n2
-  | Tsp n1, Tsp n2 => Nat.eqb n1 n2
+  | Tstack n1, Tstack n2 => Nat.eqb n1 n2
   | _, _ => false
   end.
+
+Definition tag_neqb (t1 t2 :  Tag) : bool :=
+  negb (tag_eqb t1 t2).
 
 Definition calleeTag : Tag := Th1.
 
