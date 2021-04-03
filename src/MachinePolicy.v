@@ -13,6 +13,7 @@ Require Import riscv.Platform.Minimal.
 Require Import riscv.Platform.MinimalLogging.
 Require Import riscv.Platform.Run.
 Require Import riscv.Utility.Monads.
+Require Import riscv.Utility.MonadNotations.
 Require Import riscv.Utility.MkMachineWidth.
 Require Import coqutil.Map.Interface.
 Require Import coqutil.Word.LittleEndian.
@@ -257,25 +258,16 @@ Definition mpstep (mp : MPState) : option (MPState * Observation) :=
   let m := ms mp in
   let p := ps mp in
   let pc := getPc m in
-  match loadWord (getMem m) pc, map.get p (word.unsigned pc) with
-  | Some w, Some _ =>
-    (* Forbid [J] instructions unless allowed by the policy *)
-    match decode RV32IM (LittleEndian.combine 4 w) with
-    | IInstruction (Jal _ addr) =>
-      let pc' := word.add (ZToReg addr) pc in
-      match map.get p (word.unsigned pc') with
-      | Some ts' =>
-        match List.find (tag_eqb calleeTag) ts' with
-        | Some _ => mpstep_wrap mp
-        | None => None
-        end
-      | _ => None
-      end
-    | _ => mpstep_wrap mp
-    end
-  | _, _ => None
-  end
-.
+  w <- loadWord (getMem m) pc;
+  map.get p (word.unsigned pc);;
+  match decode RV32IM (LittleEndian.combine 4 w) with
+  | IInstruction (Jal _ addr) => (* Forbid [J] instructions unless allowed by the policy *)
+    let pc' := word.add (ZToReg addr) pc in
+    ts' <- map.get p (word.unsigned pc');
+    List.find (tag_eqb calleeTag) ts';;
+    mpstep_wrap mp
+  | _ => mpstep_wrap mp
+  end.
 
 Axiom mpstepCompat :
   forall m p o m' p',
