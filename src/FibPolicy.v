@@ -51,6 +51,9 @@ Goal False.
   (* decoder seems to work :) *)
 Abort.
 
+Let stack_init : Z := 100.
+Let data_words : nat := 32.
+
 (* Writing programs more abstractly *)
 Let RARG : Z := 19.
 Let RRES : Z := 18.
@@ -91,6 +94,8 @@ Let r1Tags    := [Tinstr; Tr1].
 Let r2Tags    := [Tinstr; Tr2].
 Let r3Tags    := [Tinstr; Tr3].
 
+Let initDataTags := [Tstack 0].
+
 (* TODO: Better done in terms of call maps, etc., jointly with program *)
 Definition fib_pump_bad : list (list Tag) :=
   [instrTags; callTags; instrTags; h1Tags] ++ repeat instrTags 17.
@@ -102,7 +107,8 @@ Definition fib_pump : list (list Tag) :=
     ++ repeat instrTags 3
     ++ [callTags]
     ++ repeat instrTags 4
-    ++ [r1Tags; r2Tags; r3Tags].
+    ++ [r1Tags; r2Tags; r3Tags]
+    ++ repeat initDataTags 32.
 
 Goal False.
   (* We can get the memory dump as before *)
@@ -112,9 +118,6 @@ Goal False.
   set (l' := map (decode RV32IM) (map unsigned l)).
   cbv in l'.
 Abort.
-
-Let stack_init : Z := 100.
-Let data_words : nat := 32.
 
 (* This example uses the memory only as instruction memory
    TODO make an example which uses memory to store data *)
@@ -145,7 +148,9 @@ Definition initialMemTags(tags: list (list Tag)): TagMap :=
 Definition initialPumpPolicy(tags: list (list Tag)): PolicyState :=
   {| nextid := 0;
      pctags := [Tpc 0];
-     regtags := map.empty; (* FIXME: register (and data memory) tags *)
+     regtags := map.put
+                  (map.of_list (combine (map Z.of_nat (seq 0 32)) (repeat [] 32)))
+                  SP [Tsp];
      memtags := initialMemTags tags |}.
 
 (* success flag * final state *)
