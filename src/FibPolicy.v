@@ -145,7 +145,7 @@ Definition initialMemTags(tags: list (list Tag)): TagMap :=
 Definition initialPumpPolicy(tags: list (list Tag)): PolicyState :=
   {| nextid := 0;
      pctags := [Tpc 0];
-     regtags := map.empty;
+     regtags := map.empty; (* FIXME: register (and data memory) tags *)
      memtags := initialMemTags tags |}.
 
 (* success flag * final state *)

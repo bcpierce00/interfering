@@ -272,15 +272,104 @@ Definition mpstep_wrap (mp : MPState) : option (MPState * Observation) :=
 (* Definition callTags := [Tinstr; Tcall]. *)
 
 (* TODO: Use [RecordUpdate], monadic syntax *)
+Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
+  tinstr <- map.get (memtags p) (word.unsigned pc);
+  let tpc := pctags p in
+  trs <- map.get (regtags p) rs;
+  trd <- map.get (regtags p) rd;
+  match tinstr with
+  | [Tinstr] =>
+    match forallb (tag_neqb Tsp) trs, forallb (tag_neqb Tsp) trd with
+    | true, true => Some {| nextid := nextid p;
+                            pctags := tpc;
+                            regtags := map.put (regtags p) rd [];
+                            memtags := memtags p |}
+    | _, _ => None
+    end
+  | [Tinstr; Th2] =>
+    match existsb (tag_eqb Th2) tpc, trs with
+    | true, [Tsp] => Some {| nextid := nextid p;
+                             pctags := filter (tag_neqb Th2) tpc;
+                             regtags := map.put (regtags p) rd [Tsp];
+                             memtags := memtags p |}
+    | _, _ => None
+    end
+  | [Tinstr; Tr2] =>
+    match existsb (tag_eqb Tr2) tpc, trs with
+    | true, [Tsp] => Some {| nextid := nextid p;
+                             pctags := filter (tag_neqb Tr2) tpc ++ [Tr3];
+                             regtags := map.put (regtags p) rd [Tsp];
+                             memtags := memtags p |}
+    | _, _ => None
+    end
+  | _ => None
+  end.
+
 Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState :=
   match pctags p, map.get (memtags p) (word.unsigned pc) with
   | [Tpc old], Some [Tinstr; Tcall] =>
     let newid := S (nextid p) in
     Some {| nextid := newid;
-            pctags := [Tpc newid(*; Th1*)];
+            pctags := [Tpc newid; Th1];
             regtags := map.put (regtags p) rd [Tpc old];
             memtags := memtags p |}
   | _, _ => None
+  end.
+
+Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : option PolicyState :=
+  tinstr <- map.get (memtags p) (word.unsigned pc);
+  let addr := word.unsigned rsdata + imm in
+  taddr <- map.get (memtags p) addr;
+  let tpc := pctags p in
+  trs <- map.get (regtags p) rs;
+  match tinstr with
+  | [Tinstr] =>
+    match tpc, taddr with
+    | [Tpc pcdepth], [Tstack memdepth] =>
+      if Nat.leb pcdepth memdepth then Some {| nextid := nextid p;
+                                               pctags := pctags p;
+                                               regtags := map.put (regtags p) rd [];
+                                               memtags := memtags p |}
+      else None
+    | _, _ => None
+    end
+  | [Tinstr; Tr1] =>
+    match trs, taddr with
+    | [Tsp], [Tpc _] => Some {| nextid := nextid p;
+                                pctags := pctags p ++ [Tr2];
+                                regtags := map.put (regtags p) rd taddr;
+                                memtags := memtags p |}
+    | _, _ => None
+    end
+  | _ => None
+  end.
+
+Definition policyStore (p : PolicyState) (pc rddata : word) (rs imm : Z) : option PolicyState :=
+  tinstr <- map.get (memtags p) (word.unsigned pc);
+  let addr := word.unsigned rddata + imm in
+  taddr <- map.get (memtags p) addr;
+  let tpc := pctags p in
+  trs <- map.get (regtags p) rs;
+  (* trd <- map.get (regtags p) rd; *)
+  match tinstr with
+  | [Tinstr] =>
+    (* TODO: Probably wrong, no writing on instruction memory! *)
+    match tpc, existsb (tag_eqb Tsp) taddr, trs with
+    | [Tpc depth], false, [] => Some  {| nextid := nextid p;
+                                         pctags := pctags p;
+                                         regtags := regtags p;
+                                         memtags := map.put (memtags p) addr [Tstack depth] |}
+    | _, _, _ => None
+    end
+  | [Tinstr; Th1] =>
+    match existsb (tag_eqb Th1) tpc, trs, taddr with
+    | true, [Tpc depth], [Tsp] => Some {| nextid := nextid p;
+                                          pctags := filter (tag_neqb Th1) tpc ++ [Th2];
+                                          regtags := regtags p;
+                                          memtags := map.put (memtags p) addr [Tpc depth] |}
+    | _, _, _ => None
+    end
+  | _ => None
   end.
 
 Definition pstep (p : PolicyState) (pc : word) (instr : Instruction) : option PolicyState :=
@@ -289,18 +378,30 @@ Definition pstep (p : PolicyState) (pc : word) (instr : Instruction) : option Po
     policyJal p pc rd
   | _ => Some p
   end.
+
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
   let '(m, p) := mp in
   let pc := getPc m in
   w <- loadWord (getMem m) pc;
   (* map.get p (word.unsigned pc);; *)
   match decode RV32IM (LittleEndian.combine 4 w) with
-  | IInstruction (Jal rd jimm) =>
+  | IInstruction (Addi rd rs imm) =>
+    p' <- policyImmArith p pc rd rs (*imm*);
+    mpstep_wrap (m, p')
+  | IInstruction (Jal rd imm) =>
     p' <- policyJal p pc rd;
-    (* let pc' := word.add (ZToReg jimm) pc in *)
+    (* let pc' := word.add (ZToReg imm) pc in *)
     (* ts' <- map.get p (word.unsigned pc'); *)
     (* List.find (tag_eqb calleeTag) ts';; *)
     mpstep_wrap (m, p') (* TODO: Refactor, clean function interface *)
+  | IInstruction (Lw rd rs imm) =>
+    rsdata <- map.get (getRegs m) rs;
+    p' <- policyLoad p pc rsdata rd rs imm;
+    mpstep_wrap (m, p')
+  | IInstruction (Sw rd rs imm) =>
+    rddata <- map.get (getRegs m) rd;
+    p' <- policyStore p pc rddata (*rd*) rs imm;
+    mpstep_wrap (m, p')
   | _ => mpstep_wrap mp
   end.
 
