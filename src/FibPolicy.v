@@ -92,8 +92,16 @@ Let r2Tags    := [Tinstr; Tr2].
 Let r3Tags    := [Tinstr; Tr3].
 
 (* TODO: Better done in terms of call maps, etc., jointly with program *)
-Definition fib_pump : list (list Tag) :=
+Definition fib_pump_bad : list (list Tag) :=
   [instrTags; callTags; instrTags; h1Tags] ++ repeat instrTags 17.
+
+Definition fib_pump : list (list Tag) :=
+  [instrTags; callTags; instrTags; h1Tags]
+    ++ repeat instrTags 5
+    ++ [callTags]
+    ++ repeat instrTags 3
+    ++ [callTags]
+    ++ repeat instrTags 7.
 
 Goal False.
   (* We can get the memory dump as before *)
@@ -123,15 +131,21 @@ Definition initialRiscvMachine(insts: list Instruction): RiscvMachine :=
   let imem := map unsigned words in
   putProgram imem (ZToReg 0) zeroedRiscvMachine.
 
-Definition initialPumpPolicy(tags: list (list Tag)): PolicyState :=
-  let fix aux (tags: list (list Tag)) (acc: Z * PolicyState) : PolicyState :=
-      let '(addr, pol) := acc in
+Definition initialMemTags(tags: list (list Tag)): TagMap :=
+  let fix aux (tags: list (list Tag)) (acc: Z * TagMap) : TagMap :=
+      let '(addr, tagmap) := acc in
       match tags with
-      | [] => pol
-      | tagset :: tags' => aux tags' (addr + 4, map.put pol addr tagset)
+      | [] => tagmap
+      | tagset :: tags' => aux tags' (addr + 4, map.put tagmap addr tagset)
       end
   in
   aux tags (0, map.empty).
+
+Definition initialPumpPolicy(tags: list (list Tag)): PolicyState :=
+  {| nextid := 0;
+     pctags := [Tpc 0];
+     regtags := map.empty;
+     memtags := initialMemTags tags |}.
 
 (* success flag * final state *)
 Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observation) : (list Observation * RiscvMachine * PolicyState * bool) :=
@@ -144,6 +158,6 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-Compute (run 310 (initialRiscvMachine (fib_riscv 6)) map.empty nil). (* can't jump *)
+Compute (run 310 (initialRiscvMachine (fib_riscv 6)) (initialPumpPolicy fib_pump_bad) nil). (* can't jump *)
 Compute (run 310 (initialRiscvMachine (fib_riscv 6)) (initialPumpPolicy fib_pump) nil).
 (* reg 18 *)

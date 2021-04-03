@@ -1,3 +1,6 @@
+Require Import Coq.Lists.List.
+Import List.ListNotations.
+
 From StackSafety Require Import Trace.
 
 Require Import coqutil.Word.Naive.
@@ -230,13 +233,21 @@ Definition tag_eqb (t1 t2 :  Tag) : bool :=
   | Tpc n1, Tpc n2
   | Tsp n1, Tsp n2 => Nat.eqb n1 n2
   | _, _ => false
-  end
-.
+  end.
 
 Definition calleeTag : Tag := Th1.
 
+Definition TagSet : Type := list Tag.
+Definition TagMap : Type := Zkeyed_map TagSet.
+
 (* Map of memory tags *)
-Definition PolicyState : Type := Zkeyed_map (list Tag).
+Record PolicyState : Type :=
+  {
+  nextid: nat;
+  pctags: TagSet;
+  regtags: TagMap;
+  memtags: TagMap;
+  }.
 
 (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.
@@ -253,19 +264,38 @@ Definition mpstep_wrap (mp : MPState) : option (MPState * Observation) :=
   end
 .
 
+(* Definition callTags := [Tinstr; Tcall]. *)
+
+(* TODO: Use [RecordUpdate], monadic syntax *)
+Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState :=
+  match pctags p, map.get (memtags p) (word.unsigned pc) with
+  | [Tpc old], Some [Tinstr; Tcall] =>
+    let newid := S (nextid p) in
+    Some {| nextid := newid;
+            pctags := [Tpc newid(*; Th1*)];
+            regtags := map.put (regtags p) rd [Tpc old];
+            memtags := memtags p |}
+  | _, _ => None
+  end.
+
+Definition pstep (p : PolicyState) (pc : word) (instr : Instruction) : option PolicyState :=
+  match instr with
+  | IInstruction (Jal rd jimm) =>
+    policyJal p pc rd
+  | _ => Some p
+  end.
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
-  (* Case analysis on instructions *)
-  let m := ms mp in
-  let p := ps mp in
+  let '(m, p) := mp in
   let pc := getPc m in
   w <- loadWord (getMem m) pc;
-  map.get p (word.unsigned pc);;
+  (* map.get p (word.unsigned pc);; *)
   match decode RV32IM (LittleEndian.combine 4 w) with
-  | IInstruction (Jal _ addr) => (* Forbid [J] instructions unless allowed by the policy *)
-    let pc' := word.add (ZToReg addr) pc in
-    ts' <- map.get p (word.unsigned pc');
-    List.find (tag_eqb calleeTag) ts';;
-    mpstep_wrap mp
+  | IInstruction (Jal rd jimm) =>
+    p' <- policyJal p pc rd;
+    (* let pc' := word.add (ZToReg jimm) pc in *)
+    (* ts' <- map.get p (word.unsigned pc'); *)
+    (* List.find (tag_eqb calleeTag) ts';; *)
+    mpstep_wrap (m, p') (* TODO: Refactor, clean function interface *)
   | _ => mpstep_wrap mp
   end.
 
@@ -328,8 +358,9 @@ Qed.
 Lemma MPTraceOfHead: forall mp, mp = head (MPTraceOf mp).
 Proof.
   intros. destruct mp.  simpl. 
-  destruct (mpstep (m,p)); auto; destruct p0; auto.
-Qed.
+  (* destruct (mpstep (m,p)); auto; destruct p0; auto. *)
+(* Qed. *)
+Abort. (* FIXME *)
 
 (* ******************* Trace stuff ********************* *)
 
