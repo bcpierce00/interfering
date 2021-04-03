@@ -205,8 +205,37 @@ Require Import Lia.
   Qed.
 
 (* TODO: More interesting state/abstract *)
-(* List of allowed call sites *)
-Definition PolicyState : Type := list word.
+Inductive Tag : Type :=
+| Tcall
+| Th1
+| Th2
+| Tinstr
+| Tpc (n : nat)
+| Tr1
+| Tr2
+| Tr3
+| Tsp (n : nat)
+.
+
+Definition tag_eqb (t1 t2 :  Tag) : bool :=
+  match t1, t2 with
+  | Tcall, Tcall
+  | Th1, Th1
+  | Th2, Th2
+  | Tinstr, Tinstr
+  | Tr1, Tr1
+  | Tr2, Tr2
+  | Tr3, Tr3 => true
+  | Tpc n1, Tpc n2
+  | Tsp n1, Tsp n2 => Nat.eqb n1 n2
+  | _, _ => false
+  end
+.
+
+Definition calleeTag : Tag := Th1.
+
+(* Map of memory tags *)
+Definition PolicyState : Type := Zkeyed_map (list Tag).
 
 (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.
@@ -226,19 +255,25 @@ Definition mpstep_wrap (mp : MPState) : option (MPState * Observation) :=
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
   (* Case analysis on instructions *)
   let m := ms mp in
+  let p := ps mp in
   let pc := getPc m in
-  match loadWord (getMem m) pc with
-  | Some w =>
+  match loadWord (getMem m) pc, map.get p (word.unsigned pc) with
+  | Some w, Some _ =>
     (* Forbid [J] instructions unless allowed by the policy *)
     match decode RV32IM (LittleEndian.combine 4 w) with
     | IInstruction (Jal _ addr) =>
-      match List.find (reg_eqb (word.add (ZToReg addr) pc)) (ps mp) with
-      | Some _ => mpstep_wrap mp
-      | None => None
+      let pc' := word.add (ZToReg addr) pc in
+      match map.get p (word.unsigned pc') with
+      | Some ts' =>
+        match List.find (tag_eqb calleeTag) ts' with
+        | Some _ => mpstep_wrap mp
+        | None => None
+        end
+      | _ => None
       end
     | _ => mpstep_wrap mp
     end
-  | None => None
+  | _, _ => None
   end
 .
 

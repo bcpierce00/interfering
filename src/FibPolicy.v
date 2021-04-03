@@ -83,6 +83,18 @@ Definition fib_riscv (n : Z) : list Instruction :=
   IInstruction (Jalr RA RA 0)] (* R3 *)
 .
 
+Let instrTags := [Tinstr].
+Let callTags  := [Tinstr; Tcall].
+Let h1Tags    := [Tinstr; Th1].
+Let h2Tags    := [Tinstr; Th2].
+Let r1Tags    := [Tinstr; Tr1].
+Let r2Tags    := [Tinstr; Tr2].
+Let r3Tags    := [Tinstr; Tr3].
+
+(* TODO: Better done in terms of call maps, etc., jointly with program *)
+Definition fib_pump : list (list Tag) :=
+  [instrTags; callTags; instrTags; h1Tags] ++ repeat instrTags 17.
+
 Goal False.
   (* We can get the memory dump as before *)
   set (l := map ZToReg (map encode (fib_riscv 6))).
@@ -111,6 +123,16 @@ Definition initialRiscvMachine(insts: list Instruction): RiscvMachine :=
   let imem := map unsigned words in
   putProgram imem (ZToReg 0) zeroedRiscvMachine.
 
+Definition initialPumpPolicy(tags: list (list Tag)): PolicyState :=
+  let fix aux (tags: list (list Tag)) (acc: Z * PolicyState) : PolicyState :=
+      let '(addr, pol) := acc in
+      match tags with
+      | [] => pol
+      | tagset :: tags' => aux tags' (addr + 4, map.put pol addr tagset)
+      end
+  in
+  aux tags (0, map.empty).
+
 (* success flag * final state *)
 Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observation) : (list Observation * RiscvMachine * PolicyState * bool) :=
   match fuel with
@@ -122,6 +144,6 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-Compute (run 310 (initialRiscvMachine (fib_riscv 6)) [] nil). (* can't jump *)
-Compute (run 310 (initialRiscvMachine (fib_riscv 6)) [ZToReg 12] nil).
+Compute (run 310 (initialRiscvMachine (fib_riscv 6)) map.empty nil). (* can't jump *)
+Compute (run 310 (initialRiscvMachine (fib_riscv 6)) (initialPumpPolicy fib_pump) nil).
 (* reg 18 *)
