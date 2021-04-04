@@ -28,6 +28,9 @@ Require coqutil.Map.SortedList.
 
 Require Import Lia.
 
+From RecordUpdate Require Import RecordSet.
+Import RecordSetNotations.
+
   Definition Word := MachineInt.
   (* Parameter Word *)
 
@@ -254,6 +257,9 @@ Record PolicyState : Type :=
   memtags: TagMap;
   }.
 
+Instance etaPolicyState : Settable _ :=
+  settable! Build_PolicyState <nextid; pctags; regtags; memtags>.
+
 (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.
 Definition ms (mp : MPState) := fst mp.
@@ -271,7 +277,7 @@ Definition mpstep_wrap (mp : MPState) : option (MPState * Observation) :=
 
 (* Definition callTags := [Tinstr; Tcall]. *)
 
-(* TODO: Use [RecordUpdate], monadic syntax *)
+(* TODO: Monadic syntax *)
 Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
   tinstr <- map.get (memtags p) (word.unsigned pc);
   let tpc := pctags p in
@@ -280,26 +286,19 @@ Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : op
   match tinstr with
   | [Tinstr] =>
     match forallb (tag_neqb Tsp) trs, forallb (tag_neqb Tsp) trd with
-    | true, true => Some {| nextid := nextid p;
-                            pctags := tpc;
-                            regtags := map.put (regtags p) rd [];
-                            memtags := memtags p |}
+    | true, true => Some (p <| regtags := map.put (regtags p) rd [] |>)
     | _, _ => None
     end
   | [Tinstr; Th2] =>
     match existsb (tag_eqb Th2) tpc, trs with
-    | true, [Tsp] => Some {| nextid := nextid p;
-                             pctags := filter (tag_neqb Th2) tpc;
-                             regtags := map.put (regtags p) rd [Tsp];
-                             memtags := memtags p |}
+    | true, [Tsp] => Some (p <| pctags := filter (tag_neqb Th2) tpc |>
+                             <| regtags := map.put (regtags p) rd [Tsp] |>)
     | _, _ => None
     end
   | [Tinstr; Tr2] =>
     match existsb (tag_eqb Tr2) tpc, trs with
-    | true, [Tsp] => Some {| nextid := nextid p;
-                             pctags := filter (tag_neqb Tr2) tpc ++ [Tr3];
-                             regtags := map.put (regtags p) rd [Tsp];
-                             memtags := memtags p |}
+    | true, [Tsp] => Some (p <| pctags := filter (tag_neqb Tr2) tpc ++ [Tr3] |>
+                             <| regtags := map.put (regtags p) rd [Tsp] |>)
     | _, _ => None
     end
   | _ => None
@@ -308,21 +307,18 @@ Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : op
 Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState :=
   match pctags p, map.get (memtags p) (word.unsigned pc) with
   | [Tpc old], Some [Tinstr; Tcall] =>
-    let newid := S (nextid p) in
-    Some {| nextid := newid;
-            pctags := [Tpc newid; Th1];
-            regtags := map.put (regtags p) rd [Tpc old];
-            memtags := memtags p |}
+    let newid := S (nextid p) in (* TODO: This is not next but last! *)
+    Some (p <| nextid := newid |>
+            <| pctags := [Tpc newid; Th1] |>
+            <| regtags := map.put (regtags p) rd [Tpc old] |>)
   | _, _ => None
   end.
 
 Definition policyJalr (p : PolicyState) (pc : word) (rd rs : Z) : option PolicyState :=
   match pctags p, map.get (memtags p) (word.unsigned pc), map.get (regtags p) rs with
   | [Tpc _; Tr3], Some [Tinstr; Tr3], Some [Tpc old] =>
-    Some {| nextid := nextid p;
-            pctags := [Tpc old];
-            regtags := map.put (regtags p) rd [];
-            memtags := memtags p |}
+    Some (p <| pctags := [Tpc old] |>
+            <| regtags := map.put (regtags p) rd [] |>)
   | _, _, _ => None
   end.
 
@@ -336,19 +332,14 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   | [Tinstr] =>
     match tpc, taddr with
     | [Tpc pcdepth], [Tstack memdepth] =>
-      if Nat.leb pcdepth memdepth then Some {| nextid := nextid p;
-                                               pctags := pctags p;
-                                               regtags := map.put (regtags p) rd [];
-                                               memtags := memtags p |}
+      if Nat.leb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
       else None
     | _, _ => None
     end
   | [Tinstr; Tr1] =>
     match trs, taddr with
-    | [Tsp], [Tpc _] => Some {| nextid := nextid p;
-                                pctags := pctags p ++ [Tr2];
-                                regtags := map.put (regtags p) rd taddr;
-                                memtags := memtags p |}
+    | [Tsp], [Tpc _] => Some (p <| pctags := pctags p ++ [Tr2] |>
+                                <| regtags := map.put (regtags p) rd taddr |>)
     | _, _ => None
     end
   | _ => None
@@ -366,18 +357,13 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
     (* TODO: Probably wrong, no writing on instruction memory!
        Also relaxed in order for program to work: no stack-indexed writes? *)
     match tpc, existsb (tag_eqb Tsp) taddr, trs with
-    | [Tpc depth], (*false*)_, [] => Some {| nextid := nextid p;
-                                             pctags := pctags p;
-                                             regtags := regtags p;
-                                             memtags := map.put (memtags p) addr [Tstack depth] |}
+    | [Tpc depth], (*false*)_, [] => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
     | _, _, _ => None
     end
   | [Tinstr; Th1] =>
     match existsb (tag_eqb Th1) tpc, trs, taddr with
-    | true, [Tpc depth], [Tsp] => Some {| nextid := nextid p;
-                                          pctags := filter (tag_neqb Th1) tpc ++ [Th2];
-                                          regtags := regtags p;
-                                          memtags := map.put (memtags p) addr [Tpc depth] |}
+    | true, [Tpc depth], [Tsp] => Some (p <| pctags := filter (tag_neqb Th1) tpc ++ [Th2] |>
+                                          <| memtags := map.put (memtags p) addr [Tpc depth] |>)
     | _, _, _ => None
     end
   | _ => None
