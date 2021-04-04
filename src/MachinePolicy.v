@@ -342,17 +342,16 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
 Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
   tinstr <- map.get (memtags p) (word.unsigned pc);
   let addr := word.unsigned rddata + imm in
-  (* taddr <- map.get (memtags p) addr; *)
+  tmem <- map.get (memtags p) addr;
   let tpc := pctags p in
   trs <- map.get (regtags p) rs;
   taddr <- map.get (regtags p) rd;
   match tinstr with
   | [Tinstr] =>
-    (* TODO: Probably wrong, no writing on instruction memory!
-       Also relaxed in order for program to work: no stack-indexed writes? *)
-    match tpc, existsb (tag_eqb Tsp) taddr, trs with
-    | [Tpc depth], (*false*)_, [] => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
-    | _, _, _ => None
+    (* TODO: Relaxed in order for program to work: no stack-indexed writes? *)
+    match tpc, existsb (tag_eqb Tsp) taddr, trs, existsb (tag_eqb Tinstr) tmem with
+    | [Tpc depth], (*false*)_, [], false => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
+    | _, _, _, _ => None
     end
   | [Tinstr; Th1] =>
     match existsb (tag_eqb Th1) tpc, trs, taddr with
