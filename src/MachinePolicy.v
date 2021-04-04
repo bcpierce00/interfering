@@ -268,12 +268,6 @@ Definition ps (mp : MPState) := snd mp.
 (* TODO: Real policy. *)
 (* ...
    TODO: Use [MonadNotations] *)
-(* Step as usual *)
-Definition mpstep_wrap (mp : MPState) : option (MPState * Observation) :=
-  match step (ms mp) with
-  | (m', o) => Some (m', ps mp, o)
-  end
-.
 
 (* Definition callTags := [Tinstr; Tcall]. *)
 
@@ -369,41 +363,36 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
   | _ => None
   end.
 
-Definition pstep (p : PolicyState) (pc : word) (instr : Instruction) : option PolicyState :=
-  match instr with
-  | IInstruction (Jal rd jimm) =>
-    policyJal p pc rd
-  | _ => Some p
-  end.
-
-Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+Definition pstep (mp : MPState) : option PolicyState :=
   let '(m, p) := mp in
   let pc := getPc m in
   w <- loadWord (getMem m) pc;
   (* map.get p (word.unsigned pc);; *)
   match decode RV32IM (LittleEndian.combine 4 w) with
   | IInstruction (Addi rd rs imm) =>
-    p' <- policyImmArith p pc rd rs (*imm*);
-    mpstep_wrap (m, p')
+    policyImmArith p pc rd rs (*imm*)
   | IInstruction (Jal rd imm) =>
-    p' <- policyJal p pc rd;
+    policyJal p pc rd
     (* let pc' := word.add (ZToReg imm) pc in *)
     (* ts' <- map.get p (word.unsigned pc'); *)
     (* List.find (tag_eqb calleeTag) ts';; *)
-    mpstep_wrap (m, p') (* TODO: Refactor, clean function interface *)
   | IInstruction (Jalr rd rs imm) =>
-    p' <- policyJalr p pc rd rs (*imm*);
-    mpstep_wrap (m, p')
+    policyJalr p pc rd rs (*imm*)
   | IInstruction (Lw rd rs imm) =>
     rsdata <- map.get (getRegs m) rs;
-    p' <- policyLoad p pc rsdata rd rs imm;
-    mpstep_wrap (m, p')
+    policyLoad p pc rsdata rd rs imm
   | IInstruction (Sw rd rs imm) =>
     rddata <- map.get (getRegs m) rd;
-    p' <- policyStore p pc rddata rd rs imm;
-    mpstep_wrap (m, p')
-  | _ => mpstep_wrap mp
+    policyStore p pc rddata rd rs imm
+  | _ => Some p
   end.
+
+Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  p' <- pstep mp;
+  match step (ms mp) with
+  | (m', o) => Some (m', p', o)
+  end
+.
 
 Axiom mpstepCompat :
   forall m p o m' p',
