@@ -272,6 +272,25 @@ Definition ps (mp : MPState) := snd mp.
 (* Definition callTags := [Tinstr; Tcall]. *)
 
 (* TODO: Monadic syntax *)
+Definition policyArith (p : PolicyState) (pc : word) (rd rs1 rs2 : Z) : option PolicyState :=
+  tinstr <- map.get (memtags p) (word.unsigned pc);
+  trs1 <- map.get (regtags p) rs1;
+  trs2 <- map.get (regtags p) rs2;
+  trd <- map.get (regtags p) rd;
+  match tinstr, existsb (tag_eqb Tsp) trs1, existsb (tag_eqb Tsp) trs2, trd with
+  | [Tinstr], false, false, [] => Some p
+  | _, _, _, _ => None
+  end.
+
+Definition policyBranch (p : PolicyState) (pc : word) (rs1 rs2 : Z) : option PolicyState :=
+  tinstr <- map.get (memtags p) (word.unsigned pc);
+  trs1 <- map.get (regtags p) rs1;
+  trs2 <- map.get (regtags p) rs2;
+  match tinstr, existsb (tag_eqb Tsp) trs1, existsb (tag_eqb Tsp) trs2 with
+  | [Tinstr], false, false => Some p
+  | _, _, _ => None
+  end.
+
 Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
   tinstr <- map.get (memtags p) (word.unsigned pc);
   let tpc := pctags p in
@@ -309,11 +328,23 @@ Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState
   end.
 
 Definition policyJalr (p : PolicyState) (pc : word) (rd rs : Z) : option PolicyState :=
-  match pctags p, map.get (memtags p) (word.unsigned pc), map.get (regtags p) rs with
-  | [Tpc _; Tr3], Some [Tinstr; Tr3], Some [Tpc old] =>
-    Some (p <| pctags := [Tpc old] |>
-            <| regtags := map.put (regtags p) rd [] |>)
-  | _, _, _ => None
+  tinstr <- map.get (memtags p) (word.unsigned pc);
+  let tpc := pctags p in
+  ttarget <- map.get (regtags p) rs;
+  treturn <- map.get (regtags p) rd;
+  match tinstr with
+  | [Tinstr] =>
+    match tpc, ttarget, treturn with
+    | [Tpc _], [], [] => Some p
+    | _, _, _ => None
+    end
+  | [Tinstr; Tr3] =>
+    match tpc, ttarget with
+    | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
+                                         <| regtags := map.put (regtags p) rd [] |>)
+    | _, _ => None
+    end
+  | _ => None
   end.
 
 Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : option PolicyState :=
@@ -366,24 +397,53 @@ Definition pstep (mp : MPState) : option PolicyState :=
   let '(m, p) := mp in
   let pc := getPc m in
   w <- loadWord (getMem m) pc;
-  (* map.get p (word.unsigned pc);; *)
   match decode RV32IM (LittleEndian.combine 4 w) with
-  | IInstruction (Addi rd rs imm) =>
-    policyImmArith p pc rd rs (*imm*)
-  | IInstruction (Jal rd imm) =>
-    policyJal p pc rd
-    (* let pc' := word.add (ZToReg imm) pc in *)
-    (* ts' <- map.get p (word.unsigned pc'); *)
-    (* List.find (tag_eqb calleeTag) ts';; *)
-  | IInstruction (Jalr rd rs imm) =>
-    policyJalr p pc rd rs (*imm*)
-  | IInstruction (Lw rd rs imm) =>
-    rsdata <- map.get (getRegs m) rs;
-    policyLoad p pc rsdata rd rs imm
-  | IInstruction (Sw rd rs imm) =>
-    rddata <- map.get (getRegs m) rd;
-    policyStore p pc rddata rd rs imm
-  | _ => Some p
+  | IInstruction (Add rd rs1 rs2)
+  | IInstruction (Sub rd rs1 rs2)
+  | IInstruction (Sll rd rs1 rs2)
+  | IInstruction (Slt rd rs1 rs2)
+  | IInstruction (Sltu rd rs1 rs2)
+  | IInstruction (Xor rd rs1 rs2)
+  | IInstruction (Or rd rs1 rs2)
+  | IInstruction (Srl rd rs1 rs2)
+  | IInstruction (Sra rd rs1 rs2)
+  | IInstruction (And rd rs1 rs2)
+    => policyArith p pc rd rs1 rs2
+  | IInstruction (Beq rs1 rs2 _)
+  | IInstruction (Bne rs1 rs2 _)
+  | IInstruction (Blt rs1 rs2 _)
+  | IInstruction (Bge rs1 rs2 _)
+  | IInstruction (Bltu rs1 rs2 _)
+  | IInstruction (Bgeu rs1 rs2 _)
+    => policyBranch p pc rs1 rs2
+  | IInstruction (Addi rd rs _)
+  | IInstruction (Slti rd rs _)
+  | IInstruction (Sltiu rd rs _)
+  | IInstruction (Xori rd rs _)
+  | IInstruction (Ori rd rs _)
+  | IInstruction (Andi rd rs _)
+  | IInstruction (Slli rd rs _)
+  | IInstruction (Srli rd rs _)
+  | IInstruction (Srai rd rs _)
+    => policyImmArith p pc rd rs
+  | IInstruction (Jal rd _)
+    => policyJal p pc rd
+  | IInstruction (Jalr rd rs _)
+    => policyJalr p pc rd rs
+  | IInstruction (Lb rd rs imm)
+  | IInstruction (Lh rd rs imm)
+  | IInstruction (Lw rd rs imm)
+  | IInstruction (Lbu rd rs imm)
+  | IInstruction (Lhu rd rs imm)
+    => rsdata <- map.get (getRegs m) rs;
+       policyLoad p pc rsdata rd rs imm
+  | IInstruction (Sb rd rs imm)
+  | IInstruction (Sh rd rs imm)
+  | IInstruction (Sw rd rs imm)
+    => rddata <- map.get (getRegs m) rd;
+       policyStore p pc rddata rd rs imm
+  | _
+    => None
   end.
 
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
