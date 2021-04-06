@@ -822,10 +822,12 @@ It consists of a {\tt main} function that performs a call to a function {\tt f},
 which prints its argument, performs arithmetic, and returns a result.
 \Cref{fig:simple-trace} shows the stack as it is divided into domains throughout
 the program execution. We use high-level code for compactness, but reason about
-a standard compilation of each function. Line numbers correspond to the code
+a standard compilation of each function. \apt{Note assumption that arguments and return values are in registers.}
+Line numbers correspond to the code
 addresses just before the code that implements the line, and annotations
 {\tt C} and {\tt R} indicate that an instruction is annotated as a call or
 return, respectively.
+\apt{In trace, clarify difference between values (like 42,0) and line numbers (like 2).}
 
 We also assume that the machine is word- (not byte-) addressed and that the
 machine communicates with the outside world through a single memory-mapped
@@ -834,7 +836,7 @@ compiled to a store to this location), and that the stack grows upwards.
 
 In the initial memory layout the entire stack is currently {\em unsealed},
 meaning that it is eligible to be written to. At the call from {\tt main} to
-{\tt f}, {\tt main}'s locals (as designated by the stack pointer) are
+{\tt f}, {\tt main}'s locals (as designated \apt{``delimited''? in any case, how?} by the stack pointer) are
 {\em sealed} and labeled with the depth of their owner, in this case 0.
 Sealing is the fundamental integrity contract between the caller and callee:
 {\tt main} expects that {\tt x} and {\tt y} will be unchanged when it gets control back.
@@ -844,7 +846,8 @@ refers to the fact that the property must hold on every step. Later we will
 loosen this condition in the interest of extensionality -- the caller only
 cares about changes it can see after the return, not changes during execution.
 
-Suppose we insert an instruction after line 10, that stores 5 to the stack pointer - 1.
+Suppose we insert an instruction after line 10 that stores 5 to the stack pointer - 1.\apt{Actually, -2.
+  But this also raises the question of if/how return addresses are protected.}
 Then we would be changing {\tt y}, which is sealed, in violation of stepwise integrity.
 
 \begin{figure}
@@ -935,9 +938,9 @@ int f() {
 \end{figure}
 
 Meanwhile confidentiality intuitively states that the callee, {\tt f}, is unaware
-of the context of its call (with the exception, of course, of its arguments).
+of the context of its call (except, of course, for its arguments).
 We state this in a style similar to {\em noninterference}, a well-known concept in theoretical
-security. Noninterference describes knowledge: it states that for some component(s)
+security. Noninterference describes knowledge: it states that for some component(s)\apt{??}
 that we do not know, we can substitute any values whatsoever without changing the results
 of our computation. If there exists some value for which we see different results, then
 in fact we can learn something about the components by observing those results, violating
@@ -945,15 +948,16 @@ confidentiality.
 
 In example \ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
 by reading {\tt main}'s variable {\tt y}, which was not passed to it. The trace
-in figure \ref{fig:conf1-trace} shows how noninterference works. First, let \(a\),
+in figure \ref{fig:conf1-trace} shows how noninterference works. \apt{Is this right? what is d?}
+First, let \(a\),
 \(b\), and \(c\) be the unknown initial values at their locations. On entry to {\tt f}
 we again have 42 and 0 in {\tt x} and {\tt y}, and {\tt z} contains \(c\). We consider a
 {\em variant state} that replaces the values of components that should be secret with
 arbitrary values \(a'\), \(b'\), and \(c'\). After a step, we've copied 0 and \(c'\),
 respectively, into {\tt z}. Since {\tt z} changed value, for confidentiality to hold,
 its value should be the same in all variant states. But when \(c' \not = 0\), the
-states changes differently, which violates confidentiality. It would also be a violation
-to print the secret value.
+states change differently, which violates confidentiality. It would also be a violation
+to print the secret value.\apt{all this is not too clear.}
 
 This form of confidentiality we will term {\em lockstep confidentiality}, defined informally
 as: for any state at the entry to a function, for any variant over the values in the stack,
@@ -966,7 +970,7 @@ track which addresses may be read (i.e., which have been initialized), and at ea
 guarantee that the step alters state identically to a step from a variant state. Then we
 wouldn't need to divide up the execution by calls. But this is further from the normal
 framing of noninterference, requires explicitly tracking initializations, and would behave
-no differently relative to our policies.
+no differently relative to our policies.\apt{not very clear.}
 
 \begin{figure}
 
@@ -1062,10 +1066,11 @@ of stack confidentiality refers to a variation of the entire stack, not just the
 sealed portion. In fact, we support temporal stack safety, in which values left behind
 by previous activations are also inaccessible. In this case, we connect temporal safety
 firmly to the caller-callee attacker model -- {\tt f} stored some data in the variables
-{\tt y} and {\tt z}, used it, then deallocated them by moving the stack pointer.
+{\tt y} and {\tt z}, used it, then deallocated them by moving the stack pointer.\apt{Where is the storage for x ?.
+And need to explain what the colors mean.}
 After the stack pointer is written over {\tt y}, the value of {\tt z} is still
 left behind. Then {\tt g} can read it just by allocating and accessing an uninitialized
-variable!
+variable! \apt{Need to be more explicit about what is getting varied, when, and why.}
 
 \paragraph*{Control Flow and Awkward Examples}
 
@@ -1157,8 +1162,8 @@ call's return pointer, violating return integrity? Yet some weaker enforcement m
 such as those in which returns are implemented as invocation of a Cheri object capability,
 do allow skipping when adversarial code acts unreasonably by leaking its own return capability,
 reasoning that this is acceptable as long as only the unreasonable function is skipped
-(e.g. \citep{Skorstengaard+19b}). A variant of our model supports this weaker form of WBCF,
-but with tag-based policies we can enforce the non-skipping version entirely.
+(e.g. \citep{Skorstengaard+19b}).\apt{???} A variant of our model supports this weaker form of WBCF,
+but with tag-based policies we can enforce the non-skipping version entirely.\apt{??}
 \sna{Cite future work for details when the relevant section is finished.}
 
 \paragraph*{Pass by Reference and Stack Arguments}
@@ -1230,10 +1235,12 @@ when passing arguments on the stack, as seen in example \ref{fig:passing}. In th
 {\tt main} passes a reference to {\tt x}, but then clears {\tt x} and instead passes one to
 {\tt y}. Before each call, when the address of a variable is taken, we add a new annotation
 \(P(x)\) or \(P(y)\) identifying the memory to be passed, and our stack model marks it in
-magenta. Then at the call, the caller's frame that is not passed is sealed, as usual. Passed
+magenta. \apt{Why are there two line numbers assoicated with the two calls?}
+Then at the call, the parts of the caller's frame that are not passed are sealed, as usual. Passed
 memory also tracks which depth owns it, and it may only be accessed by the immediate callee
 (at its depth plus one).
 
+\apt{This needs to be talked through in more detail.}
 But because {\tt f} stashes the original pointer to {\tt x}, it will overwrite {\tt x} while
 {\tt x} is sealed, an integrity violation. This fits with the intuition of passing by reference,
 that the passed variable might be read or written during the call, not that it is permanently
