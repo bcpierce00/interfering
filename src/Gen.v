@@ -1,8 +1,10 @@
 Require Import coqutil.Z.Lia.
 Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.
-Require Import coqutil.Z.HexNotation. Require Coq.Strings.String. Open Scope string_scope.
-Require Import Coq.Lists.List. Import ListNotations.
+Require Import coqutil.Z.HexNotation.
+Require Coq.Strings.String. Open Scope string_scope.
+Require Import Coq.Lists.List. 
+
 Require Import riscv.Utility.InstructionCoercions. Open Scope ilist_scope.
 Require Import riscv.Spec.Machine.
 Require Import riscv.Spec.Decode.
@@ -24,6 +26,7 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import riscv.Utility.ExtensibleRecords. Import HnatmapNotations. Open Scope hnatmap_scope.
 Require coqutil.Map.SortedList.
 
+Import ListNotations.
 Import RiscvMachine.
 
 From StackSafety Require Import Machine.
@@ -404,3 +407,62 @@ genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag sp
 
   (gen_exec_aux 40 i ms' tt ms' tt nil))).
 
+Definition defaultLayoutInfo :=
+  {| dataLo := 1000
+   ; dataHi := 1020
+   ; instLo := 0
+   ; instHi := 400 |}.                 
+
+(* Printing *)
+Instance ShowWord : Show word :=
+  {| show x := show (word.signed x) |}.
+
+Definition printGPRs (m : MachineState) :=
+  map.fold (fun s k v =>
+              (show k ++ " : " ++ show v ++ nl ++ s)%string
+           ) 
+           "" (getRegs m).
+
+Derive Show for InstructionI.
+
+Definition printMem (m : MachineState) (i : LayoutInfo) :=
+  let mem := getMem m in
+  map.fold (fun s k v =>
+              if Z.eqb (snd (Z.div_eucl (word.unsigned k) 4)) 0
+              then
+                trace (show ("Printing...", word.unsigned k, instLo i, andb (Z.leb (instLo i) (word.unsigned k))
+                            (Z.leb (word.unsigned k) (instHi i)))) (
+                let val := 
+                    match loadWord mem k with
+                    | Some w32 => LittleEndian.combine _ w32
+                    | _ => 0
+                    end in
+                let printed :=
+                    if andb (Z.leb (instLo i) (word.unsigned k))
+                            (Z.leb (word.unsigned k) (instHi i))
+                    then
+                      match decode RV32I val with
+                      | IInstruction inst =>
+                        show inst
+                      | _ => (show val ++ " <not-inst>")%string
+                      end
+                    else show val in
+                (show k ++ " : " ++ printed ++ nl ++ s)%string)
+              else s
+           ) 
+              "" mem.
+
+Definition printMachine (m : MachineState) := (
+  "Registers:" ++ nl ++
+  printGPRs m ++ nl ++
+  "Memory: " ++ nl ++
+  printMem m defaultLayoutInfo ++ nl
+  )%string.
+
+Instance ShowMachineState : Show MachineState :=
+  {| show := printMachine |}.
+
+Instance ShowUnit : Show unit :=
+  {| show := fun _ => "tt" |}.
+
+Sample (genMachine defaultLayoutInfo).
