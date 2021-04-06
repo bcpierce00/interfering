@@ -271,17 +271,27 @@ Definition Zseq (lo hi : Z) :=
       end in
   aux lo len.
 
-Definition genDataMemory (i : LayoutInfo) : G map.rep :=
-  let idx := Zseq (dataLo i) (dataHi i) in
-  let fix walk addrs mem :=
-      match addrs with
-      | [] => returnGen mem
-      | a::addrs' =>
-        bindGen (genImm (dataHi i)) (fun d =>
-        walk addrs' (map.put mem a d))
+Definition replicateGen {A} (n : nat) (g : G A) : G (list A) :=
+  let fix aux n :=
+      match n with
+      | O => returnGen nil
+      | S n' => liftGen2 cons g (aux n')
       end in
-  walk idx map.empty.
+  aux n.
 
+Definition genDataMemory (i : LayoutInfo)
+  (m : MachineState) : G MachineState :=
+  let idx := Zseq (dataLo i) (dataHi i) in
+  bindGen (replicateGen (List.length idx) (genImm (dataHi i)))
+  (fun vals =>           
+  returnGen (withXAddrs
+    (addXAddrRange (word.of_Z (dataLo i))
+                   (4 * Datatypes.length vals)
+                   (getXAddrs m))
+        (withMem
+           (unchecked_store_byte_list (word.of_Z (dataLo i))
+              (Z32s_to_bytes vals) (getMem m)) m))).
+  
 Definition setInstrI (m : MachineState) (i : InstructionI) : MachineState :=
   let prog := [encode i] in
   let addr := getPc m in
@@ -291,7 +301,8 @@ Definition setInstrI (m : MachineState) (i : InstructionI) : MachineState :=
         (withMem
            (unchecked_store_byte_list addr
               (Z32s_to_bytes prog) (getMem m)) m).
-  
+
+
 
 (*
 -- | Generation by execution receives an initial machine X PIPE state and
@@ -303,58 +314,52 @@ genByExec :: PolicyPlus -> Int -> Machine_State -> PIPE_State ->
              (Integer -> [(Instr_I, TagSet)]) -> [(Instr_I, TagSet)] ->
              (Instr_I -> Gen TagSet) -> 
              Gen (Machine_State, PIPE_State)
-genByExec pplus n init_ms init_ps dataP codeP callP headerSeq retSeq genInstrTag =
-  exec_aux n init_ms init_ps init_ms init_ps [] 0
-  where exec_aux :: Int -> Machine_State -> PIPE_State ->
-                           Machine_State -> PIPE_State ->
-                           [(Instr_I, TagSet)] ->
-                           Int -> 
-                           Gen (Machine_State, PIPE_State)
-        exec_aux 0 ims ips ms ps generated numCalls = return (ims, ips)
-        exec_aux n ims ips ms ps generated numCalls 
-        -- Check if an instruction already exists
-          | Map.member (f_pc ms) (f_dm $ f_mem ms) = do
-            traceShowM ("Instruction exists, executing...") 
-            case fetch_and_execute pplus ms ps of
-              Right (ms'', ps'') ->
-                -- TODO: Check that generated is empty here?
-                exec_aux (n-1) ims ips ms'' ps'' [] numCalls
-              Left err ->
-                -- trace ("Warning: Fetch and execute failed with " ++ show n
-                --        ++ " steps remaining and error: " ++ show err) $
-                return (ims, ips)
-          | otherwise = do
-              traceShowM ("No instruction exists, generating...")
-              -- Generate an instruction for the current state
-              -- Checking if there is a "sequence" part left
-              (numCalls', is, it, generated') <-
-                case generated of
-                  [] -> do --(\(is,it) -> (is,it,[])) <$>
---                          genInstr pplus ms ps dataP codeP genInstrTag
-                           (cd, v) <- genInstrSeq pplus ms ps dataP codeP callP genInstrTag headerSeq numCalls retSeq
-                           case v of
-                             ((is,it):t) -> 
-                                return (cd + numCalls, is,it,t)
-                             _ -> error "empty instruction sequencer"
-                  ((is,it):t) -> return (numCalls, is,it,t)
-              traceShowM ("Generated:", is, it, generated')
-              -- Update the i-memory of both the machine we're stepping...
-              let ms' = ms & fmem . at (f_pc ms) ?~ (encode_I RV32 is)
-                  ps' = ps & pmem . at (f_pc ms) ?~ it 
-              -- .. and the i-memory of the inital pair _at the f_pc ms location_
-                  ims' = ims & fmem . at (f_pc ms) ?~ (encode_I RV32 is)
-                  ips' = ips & pmem . at (f_pc ms) ?~ it
-              -- Proceed with execution
-              -- traceShow ("Instruction generated...", is) $
-              case fetch_and_execute pplus ms' ps' of
-                Right (ms'', ps'') ->
-                  -- trace "Successful execution" $
-                  exec_aux (n-1) ims' ips' ms'' ps'' generated' numCalls'
-                Left err ->
-                  -- trace ("Warning: Fetch and execute failed with "
-                  --       ++ show n ++ " steps remaining and error: " ++ show err) $
-                  return (ims', ips')
  *)
+Fixpoint gen_exec_aux (steps : nat) (i : LayoutInfo)
+         (m0 : MachineState) (p0 : PolicyState)
+         (m  : MachineState) (p  : PolicyState)
+         (its : list (InstructionI * Tag))
+         (* num calls? *)
+  : G (MachineState * PolicyState) :=
+  match steps with
+  | O =>
+    (* Out-of-fuel: End generation. *)
+    ret (m0, p0)
+  | S steps' =>
+    match map.get (getMem m) (getPc m) with
+    | Some _ =>
+      (* Instruction already exists, step... *)
+      match mpstep (m,p) with
+      | Some ((m',p'),o) =>
+        (* ...and recurse. *)
+        gen_exec_aux steps' i m0 p0 m' p' its
+      | _ =>
+        (* ... something went wrong. Trace something? *)
+        ret (m0, p0)
+      end
+    | _ =>
+      (* Check if there is anything left to put *)
+      bindGen (match its with
+               | [] =>
+                 (* Generate an instruction sequence. *)
+                 (* TODO: Sequences, calls. *)
+                 bindGen (genInstr i m p)
+                         (fun ist => ret (ist, nil))
+               | ist::its' => ret (ist, its')
+               end)
+      (fun '((is,it), its) =>
+         let m0' := setInstrI m0 is in
+         let m'  := setInstrI m  is in
+         (* TODO: Policy states *)
+         let p0' := p0 in
+         let p'  := p in
+         match mpstep (m', p') with
+         | Some ((m'', p''), o) =>
+           gen_exec_aux steps' i m0' p0' m'' p'' its
+         | _ => ret (m0, p0)
+         end)
+    end
+  end.
 
 Definition zeroedRiscvMachine: RiscvMachine := {|
   getRegs := map.empty;
@@ -365,44 +370,37 @@ Definition zeroedRiscvMachine: RiscvMachine := {|
   getLog := nil;
 |}.
 
-(*
-                           
-genGPRs :: Machine_State -> Gen Machine_State
--- Map GPR_Addr GPR_Val -> Gen (Map GPR_Addr GPR_Val) 
-genGPRs m = do
-  ds <- replicateM 3 $ genImm 40
-  return $ m & fgpr %~ Map.union (Map.fromList $ zip [minReg..] ds)
 
+Definition genGPRs (m : MachineState) : G MachineState :=
+  bindGen (replicateGen 3 (genImm 40)) (fun ds =>
+  let regs := List.fold_left (fun '(i,m) r => (i+1, map.put m i (word.of_Z r))) ds (minReg, map.empty) in
+  returnGen (withRegs (snd regs) m)).
+
+(*
 genGPRTs :: PolicyPlus -> PIPE_State -> Gen TagSet -> Gen PIPE_State
 genGPRTs pplus p genGPRTag = do 
   cs <- replicateM 3 genGPRTag
   return $ p & pgpr %~ Map.union (Map.fromList $ zip [minReg..] cs)
 -- TODO:  move sptag stuff from genMachine to here
+ *)
 
+Definition genMachine (i : LayoutInfo) : G (MachineState * PolicyState) :=
+(*  
 genMachine :: PolicyPlus -> (PolicyPlus -> Gen TagSet) -> (PolicyPlus -> Gen TagSet) ->
              (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
              (Integer -> [(Instr_I, TagSet)]) -> [(Instr_I, TagSet)] ->
              (Instr_I -> Gen TagSet) -> TagSet -> 
              Gen RichState
 genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag spTag = do
+ *)
+  bindGen (genDataMemory i zeroedRiscvMachine) (fun ms =>
+  bindGen (genGPRs ms) (fun ms' =>
 
-  -- | Initial memory
-  (mm,pm) <- genDataMemory pplus genMTag
-  let ms = initMachine
-             & fmem_mem .~ mm 
---             & fmem . at (f_pc initMachine) ?~ (encode_I RV32 $ JAL 0 1000) 
-      ps = init_pipe_state pplus
-             & pmem_mem .~ pm
---             & pmem . at (f_pc ms) ?~ (emptyInstTag pplus) 
-
-  -- | Update registers
-  ms' <- genGPRs  ms
+  (* Something about sp?
   let ms'' = ms' & fgpr . at sp ?~ (instrHigh pplus + 4)
   ps' <- genGPRTs pplus ps (genGPRTag pplus)
   let ps'' = ps' & pgpr . at sp ?~ spTag
+  *)
 
-  -- | Do generation by execution
-  (ms_fin, ps_fin) <- genByExec pplus maxInstrsToGenerate ms'' ps'' dataP codeP callP headerSeq retSeq genITag
+  (gen_exec_aux 40 i ms' tt ms' tt nil))).
 
-  return $ Rich ms_fin ps_fin
-*)
