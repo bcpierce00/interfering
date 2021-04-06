@@ -146,13 +146,13 @@ Section WITH_MAPS.
     | _ => (dm, d)
     end.
 
-  (* Now it's quite simple to define an "ultra eager" integrity property:
+  (* Now it's quite simple to define a "stepwise" integrity property:
      if we run from any initial state, updating the context as above, then
      at any particular state where a component k is in an Sealed domain,
      k has the same value in the following state (if any.) We term this property
      ultra eager because it "checks" at each step that components that are inaccessible
      don't change, the most frequently it is possible to check. *)
-  Definition SimpleStackIntegrityUE : Prop :=
+  Definition SimpleStackIntegrityStep : Prop :=
     forall k d m c p m' p' c' o,
       Reachable updateC initC (m,p,c) ->
       mpcstep updateC (m,p,c) = Some (m',p',c',o) ->
@@ -164,15 +164,8 @@ Section WITH_MAPS.
      system critical resource, that A, C and D should not access. Clearly, D should not read
      B's sealed memory to find it. But it is possible that it could be left behind in the
      memory B deallocated, so that to D, it is not sealed. So we could use "sealedness" to determine
-     when something should be confidential, but it is not sufficient.
-
-     Confidentiality requires that we protect the entire stack from being read until it's initialized.
-     This is not amenable to an ultra eager property under this model. Instead we will introduce
-     the notion of confidentiality using a separate property that only protects Sealed memory, whether or
-     not it has been initialized. We'll call it Sealed Confidentiality. This will show us the tools
-     we need to implement all sorts of confidentiality properties. The full ultra eager property would
-     require us to explicitly track all writes, to determine when a location has been initialized.
-     That is beyond our scope at present.
+     when something should be confidential, but it is not sufficient. Secrets could be left behind
+     anywhere in the stack, so we protect the entire stack from being read until it's initialized.
 
      Confidentiality is expressed in terms of "variant" states. A K-variant
      state of m is a state that agrees with m at every component not in the set K. It may also
@@ -208,7 +201,7 @@ Section WITH_MAPS.
      in any K-variant of the first state where K is the set of components that are
      Sealed in that state, the step has the same observable behavior and makes
      the same changes to state. *)
-  Definition SimpleStackConfidentialityUE : Prop :=
+  Definition SimpleStackConfidentialityStep : Prop :=
     forall d m p c n M N,
       let P := fun '(_,_,c) => snd c > d in
       ReachableSegment updateC initC P M ->
@@ -216,95 +209,6 @@ Section WITH_MAPS.
       variantOf (fun k => fst c k = Sealed d) m n ->
       MPCTraceToWhen updateC P (n,p,c) N ->
       Lockstep M N.
-
-  (* For integrity, ultra eager properties are significantly stronger than we actually
-     need. In fact, we want to consider lazy policies that allow illegal writes at times
-     in the name of efficiency. So we should consider what our actual goal is here - what
-     use are these properties? We want to reason about what a caller sees happen to the
-     state when control returns to it. So what matters is the state at return, not before.
-
-     Our eager property reflects this; instead of guaranteeing that components never
-     change, it guarantees that they are unchanged if and when the function returns. *)
-  Definition SimpleStackIntegrityEager : Prop :=
-    forall MPC d k mcp mcp',
-      let P := fun '(_,_,c) => snd c > d in
-      ReachableSegment updateC initC P MPC ->
-      mcp = head MPC ->
-      exists d', fst (cstate mcp) k = Sealed d' ->
-      Last MPC mcp' ->
-      proj (mstate mcp) k = proj (mstate mcp') k.
-    
-  (* We can make a similar argument about confidentiality, though it may be odd to
-     think of a confidentiality call rule. We will discuss the programming logic
-     perspective elsewhere, but it again focuses on the beginning and end of a call. *)
-
-  Definition SimpleStackConfidentialityEager : Prop :=
-    forall M N d m dm p n Om On,
-      let P := (fun '(m,p,c) => snd c >= d) in
-      ReachableSegment updateC initC P M ->
-      head M = (m,p,(dm,d)) ->
-      variantOf (fun k => dm k <> Outside) m n ->
-      MPCTraceToWhen updateC P (n,p,(dm,d)) N ->
-      ObsOfMPC updateC M Om ->
-      ObsOfMPC updateC N On ->
-      (* Case 1 *)
-      (forall mpcend,
-          Last M mpcend ->
-          ~ P mpcend ->
-          exists npcend,
-            Last N npcend /\
-            Om ~=_O On /\
-            sameDifference m (mstate mpcend) n (mstate npcend))
-      /\ (* Case 2 *)
-      (Infinite M ->
-       Om ~=_O On)
-      /\ (* Case 3 *)
-      (forall mpcend,
-          Last M mpcend ->
-          P mpcend ->
-          Om <=_O On).
-  
-  (* Now the above properties do a few things all at once that it helps to disentangle. They
-     quantify over all initial states, then over all segments of a trace at or above a certain
-     depth on the stack, ending with the return when the depth is reduced. And they state
-     properties of those segments. Lets focus on just capturing what it means for a trace
-     to respect the integrity and confidentiality of components, and separate out the finding
-     of the traces. The predicate K will indicate the set of components that must be protected. *)
-
-  Definition TraceIntegrityEager (K : Component -> Prop) (MPC:MPCTrace) : Prop :=
-    forall k (mpc':@MPCState context),
-      K k->
-      Last MPC mpc' ->
-      proj (mstate (head MPC)) k = proj (mstate mpc') k.
-  
-  (* The confidentiality trace property needs to know when the variant trace can be considered to have
-     returned, for which it takes a predicate on states and contexts, P. *)
-  Definition TraceConfidentialityEager
-             (K : Component -> Prop)
-             (P: MPCState -> Prop)
-             (MPC:@MPCTrace context) : Prop :=
-    forall MPC m c p n N Om On,
-      head MPC = (m,c,p) ->
-      variantOf K m n ->
-      MPCTraceToWhen updateC P (n,c,p) N ->
-      ObsOfMPC updateC MPC Om ->
-      ObsOfMPC updateC N On ->
-      (* Case 1 *)
-      (forall mpcend,
-          Last MPC mpcend ->
-          ~ P mpcend ->
-          exists npcend,
-            Last N npcend /\
-            Om ~=_O On /\
-            sameDifference m (mstate mpcend) n (mstate npcend))
-      /\ (* Case 2 *)
-      (Infinite MPC ->
-       Om ~=_O On)
-      /\ (* Case 3 *)
-      (forall mpcend,
-          Last MPC mpcend ->
-          P mpcend ->
-          Om <=_O On).
   
   (* ***** Control Flow Properties ***** *)
 

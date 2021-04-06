@@ -127,27 +127,18 @@ Section WITH_MAPS.
       (fst c k = (Passed d) /\ d < (snd c)-1).
 
   (* So we can do ultra eager integrity, like before. *)
-  Definition StackIntegrityUE : Prop :=
-    forall k m c p m' p' c' o,
-      Reachable updateC initC (m,p,c) ->
-      mpcstep updateC (m,p,c) = Some (m',p',c',o) ->
-      Inaccessible c  k ->
-      proj m k = proj m' k.
-  
-  (* We can use our nice trace properties (redefined in TraceProperties.v to handle different
-     context types) to implement the integrity property. *)
   Definition StackIntegrityEager : Prop :=
-    forall MCP d,
-      ReachableSegment updateC initC (fun '(m,p,c) => snd c >= d) MCP ->
-      TraceIntegrityEager (Inaccessible (cstate (head MCP))) MCP.
-  
+    forall m c p,
+      Reachable updateC initC (m,p,c) ->
+      StepIntegrity updateC (Inaccessible c) (m,p,c).
+    
   Definition StackConfidentialityEager : Prop :=
     forall MCP d m dm p,
       let P := (fun '(m,p,c) => snd c >= d) in
       let K := (fun k => Inaccessible (dm,d) k \/ dm k = Unsealed) in
       ReachableSegment updateC initC P MCP ->
       head MCP = (m,p,(dm,d)) ->
-      TraceConfidentialityEager updateC K P MCP.
+      TraceConfidentialityStep updateC K P MCP.
 
   (* Continued in Coroutine.v *)
   

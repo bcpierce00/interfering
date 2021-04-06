@@ -154,33 +154,18 @@ Section WITH_MAPS.
       StackInaccessible c k ->
       proj m k = proj m' k.
   
-  Definition CoroutineIntegrityUE : Prop :=
-    forall sid k m c p m' p' c' o,
+  Definition CoroutineIntegrityEager : Prop :=
+    forall m c p,
       Reachable updateC initC (m,p,c) ->
-      mpcstep updateC (m,p,c) = Some (m',p',c',o) ->
-      CoroutineInaccessible c sid k ->
-      proj m k = proj m' k.
+      StepIntegrity updateC (fun k => sm (proj m k) = activeStack sm m) (m,p,c).
     
   (* We can actually do ultra eager confidentiality for coroutines without any more complexity,
      because coroutine properties don't care about allocation and initialization. That only comes
      when subroutine properties are layered in. *)
-  Definition SealedConfidentialityUE : Prop :=
-    forall sid m p c m' p' c' n o n' p'' c'' o',
+  Definition SealedConfidentialityEager : Prop :=
+    forall sid m p c,
       Reachable updateC initC (m,p,c) ->
-      mpcstep updateC (m,p,c) = Some (m',p',c',o) ->
-      variantOf (fun k => CoroutineInaccessible c sid k) m n ->
-      mpcstep updateC (n,p,c) = Some (n',p'',c'',o') ->
-      sameDifference m m' n n' /\ p' = p'' /\ o = o'.
-
-  Definition StackIntegrityEager : Prop :=
-    forall MCP sid d,
-      ReachableSegment updateC initC (fun '(m,p,c) => snd c sid >= d) MCP ->
-      TraceIntegrityEager (StackInaccessible (cstate (head MCP))) MCP.
-
-  Definition CoroutineIntegrityEager : Prop :=
-    forall MCP sid,
-      ReachableSegment updateC initC (fun '(m,p,c) => activeStack sm m = Some sid) MCP ->
-      TraceIntegrityEager (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) MCP.
+      StepIntegrity updateC (CoroutineInaccessible c sid) (m,p,c).
 
   Definition StackConfidentialityEager : Prop :=
     forall sid MCP d m dm depm p,
@@ -189,17 +174,16 @@ Section WITH_MAPS.
                          fst (cstate (head MCP)) k = Instack sid Unsealed) in
       ReachableSegment updateC initC P MCP ->
       head MCP = (m,p,(dm,depm)) ->
-      TraceConfidentialityEager updateC K P MCP.
+      TraceConfidentialityStep updateC K P MCP.
   
   Definition CoroutineConfidentialityEager : Prop :=
-    forall MCP sid,
+    forall MPC sid,
       let P := (fun '(m,p,c) => activeStack sm m = Some sid) in
-      let K := (fun k => CoroutineInaccessible (cstate (head MCP)) sid k) in
-      ReachableSegment updateC initC P MCP ->
-      TraceConfidentialityEager updateC K P MCP.
+      let K := (fun k => sm (proj (mstate (head MPC)) k) = activeStack sm (mstate (head MPC))) in
+      ReachableSegment updateC initC P MPC ->
+      TraceConfidentialityStep updateC K P MPC.
 
   (* ***** Control Flow Properties ***** *)
-
 
   (* Finally, we also need to consider control flow properties. These are included here because
      they don't really change in interesting ways between the different models. *)
