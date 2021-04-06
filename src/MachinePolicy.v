@@ -393,53 +393,36 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
   | _ => None
   end.
 
+Definition decodeI (w : w32) : option InstructionI :=
+  match decode RV32IM (LittleEndian.combine 4 w) with
+  | IInstruction i => Some i
+  | _ => None
+  end.
+
 Definition pstep (mp : MPState) : option PolicyState :=
   let '(m, p) := mp in
   let pc := getPc m in
   w <- loadWord (getMem m) pc;
-  match decode RV32IM (LittleEndian.combine 4 w) with
-  | IInstruction (Add rd rs1 rs2)
-  | IInstruction (Sub rd rs1 rs2)
-  | IInstruction (Sll rd rs1 rs2)
-  | IInstruction (Slt rd rs1 rs2)
-  | IInstruction (Sltu rd rs1 rs2)
-  | IInstruction (Xor rd rs1 rs2)
-  | IInstruction (Or rd rs1 rs2)
-  | IInstruction (Srl rd rs1 rs2)
-  | IInstruction (Sra rd rs1 rs2)
-  | IInstruction (And rd rs1 rs2)
+  i <- decodeI w;
+  match i with
+  | Add  rd rs1 rs2 | Sub rd rs1 rs2 | Sll rd rs1 rs2 | Slt rd rs1 rs2
+  | Sltu rd rs1 rs2 | Xor rd rs1 rs2 | Or  rd rs1 rs2 | Srl rd rs1 rs2
+  | Sra  rd rs1 rs2 | And rd rs1 rs2
     => policyArith p pc rd rs1 rs2
-  | IInstruction (Beq rs1 rs2 _)
-  | IInstruction (Bne rs1 rs2 _)
-  | IInstruction (Blt rs1 rs2 _)
-  | IInstruction (Bge rs1 rs2 _)
-  | IInstruction (Bltu rs1 rs2 _)
-  | IInstruction (Bgeu rs1 rs2 _)
+  | Beq  rs1 rs2 _ | Bne  rs1 rs2 _ | Blt rs1 rs2 _ | Bge rs1 rs2 _
+  | Bltu rs1 rs2 _ | Bgeu rs1 rs2 _
     => policyBranch p pc rs1 rs2
-  | IInstruction (Addi rd rs _)
-  | IInstruction (Slti rd rs _)
-  | IInstruction (Sltiu rd rs _)
-  | IInstruction (Xori rd rs _)
-  | IInstruction (Ori rd rs _)
-  | IInstruction (Andi rd rs _)
-  | IInstruction (Slli rd rs _)
-  | IInstruction (Srli rd rs _)
-  | IInstruction (Srai rd rs _)
+  | Addi rd rs _ | Slti rd rs _ | Sltiu rd rs _ | Xori rd rs _ | Ori rd rs _
+  | Andi rd rs _ | Slli rd rs _ | Srli  rd rs _ | Srai rd rs _
     => policyImmArith p pc rd rs
-  | IInstruction (Jal rd _)
+  | Jal rd _
     => policyJal p pc rd
-  | IInstruction (Jalr rd rs _)
+  | Jalr rd rs _
     => policyJalr p pc rd rs
-  | IInstruction (Lb rd rs imm)
-  | IInstruction (Lh rd rs imm)
-  | IInstruction (Lw rd rs imm)
-  | IInstruction (Lbu rd rs imm)
-  | IInstruction (Lhu rd rs imm)
+  | Lb rd rs imm | Lh rd rs imm | Lw rd rs imm | Lbu rd rs imm | Lhu rd rs imm
     => rsdata <- map.get (getRegs m) rs;
        policyLoad p pc rsdata rd rs imm
-  | IInstruction (Sb rd rs imm)
-  | IInstruction (Sh rd rs imm)
-  | IInstruction (Sw rd rs imm)
+  | Sb rd rs imm | Sh rd rs imm | Sw rd rs imm
     => rddata <- map.get (getRegs m) rd;
        policyStore p pc rddata rd rs imm
   | _
