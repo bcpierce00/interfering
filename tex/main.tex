@@ -564,52 +564,44 @@ foolish defenders) are under no obligation to have reasonable annotations.
 
 Since we rely so heavily on code annotations, we must ask: what if the annotations
 are wrong? First, suppose a call or return occurs that is not annotated.
-In this case, the answer is simple:
-there has been no call or return\apt{from whose perspective?}, only an instruction resembling such an operation, and
+In this case, the answer is simple: as far as the properties are concerned, there has
+been no call or return, only an instruction sequence resembling such an operation, and
 therefore no associated change in permissions. This is particularly interesting in the
 case of a false return, where control may appear to have returned to the caller, but
 the enforcement mechanism must still protect the caller's memory.
 
-Alternatively, suppose an annotated instruction is not really an actual call or return.
-What happens in this case depends on the enforcement mechanism and the nature of the false
-annotation. A given enforcement mechanism might place a static well-formedness criterion
-on the code it applies to. For instance, our\apt{or \citeauthor{DBLP:conf/sp/RoesslerD18}'s ? }
-micro-policies expect that call and return
-annotations occur on jump instructions. On the other hand, not all jumps are proper
-calls or returns, only those preceded by appropriate sequences: in these cases the
-bad annotation might appear well formed but the system should either respect the change
-in permissions or, if doing so would compromise security, fail-stop rather than
-execute the annotated instruction.\apt{hard to follow}
+Alternatively, an annotated instruction might not really be a call or return.
+In the context of \citeauthor{DBLP:conf/sp/RoesslerD18}'s micro-policies, well-behaved calls
+and returns are identified with ``blessed sequences'' of instructions, which the tag policy
+will force to be executed from start to finish. The annotated instruction should always
+be the final instruction of the sequence. What if an annotated instruction exists outside
+such a sequence? We will statically rule out some scenarios with a well-formedness criterion
+on initial states: annotated instructions will initially be tagged apropriately, as the
+final instruction in the call or return sequence. This is all we need for the policy to
+protect itself: it can then enforce that the call or return only occurs if that instruction
+is a jump that follows the blessed sequence. So, even in our strong attacker model, we need
+very little in the way of extra guarantees.
+
+In general, regardless of enforcement mechanism, we take this approach: 
+a given enforcement mechanism may place a static well-formedness criterion
+on the code it applies to. Weaker enforcement mechanisms might also need dynamic
+reasonableness conditions to prevent the defender from sabotaging enforcement, as
+discussed in section \ref{sec:cheri}.
 
 \paragraph*{System Assumptions}
 
-\apt{I'm unclear about how many of these assumptions are relevant to the properties
-  as opposed to the (micro)policies.}
-
-Our primary target is a RISC-V architecture extended with the PIPE architecture, but the
-model makes very few assumptions about the machine it applies to. We assume a register
-machine with a program counter \(\PCname\) and stack pointer \(\rsp\); other details of
-the machine's ISA are unimportant.
-
-Our definitions are largely parametric over the layout of the stack in memory, but for
-purposes of explanation we will describe a standard layout. Memory consists of an
-instruction region and a stack that grows upwards.\apt{if we want to be ``standard''
-  we really should have the stack grown downwards.}
-(For simplicity,
-we do not consider the heap. Integrating a memory-safety property for the
-heap in the style of \citet{DBLP:conf/post/AmorimHP18} is a natural extension
-that we discuss in~\Cref{sec:relwork}.) The stack has a conventional structure, with
-contiguously allocated per-function frames.
-
-The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
-at the time of the call. The stack can be used to pass arguments or return results
-in the usual way, by placing them at the top of the caller's frame. This will be modeled
-as a form of sharing in section \sna{cite the sharing section}.
-Callers and callees can also communicate via registers if they wish; indeed, our
-definitions say nothing at all about registers (except $\PCname$ and $\rsp$).
-
-\ifaftersubmission\bcp{This implicitly amounts to choosing a caller-saves register
-  convention, though, doesn't it?\apt{I think it is neutral; we could add separate caller register protection if we wanted.}}\fi
+Our properties are defined in terms of an abstract machine model that makes very few
+assumptions about the machine that instantiates it.  We assume a register
+machine with a program counter \(\PCname\) and stack pointer \(\rsp\); other
+details of the machine's ISA are unimportant. We assume that we know ahead of time
+the layout of memory, including code (with annotations) and which addresses are within
+the bounds of the stack.
+%
+We further parameterize over the structure of the stack, particularly the means by
+which a caller identifies the data that should be protected during a call. We term
+this the {\em sealing convention} and model it as a relation between machine states
+and addresses. Then from any call, those the sealing convention relates to the
+state will be protected until the return.
 
 \paragraph*{Policies}
 
@@ -751,58 +743,45 @@ ordinary machine state and policy state is very natural in this setting.
 int main() {
 0:     int x = 42, y = 0;
 1[C]:  y = f(10);
-2:     print (x + y);
+2[R]:  return (x + y);
 }
 
 int f(int z) {
-10:     print z;
+10:     $(1,0) = 0;
 11[R]:  return (z+z);
 }
 \end{verbatim}
-
-\caption{A Simple Call}
-\label{fig:simple-program}
 \end{subfigure}
 \begin{subfigure}{.4\textwidth}
 \begin{center}
 \begin{tabular}{l l}
 {\tt 0} &
-\memoryaddrs{4em}
 \memory{2}{\unsealc}[{\makebox[0pt]{Unsealed}}]
-~$\cdots$
+\vspace{.5em}
 \\
 {\tt 1} &
-\memoryaddrs{12em}
-\memory{3}{\unsealc}
-~$\cdots$
-\MemoryLabel{-14em}{0.75em}{42}
-\MemoryLabel{-10em}{0.75em}{0}
+\memory{2}{\unsealc}
+\MemoryLabel{-6em}{0.75em}{42}
+\MemoryLabel{-4em}{0.75em}{0}
 \vspace{.5em}
 \\
 {\tt 10} &
-\memoryaddrs{17em}
+\memory[1em]{1}{\emptyoutc}
+\hspace{.5em}
 \memory{2}{\mainsealc}[{\makebox[0pt]{Sealed(0)}}]%
-\memory{2}{\unsealc}
-~$\cdots$
-\MemoryLabel{-10em}{0.75em}{2}
 \\
-{\tt 2} &
-\memoryaddrs{12em}
-\memory{3}{\unsealc}
-~$\cdots$
-\MemoryLabel{-14em}{0.75em}{42}
-\MemoryLabel{-10em}{0.75em}{0}
-\MemoryLabel{-7em}{0.75em}{2}
-\\
+{\tt 11} &
+\memory[1em]{1}{\emptyoutc}
+\hspace{.5em}
+\memory{2}{\mainsealc}[{\makebox[0pt]{Sealed(0)}}]%
+\MemoryLabel{-6em}{0.75em}{\bf 0}
 \end{tabular}
 \end{center}
 
 \vspace{\abovedisplayskip}
-
-\caption{Trace of Stack Domains}
-
-\label{fig:simple-trace}
 \end{subfigure}
+\label{fig:int1}
+\caption{Integrity Violation}
 \end{figure}
 
 This section will elucidate the intuition behind the properties through a series
@@ -813,43 +792,58 @@ the examples, arguing that:
 \begin{itemize}
 \item Examples that appear to violate stack safety, violate at least one of our properties
 \item We do not find desireable behaviors that appear stack-safe yet violate our properties
-\item Our properties are testably implemented by stack safety micro-policies from the literature,
-  and the micro-policies are not significantly more conservative (i.e., policy failstops usually 
-  correspond to imminent property violations)
+\item Our properties are testably implemented by stack safety micro-policies from the
+  literature, and the micro-policies are not significantly more conservative
+  (i.e., policy failstops usually correspond to imminent property violations)
 \end{itemize}
 
-\Cref{fig:simple-program} shows a simple example, written in C-like pseudo-code.
-It consists of a {\tt main} function that performs a call to a function {\tt f},
-which prints its argument, performs arithmetic, and returns a result.
-\Cref{fig:simple-trace} shows the stack as it is divided into domains throughout
-the program execution. We use high-level code for compactness, but reason about
-a standard compilation of each function. \apt{Note assumption that arguments and return values are in registers.}
-Line numbers correspond to the code
-addresses just before the code that implements the line, and annotations
-{\tt C} and {\tt R} indicate that an instruction is annotated as a call or
-return, respectively.
-\apt{In trace, clarify difference between values (like 42,0) and line numbers (like 2).}
+Our definitions are largely parametric over the layout of the stack in memory, so we
+will give our initial examples in a simplified layout. Treat the stack as a non-empty
+list of frames, each a contiguous block of memory (that may be of length zero). When
+the active function allocates local variables, it does so by increasing the size of the
+head of the stack; variables declared in nested scopes increase the size further when
+entering the scope, and decrease it when leaving. During a call, the sealing convention
+designates the entire head frame to be sealed, and a new frame is pushed onto the stack.
+At a return, the stack is popped. We omit return addresses from these examples, as they
+focus on local state encapsulation.
 
-We also assume that the machine is word- (not byte-) addressed and that the
-machine communicates with the outside world through a single memory-mapped
-output port whose address is elided (so a {\tt print} statement will be
-compiled to a store to this location), and that the stack grows upwards.
+We have described an idealized stack, so we need to add a way for the attacker to violate
+stack safety. We define the expression {\tt \$(i,j)} as accessing the \(i\)th frame in the
+list at the offset \(j\). We will show how uses of this expression produce violations
+of both integrity and confidentiality. Besides this operator, examples are in C-like
+pseudocode. Line numbers represent the point in execution before executing all instructions
+compiled from that line, with annotations in brackets. (Initially, only {\tt C} for call
+and {\tt R} for return.) Variables are already allocated at the first line of a block.
+All arguments and return values are passed in registers.
 
-In the initial memory layout the entire stack is currently {\em unsealed},
+%The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
+%at the time of the call. The stack can be used to pass arguments or return results
+%in the usual way, by placing them at the top of the caller's frame. This will be modeled
+%as a form of sharing in section \sna{cite the sharing section}.
+%Callers and callees can also communicate via registers if they wish; indeed, our
+%definitions say nothing at all about registers (except $\PCname$ and $\rsp$).
+
+%\ifaftersubmission\bcp{This implicitly amounts to choosing a caller-saves register
+%  convention, though, doesn't it?\apt{I think it is neutral; we could add separate caller register protection if we wanted.}}\fi
+
+\Cref{fig:int1} shows an integrity violation. It consists of a {\tt main}
+function that performs a call to a function {\tt f}, which overwrites {\tt main}'s
+variable {\tt x}, performs arithmetic, and returns a result.
+In the initial memory layout the only frame is currently {\em unsealed},
 meaning that it is eligible to be written to. At the call from {\tt main} to
-{\tt f}, {\tt main}'s locals (as designated \apt{``delimited''? in any case, how?} by the stack pointer) are
-{\em sealed} and labeled with the depth of their owner, in this case 0.
-Sealing is the fundamental integrity contract between the caller and callee:
+{\tt f}, {\tt main}'s locals are {\em sealed} and labeled with the depth of their owner,
+in this case 0. Sealing is the fundamental integrity contract between the caller and callee:
 {\tt main} expects that {\tt x} and {\tt y} will be unchanged when it gets control back.
 This gives us our simple, intuitive statement of {\em stepwise integrity}:
 if a component is sealed before a step, it will be unchanged afterward. Stepwise
-refers to the fact that the property must hold on every step. Later we will
-loosen this condition in the interest of extensionality -- the caller only
-cares about changes it can see after the return, not changes during execution.
+refers to the fact that the property must hold on every step. %Later we will
+%loosen this condition in the interest of extensionality -- the caller only
+%cares about changes it can see after the return, not changes during execution.
+In this case, after line 10, {\tt f} has violated integrity by writing to {\tt x}.
 
-Suppose we insert an instruction after line 10 that stores 5 to the stack pointer - 1.\apt{Actually, -2.
-  But this also raises the question of if/how return addresses are protected.}
-Then we would be changing {\tt y}, which is sealed, in violation of stepwise integrity.
+\sna{I'm experimenting with the example style, and it ends here currently, so below
+  this is the old version in which the stack is contiguous. Current plan is to switch
+  to contiguous stack when adding stack passing.}
 
 \begin{figure}
 
@@ -873,7 +867,6 @@ int f() {
 \begin{tabular}{l l l}
   {\tt 0} &
   \multicolumn{2}{c}{
-    \memoryaddrs{4em}
     \memory{3}{\unsealc}
     ~$\cdots$
     \MemoryLabel{-14em}{0.75em}{a}
@@ -2444,6 +2437,7 @@ will be compared.
     \ifaftersubmission\apt{More blatently, static authorities doesn't work for recursive calls.}\fi
 
 \section{Extension to Cheri}
+\label{sec:cheri}
 
 %\section{Extension to Software-based Enforcement}
 
