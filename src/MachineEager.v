@@ -311,7 +311,9 @@ Definition policyImmArith (p : PolicyState) (pc (**)rsdata(**) : word) (rd rs (*
        without extending the blessed sequences. Perhaps confusingly,
        the header sequence creates two-word stack frames, but uses the
        second slot to store the RA, leaving the first slot left to
-       label. *)
+       label. Note that without initializing the memory contents
+       themselves this still allows access to stale memory
+       contents. *)
     match (*existsb (tag_eqb Th2)*) tpc, trs with
     | (*true*)[Tpc depth; Th2], [Tsp] => let addr := word.unsigned rsdata in
                                          Some (p <| pctags := filter (tag_neqb Th2) tpc |>
