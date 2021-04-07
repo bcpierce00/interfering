@@ -357,7 +357,7 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   | [Tinstr] =>
     match tpc, taddr with
     | [Tpc pcdepth], [Tstack memdepth] =>
-      if Nat.leb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
+      if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
       else None
     | _, _ => None
     end
@@ -380,6 +380,8 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
   match tinstr with
   | [Tinstr] =>
     (* TODO: Relaxed in order for program to work: no stack-indexed writes? *)
+    (* TODO: Restrictions on [trs] here?
+       [tmem] could be [Stack _] or [Nostack], when implemented *)
     match tpc, existsb (tag_eqb Tsp) taddr, trs, existsb (tag_eqb Tinstr) tmem with
     | [Tpc depth], (*false*)_, [], false => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
     | _, _, _, _ => None
