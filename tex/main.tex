@@ -59,7 +59,7 @@
 \begin{document}
 
 %% Title information
-\title{Stack Safety as a Security Property}         %% [Short Title] is optional;
+\title{Stack Safety is a Security Property}         %% [Short Title] is optional;
                                         %% when present, will be used in
                                         %% header instead of Full Title.
 %\titlenote{with title note}             %% \titlenote is optional;
@@ -131,7 +131,6 @@
 %% Note: \begin{abstract}...\end{abstract} environment must come
 %% before \maketitle command
 \begin{abstract}
-\bcp{How about ``Stack Safety {\em is} a Security Property''?}
   What is stack safety? The phrase has been used to describe the protections
   offered by a variety of mechanisms for guarding against
   attacks that corrupt the call stacks of running programs, including micro-policies
@@ -295,16 +294,17 @@ is too strong to characterize stack safety; reasonable enforcement mechanisms
 exist that violate it. One such mechanism is a ``lazy'' tag policy, similar to
 the one in \citet{DBLP:conf/sp/RoesslerD18}. We weaken local state encapsulation
 to support this technique and argue that the new property, defined relative to an
-arbitrary notion of observation, is weak enough to characterize stack safety.
-\apt{Reads oddly. ``string enough'' is what we want, surely? (While still weak
-  enough to be enforced by the lazy policies.)}
+arbitrary notion of observation. This property is still strong enough to prevent
+the bad behaviors we associate with unsafe stack behavior, but weak enough that
+other reasonable enforcement mechanisms can enforce it.
 
 While our criteria are designed with PIPE micro-policies in mind, they are
 agnostic about many implementation details and should be applicable to other
 systems with minor adjustment.
 %
 Our key contribution is an operational model of local state encapsulation
-using the technical framework of language-based security\apt{this idea deserves more prominence}, with eager and lazy variants,
+using the technical framework of language-based security
+\apt{this idea deserves more prominence}, with eager and lazy variants,
 together with a simple characterization of well-bracketed control flow.
 
 %\begin{figure}[b]
@@ -365,9 +365,9 @@ together with a simple characterization of well-bracketed control flow.
 
 How does the programmer rely on stack safety? The stack makes implicit promises about
 the behavior of function calls. First, that when a call is finished, the caller can continue
-from where it left off with its local state unchanged. And second, that the call is
-self-contained, its behavior determined only by a predictable interface -- at minimum
-parameters and global variables, but never local state.\apt{This last sentence is not so clear.}
+from where it left off with its local state unchanged. And second, that the call's
+behavior is determined only by a predictable interface that does not include the caller's
+local state.
 
 %The most natural example is the first
 %in figure \ref{fig:examples1}, in which {\tt main} calls stores 42 to a local variable {\tt x},
@@ -376,20 +376,19 @@ parameters and global variables, but never local state.\apt{This last sentence i
 %overwrite {\tt main}'s stack data.
 
 Both expectations imply predictable control flow, termed {\em well-bracketed
-control flow} (WBCF) by \citeauthor{Skorstengaard+19}. Calls jump to a consistent \apt{??} entry
-point and return to the call site. Then the data portion of the first expectation is for
+control flow} (WBCF) by \citeauthor{Skorstengaard+19}. Calls always jump to valid entry
+points and return to their call sites. Then the data portion of the first expectation is for
 {\em integrity}: that a caller's local data is protected from modification by its callee.
 This is vital for local reasoning about the behavior of the caller. The security implications
-are significant: without integrity, a caller that branches on a local variable could be manipulated by its
-callee into unexpected behavior.
+are significant: without integrity, a caller that branches on a local variable could be
+manipulated by its callee into unexpected behavior.
 
 Alongside integrity, we have {\em confidentiality}, in which a caller's data is protected
 from leakage by its callee. As a reasoning principle, confidentiality tells us that to
 predict the behavior of a call we need only consider a subset of the machine state.
-Rearranging local data will have no impact.\apt{??} And in security terms, we can guarantee
-the secrecy of local data that we haven't passed even when calling a badly behaved function.
-Together, integrity and confidentiality comprise \citeauthor{Skorstengaard+19}'s
-{\em local state encapsulation} (LSE) property.
+And in security terms, we can guarantee the secrecy of local data that we haven't passed
+even when calling a badly behaved function. Together, integrity and confidentiality
+comprise \citeauthor{Skorstengaard+19}'s {\em local state encapsulation} (LSE) property.
 
 It must be reiterated that LSE is of little use without WBCF: without WBCF, a callee
 could subvert LSE by ``returning'' to arbitrary code; after the return LSE should permit
@@ -407,7 +406,7 @@ until it returns. Thus we have no need to differentiate safe code
 from adversarial - all functions, and indeed all activations of the same function,
 are mutually distrusting.
 %
-Even more fundamentally, \apt{``For this model to make sense,'' (??)} we need to know when a call or a return is taking
+For this model to make sense, we need to know when a call or a return is taking
 place. We assume that calls and returns are annotated in the code, so that
 we can track the point at which control transfers from the protected caller
 to the attacking callee -- and when that callee in turn becomes a protected
@@ -421,16 +420,16 @@ them while the rest are unsealed and available for use by the active, attacking
 callee.
 
 First we introduce this model for a single simple stack with no sharing between callers and
-callee. Then we expand it to allow components\apt{??} to be passed, granting a callee one time
+callee. Then we expand it to allow passing of stack data, granting a callee one time
 access to the caller's data. We do not model more sophisticated sharing, because to do
 so realistically would require a separate protection scheme, such as a capability
 model. While this is quite feasible in a tag-based enforcement mechanism, it is properly
-a separate policy outside the scope of stack safety. (The combination of such policies is
-a strength of tag-based approaches.)
+a separate policy outside the scope of stack safety. (A tag-based approach can easily
+compose multiple such policies.)
 
-Finally, we extend the model to a coroutine system featuring finitely-bounded stacks. Though
-simple\apt{simplistic}, this extension is a step toward concurrency and demonstrates that the model is flexible
-enough to handle more sophisticated styles of control-flow.
+Finally, we extend the model to a coroutine system featuring finitely-bounded stacks.
+Though simplistic, this extension is a step toward concurrency and demonstrates that
+the model is flexible enough to handle more sophisticated styles of control-flow.
 
 After formally defining stack safety, we show that the definition is
 enforceable using an existing tag-based enforcement
@@ -438,8 +437,10 @@ mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider
 \citeauthor{DBLP:conf/sp/RoesslerD18}'s conservative Depth Isolation policy.
 This policy testably enforces our {\em eager} properties, in which integrity is respected
 at every step of a program, and each call respects integrity at each of its internal steps.
-These properties are very strong, and our policies enforce them; they also have the advantage
-that they ``fail faster'' \apt{than what?} and are therefore suitable for efficient testing.
+These properties are very strong, and our policies enforce them; this also makes them very
+intensional, in that they do not distinguish internal behavior from external.
+They also have the advantage that they are suitable for efficient testing, as they
+fail immediately when a violation occurs.
 
 The downside of the Depth Isolation policy is that it is rather expensive to implement.
 In the same work, \citeauthor{DBLP:conf/sp/RoesslerD18} propose a different mechanism
@@ -458,9 +459,11 @@ writes.'' Unfortunately \citeauthor{DBLP:conf/sp/RoesslerD18}'s existing
 ``Lazy Tagging and Clearing'' policy does not quite enforce this property, as we show in
 testing, but formalizing the ideal property allows us to see how it falls short.
 We provide a variant of ``Lazy Tagging and Clearing'' that does enforce lazy integrity
-at some performance cost. We prove (in Coq) that the eager property implies the lazy one.\apt{do we?
-  and is it so interesting anyhow?}
-We argue that any system purporting to enforce stack safety ought to obey \apt{``at least'' ?} xslazy stack safety.
+at some performance cost.
+%We prove (in Coq) that the eager property implies the lazy one.\apt{do we?
+%  and is it so interesting anyhow?}
+We argue that any system purporting to enforce stack safety ought to obey at least lazy
+stack safety, making it a plausible extensional characterization.
 
 %\bcp{I worry that we are being a little
 %  dishonest here: the stated advantage of the lazy policy is that it is more
@@ -554,10 +557,8 @@ a call or return sequence and in other places for other purposes).
 We assume we are given a machine language program annotated with the locations of
 instructions representing calls, returns, and function entry points. Although this
 information would typically come from a compiler together with the machine code,
-we do not assume anything about their provenance. We do treat the execution of an
-annotated instruction as in some sense intentional on the part of the current
-function. No accidental calls or returns, and attackers control their own returns
-but cannot change the annotations on the caller's code.\apt{cryptic}
+we do not assume anything about their provenance. This means that attackers (or
+foolish defenders) are under no obligation to have reasonable annotations.
 
 \paragraph*{Well-formedness and Bad Annotations}
 
@@ -569,7 +570,7 @@ therefore no associated change in permissions. This is particularly interesting 
 case of a false return, where control may appear to have returned to the caller, but
 the enforcement mechanism must still protect the caller's memory.
 
-Alternatively, suppose an annotated instruction is not really an actual \apt{``call or'' ?} return.
+Alternatively, suppose an annotated instruction is not really an actual call or return.
 What happens in this case depends on the enforcement mechanism and the nature of the false
 annotation. A given enforcement mechanism might place a static well-formedness criterion
 on the code it applies to. For instance, our\apt{or \citeauthor{DBLP:conf/sp/RoesslerD18}'s ? }
@@ -616,8 +617,8 @@ We model the base machine as a step function over machine states, and a machine 
 an enforcement mechanism (in the language of tag-based enforcement, a {\em policy}) as
 a partial step function over machine states extended with some auxiliary state, refining
 the base machine. When the policy-enhanced machine fails to step, this is a {\em failstop},
-halting the program before it can perform an action that would violate the security property; our
-properties are therefore naturally \emph{termination insensitive.}
+halting the program before it can perform an action that would violate the security property;
+our properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
 %We model ordinary program state and policy-enforcement state separately to make it
