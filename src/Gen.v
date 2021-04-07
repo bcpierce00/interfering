@@ -76,6 +76,64 @@ Record LayoutInfo := { instLo : Z
                      ; dataHi : Z 
                      }.
 
+Definition defaultLayoutInfo :=
+  {| dataLo := 1000
+   ; dataHi := 1020
+   ; instLo := 0
+   ; instHi := 400 |}.                 
+
+(* Printing *)
+Instance ShowWord : Show word :=
+  {| show x := show (word.signed x) |}.
+
+Definition printGPRs (m : MachineState) :=
+  map.fold (fun s k v =>
+              (show k ++ " : " ++ show v ++ nl ++ s)%string
+           ) 
+           "" (getRegs m).
+
+Derive Show for InstructionI.
+
+Definition printMem (m : MachineState) (i : LayoutInfo) :=
+  let mem := getMem m in
+  map.fold (fun s k v =>
+              if Z.eqb (snd (Z.div_eucl (word.unsigned k) 4)) 0
+              then
+(*                trace (show ("Printing...", word.unsigned k, instLo i, andb (Z.leb (instLo i) (word.unsigned k))
+                            (Z.leb (word.unsigned k) (instHi i)))) *) (
+                let val := 
+                    match loadWord mem k with
+                    | Some w32 => LittleEndian.combine _ w32
+                    | _ => 0
+                    end in
+                let printed :=
+                    if andb (Z.leb (instLo i) (word.unsigned k))
+                            (Z.leb (word.unsigned k) (instHi i))
+                    then
+                      match decode RV32I val with
+                      | IInstruction inst =>
+                        show inst
+                      | _ => (show val ++ " <not-inst>")%string
+                      end
+                    else show val in
+                (show k ++ " : " ++ printed ++ nl ++ s)%string)
+              else s
+           ) 
+              "" mem.
+
+Definition printMachine (m : MachineState) := (
+  "Registers:" ++ nl ++
+  printGPRs m ++ nl ++
+  "Memory: " ++ nl ++
+  printMem m defaultLayoutInfo ++ nl
+  )%string.
+
+Instance ShowMachineState : Show MachineState :=
+  {| show := printMachine |}.
+
+Instance ShowUnit : Show unit :=
+  {| show := fun _ => "tt" |}.
+
 (*
 , initGPR :: TagSet 
   , initMem :: TagSet 
@@ -295,16 +353,14 @@ Definition genDataMemory (i : LayoutInfo)
            (unchecked_store_byte_list (word.of_Z (dataLo i))
               (Z32s_to_bytes vals) (getMem m)) m))).
   
-Definition setInstrI (m : MachineState) (i : InstructionI) : MachineState :=
+Definition setInstrI addr (m : MachineState) (i : InstructionI) : MachineState :=
   let prog := [encode i] in
-  let addr := getPc m in
   withXAddrs
     (addXAddrRange addr (4 * Datatypes.length prog)
                    (getXAddrs m))
         (withMem
            (unchecked_store_byte_list addr
               (Z32s_to_bytes prog) (getMem m)) m).
-
 
 
 (*
@@ -324,7 +380,8 @@ Fixpoint gen_exec_aux (steps : nat) (i : LayoutInfo)
          (its : list (InstructionI * Tag))
          (* num calls? *)
   : G (MachineState * PolicyState) :=
-  match steps with
+(*  trace (show ("GenExec...", steps, m, p))*)
+  (match steps with
   | O =>
     (* Out-of-fuel: End generation. *)
     ret (m0, p0)
@@ -351,18 +408,18 @@ Fixpoint gen_exec_aux (steps : nat) (i : LayoutInfo)
                | ist::its' => ret (ist, its')
                end)
       (fun '((is,it), its) =>
-         let m0' := setInstrI m0 is in
-         let m'  := setInstrI m  is in
+         let m0' := setInstrI (getPc m) m0 is in
+         let m'  := setInstrI (getPc m) m  is in
          (* TODO: Policy states *)
          let p0' := p0 in
          let p'  := p in
          match mpstep (m', p') with
          | Some ((m'', p''), o) =>
            gen_exec_aux steps' i m0' p0' m'' p'' its
-         | _ => ret (m0, p0)
+         | _ => ret (m0', p0)
          end)
     end
-  end.
+  end).
 
 Definition zeroedRiscvMachine: RiscvMachine := {|
   getRegs := map.empty;
@@ -407,62 +464,5 @@ genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag sp
 
   (gen_exec_aux 40 i ms' tt ms' tt nil))).
 
-Definition defaultLayoutInfo :=
-  {| dataLo := 1000
-   ; dataHi := 1020
-   ; instLo := 0
-   ; instHi := 400 |}.                 
-
-(* Printing *)
-Instance ShowWord : Show word :=
-  {| show x := show (word.signed x) |}.
-
-Definition printGPRs (m : MachineState) :=
-  map.fold (fun s k v =>
-              (show k ++ " : " ++ show v ++ nl ++ s)%string
-           ) 
-           "" (getRegs m).
-
-Derive Show for InstructionI.
-
-Definition printMem (m : MachineState) (i : LayoutInfo) :=
-  let mem := getMem m in
-  map.fold (fun s k v =>
-              if Z.eqb (snd (Z.div_eucl (word.unsigned k) 4)) 0
-              then
-                trace (show ("Printing...", word.unsigned k, instLo i, andb (Z.leb (instLo i) (word.unsigned k))
-                            (Z.leb (word.unsigned k) (instHi i)))) (
-                let val := 
-                    match loadWord mem k with
-                    | Some w32 => LittleEndian.combine _ w32
-                    | _ => 0
-                    end in
-                let printed :=
-                    if andb (Z.leb (instLo i) (word.unsigned k))
-                            (Z.leb (word.unsigned k) (instHi i))
-                    then
-                      match decode RV32I val with
-                      | IInstruction inst =>
-                        show inst
-                      | _ => (show val ++ " <not-inst>")%string
-                      end
-                    else show val in
-                (show k ++ " : " ++ printed ++ nl ++ s)%string)
-              else s
-           ) 
-              "" mem.
-
-Definition printMachine (m : MachineState) := (
-  "Registers:" ++ nl ++
-  printGPRs m ++ nl ++
-  "Memory: " ++ nl ++
-  printMem m defaultLayoutInfo ++ nl
-  )%string.
-
-Instance ShowMachineState : Show MachineState :=
-  {| show := printMachine |}.
-
-Instance ShowUnit : Show unit :=
-  {| show := fun _ => "tt" |}.
 
 Sample (genMachine defaultLayoutInfo).
