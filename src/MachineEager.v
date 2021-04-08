@@ -291,7 +291,7 @@ Definition policyBranch (p : PolicyState) (pc : word) (rs1 rs2 : Z) : option Pol
   | _, _, _ => None
   end.
 
-Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
+Definition policyImmArith (p : PolicyState) (pc (**)rsdata(**) : word) (rd rs (*imm*) : Z) : option PolicyState :=
   tinstr <- map.get (memtags p) (word.unsigned pc);
   let tpc := pctags p in
   trs <- map.get (regtags p) rs;
@@ -303,9 +303,22 @@ Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : op
     | _, _ => None
     end
   | [Tinstr; Th2] =>
-    match existsb (tag_eqb Th2) tpc, trs with
-    | true, [Tsp] => Some (p <| pctags := filter (tag_neqb Th2) tpc |>
-                             <| regtags := map.put (regtags p) rd [Tsp] |>)
+    (* HACK: While incrementing the SP, assume knowledge of the
+       blessed header sequence (and the address SP points to) to tag
+       the non-RA slot in the new stack frame with the correct
+       activation id. This is not something a PUMP pipeline would be
+       able to do directly, but allows us to test things quickly
+       without extending the blessed sequences. Perhaps confusingly,
+       the header sequence creates two-word stack frames, but uses the
+       second slot to store the RA, leaving the first slot left to
+       label. Note that without initializing the memory contents
+       themselves this still allows access to stale memory
+       contents. *)
+    match (*existsb (tag_eqb Th2)*) tpc, trs with
+    | (*true*)[Tpc depth; Th2], [Tsp] => let addr := word.unsigned rsdata in
+                                         Some (p <| pctags := filter (tag_neqb Th2) tpc |>
+                                                 <| regtags := map.put (regtags p) rd [Tsp] |>
+                                                 <| memtags := map.put (memtags p) addr [Tstack depth]  |>)
     | _, _ => None
     end
   | [Tinstr; Tr2] =>
@@ -357,7 +370,7 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   | [Tinstr] =>
     match tpc, taddr with
     | [Tpc pcdepth], [Tstack memdepth] =>
-      if Nat.leb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
+      if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
       else None
     | _, _ => None
     end
@@ -380,8 +393,10 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
   match tinstr with
   | [Tinstr] =>
     (* TODO: Relaxed in order for program to work: no stack-indexed writes? *)
-    match tpc, existsb (tag_eqb Tsp) taddr, trs, existsb (tag_eqb Tinstr) tmem with
-    | [Tpc depth], (*false*)_, [], false => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
+    (* TODO: Restrictions on [trs] here? *)
+    match tpc, existsb (tag_eqb Tsp) taddr, trs, tmem with
+    | [Tpc pcdepth], (*false*)_, [(*_*)], [Tstack memdepth] =>
+      if Nat.eqb pcdepth memdepth then Some p else None
     | _, _, _, _ => None
     end
   | [Tinstr; Th1] =>
@@ -414,7 +429,8 @@ Definition pstep (mp : MPState) : option PolicyState :=
     => policyBranch p pc rs1 rs2
   | Addi rd rs _ | Slti rd rs _ | Sltiu rd rs _ | Xori rd rs _ | Ori rd rs _
   | Andi rd rs _ | Slli rd rs _ | Srli  rd rs _ | Srai rd rs _
-    => policyImmArith p pc rd rs
+    => rsdata <- map.get (getRegs m) rs; (* HACK *)
+       policyImmArith p pc (**)rsdata(**) rd rs
   | Jal rd _
     => policyJal p pc rd
   | Jalr rd rs _
