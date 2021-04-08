@@ -729,12 +729,16 @@ ordinary machine state and policy state is very natural in this setting.
 \section{Stack Safety, Intuitively}
 \label{sec:running-example}
 \colorlet{lgray}{gray!40}
+\colorlet{lred}{red!40}
+\colorlet{lblue}{blue!20}
 
 \newcommand{\mainsealc}{cyan}
 \newcommand{\fsealc}{green}
 \newcommand{\unsealc}{lgray}
 \newcommand{\emptyoutc}{white} % or gray for consistency with unusedc ?
 \newcommand{\fulloutc}{white}
+\newcommand{\badc}{lred}
+\newcommand{\goodc}{lblue}
 
 \begin{figure}
 
@@ -826,7 +830,7 @@ All arguments and return values are passed in registers.
 %\ifaftersubmission\bcp{This implicitly amounts to choosing a caller-saves register
 %  convention, though, doesn't it?\apt{I think it is neutral; we could add separate caller register protection if we wanted.}}\fi
 
-\Cref{fig:int1} shows an integrity violation. It consists of a {\tt main}
+Example \ref{fig:int1} shows an integrity violation. It consists of a {\tt main}
 function that performs a call to a function {\tt f}, which overwrites {\tt main}'s
 variable {\tt x}, performs arithmetic, and returns a result.
 In the initial memory layout the only frame is currently {\em unsealed},
@@ -841,92 +845,96 @@ refers to the fact that the property must hold on every step. %Later we will
 %cares about changes it can see after the return, not changes during execution.
 In this case, after line 10, {\tt f} has violated integrity by writing to {\tt x}.
 
-\sna{I'm experimenting with the example style, and it ends here currently, so below
-  this is the old version in which the stack is contiguous. Current plan is to switch
-  to contiguous stack when adding stack passing.}
-
 \begin{figure}
 
 \begin{subfigure}{.33\textwidth}
 \begin{verbatim}
 int main() {
-0:     int x = 42, y = 0;
-1[C]:  y = f();
-2:     print (x + y);
+0:     int x,y;
+1:     x = 42;
+2:     y = 0;
+3[C]:  y = f();
+4[R]:  return x+y;
 }
 
 int f() {
-10:     int z = *($SP-1);
-11[R]:  return (z+z);
+10:     int w,z;
+11:     w = 5;
+12:     z = $(1,0);
+13[R]:  return w+z;
 }
 \end{verbatim}
 \label{fig:conf1-program}
 \end{subfigure}
 \begin{subfigure}{.59\textwidth}
 \centering
-\begin{tabular}{l l l}
-  {\tt 0} &
+\begin{tabular}{l l | l}
+  {\tt 2} &
   \multicolumn{2}{c}{
-    \memory{3}{\unsealc}
-    ~$\cdots$
-    \MemoryLabel{-14em}{0.75em}{a}
-    \MemoryLabel{-10em}{0.75em}{b}
-    \MemoryLabel{-7em}{0.75em}{c}
+    \memory{2}{\unsealc}
+    \MemoryLabel{-6em}{0.75em}{42}
+    \MemoryLabel{-3em}{0.75em}{0}
     \vspace{.5em}
   } \\
-  {\tt 1} &
-  \multicolumn{2}{c}{
-    \memoryaddrs{12em}
-    \memory{3}{\unsealc}
-    ~$\cdots$
-    \MemoryLabel{-14em}{0.75em}{42}
-    \MemoryLabel{-10em}{0.75em}{0}
-    \MemoryLabel{-7em}{0.75em}{c}
-    \vspace{.5em}
-  } \\
-  {\tt 10} &
-  \memoryaddrs{20em}
-  \memory{2}{\mainsealc}
-  \memory{2}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{42}
-  \MemoryLabel{-14em}{0.75em}{0}
-  \MemoryLabel{-10em}{0.75em}{2}
-  \MemoryLabel{-7em}{0.75em}{\bf d}
- &
-  \memoryaddrs{20em}
-  \memory{2}{\mainsealc}
-  \memory{2}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{a'}
-  \MemoryLabel{-14em}{0.75em}{b'}
-  \MemoryLabel{-10em}{0.75em}{2}
-  \MemoryLabel{-7em}{0.75em}{\bf d'}
-  \\
   {\tt 11} &
-  \memoryaddrs{20em}
-  \memory{2}{\mainsealc}
   \memory{2}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{42}
+  \hspace{1em}
+  \memory{2}{\unsealc}
+  \MemoryLabel{-17em}{0.75em}{0}
   \MemoryLabel{-14em}{0.75em}{0}
-  \MemoryLabel{-10em}{0.75em}{2}
-  \MemoryLabel{-7em}{0.75em}{\bf 0}
+  \MemoryLabel{-7em}{0.75em}{42}
+  \MemoryLabel{-3em}{0.75em}{0}
   &
-  \memoryaddrs{20em}
-  \memory{2}{\mainsealc}
   \memory{2}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{a'}
-  \MemoryLabel{-14em}{0.75em}{b'}
-  \MemoryLabel{-10em}{0.75em}{2}
-  \MemoryLabel{-7em}{0.75em}{\bf b'}
+  \hspace{1em}
+  \memory{2}{\unsealc}
+  \MemoryLabel{-17em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-14em}{0.75em}{\(v_1\)}
+  \MemoryLabel{-7em}{0.75em}{\(v_2\)}
+  \MemoryLabel{-3em}{0.75em}{\(v_3\)}
   \\
+  {\tt 12} &
+  \memory{1}{\goodc}
+  \memory{1}{\unsealc}
+  \hspace{1em}
+  \memory{2}{\unsealc}
+  \MemoryLabel{-17em}{0.75em}{5}
+  \MemoryLabel{-14em}{0.75em}{0}
+  \MemoryLabel{-7em}{0.75em}{42}
+  \MemoryLabel{-3em}{0.75em}{0}
+  &
+  \memory{1}{\goodc}
+  \memory{1}{\unsealc}
+  \hspace{1em}
+  \memory{2}{\unsealc}
+  \MemoryLabel{-17em}{0.75em}{5}
+  \MemoryLabel{-14em}{0.75em}{\(v_1\)}
+  \MemoryLabel{-7em}{0.75em}{\(v_2\)}
+  \MemoryLabel{-3em}{0.75em}{\(v_3\)}
+  \\
+    {\tt 13} &
+  \memory{1}{\unsealc}
+  \memory{1}{\badc}
+  \hspace{1em}
+  \memory{2}{\unsealc}
+  \MemoryLabel{-17em}{0.75em}{5}
+  \MemoryLabel{-14em}{0.75em}{42}
+  \MemoryLabel{-7em}{0.75em}{42}
+  \MemoryLabel{-3em}{0.75em}{0}
+  &
+  \memory{1}{\unsealc}
+  \memory{1}{\badc}
+  \hspace{1em}
+  \memory{2}{\unsealc}
+  \MemoryLabel{-17em}{0.75em}{5}
+  \MemoryLabel{-14em}{0.75em}{\(v_2\)}
+  \MemoryLabel{-7em}{0.75em}{\(v_2\)}
+  \MemoryLabel{-3em}{0.75em}{\(v_3\)}
 \end{tabular}
 
 \vspace{\abovedisplayskip}
 
-\label{fig:conf1-trace}
+\label{fig:conf1}
 \end{subfigure}
 \caption{A Confidentiality Violation}
 \end{figure}
@@ -934,37 +942,41 @@ int f() {
 Meanwhile confidentiality intuitively states that the callee, {\tt f}, is unaware
 of the context of its call (except, of course, for its arguments).
 We state this in a style similar to {\em noninterference}, a well-known concept in theoretical
-security. Noninterference describes knowledge: it states that for some component(s)\apt{??}
-that we do not know, we can substitute any values whatsoever without changing the results
+security. Noninterference describes knowledge: it states that for some system components
+containing secret values, we can substitute any values whatsoever without changing the results
 of our computation. If there exists some value for which we see different results, then
 in fact we can learn something about the components by observing those results, violating
 confidentiality.
 
 In example \ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
-by reading {\tt main}'s variable {\tt y}, which was not passed to it. The trace
-in figure \ref{fig:conf1-trace} shows how noninterference works. \apt{Is this right? what is d?}
-First, let \(a\),
-\(b\), and \(c\) be the unknown initial values at their locations. On entry to {\tt f}
-we again have 42 and 0 in {\tt x} and {\tt y}, and {\tt z} contains \(c\). We consider a
-{\em variant state} that replaces the values of components that should be secret with
-arbitrary values \(a'\), \(b'\), and \(c'\). After a step, we've copied 0 and \(c'\),
-respectively, into {\tt z}. Since {\tt z} changed value, for confidentiality to hold,
-its value should be the same in all variant states. But when \(c' \not = 0\), the
-states change differently, which violates confidentiality. It would also be a violation
-to print the secret value.\apt{all this is not too clear.}
+by reading {\tt main}'s variable {\tt x}, which was not passed to it. The trace
+shows how noninterference applies to this scenario. At line 11, we create a {\em variant}
+state with arbitrary values \(v_0\), etc., in place of the values that should
+be hidden from {\tt f}. At line 12, we note that the callee's first variable, {\tt w}, has
+changed to 5 in both the primary trace and the variant. The primary and variant agree on
+the location that changed, so confidentiality was not violated. But after line 13,
+the other variable, {\tt z}, has changed. In the primary trace it changed to 42, but
+in the variant trace it might have any value \(v_2\). Say \(v_2 = 43\) -- then the variant
+has behaved differently than the primary, violating confidentiality.
 
 This form of confidentiality we will term {\em lockstep confidentiality}, defined informally
 as: for any state at the entry to a function, for any variant over the values in the stack,
-the primary state and its variant will step in lockstep until they return. Any components
-whose values update and any printed values will be identical between the primary and variant
-traces.
+the primary state and its variant will step in lockstep until they return. Any system components
+whose values update will be identical between the primary and variant traces. This includes not
+just memory, but registers as well, so that returning a secret is a violation. And when we extend
+the model with a notion of external output, it will include any values that are outputted.
 
 We alternatively could imagine a stepwise form of confidentiality in which we explicitly
 track which addresses may be read (i.e., which have been initialized), and at each step
 guarantee that the step alters state identically to a step from a variant state. Then we
-wouldn't need to divide up the execution by calls. But this is further from the normal
-framing of noninterference, requires explicitly tracking initializations, and would behave
-no differently relative to our policies.\apt{not very clear.}
+wouldn't need to divide up the execution by calls. But we can see in this example that taking
+a single variant at the start of the call effectively captures initialization: when {\tt w} is
+initialized, the primary and the variant agree on its value, so it can now be safely read.
+This treatment is roughly in line with more standard uses of noninterference, which typically
+vary states at the starts of whole program runs.
+
+Together, stepwise integrity and lockstep confidentiality form the eager version of
+local state encapsulation.
 
 \begin{figure}
 
@@ -1048,6 +1060,16 @@ int g() {
 \caption{Another Confidentiality Violation}
 \label{fig:conf2}
 \end{figure}
+
+It may be unclear in figure \ref{fig:conf1} why we also vary the initial values of {\tt w}
+and {\tt z}. We will demonstrate by amending our toy model to make it closer to a real stack.
+In figure \ref{fig:conf2} the topmost stack frame is no longer allocated as needed, but is an
+infinite array of addresses. Variables are allocated and deallocated by moving the stack pointer,
+and on a call, addresses to the left of the stack pointer are split off and pushed onto the
+stack as sealed frames. On a return, the topmost sealed frame is prepended to the unsealed
+frame. Now we can see how secrets might be left behind even in the unsealed portion of the stack.
+
+\sna{Updated up to here.}
 
 Two important details of confidentiality are reflected in figure \ref{fig:conf2}.
 First of all, it has multiple calls, and while we focus on the stack at the call
