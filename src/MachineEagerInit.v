@@ -402,7 +402,7 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
        initialize or clear (and tag in both cases) stack space, but
        the micropolicy does not control whether this is the case, or
        whether the right slots are being written to. *)
-    match tpc, trs with
+    match tpc, taddr with
     | [Tpc depth], [Tsp] => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
     | _, _ => None
     end
