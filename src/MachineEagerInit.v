@@ -216,6 +216,7 @@ Inductive Tag : Type :=
 | Tcall
 | Th1
 | Th2
+| Tinit
 | Tinstr
 | Tpc (n : nat)
 | Tr1
@@ -231,6 +232,7 @@ Definition tag_eqb (t1 t2 :  Tag) : bool :=
   | Th1, Th1
   | Th2, Th2
   | Tinstr, Tinstr
+  | Tinit, Tinit
   | Tr1, Tr1
   | Tr2, Tr2
   | Tr3, Tr3
@@ -291,7 +293,7 @@ Definition policyBranch (p : PolicyState) (pc : word) (rs1 rs2 : Z) : option Pol
   | _, _, _ => None
   end.
 
-Definition policyImmArith (p : PolicyState) (pc (**)rsdata(**) : word) (rd rs (*imm*) : Z) : option PolicyState :=
+Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
   tinstr <- map.get (memtags p) (word.unsigned pc);
   let tpc := pctags p in
   trs <- map.get (regtags p) rs;
@@ -303,22 +305,9 @@ Definition policyImmArith (p : PolicyState) (pc (**)rsdata(**) : word) (rd rs (*
     | _, _ => None
     end
   | [Tinstr; Th2] =>
-    (* HACK: While incrementing the SP, assume knowledge of the
-       blessed header sequence (and the address SP points to) to tag
-       the non-RA slot in the new stack frame with the correct
-       activation id. This is not something a PUMP pipeline would be
-       able to do directly, but allows us to test things quickly
-       without extending the blessed sequences. Perhaps confusingly,
-       the header sequence creates two-word stack frames, but uses the
-       second slot to store the RA, leaving the first slot left to
-       label. Note that without initializing the memory contents
-       themselves this still allows access to stale memory
-       contents. *)
-    match (*existsb (tag_eqb Th2)*) tpc, trs with
-    | (*true*)[Tpc depth; Th2], [Tsp] => let addr := word.unsigned rsdata in
-                                         Some (p <| pctags := filter (tag_neqb Th2) tpc |>
-                                                 <| regtags := map.put (regtags p) rd [Tsp] |>
-                                                 <| memtags := map.put (memtags p) addr [Tstack depth]  |>)
+    match existsb (tag_eqb Th2) tpc, trs with
+    | true, [Tsp] => Some (p <| pctags := filter (tag_neqb Th2) tpc |>
+                             <| regtags := map.put (regtags p) rd [Tsp] |>)
     | _, _ => None
     end
   | [Tinstr; Tr2] =>
@@ -405,6 +394,18 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
                                           <| memtags := map.put (memtags p) addr [Tpc depth] |>)
     | _, _, _ => None
     end
+  | [Tinstr; Tinit] =>
+    (* Special case for stack space initialization and clearing as
+       part of the blessed sequences. At the moment, this relies on an
+       external well-formedness criterion (i.e., these instructions
+       are only used as part of the entry and return sequences to
+       initialize or clear (and tag in both cases) stack space, but
+       the micropolicy does not control whether this is the case, or
+       whether the right slots are being written to. *)
+    match tpc, trs with
+    | [Tpc depth], [Tsp] => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
+    | _, _ => None
+    end
   | _ => None
   end.
 
@@ -429,8 +430,7 @@ Definition pstep (mp : MPState) : option PolicyState :=
     => policyBranch p pc rs1 rs2
   | Addi rd rs _ | Slti rd rs _ | Sltiu rd rs _ | Xori rd rs _ | Ori rd rs _
   | Andi rd rs _ | Slli rd rs _ | Srli  rd rs _ | Srai rd rs _
-    => rsdata <- map.get (getRegs m) rs; (* HACK *)
-       policyImmArith p pc (**)rsdata(**) rd rs
+    => policyImmArith p pc rd rs
   | Jal rd _
     => policyJal p pc rd
   | Jalr rd rs _
