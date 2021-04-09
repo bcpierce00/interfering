@@ -214,6 +214,7 @@ Import RecordSetNotations.
 (* TODO: More interesting state/abstract *)
 Inductive Tag : Type :=
 | Tcall
+| Tglobal
 | Th1
 | Th2
 | Tinit
@@ -229,6 +230,7 @@ Inductive Tag : Type :=
 Definition tag_eqb (t1 t2 :  Tag) : bool :=
   match t1, t2 with
   | Tcall, Tcall
+  | Tglobal, Tglobal
   | Th1, Th1
   | Th2, Th2
   | Tinstr, Tinstr
@@ -361,6 +363,7 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
     | [Tpc pcdepth], [Tstack memdepth] =>
       if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
       else None
+    | [Tpc _], [Tglobal] => Some p
     | _, _ => None
     end
   | [Tinstr; Tr1] =>
@@ -386,6 +389,7 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
     match tpc, existsb (tag_eqb Tsp) taddr, trs, tmem with
     | [Tpc pcdepth], (*false*)_, [(*_*)], [Tstack memdepth] =>
       if Nat.eqb pcdepth memdepth then Some p else None
+    | [Tpc _], _, [], [Tglobal] => Some p
     | _, _, _, _ => None
     end
   | [Tinstr; Th1] =>
