@@ -38,7 +38,7 @@ Definition program : list Instruction :=
   (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
   (* 12 *) IInstruction (Addi SP SP 12); (* H2 *)
   (* 16 *) IInstruction (Addi RTMP 0 42); (* For brevity, initial values in sequence *)
-  (* 20 *) IInstruction (Sw SP 0 (-8)); (* Init x *)
+  (* 20 *) IInstruction (Sw SP RTMP (-8)); (* Init x *)
   (* 24 *) IInstruction (Sw SP 0 (-4)); (* Init y *)
   (* 28 *) IInstruction (Addi RARG 0 10);
   (* 32 *) IInstruction (Jal RA 36); (* Call f *)
@@ -53,7 +53,7 @@ Definition program : list Instruction :=
   (* f *)
   (* 68 *) IInstruction (Sw SP RA 0); (* H1 *)
   (* 72 *) IInstruction (Addi SP SP 4); (* H2 *)
-  (* 76 *) IInstruction (Sw SP 0 (-12));
+  (* 76 *) IInstruction (Sw SP 0 (-12)); (* IInstruction (Addi RTMP 0 0); *)
   (* 80 *) IInstruction (Add RRES RARG RARG);
   (* 84 *) IInstruction (Lw RA SP (-4)); (* R1 *)
   (* 88 *) IInstruction (Addi SP SP (-4)); (* R2 *)
@@ -127,4 +127,4 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
   end.
 
 (* Gets stuck at instruction 76 *)
-Compute (run 20 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
+Compute (run 30 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
