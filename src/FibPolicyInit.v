@@ -21,7 +21,7 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Z.HexNotation.
 Require coqutil.Map.SortedList.
 
-From StackSafety Require Import Trace MachinePolicy.
+From StackSafety Require Import Trace MachineEagerInit.
 
 Definition fib6_riscv_concrete: list MachineInt := [ (* TODO should be "word32", not MachineInt *)
   Ox"00600993";         (* li s3,6 *)
@@ -65,25 +65,27 @@ Definition fib_riscv (n : Z) : list Instruction :=
   (* 04 *) IInstruction (Jal RA 8);
   (* 08 *) IInstruction (Beq 0 0 0); (* Finish execution (loop) *)
   (* Fibonacci *)
-  (* 12 *) IInstruction (Sw SP RA 4); (* H1 *)
+  (* 12 *) IInstruction (Sw SP RA 0); (* H1 *)
   (* 16 *) IInstruction (Addi SP SP 8); (* H2 *)
-  (* 20 *) IInstruction (Addi RTMP 0 2); (* Case selection *)
-  (* 24 *) IInstruction (Blt RARG RTMP 44);
+  (* 20 *) IInstruction (Sw SP 0 (-4)); (* Init *)
+  (* 24 *) IInstruction (Addi RTMP 0 2); (* Case selection *)
+  (* 28 *) IInstruction (Blt RARG RTMP 44);
   (* - Recursive case *)
-  (* 28 *) IInstruction (Addi RARG RARG (-1)); (* Decrement arg *)
-  (* 32 *) IInstruction (Sw SP RARG (-8)); (* Save arg in stack *)
-  (* 36 *) IInstruction (Jal RA (-24)); (* First call *)
-  (* 40 *) IInstruction (Lw RARG SP (-8)); (* Restore arg from stack *)
-  (* 44 *) IInstruction (Sw SP RRES (-8)); (* Save res in stack *)
-  (* 48 *) IInstruction (Addi RARG RARG (-1)); (* Decrement arg *)
-  (* 52 *) IInstruction (Jal RA (-40)); (* Second call *)
-  (* 56 *) IInstruction (Lw RTMP SP (-8)); (* Restore res from stack *)
-  (* 60 *) IInstruction (Add RRES RRES RTMP); (* Add res *)
-  (* 64 *) IInstruction (Beq 0 0 8); (* Jump to return *)
-  (* 68 *) IInstruction (Addi RRES 0 1); (* Base case, cascades down to return *)
-  (* 72 *) IInstruction (Lw RA SP (-4)); (* R1 *)
-  (* 76 *) IInstruction (Addi SP SP (-8)); (* R2 *)
-  (* 80 *) IInstruction (Jalr RA RA 0)] (* R3 *)
+  (* 32 *) IInstruction (Addi RARG RARG (-1)); (* Decrement arg *)
+  (* 36 *) IInstruction (Sw SP RARG (-4)); (* Save arg in stack *)
+  (* 40 *) IInstruction (Jal RA (-28)); (* First call *)
+  (* 44 *) IInstruction (Lw RARG SP (-4)); (* Restore arg from stack *)
+  (* 48 *) IInstruction (Sw SP RRES (-4)); (* Save res in stack *)
+  (* 52 *) IInstruction (Addi RARG RARG (-1)); (* Decrement arg *)
+  (* 56 *) IInstruction (Jal RA (-44)); (* Second call *)
+  (* 60 *) IInstruction (Lw RTMP SP (-4)); (* Restore res from stack *)
+  (* 64 *) IInstruction (Add RRES RRES RTMP); (* Add res *)
+  (* 68 *) IInstruction (Beq 0 0 8); (* Jump to return *)
+  (* 72 *) IInstruction (Addi RRES 0 1); (* Base case, cascades down to return *)
+  (* 76 *) IInstruction (Sw SP 0 (-4)); (* Init *)
+  (* 80 *) IInstruction (Lw RA SP (-8)); (* R1 *)
+  (* 88 *) IInstruction (Addi SP SP (-8)); (* R2 *)
+  (* 92 *) IInstruction (Jalr RA RA 0)] (* R3 *)
 .
 
 Let instrTags := [Tinstr].
@@ -93,6 +95,7 @@ Let h2Tags    := [Tinstr; Th2].
 Let r1Tags    := [Tinstr; Tr1].
 Let r2Tags    := [Tinstr; Tr2].
 Let r3Tags    := [Tinstr; Tr3].
+Let initTags  := [Tinstr; Tinit].
 
 Let initDataTags := [Tstack 0].
 
@@ -101,13 +104,13 @@ Definition fib_pump_bad : list (list Tag) :=
   [instrTags; callTags; instrTags; h1Tags] ++ repeat instrTags 17.
 
 Definition fib_pump : list (list Tag) :=
-  [instrTags; callTags; instrTags; h1Tags; h2Tags]
+  [instrTags; callTags; instrTags; h1Tags; h2Tags; initTags]
     ++ repeat instrTags 4
     ++ [callTags]
     ++ repeat instrTags 3
     ++ [callTags]
     ++ repeat instrTags 4
-    ++ [r1Tags; r2Tags; r3Tags]
+    ++ [initTags; r1Tags; r2Tags; r3Tags]
     ++ repeat initDataTags 32.
 
 Goal False.
@@ -165,6 +168,6 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-Compute (run 310 (initialRiscvMachine (fib_riscv 6)) (initialPumpPolicy fib_pump_bad) nil). (* can't jump *)
-Compute (run 310 (initialRiscvMachine (fib_riscv 6)) (initialPumpPolicy fib_pump) nil).
+Compute (run 360 (initialRiscvMachine (fib_riscv 6)) (initialPumpPolicy fib_pump_bad) nil). (* can't jump *)
+Compute (run 360 (initialRiscvMachine (fib_riscv 6)) (initialPumpPolicy fib_pump) nil).
 (* reg 18 *)

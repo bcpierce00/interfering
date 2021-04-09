@@ -216,6 +216,7 @@ Inductive Tag : Type :=
 | Tcall
 | Th1
 | Th2
+| Tinit
 | Tinstr
 | Tpc (n : nat)
 | Tr1
@@ -231,6 +232,7 @@ Definition tag_eqb (t1 t2 :  Tag) : bool :=
   | Th1, Th1
   | Th2, Th2
   | Tinstr, Tinstr
+  | Tinit, Tinit
   | Tr1, Tr1
   | Tr2, Tr2
   | Tr3, Tr3
@@ -357,7 +359,7 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   | [Tinstr] =>
     match tpc, taddr with
     | [Tpc pcdepth], [Tstack memdepth] =>
-      if Nat.leb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
+      if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
       else None
     | _, _ => None
     end
@@ -380,8 +382,10 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
   match tinstr with
   | [Tinstr] =>
     (* TODO: Relaxed in order for program to work: no stack-indexed writes? *)
-    match tpc, existsb (tag_eqb Tsp) taddr, trs, existsb (tag_eqb Tinstr) tmem with
-    | [Tpc depth], (*false*)_, [], false => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
+    (* TODO: Restrictions on [trs] here? *)
+    match tpc, existsb (tag_eqb Tsp) taddr, trs, tmem with
+    | [Tpc pcdepth], (*false*)_, [(*_*)], [Tstack memdepth] =>
+      if Nat.eqb pcdepth memdepth then Some p else None
     | _, _, _, _ => None
     end
   | [Tinstr; Th1] =>
@@ -389,6 +393,18 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
     | true, [Tpc depth], [Tsp] => Some (p <| pctags := filter (tag_neqb Th1) tpc ++ [Th2] |>
                                           <| memtags := map.put (memtags p) addr [Tpc depth] |>)
     | _, _, _ => None
+    end
+  | [Tinstr; Tinit] =>
+    (* Special case for stack space initialization and clearing as
+       part of the blessed sequences. At the moment, this relies on an
+       external well-formedness criterion (i.e., these instructions
+       are only used as part of the entry and return sequences to
+       initialize or clear (and tag in both cases) stack space, but
+       the micropolicy does not control whether this is the case, or
+       whether the right slots are being written to. *)
+    match tpc, taddr with
+    | [Tpc depth], [Tsp] => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
+    | _, _ => None
     end
   | _ => None
   end.
