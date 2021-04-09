@@ -745,14 +745,15 @@ ordinary machine state and policy state is very natural in this setting.
 \begin{subfigure}{.4\textwidth}
 \begin{verbatim}
 int main() {
-0:     int x = 42, y = 0;
-1[C]:  y = f(10);
-2[R]:  return (x + y);
+0:     int x, y;
+1:     x = 0
+2[C]:  y = f();
+3[R]:  return (x + y);
 }
 
-int f(int z) {
-10:     $(1,0) = 0;
-11[R]:  return (z+z);
+int f() {
+10:     $SP-3 = 0;
+11[R]:  return 5;
 }
 \end{verbatim}
 \end{subfigure}
@@ -912,7 +913,7 @@ int f() {
   \MemoryLabel{-7em}{0.75em}{\(v_2\)}
   \MemoryLabel{-3em}{0.75em}{\(v_3\)}
   \\
-    {\tt 13} &
+  {\tt 13} &
   \memory{1}{\unsealc}
   \memory{1}{\badc}
   \hspace{1em}
@@ -963,8 +964,9 @@ This form of confidentiality we will term {\em lockstep confidentiality}, define
 as: for any state at the entry to a function, for any variant over the values in the stack,
 the primary state and its variant will step in lockstep until they return. Any system components
 whose values update will be identical between the primary and variant traces. This includes not
-just memory, but registers as well, so that returning a secret is a violation. And when we extend
-the model with a notion of external output, it will include any values that are outputted.
+just memory, but registers as well, so that returning a secret is a violation. And when we
+extend the model with a notion of external output, it will include any values that are
+outputted.
 
 We alternatively could imagine a stepwise form of confidentiality in which we explicitly
 track which addresses may be read (i.e., which have been initialized), and at each step
@@ -980,35 +982,27 @@ local state encapsulation.
 
 \begin{figure}
 
-\begin{subfigure}{.25\textwidth}
-\begin{verbatim}
-int main() {
-0[C]:  int t = f();
-1[R]:  return t;
-}
-\end{verbatim}
-\end{subfigure}
-\begin{subfigure}{.37\textwidth}
+\begin{subfigure}{.35\textwidth}
 \begin{verbatim}
 int f() {
-10:     int x, y = 5, z = 6;
-11:     print y+z;
-12:     $SP-=2;
-13[C]:  x = g();
-14[R]:  return x;
+0:     int x;
+        {
+1:       int y;
+2:       y = 5;
+3:       x = y;
+        }
+4[C]:  g();
+5[R]:  return x;
 }
-\end{verbatim}
-\end{subfigure}
-\begin{subfigure}{.32\textwidth}
-\begin{verbatim}
-int g() {
-20:     int z;
-21[R]:  return (z+z);
-}
-\end{verbatim}
-\end{subfigure}
 
-\begin{subfigure}{.8\textwidth}
+int g() {
+10:     int w,z;
+11:     z = w;
+12[R]:  return z+z;
+}
+\end{verbatim}
+\end{subfigure}
+\begin{subfigure}{.6\textwidth}
 \begin{center}
 \begin{tabular}{l l l}
   {\tt 13} &
