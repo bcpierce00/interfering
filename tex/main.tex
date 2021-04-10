@@ -50,6 +50,10 @@
                         %% http://ctan.org/pkg/booktabs
 \usepackage{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
+\usepackage{tikz}
+\newcommand*\circled[1]{\tikz[baseline=(char.base)]{
+    \node[shape=circle,draw,inner sep=2pt] (char) {#1};}}
+
 \input{macros}
 \input{examples}
 \input{example1}
@@ -742,6 +746,7 @@ ordinary machine state and policy state is very natural in this setting.
 \newcommand{\fulloutc}{white}
 \newcommand{\badc}{lred}
 \newcommand{\goodc}{lblue}
+\newcommand{\retptrc}{black}
 
 \begin{figure}
 
@@ -749,13 +754,13 @@ ordinary machine state and policy state is very natural in this setting.
 \begin{verbatim}
 int main() {
 0:     int x, y;
-1:     x = 0
-2[C]:  y = f();
-3[R]:  return (x + y);
+1:     y = 42;
+2[C]:  x = f();
+3[R]:  return x+y;
 }
 
 int f() {
-10:     $SP-3 = 0;
+10:     $SP-2 = 0;
 11[R]:  return 5;
 }
 \end{verbatim}
@@ -763,26 +768,36 @@ int f() {
 \begin{subfigure}{.4\textwidth}
 \begin{center}
 \begin{tabular}{l l}
-{\tt 0} &
-\memory{2}{\unsealc}[{\makebox[0pt]{Unsealed}}]
+{\tt 1} &
+\memoryaddrs{12em}
+\memory{4}{\unsealc}[Unseal]
+~$\cdots$
 \vspace{.5em}
 \\
-{\tt 1} &
-\memory{2}{\unsealc}
-\MemoryLabel{-6em}{0.75em}{42}
-\MemoryLabel{-4em}{0.75em}{0}
-\vspace{.5em}
+{\tt 2} &
+\memoryaddrs{12em}
+\memory{4}{\unsealc}
+~$\cdots$
+    \MemoryLabel{-15em}{0.75em}{42}
+    \vspace{.5em}
 \\
 {\tt 10} &
-\memory[1em]{1}{\emptyoutc}
-\hspace{.5em}
-\memory{2}{\mainsealc}[{\makebox[0pt]{Sealed(0)}}]%
+\memoryaddrs{16em}
+\memory{2}{\mainsealc}[Seal(0)]%
+\memory{1}{\retptrc}[RetPtr]%
+\memory{1}{\unsealc}[Unseal]
+~$\cdots$
+\MemoryLabel{-15em}{0.75em}{42}
+\vspace{.5em}
 \\
 {\tt 11} &
-\memory[1em]{1}{\emptyoutc}
-\hspace{.5em}
-\memory{2}{\mainsealc}[{\makebox[0pt]{Sealed(0)}}]%
-\MemoryLabel{-6em}{0.75em}{\bf 0}
+\memoryaddrs{16em}
+\memory{2}{\mainsealc}
+\memory{1}{\retptrc}
+\memory{1}{\unsealc}
+~$\cdots$
+\MemoryLabel{-15em}{0.75em}{\bf 0}
+\vspace{.5em}
 \end{tabular}
 \end{center}
 
@@ -805,24 +820,12 @@ the examples, arguing that:
   (i.e., policy failstops usually correspond to imminent property violations)
 \end{itemize}
 
-Our definitions are largely parametric over the layout of the stack in memory, so we
-will give our initial examples in a simplified layout. Treat the stack as a non-empty
-list of frames, each a contiguous block of memory (that may be of length zero). When
-the active function allocates local variables, it does so by increasing the size of the
-head of the stack; variables declared in nested scopes increase the size further when
-entering the scope, and decrease it when leaving. During a call, the sealing convention
-designates the entire head frame to be sealed, and a new frame is pushed onto the stack.
-At a return, the stack is popped. We omit return addresses from these examples, as they
-focus on local state encapsulation.
-
-We have described an idealized stack, so we need to add a way for the attacker to violate
-stack safety. We define the expression {\tt \$(i,j)} as accessing the \(i\)th frame in the
-list at the offset \(j\). We will show how uses of this expression produce violations
-of both integrity and confidentiality. Besides this operator, examples are in C-like
-pseudocode. Line numbers represent the point in execution before executing all instructions
-compiled from that line, with annotations in brackets. (Initially, only {\tt C} for call
-and {\tt R} for return.) Variables are already allocated at the first line of a block.
-All arguments and return values are passed in registers.
+Our examples are written in C-like syntax, labeled with line numbers for reference,
+but to reflect the increased power of the underlying assembly code, we allow code
+to access the stack pointer directly, written {\tt \$SP}. The layout of the stack
+is given to the right, with a box representing a word of memory, and variables stored
+in declaration order from left to right. The stack grows upward in memory and to the
+right on paper.
 
 %The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
 %at the time of the call. The stack can be used to pass arguments or return results
@@ -836,8 +839,7 @@ All arguments and return values are passed in registers.
 
 Example \ref{fig:int1} shows an integrity violation. It consists of a {\tt main}
 function that performs a call to a function {\tt f}, which overwrites {\tt main}'s
-variable {\tt x}, performs arithmetic, and returns a result.
-In the initial memory layout the only frame is currently {\em unsealed},
+variable {\tt x}. In the initial memory layout the entire stack is {\em unsealed},
 meaning that it is eligible to be written to. At the call from {\tt main} to
 {\tt f}, {\tt main}'s locals are {\em sealed} and labeled with the depth of their owner,
 in this case 0. Sealing is the fundamental integrity contract between the caller and callee:
@@ -849,91 +851,104 @@ refers to the fact that the property must hold on every step. %Later we will
 %cares about changes it can see after the return, not changes during execution.
 In this case, after line 10, {\tt f} has violated integrity by writing to {\tt x}.
 
-\begin{figure}
+The black rectangle represents the return address. In a typical calling convention
+this will have been passed in a register during the call itself, and {\tt f} stores
+it in the stack during its preamble, so it is not itself sealed.
 
+\begin{figure}
 \begin{subfigure}{.33\textwidth}
 \begin{verbatim}
 int main() {
-0:     int x,y;
+0:     int x;
 1:     x = 42;
-2:     y = 0;
-3[C]:  y = f();
-4[R]:  return x+y;
+2[C]:  x = f();
+3[R]:  return x+y;
 }
 
 int f() {
-10:     int w,z;
-11:     w = 5;
-12:     z = $(1,0);
-13[R]:  return w+z;
+10:     int y,z;
+11:     y = 5;
+12:     z = $SP-2;
+13[R]:  return y+z;
 }
 \end{verbatim}
-\label{fig:conf1-program}
 \end{subfigure}
 \begin{subfigure}{.59\textwidth}
 \centering
 \begin{tabular}{l l | l}
-  {\tt 2} &
+  {\tt 1} &
   \multicolumn{2}{c}{
-    \memory{2}{\unsealc}
-    \MemoryLabel{-6em}{0.75em}{42}
-    \MemoryLabel{-3em}{0.75em}{0}
+    \memoryaddrs{8em}
+    \memory{4}{\unsealc}
+    ~$\cdots$
+    \MemoryLabel{-18em}{0.75em}{0}
+    \MemoryLabel{-14em}{0.75em}{0}
+    \MemoryLabel{-10em}{0.75em}{0}
+    \MemoryLabel{-7em}{0.75em}{0}
     \vspace{.5em}
   } \\
-  {\tt 11} &
+  {\tt 10} &
+  \memoryaddrs{20em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
   \memory{2}{\unsealc}
-  \hspace{1em}
-  \memory{2}{\unsealc}
-  \MemoryLabel{-17em}{0.75em}{0}
-  \MemoryLabel{-14em}{0.75em}{0}
-  \MemoryLabel{-7em}{0.75em}{42}
-  \MemoryLabel{-3em}{0.75em}{0}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{42}
+  \MemoryLabel{-10em}{0.75em}{0}
+  \MemoryLabel{-6em}{0.75em}{0}
   &
+  \memoryaddrs{20em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
   \memory{2}{\unsealc}
-  \hspace{1em}
-  \memory{2}{\unsealc}
-  \MemoryLabel{-17em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-14em}{0.75em}{\(v_1\)}
-  \MemoryLabel{-7em}{0.75em}{\(v_2\)}
-  \MemoryLabel{-3em}{0.75em}{\(v_3\)}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-10em}{0.75em}{\(v_1\)}
+  \MemoryLabel{-6em}{0.75em}{\(v_2\)}
+  \\
+  {\tt 11} &
+  \memoryaddrs{20em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
+  \memory{1}{\goodc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{42}
+  \MemoryLabel{-10em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{0}
+  &
+  \memoryaddrs{20em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
+  \memory{1}{\goodc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-10em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
   {\tt 12} &
-  \memory{1}{\goodc}
+  \memoryaddrs{20em}
   \memory{1}{\unsealc}
-  \hspace{1em}
-  \memory{2}{\unsealc}
-  \MemoryLabel{-17em}{0.75em}{5}
-  \MemoryLabel{-14em}{0.75em}{0}
-  \MemoryLabel{-7em}{0.75em}{42}
-  \MemoryLabel{-3em}{0.75em}{0}
-  &
-  \memory{1}{\goodc}
-  \memory{1}{\unsealc}
-  \hspace{1em}
-  \memory{2}{\unsealc}
-  \MemoryLabel{-17em}{0.75em}{5}
-  \MemoryLabel{-14em}{0.75em}{\(v_1\)}
-  \MemoryLabel{-7em}{0.75em}{\(v_2\)}
-  \MemoryLabel{-3em}{0.75em}{\(v_3\)}
-  \\
-  {\tt 13} &
+  \memory{1}{\retptrc}
   \memory{1}{\unsealc}
   \memory{1}{\badc}
-  \hspace{1em}
-  \memory{2}{\unsealc}
-  \MemoryLabel{-17em}{0.75em}{5}
-  \MemoryLabel{-14em}{0.75em}{42}
-  \MemoryLabel{-7em}{0.75em}{42}
-  \MemoryLabel{-3em}{0.75em}{0}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{42}
+  \MemoryLabel{-10em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{42}
+  \vspace{.5em}
   &
+  \memoryaddrs{20em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
   \memory{1}{\unsealc}
   \memory{1}{\badc}
-  \hspace{1em}
-  \memory{2}{\unsealc}
-  \MemoryLabel{-17em}{0.75em}{5}
-  \MemoryLabel{-14em}{0.75em}{\(v_2\)}
-  \MemoryLabel{-7em}{0.75em}{\(v_2\)}
-  \MemoryLabel{-3em}{0.75em}{\(v_3\)}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-10em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{\(v_0\)}
+  \vspace{.5em}
 \end{tabular}
 
 \vspace{\abovedisplayskip}
@@ -943,20 +958,20 @@ int f() {
 \caption{A Confidentiality Violation}
 \end{figure}
 
-Meanwhile confidentiality intuitively states that the callee, {\tt f}, is unaware
-of the context of its call (except, of course, for its arguments).
+Meanwhile confidentiality intuitively states that a callee is unaware
+of the context of its call (except for its arguments and any global variables).
 We state this in a style similar to {\em noninterference}, a well-known concept in theoretical
 security. Noninterference describes knowledge: it states that for some system components
 containing secret values, we can substitute any values whatsoever without changing the results
 of our computation. If there exists some value for which we see different results, then
-in fact we can learn something about the components by observing those results, violating
+in fact we can learn something about the initial state by observing those results, violating
 confidentiality.
 
 In example \ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
-by reading {\tt main}'s variable {\tt x}, which was not passed to it. The trace
+by reading {\tt main}'s variable {\tt x}. The trace
 shows how noninterference applies to this scenario. At line 11, we create a {\em variant}
 state with arbitrary values \(v_0\), etc., in place of the values that should
-be hidden from {\tt f}. At line 12, we note that the callee's first variable, {\tt w}, has
+be hidden from {\tt f}. At line 12, we note that the callee's first variable, {\tt y}, has
 changed to 5 in both the primary trace and the variant. The primary and variant agree on
 the location that changed, so confidentiality was not violated. But after line 13,
 the other variable, {\tt z}, has changed. In the primary trace it changed to 42, but
@@ -975,78 +990,128 @@ We alternatively could imagine a stepwise form of confidentiality in which we ex
 track which addresses may be read (i.e., which have been initialized), and at each step
 guarantee that the step alters state identically to a step from a variant state. Then we
 wouldn't need to divide up the execution by calls. But we can see in this example that taking
-a single variant at the start of the call effectively captures initialization: when {\tt w} is
+a single variant at the start of the call effectively captures initialization: when {\tt y} is
 initialized, the primary and the variant agree on its value, so it can now be safely read.
 This treatment is roughly in line with more standard uses of noninterference, which typically
 vary states at the starts of whole program runs.
 
-Together, stepwise integrity and lockstep confidentiality form the eager version of
+Together, stepwise integrity and lockstep confidentiality form the stepwise version of
 local state encapsulation.
 
 \begin{figure}
 
-\begin{subfigure}{.35\textwidth}
+\begin{subfigure}{.3\textwidth}
 \begin{verbatim}
-int f() {
+int main() {
 0:     int x;
-        {
-1:       int y;
-2:       y = 5;
-3:       x = y;
-        }
-4[C]:  g();
-5[R]:  return x;
+1[C]:  x = f();
+2[CR]: return g();
+}
+
+int f() {
+10:     int y;
+11:     y = 5;
+12[R]:  return y;
 }
 
 int g() {
-10:     int w,z;
-11:     z = w;
-12[R]:  return z+z;
+20:     int z;
+21:     if(z == 5)
+22[R]:    return 100;
+23:     else
+24[R]:    return 10;
 }
 \end{verbatim}
 \end{subfigure}
-\begin{subfigure}{.6\textwidth}
+\begin{subfigure}{.65\textwidth}
 \begin{center}
-\begin{tabular}{l l l}
-  {\tt 13} &
+\begin{tabular}{l r | l}
+  \circled{\tt 01} &
   \multicolumn{2}{c}{
-    \memoryaddrs{16em}
-    \memory{1}{\mainsealc}
+    \memoryaddrs{8em}
     \memory{4}{\unsealc}
     ~$\cdots$
-    \MemoryLabel{-23em}{0.75em}{a}
-    \MemoryLabel{-19em}{0.75em}{b}
-    \MemoryLabel{-15em}{0.75em}{1}
-    \MemoryLabel{-11em}{0.75em}{5}
-    \MemoryLabel{-8em}{0.75em}{6}
+    \MemoryLabel{-18em}{0.75em}{0}
+    \MemoryLabel{-14em}{0.75em}{0}
+    \MemoryLabel{-10em}{0.75em}{0}
+    \MemoryLabel{-7em}{0.75em}{0}
+    \vspace{.5em}
+  } \\
+  \circled{\tt 11} &
+  \memoryaddrs{16em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
+  \memory{2}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{0}
+  \MemoryLabel{-10em}{0.75em}{0}
+  \MemoryLabel{-6em}{0.75em}{0}
+  &
+  \memoryaddrs{16em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
+  \memory{2}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-10em}{0.75em}{\(v_1\)}
+  \MemoryLabel{-6em}{0.75em}{\(v_2\)}
+  \\
+  \circled{\tt 12} &
+  \memoryaddrs{16em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
+  \memory{2}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{0}
+  \MemoryLabel{-10em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{0}
+  &
+  \memoryaddrs{16em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
+  \memory{2}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-10em}{0.75em}{\(5\)}
+  \MemoryLabel{-6em}{0.75em}{\(v_2\)}
+  \\
+  \circled{\tt 02} &
+  \multicolumn{2}{c}{
+    \memoryaddrs{8em}
+    \memory{4}{\unsealc}
+    ~$\cdots$
+    \MemoryLabel{-18em}{0.75em}{5}
+    \MemoryLabel{-14em}{0.75em}{2}
+    \MemoryLabel{-10em}{0.75em}{5}
+    \MemoryLabel{-7em}{0.75em}{0}
     \vspace{.5em}
   }
-\\
-  {\tt 20} &
-  \memoryaddrs{25em}
-  \memory{1}{\mainsealc}
-  \memory{2}{\fsealc}
+  \\
+  \circled{\tt 21} &
+  \memoryaddrs{16em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
   \memory{2}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-23em}{0.75em}{a}
-  \MemoryLabel{-19em}{0.75em}{b}
-  \MemoryLabel{-15em}{0.75em}{1}
-  \MemoryLabel{-11em}{0.75em}{14}
-  \MemoryLabel{-8em}{0.75em}{\bf 6}
-  \vspace{.5em}
+  \MemoryLabel{-19em}{0.75em}{5}
+  \MemoryLabel{-10em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{0}
   &
-  \memoryaddrs{25em}
-  \memory{1}{\mainsealc}
-  \memory{2}{\fsealc}
+  \memoryaddrs{16em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
   \memory{2}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-23em}{0.75em}{a'}
-  \MemoryLabel{-19em}{0.75em}{b'}
-  \MemoryLabel{-15em}{0.75em}{c'}
-  \MemoryLabel{-11em}{0.75em}{14}
-  \MemoryLabel{-8em}{0.75em}{\bf d'}
-  \vspace{.5em}
-\\
+  \MemoryLabel{-19em}{0.75em}{\(v_3\)}
+  \MemoryLabel{-10em}{0.75em}{\(v_4\)}
+  \MemoryLabel{-6em}{0.75em}{\(v_5\)}
+  \\ &
+  \circled{\bf 22}
+  ~$\cdots$
+  &
+  \circled{\bf 24}
+  ~$\cdots$
+  \\
 \end{tabular}
 \end{center}
 
@@ -1058,65 +1123,48 @@ int g() {
 \label{fig:conf2}
 \end{figure}
 
-It may be unclear in figure \ref{fig:conf1} why we also vary the initial values of {\tt w}
-and {\tt z}. We will demonstrate by amending our toy model to make it closer to a real stack.
-In figure \ref{fig:conf2} the topmost stack frame is no longer allocated as needed, but is an
-infinite array of addresses. Variables are allocated and deallocated by moving the stack pointer,
-and on a call, addresses to the left of the stack pointer are split off and pushed onto the
-stack as sealed frames. On a return, the topmost sealed frame is prepended to the unsealed
-frame. Now we can see how secrets might be left behind even in the unsealed portion of the stack.
+It may be unclear in figure \ref{fig:conf1} why we also vary the initial values of {\tt y}
+and {\tt z}. In figure \ref{fig:conf2}, we watch as {\tt f} leaves behind a value in {\tt y}
+that corresponds to {\tt main}'s variable, {\tt x}. Then {\tt g} is able to access
+{\tt y} without even directly using its ability to read the stack pointer. In
+this case, {\tt g} branches on that value, which is a different way of
+violating lockstep confidentiality. Technically, this violation
+occurs because the program counter is also a component of the state that must change
+identically between the primary and variant traces. In a case where \(v_1 \not = 5\),
+the program counters will differ, breaking the lockstep.
 
-\sna{Updated up to here.}
+%\paragraph*{Control Flow and Awkward Examples}
 
-Two important details of confidentiality are reflected in figure \ref{fig:conf2}.
-First of all, it has multiple calls, and while we focus on the stack at the call
-from line 13 to line 20, it should be clear that we also need to consider a similar
-variant at the call from 0 to 10. Confidentiality is in this sense recursive: each
-nested call must obey confidentiality in its own right.
+%\begin{figure}
+%  \centering
+%  \begin{minipage}{.4\textwidth}
+%\begin{verbatim}
+%int stash = 0;
 
-More importantly, careful readers will have noticed that the informal definition
-of stack confidentiality refers to a variation of the entire stack, not just the
-sealed portion. In fact, we support temporal stack safety, in which values left behind
-by previous activations are also inaccessible. In this case, we connect temporal safety
-firmly to the caller-callee attacker model -- {\tt f} stored some data in the variables
-{\tt y} and {\tt z}, used it, then deallocated them by moving the stack pointer.\apt{Where is the storage for x ?.
-And need to explain what the colors mean.}
-After the stack pointer is written over {\tt y}, the value of {\tt z} is still
-left behind. Then {\tt g} can read it just by allocating and accessing an uninitialized
-variable! \apt{Need to be more explicit about what is getting varied, when, and why.}
-
-\paragraph*{Control Flow and Awkward Examples}
-
-\begin{figure}
-  \centering
-  \begin{minipage}{.4\textwidth}
-\begin{verbatim}
-int stash = 0;
-
-int main() {
-0:     int x = 1;
-1[C]:  f();
-2:     x = -x;
-3[C]:  f();
-4[R]:  return x;
-}
-\end{verbatim}
-  \end{minipage}
-  \begin{minipage}{.4\textwidth}
-\begin{verbatim}
-void f() {
-10:     if(!stash) {
-        // store return pointer
-11:       stash = $SP-1;
-12:     } else {
-13:       $SP-1 = stash;
-14:       stash = 0;
-15[R]:    return;
-        }
-}
-\end{verbatim}
-  \end{minipage}
-\label{fig:WBCF1}
+%int main() {
+%0:     int x = 1;
+%1[C]:  f();
+%2:     x = -x;
+%3[C]:  f();
+%4[R]:  return x;
+%}
+%\end{verbatim}
+%  \end{minipage}
+%  \begin{minipage}{.4\textwidth}
+%\begin{verbatim}
+%void f() {
+%10:     if(!stash) {
+%        // store return pointer
+%11:       stash = $SP-1;
+%12:     } else {
+%13:       $SP-1 = stash;
+%14:       stash = 0;
+%15[R]:    return;
+%        }
+%}
+%\end{verbatim}
+%  \end{minipage}
+%\label{fig:WBCF1}
 %  \begin{subfigure}[t]{.4\textwidth}
 %\begin{verbatim}
 %int counter = 0;
@@ -1146,43 +1194,42 @@ void f() {
 %\end{verbatim}
 %\label{fig:WBCF2}
 %  \end{subfigure}
-  \caption{Control Flow Attacks}
-  \label{fig:WBCF}
-\end{figure}
+%  \caption{Control Flow Attacks}
+%  \label{fig:WBCF}
+%\end{figure}
 
-Example \ref{fig:WBCF} shows how control flow attacks can compromise integrity in principle
-even when the attacker obeys LSE. In this case, the attacker hides a return pointer in a
-global variable and retrieves it the second time it is called, returning to the first call
-point rather than the second. A return was performed, so {\tt x} is no longer sealed, but
-line {\tt 2} is executed twice, so that {\tt main} returns 1 instead of -1.
+%Example \ref{fig:WBCF} shows how control flow attacks can compromise integrity in principle
+%even when the attacker obeys LSE. In this case, the attacker hides a return pointer in a
+%global variable and retrieves it the second time it is called, returning to the first call
+%point rather than the second. A return was performed, so {\tt x} is no longer sealed, but
+%line {\tt 2} is executed twice, so that {\tt main} returns 1 instead of -1.
 
-To prevent this, we define Well-bracketed Control Flow. Throughout the above examples, we
-have implicitly tracked the depth of the current call in order to seal memory at the correct
-depth. We also have a clear sense of where the entry points to functions are -- the top line,
-in our examples, and another instruction annotation in practice. Well-bracketed Control Flow
-holds if:
+%To prevent this, we define Well-bracketed Control Flow. Throughout the above examples, we
+%have implicitly tracked the depth of the current call in order to seal memory at the correct
+%depth. We also have a clear sense of where the entry points to functions are -- the top line,
+%in our examples, and another instruction annotation in practice. Well-bracketed Control Flow
+%holds if:
 
-\begin{itemize}
-\item All calls jump to entry points ({\em entry integrity})
-\item The depth counter decreases by exactly one on a return ({\em non-skipping})
-\item From a call at depth \(d\), the next state to have depth \(d\) matches the stack pointer,
-  and the program counter is at the instruction following the jal ({\em return integrity})
-\end{itemize}
+%\begin{itemize}
+%\item All calls jump to entry points ({\em entry integrity})
+%\item The depth counter decreases by exactly one on a return ({\em non-skipping})
+%\item From a call at depth \(d\), the next state to have depth \(d\) matches the stack pointer,
+%  and the program counter is at the instruction following the jal ({\em return integrity})
+%\end{itemize}
 
-Non-skipping may seem strange -- surely the depth counter ought to decrease by one at a time
-as part of the property definition, and the problem comes when the return is to a shallower
-call's return pointer, violating return integrity? Yet some weaker enforcement mechanisms,
-such as those in which returns are implemented as invocation of a Cheri object capability,
-do allow skipping when adversarial code acts unreasonably by leaking its own return capability,
-reasoning that this is acceptable as long as only the unreasonable function is skipped
-(e.g. \citep{Skorstengaard+19b}).\apt{???} A variant of our model supports this weaker form of WBCF,
-but with tag-based policies we can enforce the non-skipping version entirely.\apt{??}
-\sna{Cite future work for details when the relevant section is finished.}
+%Non-skipping may seem strange -- surely the depth counter ought to decrease by one at a time
+%as part of the property definition, and the problem comes when the return is to a shallower
+%call's return pointer, violating return integrity? Yet some weaker enforcement mechanisms,
+%such as those in which returns are implemented as invocation of a Cheri object capability,
+%do allow skipping when adversarial code acts unreasonably by leaking its own return capability,
+%reasoning that this is acceptable as long as only the unreasonable function is skipped
+%(e.g. \citep{Skorstengaard+19b}).\apt{???} A variant of our model supports this weaker form of WBCF,
+%but with tag-based policies we can enforce the non-skipping version entirely.\apt{??}
+%\sna{Cite future work for details when the relevant section is finished.}
 
 \paragraph*{Pass by Reference and Stack Arguments}
 
 \newcommand{\mainpassc}{magenta}
-\newcommand{\sharec}{lgray}
 
 \begin{figure}[b]
   \centering
