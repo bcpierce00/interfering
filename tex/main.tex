@@ -308,6 +308,25 @@ return to the point just after their call (or don't return at all).
 in which they visibly hold by construction; an enforcement mechanism (in their case, hardware capabilities)
 can then be shown to provide stack safety by giving a fully abstract embedding function
 from the idealized machine to an ordinary machine equipped with the enforcement.
+%%
+%% While this work represents an important step in the right direction, we believe
+%% there is still room to craft an operational characterization
+%% of stack safety. \apt{Perhaps our rhetoric should be more micro-policy-specific here?}
+%% In other words, we seek formal criteria that can be applied
+%% to a mechanism for protecting stack-based low-level programs to judge
+%% whether or not it actually ``guarantees stack safety.''
+%% \rb{The remainder of this paragraph may be diving too quickly, would a reader be
+%% confused by the references to these types of properties, yet to be introduced?}
+%% We begin with a strong
+%% local state encapsulation property that closely models the behavior of eager
+%% micro-policies from \citet{DBLP:conf/sp/RoesslerD18}. This ``eager'' property
+%% is too strong to characterize stack safety; reasonable enforcement mechanisms
+%% exist that violate it. One such mechanism is a ``lazy'' tag policy, similar to
+%% the one in \citet{DBLP:conf/sp/RoesslerD18}. We weaken local state encapsulation
+%% to support this technique and argue that the new property, defined relative to an
+%% arbitrary notion of observation. This property is still strong enough to prevent
+%% the bad behaviors we associate with unsafe stack behavior, but weak enough that
+%% other reasonable enforcement mechanisms can enforce it.
 
 In this work, we take the (informal) definitions of WBCF and LSE as a starting point,
 but choose a different approach to formalizing them, based on the
@@ -363,61 +382,169 @@ our approach is flexible enough to handle more sophisticated styles of control-f
 
 While our property definitions were developed with micro-policy enforcement in mind, they
 agnostic about many implementation details and should be applicable to other
-systems with minor adjustment.
+systems with minor adjustment.\apt{move this up?}
 
-%\begin{figure}[b]
-%    \begin{minipage}{.4\textwidth}
-%\begin{verbatim}
-%int main() {
-%  int x = 42;
-%  f();
-%  print(x);
-%}
-%\end{verbatim}
-%    \end{minipage}
-%    \begin{minipage}{.4\textwidth}
-%\begin{verbatim}
-%int main() {
-%  int x = 1;
-%  f();
-%  if(x)
-%    g();
-%  else
-%    h();
-%}
-%\end{verbatim}
-%    \end{minipage}
-%  \caption{Simple Examples}
-%  \label{fig:examples1}
-%\end{figure}
+%% %\begin{figure}[b]
+%% %    \begin{minipage}{.4\textwidth}
+%% %\begin{verbatim}
+%% %int main() {
+%% %  int x = 42;
+%% %  f();
+%% %  print(x);
+%% %}
+%% %\end{verbatim}
+%% %    \end{minipage}
+%% %    \begin{minipage}{.4\textwidth}
+%% %\begin{verbatim}
+%% %int main() {
+%% %  int x = 1;
+%% %  f();
+%% %  if(x)
+%% %    g();
+%% %  else
+%% %    h();
+%% %}
+%% %\end{verbatim}
+%% %    \end{minipage}
+%% %  \caption{Simple Examples}
+%% %  \label{fig:examples1}
+%% %\end{figure}
 
-%\begin{figure}[b]
-%    \begin{minipage}{.4\textwidth}
-%\begin{verbatim}
-%int main(int arg) {
-%  if(arg)
-%    g();
-%  else
-%    h();
-%  f();
-%}
-%\end{verbatim}
-%    \end{minipage}
-%    \begin{minipage}{.4\textwidth}
-%\begin{verbatim}
-%int main() {
-%  int x = 1;
-%  f();
-%  x = -x;
-%  f();
-%  print(x);
-%}
-%\end{verbatim}
-%  \end{minipage}
-%
-%  \caption{More Examples}
-%  \label{fig:examples2}
-%\end{figure}
+%% %\begin{figure}[b]
+%% %    \begin{minipage}{.4\textwidth}
+%% %\begin{verbatim}
+%% %int main(int arg) {
+%% %  if(arg)
+%% %    g();
+%% %  else
+%% %    h();
+%% %  f();
+%% %}
+%% %\end{verbatim}
+%% %    \end{minipage}
+%% %    \begin{minipage}{.4\textwidth}
+%% %\begin{verbatim}
+%% %int main() {
+%% %  int x = 1;
+%% %  f();
+%% %  x = -x;
+%% %  f();
+%% %  print(x);
+%% %}
+%% %\end{verbatim}
+%% %  \end{minipage}
+%% %
+%% %  \caption{More Examples}
+%% %  \label{fig:examples2}
+%% %\end{figure}
+
+%% \paragraph*{The Use of Stack Safety}
+
+%% How does the programmer rely on stack safety? The stack makes implicit promises about
+%% the behavior of function calls. First, that when a call is finished, the caller can continue
+%% from where it left off with its local state unchanged. And second, that the call's
+%% behavior is determined only by a predictable interface that does not include the caller's
+%% local state.
+
+%% %The most natural example is the first
+%% %in figure \ref{fig:examples1}, in which {\tt main} calls stores 42 to a local variable {\tt x},
+%% %calls {\tt f}, and then prints {\tt x}. Here the programmer should be able to expect that
+%% %{\tt main} will print 42, but in C such an assumption may be wrong, if {\tt f} should
+%% %overwrite {\tt main}'s stack data.
+
+%% Both expectations imply predictable control flow, termed {\em well-bracketed
+%% control flow} (WBCF) by \citeauthor{Skorstengaard+19}. Calls always jump to valid entry
+%% points and return to their call sites. Then the data portion of the first expectation is for
+%% {\em integrity}: that a caller's local data is protected from modification by its callee.
+%% This is vital for local reasoning about the behavior of the caller. The security implications
+%% are significant: without integrity, a caller that branches on a local variable could be
+%% manipulated by its callee into unexpected behavior.
+
+%% Alongside integrity, we have {\em confidentiality}, in which a caller's data is protected
+%% from leakage by its callee. As a reasoning principle, confidentiality tells us that to
+%% predict the behavior of a call we need only consider a subset of the machine state.
+%% And in security terms, we can guarantee the secrecy of local data that we haven't passed
+%% even when calling a badly behaved function. Together, integrity and confidentiality
+%% comprise \citeauthor{Skorstengaard+19}'s {\em local state encapsulation} (LSE) property.
+
+%% It must be reiterated that LSE is of little use without WBCF: without WBCF, a callee
+%% could subvert LSE by ``returning'' to arbitrary code; after the return LSE should permit
+%% accessing the caller's state, but the execution would remain under the callee's control.
+
+%% To phrase LSE and WBCF as security properties requires an explicit attacker model:
+%% a clear understanding of who is being protected and from what. Most existing
+%% stack protection mechanisms envisage scenarios where a callee is
+%% influenced by external inputs to corrupt the stack in some way. To
+%% avoid getting into the details of exactly how this happens when
+%% formalizing our properties, we use an even stronger model: when we
+%% state the protections that a function can rely on when it makes a
+%% call, we assume that the callee can execute arbitrary instructions
+%% until it returns. Thus we have no need to differentiate safe code
+%% from adversarial --- all functions, and indeed all activations of the same function,
+%% are mutually distrusting.
+%% %
+%% For this model to make sense, we need to know when a call or a return is taking
+%% place. We assume that calls and returns are annotated in the code, so that
+%% we can track the point at which control transfers from the protected caller
+%% to the attacking callee --- and when that callee in turn becomes a protected
+%% caller in its own right.
+
+%% This ``nesting'' of properties is a key challenge in adapting the concepts
+%% of language-based security to the stack setting. We address this issue by
+%% turning any set of annotations into a dynamic model of {\em domains},
+%% in which some stack locations are sealed by the caller that needs to preserve
+%% them while the rest are unsealed and available for use by the active, attacking
+%% callee.
+
+%% First we introduce this model for a single simple stack with no sharing between callers and
+%% callees. Then we expand it to allow passing of stack data, granting a callee one-time
+%% access to the caller's data. We do not model more sophisticated sharing, because to do
+%% so realistically would require a separate protection scheme, such as a capability
+%% model. While this is quite feasible in a tag-based enforcement mechanism, it is properly
+%% a separate policy outside the scope of stack safety. (A tag-based approach can easily
+%% compose multiple such policies.)
+
+%% Finally, we extend the model to a coroutine system featuring finitely-bounded stacks.
+%% Though simplistic, this extension is a step toward concurrency and demonstrates that
+%% the model is flexible enough to handle more sophisticated styles of control-flow.
+
+%% After formally defining stack safety, we show that the definition is
+%% enforceable using an existing tag-based enforcement
+%% mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider
+%% \citeauthor{DBLP:conf/sp/RoesslerD18}'s conservative Depth Isolation policy.
+%% This policy testably enforces our {\em eager} properties, in which integrity is respected
+%% at every step of a program, and each call respects integrity at each of its internal steps.
+%% These properties are very strong, and our policies enforce them; this also makes them very
+%% intensional, in that they do not distinguish internal behavior from external.
+%% They also have the advantage that they are suitable for efficient testing, as they
+%% fail immediately when a violation occurs.
+
+%% The downside of the Depth Isolation policy is that it is rather expensive to implement.
+%% In the same work, \citeauthor{DBLP:conf/sp/RoesslerD18} propose a different mechanism
+%% that is more efficient by virtue of being lazy in its enforcement.
+%% Instead of enforcing the integrity and confidentiality of the stack at the
+%% exact moment when a callee returns, this policy signals violations when the
+%% caller actually accesses data that the callee has written into its stack
+%% frame. \ifaftersubmission\bcp{We could also hint at the lazy confidentiality
+%%   property in the same way...}\fi
+%% The lazy policy does not enforce our eager integrity property, and to our
+%% knowledge there is no formal statement of the properties that it ought to enforce.
+%% We propose {\em lazy} stack-safety properties, which capture the desired behavior of a
+%% policy that detects integrity violations between when they occur and when they make
+%% a visible impact. Intuitively this can be phrased as ``no visible reads after dangerous
+%% writes.'' Unfortunately \citeauthor{DBLP:conf/sp/RoesslerD18}'s existing
+%% ``Lazy Tagging and Clearing'' policy does not quite enforce this property, as we show in
+%% testing, but formalizing the ideal property allows us to see how it falls short.
+%% We provide a variant of ``Lazy Tagging and Clearing'' that does enforce lazy integrity
+%% at some performance cost.
+%% %We prove (in Coq) that the eager property implies the lazy one.\apt{do we?
+%% %  and is it so interesting anyhow?}
+%% We argue that any system purporting to enforce stack safety ought to obey at least lazy
+%% stack safety, making it a plausible extensional characterization.
+
+%% %\bcp{I worry that we are being a little
+%% %  dishonest here: the stated advantage of the lazy policy is that it is more
+%% %efficient, but our variant is {\em not} efficient!}
 
 In summary, we offer the following contributions:
 \begin{itemize}
@@ -428,12 +555,12 @@ In summary, we offer the following contributions:
   flow, and temporal stack safety~(\cref{sec:lse-and-wbcf}).
 \item
   We apply a property-based randomized testing framework to provide evidence that 
-  this stepwise property is enforced by the Depth Isolation policy of
-  \citet{DBLP:conf/sp/RoesslerD18} (\cref{sec:conservative}).
+  this stepwise property is enforced by the Depth Isolation policy
+  of~\citet{DBLP:conf/sp/RoesslerD18}~(\cref{sec:conservative}).
 \item 
   We formalize a weaker but more extensional \emph{observational} variant of the
   stack safety property, and argue that it accurately characterizes 
-  the Lazy Tagging and Clearing policy of \citet{DBLP:conf/sp/RoesslerD18},
+  the Lazy Tagging and Clearing policy of~\citet{DBLP:conf/sp/RoesslerD18},
   when enhanced with unique tags on each activation~(\cref{sec:lazy}).
 \item 
   We show how our models can be instantiated and extended to handle passing
