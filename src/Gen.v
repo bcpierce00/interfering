@@ -157,7 +157,25 @@ Definition listify1_word mem :=
             (word.unsigned k,val) :: acc
           else acc) nil mem).
 
-Definition printMem (m : MachineState) (p : PolicyState) (i : LayoutInfo) :=
+Definition CodeMap_Impl := Zkeyed_map CodeStatus.
+Definition CodeMap_fromImpl (cm : CodeMap_Impl) : CodeMap :=
+  fun addr => match map.get cm addr with
+              | Some cs => cs
+              | _ => notCode
+              end.
+
+Instance ShowCodeAnnotation : Show CodeAnnotation :=
+  {| show ca :=
+       match ca with
+       | call => "call"
+       | yield => "yield"
+       | share _ => "share"
+       | normal => "normal"
+       | _  => "ret"
+       end |}.
+Derive Show for CodeStatus.
+
+Definition printMem (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (i : LayoutInfo) :=
   let mem := getMem m in
   let tags := memtags p in
   let mts := combine_match (listify1_word mem) (listify1 tags) in
@@ -169,10 +187,10 @@ Definition printMem (m : MachineState) (p : PolicyState) (i : LayoutInfo) :=
            then
              match decode RV32I val with
              | IInstruction inst =>
-               (show inst ++ " @ " ++ show t)%string
+               (show inst ++ " @ " ++ show t ++ " < " ++ show (CodeMap_fromImpl cm k) ++ " >")%string
              | _ => (show val ++ " <not-inst>")%string
              end
-           else (show val ++ " @" ++ show t)%string in
+           else (show val ++ " @" ++ show t ++ " < " ++ show (CodeMap_fromImpl cm k) ++ " >")%string in
        (show k ++ " : " ++ printed ++ nl ++ s)%string
     ) "" mts.
 
@@ -180,17 +198,17 @@ Definition printPC (m : MachineState) (p : PolicyState) :=
   (show (word.unsigned (getPc m)) ++ " @ " ++ show (pctags p))%string.
 
 Definition printMachine
-           (m : MachineState) (p : PolicyState) := (
+           (m : MachineState) (p : PolicyState) cm := (
   "PC:" ++  
   printPC m p ++ nl ++
   "Registers:" ++ nl ++
   printGPRs m p ++ nl ++
   "Memory: " ++ nl ++
-  printMem m p defLayoutInfo ++ nl
+  printMem m p cm defLayoutInfo ++ nl
   )%string.
 
-Instance ShowMP : Show (MachineState * PolicyState):=
-  {| show := fun '(m,p) => printMachine m p |}.
+Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl):=
+  {| show := fun '(m,p,cm) => printMachine m p cm |}.
 
 (*
 , initGPR :: TagSet 
@@ -343,52 +361,7 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
 --              )
             ]
  *)
-(*
--- Should return a maybe or be called only when the offset is guaranteed to exist
-genCall :: PolicyPlus -> Machine_State -> PIPE_State ->
-            (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
-            (Instr_I -> Gen TagSet) ->
-            (Integer -> [(Instr_I, TagSet)]) ->
-            Gen [(Instr_I, TagSet)]
-genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
-  let m = ms ^. fmem
-      t = Map.assocs $ ps ^. pmem
 
-      existingCallSites = map (\(i,t) -> (i - ms ^. fpc)) $ filter (\(i,t) -> callP t) t
-      newCallSites =
-        -- iterate through all possible instruction locations
-        -- and filter out the ones that already exist in memory
-        let offset_choices = [20, 24 .. (instrHigh pplus - instrLow pplus - 50)]
-            valid_offsets = filter (\i -> ms ^. fpc + i < instrHigh pplus - 50) offset_choices
-            not_used = filter (\i -> not (Map.member (ms ^. fpc + i) m)) valid_offsets
---        in traceShow (instrHigh pplus, instrLow pplus, instrHigh pplus - instrLow pplus - 50, offset_choices, valid_offsets, not_used) not_used
-        in not_used        
-
-      options = existingCallSites ++ newCallSites
-
-  offset <-
-    if any (\ off -> off + ms ^. fpc > 400) options then error $ show options else
-    if not $ null options then elements options else return 4242 -- FIX
-  return $ headerSeq offset
- *)
-(*
--- TODO: This might need to be further generalized in the future
--- Returns (call diff, instruction sequence)
--- INV: Never returns empty list
-genInstrSeq :: PolicyPlus -> Machine_State -> PIPE_State ->
-               (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
-               (Instr_I -> Gen TagSet) ->
-               (Integer -> [(Instr_I, TagSet)]) -> Int -> [(Instr_I, TagSet)] ->
-               Gen (Int, [(Instr_I, TagSet)]) 
-genInstrSeq pplus ms ps dataP codeP callP genInstrTag headerSeq numCalls retSeq =
-  frequency [ (5, (0,) <$> (:[]) <$> genInstr pplus ms ps dataP codeP genInstrTag)
-            -- TODO: Sometimes generate calls in the middle of nowhere
-            , (2, (1,) <$> genCall pplus ms ps dataP codeP callP genInstrTag headerSeq)
-            -- TODO: Some times generate returns without the sequence
-            , (numCalls, return (-1, retSeq))
-            -- TODO: Sometimes read/write the instruction memory (harder to make work)
-            ] 
- *)
 
 Definition Zseq (lo hi : Z) :=
   let len := Z.to_nat (Z.div (hi - lo) 4) in
@@ -398,6 +371,84 @@ Definition Zseq (lo hi : Z) :=
       | S len' => start :: aux (start + 4) len'
       end in
   aux lo len.
+
+Definition headerSeq offset :=
+  [ (Jal ra offset, [Tcall])
+  ; (Sw sp ra 4  , [Th1])
+  ; (Addi sp sp 8, [Th2])
+  ].
+
+Definition returnSeq :=
+  [ (Lw ra sp (-4), [Tr1])
+  ; (Addi sp sp 8 , [Tr2])
+  ; (Jalr ra ra 0 , [Tr3])
+  ].
+
+Definition genCall (l : LayoutInfo) (t : TagInfo)
+           (m : MachineState) (p : PolicyState)
+           (cm : CodeMap_Impl) (nextF : FunID)
+           (callP :  TagSet -> bool) :
+  option (nat * G (list (InstructionI * TagSet) * FunID))
+  :=
+(*  
+genCall :: PolicyPlus -> Machine_State -> PIPE_State ->
+            (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
+            (Instr_I -> Gen TagSet) ->
+            (Integer -> [(Instr_I, TagSet)]) ->
+            Gen [(Instr_I, TagSet)]
+genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
+  let m = ms ^. fmem
+      t = Map.assocs $ ps ^. pmem
+ *)
+  let existingSites :=
+      List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
+               (List.filter (fun '(i,t) => callP t)
+                            (listify1 (memtags p))) in
+  let newCallSites :=
+      let offset_choices :=
+          Zseq 20 (dataHi l - dataLo l - 50) in
+      let valid_offsets :=
+          List.filter (fun i => Z.leb (word.unsigned (getPc m) + i) (dataHi l - 50)) offset_choices in
+      let not_used :=
+          List.filter (fun i =>
+                         match map.get (getMem m) (word.of_Z i) with
+                         | Some _ => true
+                         | None => false
+                         end) valid_offsets in
+      not_used in
+
+  let exOpts :=
+        (* Existing callsites, lookup fun id *)
+      List.map (fun i =>
+                  match map.get cm i with
+                  | Some (inFun f _) =>
+                    (headerSeq i, f) 
+                  | _ => exception "genCall - nofid"
+                  end) existingSites  in
+  let newOpts :=
+      List.map (fun i => (headerSeq i, nextF)) newCallSites in
+  match exOpts ++ newOpts with
+  | [] => None
+  | x :: xs =>
+    Some (S (List.length xs), elements x (x :: xs))
+  end.
+
+Definition genInstrSeq
+           (l : LayoutInfo) (t : TagInfo)
+           (m : MachineState) (p : PolicyState)
+           (dataP codeP callP : TagSet -> bool)
+           (cm : CodeMap_Impl) (f nextF : FunID)
+           (genInstrTag : InstructionI -> G TagSet) :=
+  let fromInstr :=
+      bindGen (genInstr l t m p dataP codeP genInstrTag)
+              (fun it => returnGen ([it], f)) in
+  match genCall l t m p cm f callP with
+  | None => fromInstr
+  | Some (len,g) =>
+    freq_ g (cons (2%nat, g)
+                  (cons (5%nat, fromInstr)
+                        nil))
+  end.
 
 Definition replicateGen {A} (n : nat) (g : G A) : G (list A) :=
   let fix aux n :=
@@ -455,16 +506,17 @@ Fixpoint gen_exec_aux (steps : nat)
          (i : LayoutInfo) (t : TagInfo)
          (m0 : MachineState) (p0 : PolicyState)
          (m  : MachineState) (p  : PolicyState)
+         (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
          (its : list (InstructionI * TagSet))
-         (dataP codeP : TagSet -> bool)
+         (dataP codeP callP : TagSet -> bool)
          (genInstrTag : InstructionI -> G TagSet)
          (* num calls? *)
-  : G (MachineState * PolicyState) :=
+  : G (MachineState * PolicyState * CodeMap_Impl) :=
 (*  trace (show ("GenExec...", steps, m, p))*)
   (match steps with
   | O =>
     (* Out-of-fuel: End generation. *)
-    ret (m0, p0)
+    ret (m0, p0, cm)
   | S steps' =>
     match map.get (getMem m) (getPc m) with
     | Some _ =>
@@ -472,10 +524,10 @@ Fixpoint gen_exec_aux (steps : nat)
       match mpstep (m,p) with
       | Some ((m',p'),o) =>
         (* ...and recurse. *)
-        gen_exec_aux steps' i t m0 p0 m' p' its codeP dataP genInstrTag
+        gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP genInstrTag
       | _ =>
         (* ... something went wrong. Trace something? *)
-        ret (m0, p0)
+        ret (m0, p0, cm)
       end
     | _ =>
       (* Check if there is anything left to put *)
@@ -483,20 +535,28 @@ Fixpoint gen_exec_aux (steps : nat)
                | [] =>
                  (* Generate an instruction sequence. *)
                  (* TODO: Sequences, calls. *)
-                 bindGen (genInstr i t m p dataP codeP genInstrTag)
-                         (fun ist => ret (ist, nil))
-               | ist::its' => ret (ist, its')
+                 bindGen (genInstrSeq i t m p dataP codeP callP cm f nextF genInstrTag)
+                         (fun '(ists, f') =>
+                            match ists with
+                            | ist :: ists' => 
+                              returnGen (f', ist, ists')
+                            | _ => exception "EmptyInstrSeq"
+                            end)
+               | ist::its' =>
+                 returnGen (f, ist, its')
                end)
-      (fun '((is,it), its) =>
+      (fun '(f', (is,it), its) =>
+         let nextF' := if Nat.eqb f' nextF then
+                         S nextF else nextF in
          let m0' := setInstrI (getPc m) m0 is in
          let m'  := setInstrI (getPc m) m  is in
-         (* TODO: Policy states *)
          let p0' := setInstrTagI (word.unsigned (getPc m)) p0 it in
          let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
+         let cm' := map.put cm (word.unsigned (getPc m)) (inFun f' normal) in
          match mpstep (m', p') with
          | Some ((m'', p''), o) =>
-           gen_exec_aux steps' i t m0' p0' m'' p'' its dataP codeP genInstrTag
-         | _ => ret (m0', p0')
+           gen_exec_aux steps' i t m0' p0' m'' p'' cm f nextF its dataP codeP callP genInstrTag
+         | _ => ret (m0', p0', cm)
          end)
     end
   end).
@@ -538,9 +598,10 @@ genGPRTs pplus p genGPRTag = do
 Definition genMachine
            (i : LayoutInfo) (t : TagInfo)
            (m0 : MachineState) (p0 : PolicyState)
-           (dataP codeP : TagSet -> bool)
+           (cm0 : CodeMap_Impl)
+           (dataP codeP callP : TagSet -> bool)
            (genInstrTag : InstructionI -> G TagSet)
-  : G (MachineState * PolicyState) :=
+  : G (MachineState * PolicyState * CodeMap_Impl) :=
 (*  
 genMachine :: PolicyPlus -> (PolicyPlus -> Gen TagSet) -> (PolicyPlus -> Gen TagSet) ->
              (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
@@ -558,7 +619,7 @@ genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag sp
   let ps'' = ps' & pgpr . at sp ?~ spTag
   *)
 
-  (gen_exec_aux 40 i t ms' ps' ms' ps' nil dataP codeP genInstrTag))).
+  (gen_exec_aux 40 i t ms' ps' ms' ps' cm0 O (S O) nil dataP codeP callP genInstrTag))).
 
 Definition zeroedPolicyState : PolicyState :=
   {| nextid := 0
@@ -571,12 +632,16 @@ Definition zeroedPolicyState : PolicyState :=
 Definition genMach :=
   let codeP := fun tt => true in
   let dataP := fun tt => true in
+  (* Fix this *)
+  let callP := fun tt => false in  
   let genInstrTag : InstructionI -> G TagSet :=
       fun i => returnGen (cons Tinstr nil) in
-  genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState
-             dataP codeP genInstrTag.
+  genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState map.empty
+             dataP codeP callP genInstrTag.
 
 From StackSafety Require Import SubroutineSimple.
+
+Sample (genMach).
 
 Definition prop_integrity :=
   let cm := fun _ => notCode in
@@ -584,4 +649,4 @@ Definition prop_integrity :=
   forAll genMach (fun '(m,p) =>
   (SimpleStackIntegrityStepP cm 42 m p (initC sm))).
 
-QuickCheck prop_integrity.
+(* QuickCheck prop_integrity. *)
