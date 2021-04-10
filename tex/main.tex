@@ -1231,57 +1231,69 @@ the program counters will differ, breaking the lockstep.
 
 \newcommand{\mainpassc}{magenta}
 
-\begin{figure}[b]
+\begin{figure}
   \centering
   \begin{subfigure}{.45\textwidth}
 \begin{verbatim}
-int stash;
+int stash = 0;
 
 int main() {
-0:             int x = 42, y = 0;
-1[P(x)],2[C]:  f(&x);
-3:             x = 0;
-4[P(y)],5[C]:  f(&y);
-6[R]:          return 0;
+0:         int x, y;
+1[P(x)C]:  f(x);
+2:         x = 0;
+3[P(y)C]:  f(y);
+4[R]:      return x;
 }
 
-void f(int* a) {
-10:  if(!stash)
-11:    stash = a;
-12:  *stash = 5;
-13:  return;
+void f(int &a) {
+10:    if(!stash)
+11:      stash = &a;
+12:    *stash = 5;
+13[R]:   return;
 }
 \end{verbatim}
-\end{subfigure}
+  \end{subfigure}
   \begin{subfigure}{.5\textwidth}
     \begin{tabular}{l l}
-      {\tt 2} &
-      \memoryaddrs{12em}
-      \memory{1}{\mainpassc}[{\makebox[0pt]{Pass(0)}}]%
-      \memory{2}{\unsealc}[{\makebox[0pt]{Unsealed}}]
-      ~$\cdots$ \\
       {\tt 10} &
       \memoryaddrs{17em}
       \memory{1}{\mainpassc}[{\makebox[0pt]{Pass(0)}}]%
       \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
-      \memory{2}{\unsealc}
+      \memory{1}{\retptrc}
+      \memory{1}{\unsealc}
       ~$\cdots$ \\
+      {\tt 11} &
+      \memoryaddrs{17em}
+      \memory{1}{\mainpassc}
+      \memory{1}{\mainsealc}
+      \memory{1}{\retptrc}
+      \memory{1}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-18em}{0.75em}{5}
+      \\
       {\tt 3} &
       \memoryaddrs{12em}
-      \memory{3}{\unsealc}
-      ~$\cdots$ \\
-      {\tt 5} &
-      \memoryaddrs{12em}
-      \memory{1}{\unsealc}
-      \memory{1}{\mainpassc}
-      \memory{1}{\unsealc}
-      ~$\cdots$ \\
+      \memory{4}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-18em}{0.75em}{0}
+      \\
       {\tt 10} &
+      \memoryaddrs{17em}
+      \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
+      \memory{1}{\mainpassc}[{\makebox[0pt]{Pass(0)}}]%
+      \memory{1}{\retptrc}
+      \memory{1}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-18em}{0.75em}{0}
+      \\
+      {\tt 11} &
       \memoryaddrs{17em}
       \memory{1}{\mainsealc}
       \memory{1}{\mainpassc}
-      \memory{2}{\unsealc}
-      ~$\cdots$ \\
+      \memory{1}{\retptrc}
+      \memory{1}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-18em}{0.75em}{\bf 5}
 \end{tabular}
 \end{subfigure}
 
@@ -1289,28 +1301,38 @@ void f(int* a) {
 \end{figure}
 
 
-Up til now we have assumed that function arguments and returns are passed solely in registers.
-This is an oversimplication, which we will now correct. There are important stack safety concerns
-when passing arguments on the stack, as seen in example \ref{fig:passing}. In this example,
-{\tt main} passes a reference to {\tt x}, but then clears {\tt x} and instead passes one to
-{\tt y}. Before each call, when the address of a variable is taken, we add a new annotation
-\(P(x)\) or \(P(y)\) identifying the memory to be passed, and our stack model marks it in
-magenta. \apt{Why are there two line numbers assoicated with the two calls?}
-Then at the call, the parts of the caller's frame that are not passed are sealed, as usual. Passed
-memory also tracks which depth owns it, and it may only be accessed by the immediate callee
-(at its depth plus one).
+Up til now we have ignored function arguments, since our simplest model places them in
+registers. This is an oversimplication, which we will now correct, starting with the more
+interesting case: call-by-reference. There are important stack safety concerns
+when passing arguments by reference, as seen in example \ref{fig:passing}. In this example,
+{\tt main} calls {\tt f} with a reference to {\tt x}, but then clears {\tt x} and instead
+passes a reference to {\tt y}. We would expect that the first call to {\tt f} might modify
+{\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
+{\tt x} in the second call.
 
-\apt{This needs to be talked through in more detail.}
-But because {\tt f} stashes the original pointer to {\tt x}, it will overwrite {\tt x} while
-{\tt x} is sealed, an integrity violation. This fits with the intuition of passing by reference,
-that the passed variable might be read or written during the call, not that it is permanently
-open to be read or written by all subsequent calls. This also applies to passing large objects
-by value in the stack: the caller allocates them, and the relevant instructions are annotated to
-indicate passing.
+At each call, we add a new annotation \(P(x)\) or \(P(y)\) identifying the memory to be
+passed, and our stack model marks it in magenta. Then the caller's frame that are not
+passed are sealed, as usual. Just as we marked sealed memory with the depth of its owner,
+we do the same to passed memory. We keep track of the current depth of the active function
+next to the stack pointer in the diagram. A passed address may only be accessed when the
+current depth is one higher than the one it is sealed with.
 
-We do not model cases where permanent sharing is desireable, because they are uninteresting
-and hard to motivate: we would expect to treat such sharing as completely unprotected, and
-perhaps attach a separate memory safety policy to add some protection to such variables.
+So at the initial call, {\tt x} is passed, and {\tt f} is free to write to it. Then upon
+return, {\tt main}'s frame is unsealed. At the second call it is {\tt y} that is passed,
+and when {\tt f} instead tries to write to {\tt x}, it violates integrity. For that matter
+a future call with no arguments passed by reference would also violate integrity if it wrote
+to either variable.
+
+Passed addresses are also excluded from confidentiality: at the start of each call, we vary
+only stack addresses that are not passed. This is important, as we use the passing label
+for those arguments that are passed by value on the stack, as well. We might instead
+treat them as unsealed, but then we would treat them as confidential like the rest of the stack.
+
+We do not model permanent sharing, in which a variable's address is taken and it might be
+passed far afield before use, because this situation is uninteresting and hard to motivate
+as an instance of stack safety. We would expect to treat such sharing as completely
+unprotected, and perhaps attach a separate memory safety policy to add some protection
+to such variables.
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
