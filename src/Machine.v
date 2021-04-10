@@ -26,6 +26,9 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Z.HexNotation.
 Require coqutil.Map.SortedList.
 
+Require Import coqutil.Map.Interface.
+
+
 Require Import Lia.
 
 From RecordUpdate Require Import RecordSet.
@@ -135,6 +138,23 @@ Import RecordSetNotations.
       end
     end.
 
+  Definition getComponents (m : MachineState) : list Component :=
+    (* PC *)
+    let pc := [PC] in
+    (* Non-zero registers. *)
+    let regs :=
+        List.map (fun x => Reg x) 
+                 (List.rev
+                    (map.fold (fun acc z v => z :: acc) nil 
+                              (RiscvMachine.getRegs m))) in
+    (* Non-zero memory-locs. *)
+    let mem :=
+        List.map (fun x => Mem (word.unsigned x))
+                 (List.rev
+                    (map.fold (fun acc z v => z :: acc) nil 
+                              (RiscvMachine.getMem m))) in
+    pc ++ regs ++ mem.
+       
   (* Observations are values, or silent (tau) *)
   Inductive Observation : Type := 
   | Out (w:Value) 

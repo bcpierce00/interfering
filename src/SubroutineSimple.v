@@ -1,7 +1,9 @@
 Require Import List.
 Import ListNotations.
 Require Import Bool.
+Require Import ZArith.
 Require Import Nat.
+
 
 From StackSafety Require Import Trace Machine ObsTrace.
 
@@ -159,6 +161,28 @@ Section WITH_MAPS.
       fst c k = Sealed d ->
       proj m k = proj m' k.
 
+  (* TODO: Sean, check this corresponds? *)
+  Definition SimpleStackIntegrityStepP fuel m p c :=
+    let fix aux fuel m p c :=
+        match fuel with
+        | O => true
+        | S fuel' => 
+          match mpcstep updateC (m,p,c) with
+          | None => true (* right? *)
+          | Some (m', p', c', o) =>
+            andb
+              (List.forallb (fun k =>
+                            match fst c k with
+                            | Sealed _ =>
+                              Z.eqb (proj m k) (proj m' k)
+                            | _ => true
+                            end)
+                            (getComponents m'))
+              (aux fuel' m' p' c')
+          end
+        end in
+    aux fuel m p c.
+  
   (* In addition to integrity, we have a confidentiality property. Consider in our
      example when B called C and then D. Suppose that B has some secret data, say a capability on some
      system critical resource, that A, C and D should not access. Clearly, D should not read

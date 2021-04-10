@@ -575,5 +575,13 @@ Definition genMach :=
       fun i => returnGen (cons Tinstr nil) in
   genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState
              dataP codeP genInstrTag.
-                       
-Sample (genMach).
+
+From StackSafety Require Import SubroutineSimple.
+
+Definition prop_integrity :=
+  let cm := fun _ => notCode in
+  let sm := fun _ => true in
+  forAll genMach (fun '(m,p) =>
+  (SimpleStackIntegrityStepP cm 42 m p (initC sm))).
+
+QuickCheck prop_integrity.
