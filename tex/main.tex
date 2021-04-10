@@ -148,13 +148,18 @@ We propose a formal criterion for stack safety, phrased in terms of
 language-based security: a combination of an integrity property (``each
 caller's stack frame is invariant by the callee'') and a confidentiality
 property (``the callee's behavior is insensitive to differences in the
-caller's stack frame''). These combine with a straightforward
-well-bracketedness condition on the program's control flow that ensures that
-callers and callees remain meaningfully distinct.\bcp{I am still not clear
+caller's state''). These are defined in terms of a control flow model
+in which callees are meaningfully distinct from their callers due to being
+bracketed by calls and returns. We further apply a straightforward notion of
+``well-bracketed control flow'' that ensures that callers' control flow
+can continue predictably after the return.
+
+  \bcp{I am still not clear
   how well-bracketedness fits into the story.  (For me, it is the bracketing
   that {\em defines} where calls and returns happen, so there is something
   tautological about saying that `` well-bracketedness condition ensures
   that callers and callees remain meaningfully distinct''!)}
+  \sna{Attempted to resolve this, it may need some work.}
 
 Our criterion is inspired by hardware tagging mechanisms for stack
 protection, in particular the stack-safety ``micro-policies''
@@ -163,11 +168,12 @@ principles of stack safety\bcp{I wish we did not have to be so apologetic
   about being tied to micro-policies (and it is still not clear to me that
   we have to be... do we have a clear statement someplace of why our
   definition would not apply to CFI, for example? This seems like a critical
-  discussion...)}. We define additional properties tailored for specific
-contexts: a stronger property amenable to efficient testing and a weaker one
-that is approximated by more efficient, lazy policies.
-
-\bcp{... and now a sentence on testing!}
+  discussion...)}. Finally, we show that micro-policies do indeed enforce
+our properties using property-based randomized testing. An eager micropolicy
+that catches violations immediately enforces our stronger property, and we
+define a weaker, more extensional form of the property that is enforced
+by a ``lazy'' micropolicy -- one that, for performance reasons, may permit
+local violations as long as they do not influence future behavior.
 
   \ifaftersubmission\bcp{should we mention stktokens here?}
   \leo{Not sure. We almost never cite stuff in the abstract, do we?}
@@ -389,6 +395,8 @@ micro-policy does not quite enforce this property either, as we show in
 testing~\apt{really??}, but formalizing the ideal property allows us to see how it falls short.
 We propose  a variant of Lazy Tagging and Clearing that we believe \emph{does} enforce observational integrity,
 at some performance cost.\apt{but we're not testing that, right?}
+\rb{Not sure about the property part right now, the machine side of this is
+pretty much done}
 
 Observational integrity is attractive in being significantly more \emph{extensional} than
 stepwise integrity.  We argue that it may therefore be a better minimal specification for
@@ -401,6 +409,8 @@ so realistically would require a separate protection scheme, such as a capabilit
 model. While this is quite feasible in a tag-based enforcement mechanism, it is properly
 a separate policy outside the scope of stack safety. (A tag-based approach can easily
 compose multiple such policies.)
+\rb{So no pointer passing? Pass by reference is now discussed at the end of
+Section 3, however it looks like things get tricky rather quickly.}
 
 Finally, we define integrity and confidentiality properties for a coroutine system featuring finitely-bounded stacks.
 Though simplistic, this extension is a step toward concurrency and demonstrates that
@@ -409,60 +419,6 @@ our approach is flexible enough to handle more sophisticated styles of control-f
 While our property definitions were developed with micro-policy enforcement in mind, they
 agnostic about many implementation details and should be applicable to other
 systems with minor adjustment.\apt{move this up?}
-
-%% %\begin{figure}[b]
-%% %    \begin{minipage}{.4\textwidth}
-%% %\begin{verbatim}
-%% %int main() {
-%% %  int x = 42;
-%% %  f();
-%% %  print(x);
-%% %}
-%% %\end{verbatim}
-%% %    \end{minipage}
-%% %    \begin{minipage}{.4\textwidth}
-%% %\begin{verbatim}
-%% %int main() {
-%% %  int x = 1;
-%% %  f();
-%% %  if(x)
-%% %    g();
-%% %  else
-%% %    h();
-%% %}
-%% %\end{verbatim}
-%% %    \end{minipage}
-%% %  \caption{Simple Examples}
-%% %  \label{fig:examples1}
-%% %\end{figure}
-
-%% %\begin{figure}[b]
-%% %    \begin{minipage}{.4\textwidth}
-%% %\begin{verbatim}
-%% %int main(int arg) {
-%% %  if(arg)
-%% %    g();
-%% %  else
-%% %    h();
-%% %  f();
-%% %}
-%% %\end{verbatim}
-%% %    \end{minipage}
-%% %    \begin{minipage}{.4\textwidth}
-%% %\begin{verbatim}
-%% %int main() {
-%% %  int x = 1;
-%% %  f();
-%% %  x = -x;
-%% %  f();
-%% %  print(x);
-%% %}
-%% %\end{verbatim}
-%% %  \end{minipage}
-%% %
-%% %  \caption{More Examples}
-%% %  \label{fig:examples2}
-%% %\end{figure}
 
 %% \paragraph*{The Use of Stack Safety}
 
