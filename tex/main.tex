@@ -275,9 +275,9 @@ local violations as long as they do not influence future behavior.
 %  a bit to make sure though}
 
 The call stack is a perennial target for low-level attacks
-based on memory-safety vulnerabilities, with consequences
-ranging from leakage or corruption of private stack data to
-control-flow hijacking. To detect or prevent such attacks, a menagerie of
+based on memory-safety vulnerabilities, leading to consequences
+from leakage or corruption of private stack data to
+control-flow hijacking. To detect or prevent such attacks, a profusion of
 software and hardware protections have been proposed,
 %
 including stack canaries~\citep{Cowan+98},
@@ -286,29 +286,45 @@ split stacks~\citep{Kuznetsov+14},
 shadow stacks~\citep{Dang+15,Shanbhogue+19},
 capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b,Tsampas+19,Georges+21},
 and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \ifaftersubmission\apt{Mostly from
-  nick; there could be more}
+  nick; there could be more}\bcp{Yes, going back to MIT days---we should
+  include several more of these, if only to give readers the impression that
+this is a well-studied mechanism (so formalizing its protections is
+useful).} 
 \fi
 %
-The implementation and configuration of these  stack-safety mechanisms can be complex,
-and often involves compromises trading protection for efficiency.
-Thus it would be useful to have a precise formal specification for stack
-safety, both as a basis for comparing the security guarantees claimed by different enforcement
-techniques and for verifying that these claims are met by particular implementations.
+The protections offered by such mechanisms are generally described in terms
+of a set of concrete examples of attacks that they can prevent, leaving a
+more general characterization to the reader's intuition.
+Moreover, the details of these mechanisms can be quite intricate
+and often involve trading off protection and efficiency.
+Thus, it would be useful to have a precise, generic, and formal
+specification for stack
+safety, both as a basis for comparing the security claims of different
+enforcement techniques and for validating more rigorously that these claims
+are met by particular implementations.
 
 For example, \citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
 using tag-based \emph{micro-policies}~\citep{pump_oakland2015}.
-In essence, memory locations within each stack frame are tagged with the identity of
+Intuitively, memory cells within each stack frame are tagged with the
+identity of
 the function that owns the frame, and access to those locations is then gated
-according to the function that is currently executing. Many alternatives can
-be implemented on top of this basic idea, by choosing how to identify functions
-and deciding just which accesses are checked.  These alternatives vary in their
-efficiency, but also in the spatial and temporal precision of their security guarantees.
-For example, the \emph{Depth Isolation} policy strictly requires that a function owns any
+according to the function that is currently executing. Roessler and Dehon
+explored a number of versions
+of this basic idea, with different ways of identifying
+functions and deciding exactly which accesses are allowed.  These alternatives
+vary in their
+efficiency and in the spatial and temporal precision of their security guarantees.
+For example, their \emph{Depth Isolation} policy demands that a function
+owns any
 frame into which it writes; this seems simple and intuitively correct, but can be expensive to implement.
-On the other hand, the \emph{Lazy Tagging and Clearing} policy improves performance by
-allowing illicit writes to the frame so long as the written locations are not
-subsequently read. The intuition justifying laziness is that any genuinely dangerous writes will ultimately be
-detected before they can affect program behavior.  But we clearly need a more formal foundation for
+Conversely, their \emph{Lazy Tagging and Clearing} policy improves
+performance by
+allowing ``illicit'' writes to out-of-scope stack frames so long as the
+written locations are not
+subsequently read. The justification for this form of laziness is that any
+genuinely dangerous writes will ultimately be
+detected before they can affect program behavior. \bcp{Awkward transition here.} But we clearly need a
+more formal foundation for
 expressing, comparing and verifying these micro-policy security claims, as well as those of
 other enforcement technologies.
 
