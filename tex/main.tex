@@ -131,6 +131,7 @@
 %% Note: \begin{abstract}...\end{abstract} environment must come
 %% before \maketitle command
 \begin{abstract}
+\apt{maybe: ``Stack safety is a testable security property'' ?}a
   What is stack safety? The phrase has been used to describe the protections
   offered by a variety of mechanisms for guarding against
   attacks that corrupt the call stacks of running programs, including micro-policies
@@ -181,7 +182,7 @@
 
 %% Keywords
 %% comma separated list
-\keywords{Stack Safety, Micropolicies}  %% \keywords are mandatory in final camera-ready submission
+\keywords{Stack Safety, Micro-Policies}  %% \keywords are mandatory in final camera-ready submission
 
 
 %% \maketitle
@@ -257,17 +258,37 @@ including stack canaries~\citep{Cowan+98},
 bounds checking~\citep{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
 split stacks~\citep{Kuznetsov+14},
 shadow stacks~\citep{Dang+15,Shanbhogue+19},
-capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b},
+capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b,Tsampas+19,Georges+21},
 and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \ifaftersubmission\apt{Mostly from
   nick; there could be more}\leo{Do we want to hunt for more refs here?}
 \bcp{Sure, but later!}
 \fi
-This last provides an array of micro-policies offering protection at various granularities,
-which offer a trade-off between protection and efficiency.
+% 
+The implementation and configuration of these mechanisms can be complex, 
+and often involves making compromises that trade off protection for efficiency.  
+Thus it would be very useful to have precise formal specifications for stack safety
+that give us a basis for comparing the security guarantees claimed by different enforcement
+techniques, and for verifying that these claims are met by particular implementations.
 
-But what {\em is} the stack safety that these techniques enforce? Precise formal
-definitions are mostly lacking: rather, the notion is commonly defined in a
-negative way, by enumerating the bad things that a given enforcement mechanism
+For example, \citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
+using tag-based \emph{micro-policies}~\citep{pump_oakland2015}.
+In essence, memory locations within each stack frame are tagged with the identity of
+the function that owns the frame, and access to those locations is then gated
+according to the function that is currently executing. Many alternatives can
+be implemented on top of this basic idea, by choosing how to identify functions
+and deciding just which accesses are checked.  These alternatives vary in their
+efficiency, but also in the spatial and temporal precision of their security guarantees.
+For example, the \emph{Depth Isolation} policy strictly requires that a function owns any
+frame into which it writes; this seems simple and intuitively correct, but can be expensive to implement.
+On the other hand, the \emph{Lazy Tagging and Clearing} policy improves performance by 
+allowing illicit writes to the frame so long as the written locations are not
+subsequently read. The intuition justifying laziness is that any genuinely dangerous writes will ultimately be
+detected before they can affect program behavior.  But we clearly need a more formal foundation for
+expressing, comparing and verifying these micro-policy security claims, as well as those of
+other enforcement technologies.
+
+So how should we formally define stack safety? Definitions in the literature are commonly informal
+and proceed by enumerating the specific bad things that a given enforcement mechanism
 prevents, such as corruption of return addresses, buffer overflows, or
 use of uninitialized variables.
 %\bcp{Does use of unitialized variables lead to stack safety attacks?\apt{sure, via buffer overflow}}
@@ -276,39 +297,73 @@ use of uninitialized variables.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
-Indeed, we are only aware of one quite recent attempt to frame a positive definition, by
-\citet{Skorstengaard+19}, which defines stack safety as the conjunction of two properties:
-{\em local state encapsulation} and {\em well-bracketed control flow}.
-These properties are formalized by defining a capability-based machine
-that ``satisfies [stack safety] by construction.''
-%
-While this work represents an important step in the right direction, we believe
-there is still room to craft an operational characterization
-of stack safety. \apt{Perhaps our rhetoric should be more micro-policy-specific here?}
-In other words, we seek formal criteria that can be applied
-to a mechanism for protecting stack-based low-level programs to judge
-whether or not it actually ``guarantees stack safety.''
-\rb{The remainder of this paragraph may be diving too quickly, would a reader be
-confused by the references to these types of properties, yet to be introduced?}
-We begin with a strong
-local state encapsulation property that closely models the behavior of eager
-micro-policies from \citet{DBLP:conf/sp/RoesslerD18}. This ``eager'' property
-is too strong to characterize stack safety; reasonable enforcement mechanisms
-exist that violate it. One such mechanism is a ``lazy'' tag policy, similar to
-the one in \citet{DBLP:conf/sp/RoesslerD18}. We weaken local state encapsulation
-to support this technique and argue that the new property, defined relative to an
-arbitrary notion of observation. This property is still strong enough to prevent
-the bad behaviors we associate with unsafe stack behavior, but weak enough that
-other reasonable enforcement mechanisms can enforce it.
+The most abstract characterization of which we are aware is in 
+recent work by \citet{Skorstengaard+19}, which defines stack safety as the conjunction of two properties:
+{\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
+Informally, LSE says that the contents of
+a caller's stack frame are not read and written while its callees (and their callees, etc.) are
+executing, and WBCF says that callees always
+return to the point just after their call (or don't return at all). 
+\citet{Skorstengaard+19} formalize these properties by defining an idealized machine
+in which they visibly hold by construction; an enforcement mechanism (in their case, hardware capabilities)
+can then be shown to provide stack safety by giving a fully abstract embedding function
+from the idealized machine to an ordinary machine equipped with the enforcement.
 
-While our criteria are designed with PIPE micro-policies in mind, they are
+In this work, we take the (informal) definitions of WBCF and LSE as a starting point,
+but choose a different approach to formalizing them, based on the
+technical framework of language-based security~\citep{??}.  We define
+trace-based properties of \emph{stepwise stack integrity} and \emph{stack confidentiality}.
+In applying these security concepts, we treat each caller-callee pair as mutually distrustful
+and view the caller as needing protection from the callee. \apt{Need more explanation of
+  ``nesting'' and our novelty factor here? Also about domains??}
+{\em Integrity} says that a caller's local data is protected from modification by its callee.
+This is vital for local reasoning about the behavior of the caller. 
+{\em Confidentiality} states that a caller's data is protected
+from being leaked into its callee, and also that the callee cannot see uninitialized data.
+As a reasoning principle, confidentiality guarantees that the callee's
+behavior is determined only by a predictable interface that does not include the caller's
+local state or the uninitialized portion of the stack.
+Together, these properties (informally) capture LSE, as well as the ``temporal stack safety''
+notion that data outside of live frames should be inaccessible (which LSE does not address).
+We also give a simple trace-based formalization of WBCF, which is essential for keeping the
+notions of ``caller' and ``callee'' sensible.
+
+To illustrate the applicability of these properties, we perform randomized testing to
+validate that \citeauthor{DBLP:conf/sp/RoesslerD18}'s Depth Isolation micro-policy enforces them.
+\apt{more to say?}
+
+However, their Lazy Tagging and Clearing micro-policy does not enforce stepwise integrity.
+To address this, we develop an \emph{observational stack integrity} property that 
+is intended to specify enforcement mechanisms that 
+detect integrity violations between the point when they occur and the point when they make
+an observable impact. Intuitively this property can be phrased as ``no visible reads after dangerous
+writes.''  We prove (in Coq) that stepwise integrity implies observational integrity.
+
+Unfortunately the existing Lazy Tagging and Clearing 
+micro-policy does not quite enforce this property either, as we show in
+testing~\apt{really??}, but formalizing the ideal property allows us to see how it falls short.
+We propose  a variant of Lazy Tagging and Clearing that we believe \emph{does} enforce observational integrity,
+at some performance cost.\apt{but we're not testing that, right?}
+
+Observational integrity is attractive in being significantly more \emph{extensional} than
+stepwise integrity.  We argue that it may therefore be a better minimal specification for
+stack safety enforcement mechanisms in general.
+
+Our initial description of the properties assumes single simple stack with no sharing between callers and
+callees.  We expand it to allow passing of scalar stack data, granting a callee 
+access to the caller's data. We do not model more sophisticated sharing, because to do
+so realistically would require a separate protection scheme, such as a capability
+model. While this is quite feasible in a tag-based enforcement mechanism, it is properly
+a separate policy outside the scope of stack safety. (A tag-based approach can easily
+compose multiple such policies.)
+
+Finally, we define integrity and confidentiality properties for a coroutine system featuring finitely-bounded stacks.
+Though simplistic, this extension is a step toward concurrency and demonstrates that
+our approach is flexible enough to handle more sophisticated styles of control-flow.
+
+While our property definitions were developed with micro-policy enforcement in mind, they
 agnostic about many implementation details and should be applicable to other
 systems with minor adjustment.
-%
-Our key contribution is an operational model of local state encapsulation
-using the technical framework of language-based security
-\apt{this idea deserves more prominence}, with eager and lazy variants,
-together with a simple characterization of well-bracketed control flow.
 
 %\begin{figure}[b]
 %    \begin{minipage}{.4\textwidth}
@@ -364,142 +419,25 @@ together with a simple characterization of well-bracketed control flow.
 %  \label{fig:examples2}
 %\end{figure}
 
-\paragraph*{The Use of Stack Safety}
-
-How does the programmer rely on stack safety? The stack makes implicit promises about
-the behavior of function calls. First, that when a call is finished, the caller can continue
-from where it left off with its local state unchanged. And second, that the call's
-behavior is determined only by a predictable interface that does not include the caller's
-local state.
-
-%The most natural example is the first
-%in figure \ref{fig:examples1}, in which {\tt main} calls stores 42 to a local variable {\tt x},
-%calls {\tt f}, and then prints {\tt x}. Here the programmer should be able to expect that
-%{\tt main} will print 42, but in C such an assumption may be wrong, if {\tt f} should
-%overwrite {\tt main}'s stack data.
-
-Both expectations imply predictable control flow, termed {\em well-bracketed
-control flow} (WBCF) by \citeauthor{Skorstengaard+19}. Calls always jump to valid entry
-points and return to their call sites. Then the data portion of the first expectation is for
-{\em integrity}: that a caller's local data is protected from modification by its callee.
-This is vital for local reasoning about the behavior of the caller. The security implications
-are significant: without integrity, a caller that branches on a local variable could be
-manipulated by its callee into unexpected behavior.
-
-Alongside integrity, we have {\em confidentiality}, in which a caller's data is protected
-from leakage by its callee. As a reasoning principle, confidentiality tells us that to
-predict the behavior of a call we need only consider a subset of the machine state.
-And in security terms, we can guarantee the secrecy of local data that we haven't passed
-even when calling a badly behaved function. Together, integrity and confidentiality
-comprise \citeauthor{Skorstengaard+19}'s {\em local state encapsulation} (LSE) property.
-
-It must be reiterated that LSE is of little use without WBCF: without WBCF, a callee
-could subvert LSE by ``returning'' to arbitrary code; after the return LSE should permit
-accessing the caller's state, but the execution would remain under the callee's control.
-
-To phrase LSE and WBCF as security properties requires an explicit attacker model:
-a clear understanding of who is being protected and from what. Most existing
-stack protection mechanisms envisage scenarios where a callee is
-influenced by external inputs to corrupt the stack in some way. To
-avoid getting into the details of exactly how this happens when
-formalizing our properties, we use an even stronger model: when we
-state the protections that a function can rely on when it makes a
-call, we assume that the callee can execute arbitrary instructions
-until it returns. Thus we have no need to differentiate safe code
-from adversarial --- all functions, and indeed all activations of the same function,
-are mutually distrusting.
-%
-For this model to make sense, we need to know when a call or a return is taking
-place. We assume that calls and returns are annotated in the code, so that
-we can track the point at which control transfers from the protected caller
-to the attacking callee --- and when that callee in turn becomes a protected
-caller in its own right.
-
-This ``nesting'' of properties is a key challenge in adapting the concepts
-of language-based security to the stack setting. We address this issue by
-turning any set of annotations into a dynamic model of {\em domains},
-in which some stack locations are sealed by the caller that needs to preserve
-them while the rest are unsealed and available for use by the active, attacking
-callee.
-
-First we introduce this model for a single simple stack with no sharing between callers and
-callees. Then we expand it to allow passing of stack data, granting a callee one-time
-access to the caller's data. We do not model more sophisticated sharing, because to do
-so realistically would require a separate protection scheme, such as a capability
-model. While this is quite feasible in a tag-based enforcement mechanism, it is properly
-a separate policy outside the scope of stack safety. (A tag-based approach can easily
-compose multiple such policies.)
-
-Finally, we extend the model to a coroutine system featuring finitely-bounded stacks.
-Though simplistic, this extension is a step toward concurrency and demonstrates that
-the model is flexible enough to handle more sophisticated styles of control-flow.
-
-After formally defining stack safety, we show that the definition is
-enforceable using an existing tag-based enforcement
-mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider
-\citeauthor{DBLP:conf/sp/RoesslerD18}'s conservative Depth Isolation policy.
-This policy testably enforces our {\em eager} properties, in which integrity is respected
-at every step of a program, and each call respects integrity at each of its internal steps.
-These properties are very strong, and our policies enforce them; this also makes them very
-intensional, in that they do not distinguish internal behavior from external.
-They also have the advantage that they are suitable for efficient testing, as they
-fail immediately when a violation occurs.
-
-The downside of the Depth Isolation policy is that it is rather expensive to implement.
-In the same work, \citeauthor{DBLP:conf/sp/RoesslerD18} propose a different mechanism
-that is more efficient by virtue of being lazy in its enforcement.
-Instead of enforcing the integrity and confidentiality of the stack at the
-exact moment when a callee returns, this policy signals violations when the
-caller actually accesses data that the callee has written into its stack
-frame. \ifaftersubmission\bcp{We could also hint at the lazy confidentiality
-  property in the same way...}\fi
-The lazy policy does not enforce our eager integrity property, and to our
-knowledge there is no formal statement of the properties that it ought to enforce.
-We propose {\em lazy} stack-safety properties, which capture the desired behavior of a
-policy that detects integrity violations between when they occur and when they make
-a visible impact. Intuitively this can be phrased as ``no visible reads after dangerous
-writes.'' Unfortunately \citeauthor{DBLP:conf/sp/RoesslerD18}'s existing
-``Lazy Tagging and Clearing'' policy does not quite enforce this property, as we show in
-testing, but formalizing the ideal property allows us to see how it falls short.
-We provide a variant of ``Lazy Tagging and Clearing'' that does enforce lazy integrity
-at some performance cost.
-%We prove (in Coq) that the eager property implies the lazy one.\apt{do we?
-%  and is it so interesting anyhow?}
-We argue that any system purporting to enforce stack safety ought to obey at least lazy
-stack safety, making it a plausible extensional characterization.
-
-%\bcp{I worry that we are being a little
-%  dishonest here: the stated advantage of the lazy policy is that it is more
-%efficient, but our variant is {\em not} efficient!}
-
 In summary, we offer the following contributions:
 \begin{itemize}
+\item 
+  We harness the language-based security concepts of integrity and confidentiality 
+  to formalize a parameterized {\em stepwise stack-safety property}, and argue that
+  it captures the intuitive meaning of local stack encapsulation, well-bracketed control
+  flow, and temporal stack safety~(\cref{sec:lse-and-wbcf}).
 \item
-  % \leo{More? Extensional}\bcp{We might need to invent a word for this---''quasi-extensional''?}
-  A novel {\em stack-safety property} capturing the intuitive concepts of strictly enforced
-  local state encapsulation and well-bracketed control flow~(\cref{sec:lse-and-wbcf}).
-  % These properties rule out common examples of stack memory abuse.
-\item
-  A property-based randomized testing framework that demonstrates that this
-  property can be enforced by the Depth Isolation policy of
-  \citet{DBLP:conf/sp/RoesslerD18}, which is based on hardware
-  tagging~(\cref{sec:conservative}).
-\item
-  A {\em lazy} variant of the stack-safety property that can be enforced if the
-  Lazy Tagging and Clearing policy of \citet{DBLP:conf/sp/RoesslerD18} is enhanced
-  with unique tags on each activation, plus a proof (in Coq) that this
-  variant is weaker than the original~(\cref{sec:lazy}).
-\item
-  Standardized trace-based formulations of both eager and lazy confidentiality and integrity,
-  parameterizeable by arbitrary control-flow models and assignments of machine components
-  to {\em LSE domains}.
-\item
-  An LSE-domain model enhanced with passing of function arguments on the stack, with which our
-  standardized trace properties extend stack safety with local sharing.
-\item
-  An LSE-domain model that applies to simple coroutining, with corresponding LSE
-  properties and a {\em well-structured control flow} property that subsumes WBCF for each
-  stack as well as guaranteeing legitimate coroutine control transfers.
+  We apply a property-based randomized testing framework to provide evidence that 
+  this stepwise property is enforced by the Depth Isolation policy of
+  \citet{DBLP:conf/sp/RoesslerD18} (\cref{sec:conservative}).
+\item 
+  We formalize a weaker but more extensional \emph{observational} variant of the
+  stack safety property, and argue that it accurately characterizes 
+  the Lazy Tagging and Clearing policy of \citet{DBLP:conf/sp/RoesslerD18},
+  when enhanced with unique tags on each activation~(\cref{sec:lazy}).
+\item 
+  We show how our models can be instantiated and extended to handle passing
+  arguments on the stack~(\cref{sec:??}) and to support simple coroutining~(\cref{sec:??}).
 %  This policy does not enforce our strict
 %  local state encapsulation property,
 %  but a modified version of it using unique per-activation tags enforces
@@ -516,8 +454,8 @@ In summary, we offer the following contributions:
 
   %\item As evidence that the property is not too strong\apt{But we add the lazy version because the strict version \emph{is} too strong, in some sense.}, we show that it is
 %  realizible by
-%  a previously proposed micropolicy enforcement
-%  mechanism~(\Cref{sec:micropolicy}). \leo{And it says yes on a
+%  a previously proposed micro-policy enforcement
+%  mechanism~(\Cref{sec:micro-policy}). \leo{And it says yes on a
 %    substantial body of code}. We also present a variation of the
 %  property + policy that is lazy, easier/more efficient to implement,
 %  and provably weaker (\Cref{sec:lazy}).
@@ -531,7 +469,7 @@ In summary, we offer the following contributions:
 We begin with a description of our threat model
 (\cref{sec:threat}), a running example that we refer to throughout the paper
 (\cref{sec:running-example}),  and some technical preliminaries
-(\cref{sec:prelim}).
+(\cref{sec:prelim}).\apt{this para needs updating}
 
 \section{Threat Model and Assumptions}
 \label{sec:threat}
@@ -634,7 +572,7 @@ This model will be made more precise in \cref{sec:prelim}.
 %% \leo{Policies of interest: null, micro, cherri, software-only}
 %% \leo{TODO: Write down carefully}
 
-This enforcement model directly describes micropolicies~\citep{pump_oakland2015}.
+This enforcement model directly describes micro-policies~\citep{pump_oakland2015}.
 We believe that it is flexible enough to capture code-altering approaches, such as code
 rewriting or capability-based techniques, perhaps with less elegance.
 
@@ -642,9 +580,9 @@ rewriting or capability-based techniques, perhaps with less elegance.
 \newcommand{\tagname}{t}
 \newcommand{\uP}{{\mu P}}
 
-\paragraph*{Micropolicies}
+\paragraph*{Micro-Policies}
 %
-Micropolicies are a flexible tag-based, hardware-accelerated
+Micro-Policies are a flexible tag-based, hardware-accelerated
 reference monitoring mechanism; they been applied to stack safety
 enforcement by \citet{DBLP:conf/sp/RoesslerD18}.
 Here the policy state consists of metadata tags (e.g., identifying stack frames)
@@ -1248,7 +1186,7 @@ void f(int* a) {
 \end{figure}
 
 
-Up til now we have assumed that function arguments and returns are passed solely in registers.
+Until now we have assumed that function arguments and returns are passed solely in registers.
 This is an oversimplication, which we will now correct. There are important stack safety concerns
 when passing arguments on the stack, as seen in example \ref{fig:passing}. In this example,
 {\tt main} passes a reference to {\tt x}, but then clears {\tt x} and instead passes one to
@@ -1960,34 +1898,34 @@ fact enforces a stronger, inductive version of that property which strengthens t
 local state encapsulation component by checking for integrity and
 confidentiality violations at every step of the callee's execution trace.
 
-%\paragraph*{Micropolicies}
+%\paragraph*{Micro-Policies}
 %
 The enforcement policy of \citeauthor{DBLP:conf/sp/RoesslerD18} relies
 on a programmable, tag-based reference monitor that runs alongside the
 program.  To control this monitor, they use a programming model that
 allows fine-grained manipulation of metadata tags to encode so-called
-\emph{micropolicies}~\citep{pump_oakland2015}.
+\emph{micro-policies}~\citep{pump_oakland2015}.
 In such a system, all values in
 memory addresses and registers (including the $\PCname$)
 are enriched with an abstract metadata tag, which can represent
-arbitrary information about the value. A micropolicy is defined as a set of tags and a
+arbitrary information about the value. A micro-policy is defined as a set of tags and a
 collection of software-defined rules, indexed by machine opcode.
 At each step of the machine, the relevant rule is applied to the tags on
 the instruction's inputs (PC, registers, memory) and on the instruction itself, and produces
 one of two outcomes: either the instruction is allowed to execute (and generates
 tags for the result of the operation and the new PC), or the machine
 fail-stops with a policy violation.
-\citeauthor{pump_oakland2015} have shown that a wide range of micropolicies can
+\citeauthor{pump_oakland2015} have shown that a wide range of micro-policies can
 be defined using this scheme.
 
-Efficient execution of these micropolicies relies on hardware implementations,
+Efficient execution of these micro-policies relies on hardware implementations,
 such as the PUMP architecture~\citep{pump:asplos2015}.  Tags are represented
 as word-size bit vectors, stored separately from the regular memory and registers.
 The hardware incorporates a rule cache
 to allow quick retrieval of rule outputs for mapped inputs. If the cache misses,
 the hardware traps to a software handler (running in a privileged context or
 on a co-processor) to compute the rule result. To obtain adequate performance,
-it is important to design micropolicies so that they hit in the cache as
+it is important to design micro-policies so that they hit in the cache as
 much as possible. Thus, practical policies maintain a small working set of
 distinct tags.
 %% %
@@ -1997,7 +1935,7 @@ distinct tags.
 \subsection{A Conservative Tag Policy}
 \label{sec:conservative}
 %
-The first micropolicy we present to enforce the definition of stack
+The first micro-policy we present to enforce the definition of stack
 safety developed in \cref{sec:lse-and-wbcf} is a small variation
 on the Depth Isolation policy presented by
 \citet{DBLP:conf/sp/RoesslerD18}. Their policy tags the stack memory
@@ -2010,13 +1948,13 @@ sequences that have permission to manage the stack, say during calls and returns
 %% \rb{Conceivably on alloc
 %%   operations, etc., which we have not yet mentioned.}
 
-Our micropolicy works as follows. (We assume for ease of exposition that no
+Our micro-policy works as follows. (We assume for ease of exposition that no
 arguments are passed on the stack.)
 %% \rb{Come back to this later?}.
-The micropolicy maintains tags on values in memory of the form $\tagStackDepth{n}$,
+The micro-policy maintains tags on values in memory of the form $\tagStackDepth{n}$,
 indicating locations that belong to the stack frame at activation depth $n$,
 or $\tagNoDepth$; it tags the $\PCname$ with tags of the form $\tagPCDepth{n}$.
-During normal execution, the micropolicy rules only permit load and store operations
+During normal execution, the micro-policy rules only permit load and store operations
 when the target memory is tagged with the same depth as the current {\PCname} tag.
 Initially, the entire stack is tagged $\tagNoDepth$,
 %\rb{actually, the ``initial frame'' should be tagged with its proper depth}
@@ -2049,7 +1987,7 @@ usual calling convention tasks of saving/restoring the return address to/from
 the stack and adjusting the stack pointer. With the aid of an additional tag on
 the $\rsp$ register, these sequences also serve to enforce
 well-bracketed control flow.
-The micropolicy guarantees atomic execution of these sequences
+The micro-policy guarantees atomic execution of these sequences
 using a combination of tags on the instructions
 and an additional tag on the $\PCname$; we omit the details here.
 
@@ -2061,7 +1999,7 @@ in the call map. This is achieved by giving these instructions (another) special
 and it is easy to check statically that this has been done correctly.
 If the code fails to initiate an exit
 sequence at a point where the stack-safety property expects a return,
-the micropolicy will incorrectly behave as if execution
+the micro-policy will incorrectly behave as if execution
 is continuing in the callee, but since the callee never has stronger access
 rights than the caller, this is harmless.
 
@@ -2109,10 +2047,10 @@ rights than the caller, this is harmless.
 %% statically.
 
 %% Only programs whose sequences are well-formed are
-%% protected by the micropolicy, although programs are still protected
+%% protected by the micro-policy, although programs are still protected
 %% (by fail-stopping) even if the intended sequences are missing. By
 %% tracking the execution of the blessed sequences in the tag state of
-%% the {\PCname} register, the micropolicy ensures that the entry
+%% the {\PCname} register, the micro-policy ensures that the entry
 %% sequences of calls declared in the call map are executed correctly.
 
 Note that in this policy both the entry and exit sequences
@@ -2139,9 +2077,9 @@ callee's stack frame.\rb{The policy would also need to control this, I think it
 %\rb{Where to talk about the role of the compiler?}
 
 %% Because the access rights of callers subsume those of callees, it is essential
-%% that the micropolicy change tags when the property thinks that a call occurs,
-%% but it is safe for the micropolicy to fail to reset to the caller's tag when the
-%% property thinks a return occurs. (Dually, it is safe for the micropolicy to
+%% that the micro-policy change tags when the property thinks that a call occurs,
+%% but it is safe for the micro-policy to fail to reset to the caller's tag when the
+%% property thinks a return occurs. (Dually, it is safe for the micro-policy to
 %% change tags even without executing a call point, but not for it to reset tags to
 %% the caller when the property thinks execution is still in the caller).
 
@@ -2521,16 +2459,16 @@ well-bracketed control flow, which exist only in enmeshed form as part of the
 semantics of the capability machines. The main practical limitation of StkTokens
 is its reliance on linear capabilities, as it is unclear now they could be added
 to practical capability machines, especially in terms of efficiency---previous
-work on micropolicies \citep{yannis-report} has shown how to use that framework
+work on micro-policies \citep{yannis-report} has shown how to use that framework
 to implement linear return capabilities.\bcp{But IIUC the Dover realization
-  of micropolicies can't do this...?}
+  of micro-policies can't do this...?}
 
-\paragraph{Protecting the Stack with Micropolicies}
+\paragraph{Protecting the Stack with Micro-Policies}
 %
 \citet{DBLP:conf/sp/RoesslerD18} consider a standard attacker model where all
 attacks against stack data are in scope (but not side channels or hardware
 attacks), and study the protection of stack data through three families of
-micropolicies that tag stack objects with a pair of frame and object identifiers
+micro-policies that tag stack objects with a pair of frame and object identifiers
 used to validate accesses to the stack: Return Address Protection (which
 prevents an adversary from overwriting designated return addresses), Static
 Authorities (which only allows the code of a function to access the stack frames
