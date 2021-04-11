@@ -661,13 +661,13 @@ In summary, we offer the following contributions: \bcp{Section numbers are
 \Cref{sec:relwork} discusses related work, and
 \cref{sec:future} sketches directions for future work.
 
-We begin with a description of our threat model (\cref{sec:threat}),
+We begin with a description of our assumptions and threat model (\cref{sec:threat}),
 then show how our properties apply to examples of stack unsafety 
 (\cref{sec:running-example}). Then, after some technical preliminaries
 (\cref{sec:prelim}), we formalize the properties (\cref{sec:eager}, \cref{sec:lazy})
 and describe testing (\cref{sec:testing}).
 
-\section{Threat Model and Assumptions}
+\section{Assumptions and Threat Model}
 \label{sec:threat}
 
 \bcp{Again, I think we need to put ``Assumptions'' (i.e., our basic picture
@@ -676,26 +676,16 @@ and describe testing (\cref{sec:testing}).
   function calls and returns by means of annotations (and that we MUST do
   something like that because we are talking about machine code).}
 
-Intuititively, stack safety means that a caller's stack frame is protected
-from a confused or malicious callee's
-attempts to read or write its private data or hijack its control flow. And in fact the caller,
-while not malicious, may itself be confused or erroneous. Our attacker
-model reflects this intention\bcp{I don't understand how it reflects this
-  intuition about the caller---indeed, I don't understand the point about
-  the caller.} by assuming that both the attacker and the defender
-may run arbitrary machine code. Hardware and timing attacks are out of scope.
-
-%\leo{Anything else to add here?}
-%\leo{Maybe a good place to discuss calling conventions and that they
-%  are essentially enforced by the policy or sth?}
-%\rb{Intuition that the callee can do anything in principle, but the machine will
-%halt if it does not follow the calling convention, etc.?}
-
 \newcommand*{\rsp}{\textsc{sp}}
 
-In this very strong attacker model, there is little obvious distinction between
-the attacker and the defender. They are separated only by the control transfer
-inherent in their calls and returns. Our stack-safety concepts therefore depend
+Our properties are defined in terms of an abstract machine model that makes very few
+assumptions about the machine that instantiates it.  We assume a register
+machine with a program counter \(\PCname\) and stack pointer \(\rsp\); other
+details of the machine's ISA are unimportant. We assume that we know ahead of time
+the layout of memory, including code and which addresses are within
+the bounds of the stack.
+
+Our stack-safety concepts depend
 critically on the notions of ``call'' and ``return,'' which are not fully explicit
 in machine code (the same instruction opcode may be used in some places as part of
 a call or return sequence and in other places for other purposes).
@@ -703,12 +693,62 @@ a call or return sequence and in other places for other purposes).
 We assume we are given a machine language program annotated with the locations of
 instructions representing calls, returns, and function entry points. Although this
 information would typically come from a compiler together with the machine code,
-we do not assume anything about their provenance. This means that attackers (or
-foolish defenders) are under no obligation to have reasonable annotations.
+we do not assume anything about their provenance.
+
+We further parameterize over the structure of the stack, particularly the means by
+which a caller identifies the data that should be protected during a call. We term
+this the {\em sealing convention} and model it as a relation between machine states
+and addresses. Then from any call, those the sealing convention relates to the
+state will be protected until the return.
+
+We model the base machine as a step function over machine states, and a machine
+enhanced with an enforcement mechanism (in the language of tag-based enforcement,
+a {\em policy}) as a partial step function over machine states extended with some
+auxiliary state, refining the base machine. When the policy-enhanced machine fails
+to step, this is a {\em failstop}, halting the program before it can perform an
+action that would violate the security property;
+our properties are therefore naturally \emph{termination insensitive.}
+This model will be made more precise in \cref{sec:prelim}.
+
+This division of policy state from machine state is helpful when reasoning about
+enforcement mechanisms that keep a significant amount of data separate from the
+primary execution data to inform security. Obviously tag-based systems do this,
+with tags and extra policy state separated from and untouchable by application code.
+Another significant example is the shadow stack, where a second stack
+mirrors the real one, and a return may only occur if both stacks agree on the
+target address. Typically the shadow stack is isolated using a separate protection
+mechanism.
+
+The separation is less useful in protection mechanisms that interact more directly
+with application code, such as Cheri-style capabilities. In these instances
+the policy would not have auxiliary state, but would still refine the machine step
+function to create a distinct failstop condition. Other techniques such as software-based
+ones might never actually failstop, but fulfill the properties by never creating
+traces that violate them.
+
+\paragraph*{Threat Model}
+
+Intuititively, stack safety means that a caller's stack frame is protected
+from a confused or malicious callee's attempts to read or write its private data.
+The attacker model therefore treats every caller as a defender and its callee as
+an attacker, meaning that with nested calls, a single function may play both roles
+at varying points.
+
+We take a very strong threat model in which both caller and callee may execute
+arbitrary machine code. This means that even the defender might be ill-behaved
+to the point that it attempts to undermine its own protections, and we expect
+enforcement mechanisms to ensure that it fails.
+Hardware and timing attacks are out of scope, however.
+
+%\leo{Anything else to add here?}
+%\leo{Maybe a good place to discuss calling conventions and that they
+%  are essentially enforced by the policy or sth?}
+%\rb{Intuition that the callee can do anything in principle, but the machine will
+%halt if it does not follow the calling convention, etc.?}
 
 \paragraph*{Well-formedness and Bad Annotations}
 
-Since we rely so heavily on code annotations, we must ask: what if the annotations
+Since we rely heavily on code annotations, we must ask: what if the annotations
 are wrong? First, suppose a call or return occurs that is not annotated.
 In this case, the answer is simple: as far as the properties are concerned, there has
 been no call or return, only an instruction sequence resembling such an operation, and
@@ -733,31 +773,6 @@ a given enforcement mechanism may place a static well-formedness criterion
 on the code it applies to. Weaker enforcement mechanisms might also need dynamic
 reasonableness conditions to prevent the defender from sabotaging enforcement, as
 discussed in section \ref{sec:cheri}.
-
-\paragraph*{System Assumptions}
-
-Our properties are defined in terms of an abstract machine model that makes very few
-assumptions about the machine that instantiates it.  We assume a register
-machine with a program counter \(\PCname\) and stack pointer \(\rsp\); other
-details of the machine's ISA are unimportant. We assume that we know ahead of time
-the layout of memory, including code (with annotations) and which addresses are within
-the bounds of the stack.
-%
-We further parameterize over the structure of the stack, particularly the means by
-which a caller identifies the data that should be protected during a call. We term
-this the {\em sealing convention} and model it as a relation between machine states
-and addresses. Then from any call, those the sealing convention relates to the
-state will be protected until the return.
-
-\paragraph*{Policies}
-
-We model the base machine as a step function over machine states, and a machine enhanced with
-an enforcement mechanism (in the language of tag-based enforcement, a {\em policy}) as
-a partial step function over machine states extended with some auxiliary state, refining
-the base machine. When the policy-enhanced machine fails to step, this is a {\em failstop},
-halting the program before it can perform an action that would violate the security property;
-our properties are therefore naturally \emph{termination insensitive.}
-This model will be made more precise in \cref{sec:prelim}.
 
 %We model ordinary program state and policy-enforcement state separately to make it
 %easier to use well-established concepts from language-based security.
@@ -785,17 +800,17 @@ rewriting or capability-based techniques, perhaps with less elegance.
 \newcommand{\tagname}{t}
 \newcommand{\uP}{{\mu P}}
 
-\paragraph*{Micro-Policies}
+%\paragraph*{Micro-Policies}
 %
-Micro-Policies are a flexible tag-based, hardware-accelerated
-reference monitoring mechanism; they been applied to stack safety
-enforcement by \citet{DBLP:conf/sp/RoesslerD18}.
-Here the policy state consists of metadata tags (e.g., identifying stack frames)
-attached to each value in memory or registers, and the policy step
-function checks that each machine operation obeys a set of rules on tags
-(e.g., that the current $\PCname$ tag matches the tag on the stack
-location being accessed), and halts the machine if not.  Distinguishing
-ordinary machine state and policy state is very natural in this setting.
+%Micro-Policies are a flexible tag-based, hardware-accelerated
+%reference monitoring mechanism; they been applied to stack safety
+%enforcement by \citet{DBLP:conf/sp/RoesslerD18}.
+%Here the policy state consists of metadata tags (e.g., identifying stack frames)
+%attached to each value in memory or registers, and the policy step
+%function checks that each machine operation obeys a set of rules on tags
+%(e.g., that the current $\PCname$ tag matches the tag on the stack
+%location being accessed), and halts the machine if not.  Distinguishing
+%ordinary machine state and policy state is very natural in this setting.
 %% Here the machine state is extended with tags paired with all components of the
 %% system, and a monitor checks for each operation that the tags on the operands
 %% obey a set of rules. One could treat tags directly as part of the machine
@@ -808,7 +823,7 @@ ordinary machine state and policy state is very natural in this setting.
 %%   policy? }
 
 
-\ifaftersubmission\apt{This still seems wrong to me. The policy part needs somehow to describe everything that isn't varied or rolled back.}\fi
+%\ifaftersubmission\apt{This still seems wrong to me. The policy part needs somehow to describe everything that isn't varied or rolled back.}\fi
 %These approaches are represented as policies that
 %accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
 %being produced by the compiler.) The set of policy states is again the unit type
