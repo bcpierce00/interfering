@@ -306,7 +306,8 @@ are met by particular implementations.
 So how should we formally define stack safety? Definitions in the literature are commonly
 informal and proceed by enumerating the specific bad things that a given enforcement mechanism
 prevents, such as corruption of return addresses, buffer overflows, or
-use of uninitialized variables.
+use of uninitialized variables.\bcp{Most of that sentence should be merged
+  into the similar sentence above.  Doesn't belong here.}
 %\bcp{Does use of unitialized variables lead to stack safety attacks?\apt{sure, via buffer overflow}}
 %with the notion usually being
 %defined negatively: through examples of stack-based exploits
@@ -365,16 +366,27 @@ confidentiality property applies to many nested subtraces within a single execut
   an interesting detail at this level. Also not sure how strongly to talk about this novelty.}
 {\em Integrity} says that a caller's local data is protected from modification by its callee.
 \bcp{What about the ``stepwise'' part?}
-This is vital for local reasoning about the behavior of the caller.
-{\em Confidentiality} states that a caller's data is protected
+This is vital for local reasoning about the behavior of the
+caller.\bcp{Either delete that sentence or explain it more.}
+{\em Confidentiality} says that a caller's data is protected
 from being leaked into its callee, and also that the callee cannot see uninitialized data.
 As a reasoning principle, confidentiality guarantees that the callee's
 behavior is determined only by a predictable interface that does not include the caller's
 local state or the uninitialized portion of the stack.
 Together, these properties (informally) capture LSE, as well as the ``temporal stack safety''
-notion that data outside of live frames should be inaccessible (which LSE does not address).
+notion that data outside of live frames should be inaccessible (which LSE
+does not address\bcp{Which supports my feeling that we should not advertise
+  ourselves as reimplementing LSE but rather as defining a different
+  condition based on similar intuitions.}).
+\bcp{These are the intuitions, but we should also mention that we want to define
+  these (at least partly) in terms of a sort-of-standard notion of ``nested
+  noninterference''!  Then, at the end of the intro (just before the
+  contributions) we can summarize the whole thing like ``So what is stack
+  safety?  It is nested NI.''}
 We also give a simple trace-based formalization of WBCF, which is essential for keeping the
-notions of ``caller'' and ``callee'' sensible.
+notions of ``caller'' and ``callee'' sensible. \bcp{That last should probably
+be a separate discussion, if I've succeeded in convincing people that WBCF
+is not part of stack safety.}
 
 For example, \citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
 using tag-based \emph{micro-policies}~\citep{pump_oakland2015}.
@@ -435,15 +447,17 @@ observational integrity, at some performance cost.\apt{but we're not testing tha
   need a caveat about how it's harder to test?}
 
 Observational integrity is attractive in being significantly more \emph{extensional} than
-stepwise integrity.  We argue that it may therefore be a better minimal specification for
+stepwise integrity.  We therefore argue that, despite its somewhat greater complexity,
+it may be a better minimal specification for
 stack safety enforcement mechanisms in general.
 
-Our initial description of the properties assumes single simple stack with no sharing between
-callers and callees.  We expand it to allow passing of scalar stack data, granting a callee
-access to the caller's data. We do not model more sophisticated sharing, because to do
+Our initial description of these properties assumes a single simple stack with no sharing between callers and
+callees: all parameters and return values are passed in registers.  However,
+we can refine it to allow passing of scalar stack data, granting a callee
+access to the caller's data. (We do not model more sophisticated sharing, because to do
 so realistically would require a separate protection scheme, such as a capability
-model. While this is quite feasible in a tag-based enforcement mechanism, it is properly
-a separate policy outside the scope of stack safety. (A tag-based approach can easily
+model.\bcp{This is all a bit mysterious} While this is quite feasible in a tag-based enforcement mechanism, it is properly
+a separate policy outside the scope of stack safety. A tag-based approach can easily
 compose multiple such policies.)
 \rb{So no pointer passing? Pass by reference is now discussed at the end of
   Section 3, however it looks like things get tricky rather quickly.}
@@ -454,7 +468,14 @@ compose multiple such policies.)
 Finally, we define integrity and confidentiality properties for a coroutine system featuring
 finitely-bounded stacks.
 Though simplistic, this extension is a step toward concurrency and demonstrates that
-our approach is flexible enough to handle more sophisticated styles of control-flow.
+our approach is flexible enough to handle more sophisticated styles of
+control flow.
+
+While our property definitions were developed with micro-policy enforcement
+in mind, they agnostic about many implementation details and should be
+applicable to other systems with minor adjustment.\apt{move this up?} \bcp{I
+  am still hoping to get a clearer understanding for myself of just what is
+  micropolicy-specific about our definitions...}
 
 %% \paragraph*{The Use of Stack Safety}
 
@@ -626,10 +647,19 @@ and describe testing (\cref{sec:testing}).
 \section{Threat Model and Assumptions}
 \label{sec:threat}
 
-Stack safety is meant to protect a caller from a confused or malicious callee's
-attempts to access private data or hijack its control flow. And in fact the caller,
-while presumably not malicious, may itself be confused or erroneous. Our attacker
-model reflects this intention by assuming that both the attacker and the defender
+\bcp{Again, I think we need to put ``Assumptions'' (i.e., our basic picture
+  of the world) first, as context.  E.g., none of the threat model
+  discussion makes sense until the reader understands that we {\em define}
+  function calls and returns by means of annotations (and that we MUST do
+  something like that because we are talking about machine code).}
+
+Intuititively, stack safety means that a caller's stack frame is protected
+from a confused or malicious callee's
+attempts to read or write its private data or hijack its control flow. And in fact the caller,
+while presumably\bcp{not ``presumably'': {\em by definition}!} not malicious, may itself be confused or erroneous. Our attacker
+model reflects this intention\bcp{I don't understand how it reflects this
+  intuition about the caller---indeed, I don't understand the point about
+  the caller.} by assuming that both the attacker and the defender
 may run arbitrary machine code. Hardware and timing attacks are out of scope.
 
 %\leo{Anything else to add here?}
