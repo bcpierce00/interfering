@@ -91,11 +91,29 @@ Section WITH_MAPS.
   Definition sc : SealingConvention :=
     fun m a => wlt a (proj m (Reg SP)).
 
+  (* Likewise, we need to describe what it means to return properly from a call. We parameterize
+     this as well, but the standard of course is that the stack pointer must match the original
+     call point and the program counter should be one instruction (four cell) later. *)
+  Definition ReturnConvention : Type := MachineState -> MachineState -> bool.
+  Definition rc : ReturnConvention :=
+    fun m1 m2 => weq (proj m1 (Reg SP)) (proj m2 (Reg SP)) &&
+                 weq (proj m1 PC) (wplus (proj m2 PC) 4).
+
+  Definition ReturnTargets : Type := list (MachineState -> bool).
+  Fixpoint popTo (m:MachineState) (rts : ReturnTargets) : option ReturnTargets :=
+    match rts with
+    | rt :: rts =>
+      if rt m
+      then Some rts
+      else popTo m rts
+    | [] => None
+    end.
+  
   (* We will use the machinery defined at the end of Machine.v to extend traces of the
      machine with context that will inform our properties. In this case the context is a
      pair of a DomainMap and a natural number representing the current depth of the stack. *)
-
-  Definition context : Type := DomainMap * nat.
+  
+  Definition context : Type := DomainMap * ReturnTargets.
 
   (* For the initial context, we construct a domain map that maps the stack to Unsealed
      and everything else to Outside. The stack depth is 0. *)
@@ -108,7 +126,7 @@ Section WITH_MAPS.
                   else Outside
                 | _ => Outside
                 end in
-    (dm, O).
+    (dm, []).
 
   (* Our update function checks an "annotation" on the code being executed.
      Annotations are defined in Machine.v, and the ones that matter here are call and return.
@@ -116,7 +134,8 @@ Section WITH_MAPS.
   Variable cdm : CodeMap.
   
   Definition updateC (m:MachineState) (prev:context) : context :=
-    let '(dm, d) := prev in
+    let '(dm, rts) := prev in
+    let d := length rts in
     match AnnotationOf cdm (proj m PC) with
     | Some call => (* On a call, we check what the sealing convention wants to seal.
                       If a component is Sealed, it can't be sealed again under the new depth.
@@ -133,19 +152,24 @@ Section WITH_MAPS.
                       Sealed d
                     | _, _ => dm k
                     end in
-      (dm', d+1)
+      let rts' := rc m :: rts in
+      (dm', rts')
     | Some ret => (* On a return, we unseal everything sealed by the highest sealed depth. That will
                      always be one less than the current depth. Everything else remains. *)
-      let dm' := fun k =>
-                    match dm k with
-                    | Sealed d' =>
-                      if d-1 =? d'
-                      then Unsealed
-                      else Sealed d'
-                    | _ => dm k
-                    end in
-      (dm', d-1)
-    | _ => (dm, d)
+      match popTo (fst (step m)) rts with
+      | Some rts' =>
+        let dm' := fun k =>
+                     match dm k with
+                     | Sealed d' =>
+                       if d-1 =? d'
+                       then Unsealed
+                       else Sealed d'
+                     | _ => dm k
+                     end in
+        (dm', rts')
+      | _ => (dm, rts)
+      end
+    | _ => (dm, rts)
     end.
 
   (* Now it's quite simple to define a "stepwise" integrity property:
@@ -227,7 +251,7 @@ Section WITH_MAPS.
      the same changes to state. *)
   Definition SimpleStackConfidentialityStep : Prop :=
     forall d m p c n M N,
-      let P := fun '(_,_,c) => snd c > d in
+      let P := fun '(_,_,c) => length (snd c) > d in
       ReachableSegment updateC initC P M ->
       head M = (m,p,c) ->
       variantOf (fun k => fst c k = Sealed d) m n ->
@@ -248,12 +272,15 @@ Section WITH_MAPS.
       AnnotationOf cdm (proj m1 PC) = Some ret. *)
 
   Definition ReturnIntegrity : Prop :=
-    forall d MCP m c p m' c' p',
-      let P := fun '(m,p,c) => snd c >= d in
-      ReachableSegment updateC initC P MCP ->
-      head MCP = (m,c,p) ->
-      Last MCP (m',c',p') ->
-      justRet m m'.
+    forall mpc mpc' o,
+      Reachable updateC initC mpc ->
+      mpcstep updateC mpc = Some (mpc',o) ->
+      AnnotationOf cdm (proj (mstate mpc) PC) = Some ret ->
+      exists rt rts,
+        snd (cstate mpc) = rt :: rts /\
+        snd (cstate mpc') = rts.
+
+(* Think about how/whether we deal with entries here.
 
   Variable em:EntryMap.
   
@@ -262,12 +289,12 @@ Section WITH_MAPS.
     Reachable updateC initC mpc1 ->
     mpcstep updateC mpc1 = Some (mpc2,o) ->
     AnnotationOf cdm (proj (mstate mpc1) PC) = Some call ->
-    em (proj (mstate mpc2) PC) = true.
+    em (proj (mstate mpc2) PC) = true. *)
 
   Definition WellBracketedControlFlow  : Prop :=
     (*ControlSeparation /\*)
-    ReturnIntegrity /\
-    EntryIntegrity.
+    (* EntryIntegrity /\*)
+    ReturnIntegrity.
   
   (* Continue to SubroutineShare.v, where we enhance the model with sharing between calls. *)
 
