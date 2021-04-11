@@ -35,7 +35,6 @@ Section DOMAIN_MODEL.
   
   Inductive StackDomain :=
   | Sealed (d:nat)
-  | Shared (d:nat)
   | Passed (d:nat)
   | Unsealed
   | Outside
@@ -53,9 +52,32 @@ Section WITH_MAPS.
   Variable pOf : MachineState -> PolicyState. (* Policy initialization function. *)
 
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
-  Variable sc : SealingConvention.
+  Definition sc : SealingConvention :=
+    fun m a => wlt a (proj m (Reg SP)).
+
+  (* Likewise, we need to describe what it means to return properly from a call. We parameterize
+     this as well, but the standard of course is that the stack pointer must match the original
+     call point and the program counter should be one instruction (four cell) later. *)
+  Definition ReturnConvention : Type := MachineState -> MachineState -> bool.
+  Definition rc : ReturnConvention :=
+    fun m1 m2 => weq (proj m1 (Reg SP)) (proj m2 (Reg SP)) &&
+                 weq (proj m1 PC) (wplus (proj m2 PC) 4).
+
+  Definition ReturnTargets : Type := list (MachineState -> bool).
+  Fixpoint popTo (m:MachineState) (rts : ReturnTargets) : option ReturnTargets :=
+    match rts with
+    | rt :: rts =>
+      if rt m
+      then Some rts
+      else popTo m rts
+    | [] => None
+    end.
   
-  Definition context : Type := DomainMap * nat.
+  (* We will use the machinery defined at the end of Machine.v to extend traces of the
+     machine with context that will inform our properties. In this case the context is a
+     pair of a DomainMap and a ReturnTargets. *)
+  
+  Definition context : Type := DomainMap * ReturnTargets.
 
   (* For the initial context, we construct a domain map that maps the stack to Unsealed
      and everything else to Outside. The stack depth is 0. *)
@@ -68,55 +90,56 @@ Section WITH_MAPS.
                   else Outside
                 | _ => Outside
                 end in
-    (dm, O).
+    (dm, []).
   
   Definition updateC (m:MachineState) (prev:context) : context :=
-    let '(dm, d) := prev in
+    let '(dm, rts) := prev in
     match AnnotationOf cdm (proj m PC) with
     | Some (share f) =>
       let dm' := fun k =>
                    match k with
                    | Mem a =>
                      match f m a, dm k with
-                     | Some true, Unsealed => Passed d
-                     | Some false, Unsealed => Shared d
+                     | Some true, Unsealed => Passed (length rts)
                      | _, _ => dm k
                      end
                    | _ => dm k
                    end in
-      (dm', d)
+      (dm', rts)
     | Some call =>
       let dm' := fun k =>
-                    match k, dm k with                      
+                    match k, dm k with
                     | _, Sealed d => Sealed d (* Fix alll this *)
                     | _, Outside => Outside
                     | Mem a, _ =>
                       if sc m a
-                      then Sealed d
+                      then Sealed (length rts)
                       else Unsealed (* If addresses are marked to be shared but the sealing convention
                                        wants them unsealed, the sealing convention takes precedence *)
                     | _, _ => dm k
                     end in
-      (dm', d+1)
-    | Some ret => 
-      let dm' := fun k =>
-                    match dm k with
-                    | Sealed d' =>
-                      if (d-1) =? d' (* Sealed addresses are unsealed when their sealer is returned to. *)
-                      then Unsealed
-                      else dm k
-                    | Passed d' =>
-                      if (d-1) =? d' (* The same is true of passed addresses; they are single-use *)
-                      then Unsealed
-                      else dm k
-                    | Shared d' =>
-                      if d =? d' (* But shared addresses persist until the sharer itself returns *)
-                      then Unsealed
-                      else dm k
-                    | _ => dm k
-                    end in
-      (dm', d-1)
-    | _ => (dm, d)
+      let rt := rc m in
+      (dm', rt::rts)
+    | Some ret =>
+      match popTo (fst (step m)) rts with
+      | Some rts' =>
+        let d := length rts' in
+        let dm' := fun k =>
+                     match dm k with
+                     | Sealed d' =>
+                       if d <=? d' (* Sealed addresses are unsealed when their sealer is returned to/past. *)
+                       then Unsealed
+                       else dm k
+                     | Passed d' =>
+                       if d <=? d' (* The same is true of passed addresses; they are single-use *)
+                       then Unsealed
+                       else dm k
+                     | _ => dm k
+                     end in
+        (dm', rts')
+      | None => (dm, rts)
+      end
+    | _ => (dm, rts)
     end.
 
   (* A component is inaccessible for writes if it is sealed or if it is passed by the a
@@ -124,7 +147,7 @@ Section WITH_MAPS.
   Definition Inaccessible (c:context) (k:Component) : Prop :=
     exists d,
       fst c k = (Sealed d) \/
-      (fst c k = (Passed d) /\ d < (snd c)-1).
+      (fst c k = (Passed d) /\ d = (length (snd c))-1).
 
   (* So we can do ultra eager integrity, like before. *)
   Definition StackIntegrityEager : Prop :=
@@ -133,11 +156,11 @@ Section WITH_MAPS.
       StepIntegrity updateC (Inaccessible c) (m,p,c).
     
   Definition StackConfidentialityEager : Prop :=
-    forall MCP d m dm p,
-      let P := (fun '(m,p,c) => snd c >= d) in
-      let K := (fun k => Inaccessible (dm,d) k \/ dm k = Unsealed) in
+    forall MCP d m p c,
+      let P := (fun '(m,p,c) => length (snd c) >= d) in
+      let K := (fun k => Inaccessible c k \/ (fst c) k = Unsealed) in
       ReachableSegment updateC initC P MCP ->
-      head MCP = (m,p,(dm,d)) ->
+      head MCP = (m,p,c) ->
       TraceConfidentialityStep updateC K P MCP.
 
   (* Continued in Coroutine.v *)
