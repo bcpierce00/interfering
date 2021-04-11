@@ -7,4 +7,7 @@ Makefile.coq:
 clean: Makefile.coq
 	$(MAKE) -f Makefile.coq clean
 
+test:
+	coqc -R . StackSafety -R ../../mit-riscv/riscv-coq/src/riscv riscv -Q ../../mit-riscv/coqutil/src/coqutil coqutil -Q ../../mit-riscv/coq-record-update/src RecordUpdate Gen.v
+
 .PHONY: build clean

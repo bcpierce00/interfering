@@ -1,4 +1,4 @@
-From StackSafety Require Import Trace Machine.
+From StackSafety Require Import Trace MachineImpl.
 
 
   Definition ObsTrace := TraceOf Observation.

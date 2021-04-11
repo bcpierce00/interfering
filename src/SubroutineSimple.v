@@ -5,7 +5,7 @@ Require Import ZArith.
 Require Import Nat.
 
 
-From StackSafety Require Import Trace Machine ObsTrace.
+From StackSafety Require Import Trace MachineImpl ObsTrace.
 
   Section DOMAIN_MODEL.
 

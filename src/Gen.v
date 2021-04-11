@@ -6,7 +6,6 @@ Require Coq.Strings.String. Open Scope string_scope.
 Require Import Coq.Lists.List. 
 
 Require Import riscv.Utility.InstructionCoercions. Open Scope ilist_scope.
-Require Import riscv.Spec.Machine.
 Require Import riscv.Spec.Decode.
 Require Import riscv.Spec.PseudoInstructions.
 Require Import riscv.Utility.RegisterNames.
@@ -29,7 +28,7 @@ Require coqutil.Map.SortedList.
 Import ListNotations.
 Import RiscvMachine.
 
-From StackSafety Require Import Machine.
+From StackSafety Require Import MachineImpl.
 
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
@@ -76,14 +75,17 @@ Record RegInfo := { dataPtr : list PtrInfo
 Record LayoutInfo := { instLo : Z
                      ; instHi : Z
                      ; dataLo : Z
-                     ; dataHi : Z 
+                     ; dataHi : Z
+                     ; stack  : Z
                      }.
 
 Definition defLayoutInfo :=
   {| dataLo := 1000
    ; dataHi := 1020
    ; instLo := 0
-   ; instHi := 400 |}.                 
+   ; instHi := 400
+   ; stack  := 500
+  |}.                 
 
 Record TagInfo :=
   { regTag  : TagSet
@@ -104,15 +106,6 @@ Definition listify1 {A} (m : Zkeyed_map A)
   : list (Z * A) :=
   List.rev (map.fold (fun acc z v => (z,v) :: acc) nil m).
 
-Axiom exception : forall {A}, string -> A.
-Extract Constant exception =>
-  "(fun l ->
-   let s = Bytes.create (List.length l) in
-   let rec copy i = function
-    | [] -> s
-    | c :: l -> Bytes.set s i c; copy (i+1) l
-   in failwith (""Exception: "" ^ Bytes.to_string (copy 0 l)))".
-
 Fixpoint combine_match {A B} `{Show A} `{Show B}
          (l1 : list (Z * A)) (l2 : list (Z * B))
   : list (Z * A * B) :=
@@ -130,17 +123,14 @@ Definition listify2 {A B} `{Show A} `{Show B}
            (m2 : Zkeyed_map B) : list (Z * A * B) :=
   combine_match (listify1 m1) (listify1 m2).
 
-Derive Show for Tag.
-
 (* Printing *)
 Instance ShowWord : Show word :=
   {| show x := show (word.signed x) |}.
 
 Definition printGPRs (m : MachineState) (p : PolicyState) :=
   List.fold_right (fun '(rID, rVal, rTag) acc =>
-                     show rID ++ " : " ++ show rVal ++ " @ " ++ show rTag ++ nl ++ acc)%string "" (listify2 (getRegs m) (regtags p)). 
-
-Derive Show for InstructionI.
+                     show rID ++ " : " ++ show rVal ++ " @ " ++ show rTag ++ nl ++ acc)%string ""
+                  (listify2 (getRegs m) (regtags p)). 
 
 Definition listify1_word mem := 
   List.rev
@@ -258,10 +248,13 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
              |}
       else None
   in
+
+  let noSp p t :=
+      andb (p t) (negb (existsb (tag_eqb Tsp) t)) in
   let getDataInfo :=
-      getInfo dataP (dataLo i) (dataHi i) in 
+      getInfo (noSp dataP) (dataLo i) (dataHi i) in 
   let getCodeInfo :=
-      getInfo codeP (instLo i) (instHi i) in 
+      getInfo (noSp codeP) (instLo i) (instHi i) in 
 
   
   let dataRegs :=
@@ -278,10 +271,13 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
            | Some pi => pi :: acc
            | None => acc
            end) nil (listify2 regs tags) in
- 
+
   let arithRegs :=
-      map.fold (fun acc rID rVal =>
-                  {| aID := rID |} :: acc) nil regs in
+      List.fold_right
+        (fun '(rID, rVal, rTag) acc =>
+           if noSp (fun _ => true) rTag then
+             {| aID := rID |} :: acc
+           else acc) nil (listify2 regs tags) in
   
   {| codePtr := codeRegs
    ; dataPtr := dataRegs
@@ -323,22 +319,22 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           let instr := Addi rd (aID ai) imm in
           bindGen (genInstrTag instr) (fun tag =>
           ret (instr, tag))))))
-       ; (onNonEmpty d 3%nat,
+(*       ; (onNonEmpty d 3%nat,
           bindGen (elems_ def_dp d) (fun pi =>
           bindGen (genTargetReg m) (fun rd =>
           bindGen (genImm (pMaxImm pi - pMinImm pi)) (fun imm' =>
           let imm := pMinImm pi + imm' in
           let instr := Lw rd (pID pi) imm in
           bindGen (genInstrTag instr) (fun tag =>
-          ret (instr, tag))))))
-       ; ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
+          ret (instr, tag)))))) *)
+(*       ; ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
           bindGen (elems_ def_dp d) (fun pi =>
           bindGen (genSourceReg m) (fun rs =>
           bindGen (genImm (pMaxImm pi - pMinImm pi)) (fun imm' =>
           let imm := pMinImm pi + imm' in
           let instr := Sw (pID pi) rs imm in
           bindGen (genInstrTag instr) (fun tag => 
-          ret (instr, tag))))))
+          ret (instr, tag)))))) *)
        ; (onNonEmpty a 1%nat,
           bindGen (elems_ def_a a) (fun ai1 =>
           bindGen (elems_ def_a a) (fun ai2 =>
@@ -373,15 +369,18 @@ Definition Zseq (lo hi : Z) :=
   aux lo len.
 
 Definition headerSeq offset :=
-  [ (Jal ra offset, [Tcall])
-  ; (Sw sp ra 4  , [Th1])
-  ; (Addi sp sp 8, [Th2])
+  [ (Jal ra offset, [Tinstr; Tcall])
+  ; (Sw sp ra 0  , [Tinstr; Th1])
+  ; (Addi sp sp 12, [Tinstr; Th2])
   ].
-
+(* Based on Rob's 
+  (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
+  (* 12 *) IInstruction (Addi SP SP 12); (* H2 *)
+*)
 Definition returnSeq :=
-  [ (Lw ra sp (-4), [Tr1])
-  ; (Addi sp sp 8 , [Tr2])
-  ; (Jalr ra ra 0 , [Tr3])
+  [ (Lw ra sp (-4), [Tinstr; Tr1])
+  ; (Addi sp sp 8 , [Tinstr; Tr2])
+  ; (Jalr ra ra 0 , [Tinstr; Tr3])
   ].
 
 Definition genCall (l : LayoutInfo) (t : TagInfo)
@@ -429,7 +428,7 @@ genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
   match exOpts ++ newOpts with
   | [] => None
   | x :: xs =>
-    Some (S (List.length xs), elements x (x :: xs))
+    Some (S (List.length xs), elems_ x (x :: xs))
   end.
 
 Definition genInstrSeq
@@ -511,7 +510,7 @@ Fixpoint gen_exec_aux (steps : nat)
          (genInstrTag : InstructionI -> G TagSet)
          (* num calls? *)
   : G (MachineState * PolicyState * CodeMap_Impl) :=
-(*  trace (show ("GenExec...", steps, m, p))*)
+  trace (show ("GenExec...", steps, its) ++ nl)%string
   (match steps with
   | O =>
     (* Out-of-fuel: End generation. *)
@@ -519,6 +518,8 @@ Fixpoint gen_exec_aux (steps : nat)
   | S steps' =>
     match map.get (getMem m) (getPc m) with
     | Some _ =>
+      trace ("Existing instruction found: " ++ nl)%string
+      (            
       (* Instruction already exists, step... *)
       match mpstep (m,p) with
       | Some ((m',p'),o) =>
@@ -528,6 +529,7 @@ Fixpoint gen_exec_aux (steps : nat)
         (* ... something went wrong. Trace something? *)
         ret (m0, p0, cm)
       end
+      )
     | _ =>
       (* Check if there is anything left to put *)
       bindGen (match its with
@@ -537,8 +539,9 @@ Fixpoint gen_exec_aux (steps : nat)
                  bindGen (genInstrSeq i t m p dataP codeP callP cm f nextF genInstrTag)
                          (fun '(ists, f') =>
                             match ists with
-                            | ist :: ists' => 
-                              returnGen (f', ist, ists')
+                            | ist :: ists' =>
+                              trace (show (f',ist, ists') ++ nl)%string
+                                    (returnGen (f', ist, ists'))
                             | _ => exception "EmptyInstrSeq"
                             end)
                | ist::its' =>
@@ -554,18 +557,25 @@ Fixpoint gen_exec_aux (steps : nat)
          let cm' := map.put cm (word.unsigned (getPc m)) (inFun f' normal) in
          match mpstep (m', p') with
          | Some ((m'', p''), o) =>
-           gen_exec_aux steps' i t m0' p0' m'' p'' cm' f nextF' its dataP codeP callP genInstrTag
-         | _ => ret (m0', p0', cm')
+           trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string 
+                 (gen_exec_aux steps' i t m0' p0' m'' p'' cm' f nextF' its dataP codeP callP genInstrTag)
+         | _ =>
+           trace ("Couldn't step" ++ nl ++  printMachine m' p' cm' ++ nl)%string
+                 (ret (m0', p0', cm'))
          end)
     end
   end).
 
 Definition zeroedRiscvMachine: RiscvMachine := {|
-  getRegs := map.empty;
+  getRegs := map.put (map.put map.empty sp (word.of_Z 500))
+                     ra (word.of_Z 0);
   getPc := ZToReg 0;
   getNextPc := ZToReg 4;
   getMem := map.empty;
-  getXAddrs := nil;
+  (*unchecked_store_byte_list (word.of_Z 500)
+                                      (Z32s_to_bytes (cons 0 nil))
+                                      (map.empty); *)
+  getXAddrs := nil; 
   getLog := nil;
 |}.
 
@@ -578,11 +588,11 @@ Definition genGPRs (t : TagInfo)
   let regs :=
       List.fold_left (fun '(i,m) r =>
                         (i+1, map.put m i (word.of_Z r)))
-                     ds (minReg, map.empty) in
+                     ds (minReg, getRegs m) in
   let tags : Z * TagMap :=
       List.fold_left (fun '(i,m) (t : TagSet) =>
                         (i+1, map.put m i t))
-                     ts (minReg, map.empty) in
+                     ts (minReg, regtags p) in
   returnGen (withRegs (snd regs) m,
              p <| regtags := snd tags |>))).
 
@@ -623,8 +633,8 @@ genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag sp
 Definition zeroedPolicyState : PolicyState :=
   {| nextid := 0
    ; pctags := [Tpc 0]
-   ; regtags := map.empty
-   ; memtags := map.empty
+   ; regtags := map.put (map.put map.empty ra nil) sp (cons Tsp nil)
+   ; memtags := map.empty (* map.put map.empty 500 (cons Tsp nil) *)
   |}. 
 
 (* Specialized to current policy *)
@@ -640,7 +650,7 @@ Definition genMach :=
 
 From StackSafety Require Import SubroutineSimple.
 
-Sample (genMach).
+Sample1 (genMach).
 
 (*
 Definition prop_integrity :=

@@ -2,7 +2,7 @@ Require Import List.
 Import ListNotations.
 Require Import Bool.
 
-From StackSafety Require Import Trace Machine ObsTrace.
+From StackSafety Require Import Trace MachineImpl ObsTrace.
 
 Section WITH_CONTEXT.
 

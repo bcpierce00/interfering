@@ -3,7 +3,7 @@ Import ListNotations.
 Require Import Bool.
 Require Import Nat.
 
-From StackSafety Require Import Trace Machine ObsTrace TraceProperties.
+From StackSafety Require Import Trace MachineImpl ObsTrace TraceProperties.
 
 (*
 Module SubroutineShare (M: MachineSpec).

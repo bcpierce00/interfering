@@ -26,13 +26,21 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Z.HexNotation.
 Require coqutil.Map.SortedList.
 
-Require Import coqutil.Map.Interface.
-
-
 Require Import Lia.
 
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
+
+From QuickChick Require Import QuickChick.
+Axiom exception : forall {A}, string -> A.
+Extract Constant exception =>
+  "(fun l ->
+   let s = Bytes.create (List.length l) in
+   let rec copy i = function
+    | [] -> s
+    | c :: l -> Bytes.set s i c; copy (i+1) l
+   in failwith (""Exception: "" ^ Bytes.to_string (copy 0 l)))".
+
 
   Definition Word := MachineInt.
   (* Parameter Word *)
@@ -154,7 +162,7 @@ Import RecordSetNotations.
                     (map.fold (fun acc z v => z :: acc) nil 
                               (RiscvMachine.getMem m))) in
     pc ++ regs ++ mem.
-       
+  
   (* Observations are values, or silent (tau) *)
   Inductive Observation : Type := 
   | Out (w:Value) 
@@ -244,6 +252,9 @@ Inductive Tag : Type :=
 | Tsp
 | Tstack (n : nat)
 .
+
+Derive Show for Tag.
+Derive Show for InstructionI.
 
 Definition tag_eqb (t1 t2 :  Tag) : bool :=
   match t1, t2 with
@@ -390,10 +401,17 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   | _ => None
   end.
 
+Definition getdef {T} m k (vdef : T) :=
+  match map.get m k with
+  | Some v => v
+  | None => vdef
+  end.
+
 Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
   tinstr <- map.get (memtags p) (word.unsigned pc);
   let addr := word.unsigned rddata + imm in
-  tmem <- map.get (memtags p) addr;
+  (* tmem <- map.get (memtags p) addr; *)
+  let tmem := getdef (memtags p) addr [] in
   let tpc := pctags p in
   trs <- map.get (regtags p) rs;
   taddr <- map.get (regtags p) rd;
@@ -405,11 +423,15 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
     | _, _, _, _ => None
     end
   | [Tinstr; Th1] =>
+    trace (show (tpc, existsb (tag_eqb Th1) tpc, trs, taddr) ++ nl)%string (
     match existsb (tag_eqb Th1) tpc, trs, taddr with
-    | true, [Tpc depth], [Tsp] => Some (p <| pctags := filter (tag_neqb Th1) tpc ++ [Th2] |>
-                                          <| memtags := map.put (memtags p) addr [Tpc depth] |>)
-    | _, _, _ => None
+    | true, cons (Tpc depth) nil, cons Tsp nil =>
+      Some (p <| pctags := filter (tag_neqb Th1) tpc ++ [Th2] |>
+              <| memtags := map.put (memtags p) addr [Tpc depth] |>)
+    | _, _, _ =>
+      None
     end
+      )
   | _ => None
   end.
 
@@ -420,6 +442,7 @@ Definition decodeI (w : w32) : option InstructionI :=
   end.
 
 Definition pstep (mp : MPState) : option PolicyState :=
+  trace ("Entering pstep..." ++ nl)%string (
   let '(m, p) := mp in
   let pc := getPc m in
   w <- loadWord (getMem m) pc;
@@ -447,13 +470,29 @@ Definition pstep (mp : MPState) : option PolicyState :=
        policyStore p pc rddata rd rs imm
   | _
     => None
-  end.
+  end).
 
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  let instr := 
+      match loadWord (getMem (ms mp)) (getPc (ms mp)) with
+      | Some w32 =>
+        match decode RV32I (        LittleEndian.combine _ w32)  with
+        | IInstruction inst =>
+          inst
+        | _ => exception "Not inst"
+        end
+      | _ => exception "Not inst2"
+      end in
+
+  
+  trace ("Entering mpstep with" ++ show (word.unsigned (getPc (ms mp))) ++ " @ " ++ show (pctags (ps mp)) ++ " : " ++ show instr ++ nl
+        )%string
+        (
   p' <- pstep mp;
   match step (ms mp) with
   | (m', o) => Some (m', p', o)
   end
+    )
 .
 
 Axiom mpstepCompat :
