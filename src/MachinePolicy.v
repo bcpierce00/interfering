@@ -370,10 +370,17 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   | _ => None
   end.
 
+Definition getdef {T} m k (vdef : T) :=
+  match map.get m k with
+  | Some v => v
+  | None => vdef
+  end.
+
 Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
   tinstr <- map.get (memtags p) (word.unsigned pc);
   let addr := word.unsigned rddata + imm in
-  tmem <- map.get (memtags p) addr;
+  (* tmem <- map.get (memtags p) addr; *)
+  let tmem := getdef (memtags p) addr [] in
   let tpc := pctags p in
   trs <- map.get (regtags p) rs;
   taddr <- map.get (regtags p) rd;

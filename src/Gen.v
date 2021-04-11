@@ -406,17 +406,16 @@ genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
                             (listify1 (memtags p))) in
   let newCallSites :=
       let offset_choices :=
-          Zseq 20 (dataHi l - dataLo l - 50) in
+          Zseq 20 (instHi l - instLo l - 50) in
       let valid_offsets :=
-          List.filter (fun i => Z.leb (word.unsigned (getPc m) + i) (dataHi l - 50)) offset_choices in
+          List.filter (fun i => Z.leb (word.unsigned (getPc m) + i) (instHi l - 50)) offset_choices in
       let not_used :=
           List.filter (fun i =>
                          match map.get (getMem m) (word.of_Z i) with
-                         | Some _ => true
-                         | None => false
+                         | Some _ => false
+                         | None => true
                          end) valid_offsets in
       not_used in
-
   let exOpts :=
         (* Existing callsites, lookup fun id *)
       List.map (fun i =>
@@ -555,8 +554,8 @@ Fixpoint gen_exec_aux (steps : nat)
          let cm' := map.put cm (word.unsigned (getPc m)) (inFun f' normal) in
          match mpstep (m', p') with
          | Some ((m'', p''), o) =>
-           gen_exec_aux steps' i t m0' p0' m'' p'' cm f nextF its dataP codeP callP genInstrTag
-         | _ => ret (m0', p0', cm)
+           gen_exec_aux steps' i t m0' p0' m'' p'' cm' f nextF' its dataP codeP callP genInstrTag
+         | _ => ret (m0', p0', cm')
          end)
     end
   end).
@@ -643,10 +642,11 @@ From StackSafety Require Import SubroutineSimple.
 
 Sample (genMach).
 
+(*
 Definition prop_integrity :=
   let cm := fun _ => notCode in
   let sm := fun _ => true in
   forAll genMach (fun '(m,p) =>
   (SimpleStackIntegrityStepP cm 42 m p (initC sm))).
-
+*)
 (* QuickCheck prop_integrity. *)
