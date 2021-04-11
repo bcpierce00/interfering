@@ -275,9 +275,9 @@ local violations as long as they do not influence future behavior.
 %  a bit to make sure though}
 
 The call stack is a perennial target for low-level attacks
-based on memory-safety vulnerabilities, with consequences
-ranging from leakage or corruption of private stack data to
-control-flow hijacking. To detect or prevent such attacks, a menagerie of
+based on memory-safety vulnerabilities, leading to consequences
+from leakage or corruption of private stack data to
+control-flow hijacking. To detect or prevent such attacks, a profusion of
 software and hardware protections have been proposed,
 %
 including stack canaries~\citep{Cowan+98},
@@ -286,36 +286,22 @@ split stacks~\citep{Kuznetsov+14},
 shadow stacks~\citep{Dang+15,Shanbhogue+19},
 capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b,Tsampas+19,Georges+21},
 and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \ifaftersubmission\apt{Mostly from
-  nick; there could be more}
+  nick; there could be more}\bcp{Yes, going back to MIT days---we should
+  include several more of these, if only to give readers the impression that
+this is a well-studied mechanism (so formalizing its protections is
+useful).}
 \fi
 %
-The implementation and configuration of these  stack-safety mechanisms can be complex,
-and often involves compromises trading protection for efficiency.
-Thus it would be useful to have a precise formal specification for stack
-safety, both as a basis for comparing the security guarantees claimed by different enforcement
-techniques and for verifying that these claims are met by particular implementations.
-
-For example, \citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
-using tag-based \emph{micro-policies}~\citep{pump_oakland2015}.
-In essence, memory locations within each stack frame are tagged with the identity of
-the function activation that owns the frame, and access to those locations is then gated
-according to the activation that is currently executing. Many alternatives can
-be implemented on top of this basic idea, by choosing how to identify activations
-and how to maintain the connection between an activation identity and the memory it owns.
-These alternatives vary in their
-efficiency, but also in the spatial and temporal precision of their security guarantees.
-For example, the \emph{Depth Isolation} policy requires a strict mapping from a function
-to its frame from the start of the call to its end, and permits the function to write
-into that frame. This seems simple and intuitively correct, but it can be expensive to
-implement that strict mapping.
-On the other hand, the \emph{Lazy Tagging and Clearing} policy improves performance by
-assigning locations to the active function when they are written, which permits
-illicit writes outside the function's frame so long as the proper owner of the written
-locations does not subsequently read them. The intuition justifying laziness is that any
-genuinely dangerous writes will ultimately be detected before they can affect program
-behavior.  But we clearly need a more formal foundation for
-expressing, comparing and verifying these micro-policy security claims, as well as those of
-other enforcement technologies.
+The protections offered by such mechanisms are generally described in terms
+of a set of concrete examples of attacks that they can prevent, leaving a
+more general characterization to the reader's intuition.
+Moreover, the details of these mechanisms can be quite intricate
+and often involve trading off protection and efficiency.
+Thus, it would be useful to have a precise, generic, and formal
+specification for stack
+safety, both as a basis for comparing the security claims of different
+enforcement techniques and for validating more rigorously that these claims
+are met by particular implementations.
 
 So how should we formally define stack safety? Definitions in the literature are commonly
 informal and proceed by enumerating the specific bad things that a given enforcement mechanism
@@ -360,21 +346,25 @@ from the idealized machine to an ordinary machine equipped with the enforcement.
 %% the bad behaviors we associate with unsafe stack behavior, but weak enough that
 %% other reasonable enforcement mechanisms can enforce it.
 
-In this work, we take the (informal) definitions of WBCF and LSE as a starting point,
-but choose a different approach to formalizing them, based on the
-technical framework of language-based security~\citep{??}.
-While our property definitions were developed with micro-policy enforcement in mind, they
-agnostic about many implementation details and should be applicable to other
-systems with minor adjustment. We define
+\bcp{If we end up adopting my recent proposal for defining subtraces and
+  separating WBCF, I think we can be a bit stronger here: We define stack
+  safety in IFC terminology based on the same intuitions as their LSE, but
+  we consider (and define) WBCF to be a separate thing---desirable, but
+  distinct from safety.  (If we make this argument, we'll need to show an
+  example of a program that is stack safe but doesn't have WBCF.)}In this
+work, we take the (informal) definitions of WBCF and LSE as a starting
+point, but choose a different approach to formalizing them, based on the
+technical framework of language-based security~\citep{??}. We define
 trace-based properties of \emph{stepwise stack integrity} and \emph{stack confidentiality}.
-In applying these security concepts, we treat each caller-callee pair as mutually distrustful
-and view the caller as needing protection from the callee. \apt{Need more explanation of
+In applying these security concepts, we treat each caller-callee pair as
+mutually distrustful, with the caller needing protection from the callee. \apt{Need more explanation of
   ``nesting'' and our novelty factor here? Also about domains??}
 This differs from common instances in language-based security in that the
 confidentiality property applies to many nested subtraces within a single execution.
 \sna{Thinking about how to express domains, or whether to. I'm not sure it's
   an interesting detail at this level. Also not sure how strongly to talk about this novelty.}
 {\em Integrity} says that a caller's local data is protected from modification by its callee.
+\bcp{What about the ``stepwise'' part?}
 This is vital for local reasoning about the behavior of the caller.
 {\em Confidentiality} states that a caller's data is protected
 from being leaked into its callee, and also that the callee cannot see uninitialized data.
@@ -385,6 +375,28 @@ Together, these properties (informally) capture LSE, as well as the ``temporal s
 notion that data outside of live frames should be inaccessible (which LSE does not address).
 We also give a simple trace-based formalization of WBCF, which is essential for keeping the
 notions of ``caller'' and ``callee'' sensible.
+
+For example, \citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
+using tag-based \emph{micro-policies}~\citep{pump_oakland2015}.
+Intuitively, memory cells within each stack frame are tagged with the
+identity of the function activation
+that owns the frame, and access to those locations is then gated
+according to the activation that is currently executing. Roessler and Dehon
+explore alternative versions of this basic idea, with different ways of identifying
+functions and deciding exactly which accesses are allowed, to enable different ways
+of maintaining the connection between an activation identity and the memory it owns.
+These vary in their efficiency and in the spatial and temporal precision of their security
+guarantees.
+For example, their \emph{Depth Isolation} policy  requires a strict mapping from a function
+to its frame from the start of the call to its end, and permits the function to write
+only into that frame.
+This seems simple and intuitively correct, but it can be expensive to implement the strict
+mapping. Conversely, their \emph{Lazy Tagging and Clearing} policy improves
+performance by assigning locations to the active function when they are written, which
+permits  ``illicit'' writes to inaccessible stack frames so long as the
+written locations are not subsequently read by their ``real'' owners. The justification
+for this form of laziness is that any genuinely dangerous writes will ultimately be
+detected before they can affect program behavior.
 
 To illustrate the applicability of these properties, we perform randomized testing to
 validate that \citeauthor{DBLP:conf/sp/RoesslerD18}'s Depth Isolation micro-policy enforces
@@ -602,7 +614,7 @@ In summary, we offer the following contributions: \bcp{Section numbers are
 %  of this property tuned for testing/verification.  We test the whole
 %  thing with a cool framework. \bcp{Which section?}
 \end{itemize}
-\Cref{sec:relwork} discusses related work, and 
+\Cref{sec:relwork} discusses related work, and
 \cref{sec:future} sketches directions for future work.
 
 We begin with a description of our threat model (\cref{sec:threat}),
