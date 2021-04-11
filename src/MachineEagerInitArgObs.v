@@ -213,6 +213,7 @@ Import RecordSetNotations.
 
 (* TODO: More interesting state/abstract *)
 Inductive Tag : Type :=
+| Targ
 | Tcall
 | Tglobal
 | Th1
@@ -229,6 +230,7 @@ Inductive Tag : Type :=
 
 Definition tag_eqb (t1 t2 :  Tag) : bool :=
   match t1, t2 with
+  | Targ, Targ
   | Tcall, Tcall
   | Tglobal, Tglobal
   | Th1, Th1
@@ -391,6 +393,19 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
       if Nat.eqb pcdepth memdepth then Some p else None
     | [Tpc _], _, [], [Tglobal] => Some p
     | _, _, _, _ => None
+    end
+  | [Tinstr; Targ] =>
+    (* Special case for argument passing on the stack. The required
+       stores precede the call and begin to fill the callee's stack
+       frame; the blessed entry must account for the arguments and
+       their location in the stack, and add its own RA and local
+       variables. At the moment, well-formedness of these combined
+       operations is not checked by the policy. Tagging ahead of time
+       assumes we can predict the next activation id (or depth) that
+       will be generated at call time. *)
+    match tpc, taddr with
+    | [Tpc depth], [Tsp] => Some (p <| memtags := map.put (memtags p) addr [Tstack (S depth)] |>)
+    | _, _ => None
     end
   | [Tinstr; Th1] =>
     match existsb (tag_eqb Th1) tpc, trs, taddr with
