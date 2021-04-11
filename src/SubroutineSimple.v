@@ -135,21 +135,21 @@ Section WITH_MAPS.
   
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, rts) := prev in
-    let d := length rts in
     match AnnotationOf cdm (proj m PC) with
     | Some call => (* On a call, we check what the sealing convention wants to seal.
                       If a component is Sealed, it can't be sealed again under the new depth.
                       Everything else retains its old status, presumably Unsealed. In the standard,
                       stack pointer-based sealing convention, sc seals everything below the stack
                       pointer, but previously sealed frames retain their old owners. *)
+      let d := length rts in
       let dm' := fun k =>
                     match k, dm k with
                     | Mem a, Unsealed =>
                       if sc m a
                       then Sealed d
                       else Unsealed
-                    | Mem a, Sealed d =>
-                      Sealed d
+                    | Mem a, Sealed d' =>
+                      Sealed d'
                     | _, _ => dm k
                     end in
       let rts' := rc m :: rts in
@@ -158,10 +158,11 @@ Section WITH_MAPS.
                      always be one less than the current depth. Everything else remains. *)
       match popTo (fst (step m)) rts with
       | Some rts' =>
+        let d := length rts' in
         let dm' := fun k =>
                      match dm k with
                      | Sealed d' =>
-                       if d-1 =? d'
+                       if d <=? d'
                        then Unsealed
                        else Sealed d'
                      | _ => dm k
