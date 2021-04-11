@@ -352,11 +352,12 @@ from the idealized machine to an ordinary machine equipped with the enforcement.
   safety in IFC terminology based on the same intuitions as their LSE, but
   we consider (and define) WBCF to be a separate thing---desirable, but
   distinct from safety.  (If we make this argument, we'll need to show an
-  example of a program that is stack safe but doesn't have WBCF.)}In this
-work, we take the (informal) definitions of WBCF and LSE as a starting
+  example of a program that is stack safe but doesn't have WBCF.)}
+In this work, we take the (informal) definitions of WBCF and LSE as a starting
 point, but choose a different approach to formalizing them, based on the
 technical framework of language-based security~\citep{??}. We define
-trace-based properties of \emph{stepwise stack integrity} and \emph{stack confidentiality}.
+trace-based properties of \emph{stepwise stack integrity} and
+\emph{lockstep stack confidentiality}.
 In applying these security concepts, we treat each caller-callee pair as
 mutually distrustful, with the caller needing protection from the callee. \apt{Need more explanation of
   ``nesting'' and our novelty factor here? Also about domains??}
@@ -364,29 +365,47 @@ This differs from common instances in language-based security in that the
 confidentiality property applies to many nested subtraces within a single execution.
 \sna{Thinking about how to express domains, or whether to. I'm not sure it's
   an interesting detail at this level. Also not sure how strongly to talk about this novelty.}
-{\em Integrity} says that a caller's local data is protected from modification by its callee.
-\bcp{What about the ``stepwise'' part?}
-This is vital for local reasoning about the behavior of the
-caller.\bcp{Either delete that sentence or explain it more.}
-{\em Confidentiality} says that a caller's data is protected
+{\em Integrity} says that a caller's local data is protected from modification by its callee,
+and its {\em stepwise} interpretation formalizes this very naturally as a caller's local data
+never being modified during a call. {\em Confidentiality} says that a caller's data is protected
 from being leaked into its callee, and also that the callee cannot see uninitialized data.
 As a reasoning principle, confidentiality guarantees that the callee's
 behavior is determined only by a predictable interface that does not include the caller's
-local state or the uninitialized portion of the stack.
-Together, these properties (informally) capture LSE, as well as the ``temporal stack safety''
-notion that data outside of live frames should be inaccessible (which LSE
-does not address\bcp{Which supports my feeling that we should not advertise
-  ourselves as reimplementing LSE but rather as defining a different
-  condition based on similar intuitions.}).
-\bcp{These are the intuitions, but we should also mention that we want to define
-  these (at least partly) in terms of a sort-of-standard notion of ``nested
-  noninterference''!  Then, at the end of the intro (just before the
-  contributions) we can summarize the whole thing like ``So what is stack
-  safety?  It is nested NI.''}
-We also give a simple trace-based formalization of WBCF, which is essential for keeping the
-notions of ``caller'' and ``callee'' sensible. \bcp{That last should probably
-be a separate discussion, if I've succeeded in convincing people that WBCF
-is not part of stack safety.}
+local state or the uninitialized portion of the stack. This is formalized as a
+{\em noninterference}-style property that, rather than comparing pairs of whole program traces,
+compares a pair of subtraces for each call, nested within other calls. The term
+{\em lockstep} describes the behavior of these pairs: they step together, and any
+deviation is recognized as a violation of confidentiality.
+Together, these properties capture the rough intuition of LSE, but are not identical --
+confidentiality contains temporal protections that LSE does not address.
+
+Since our stack safety occupies the same conceptual space as LSE, we should consider how it
+relates to WBCF. First, we observe that some degree of bracketed control flow is implicit
+in any notion stack safety, simply because calls and returns must be recognizeable; callers
+and callees, distinct. We treat control flow that creates an ambiguity between caller and
+callee as keeping the callee in control, and therefore such behavior can never give access
+to the caller's data. An example would be if the callee attempts to ``return'' to the
+wrong location, hoping to execute code on behalf of the caller: it may make the jump
+without violating stack safety, but it gains no privileges on the caller's data.
+Alternatively a callee might return past its immediate caller, to somewhere deeper in the
+stack, and stack safety does not inherently rule this out. We then define WBCF as an additional
+restriction, describing the standard control flow principle that a return pops exactly one frame
+from the stack.
+\sna{We got side-tracked a bit from talk of entry integrity, and Andrew made some good points
+  about it, so let's not rule that out just yet. But I focused on returns because there's a
+  clear story already.}
+
+Part of the challenge in fully characterizing stack safety is that at a low level,
+without built-in stacks, we are at the mercy of architectural choices that
+do not relate to the abstract notion of stack safety. We abstract over these choices
+as much as possible, so that our model can be applied to a wide range of architectures
+and enforcement mechanisms. But a second challenge is the diversity of enforcement
+mechanisms and their need for efficiency. In the name of efficiency, enforcement
+mechanisms may weaken their protections, arguing that the protections they do provide
+still capture stack safety in a meaningful sense. This calls for an {\em extensional}
+characterization of stack safety, one that describes the externally visible behavior
+of a stack safe system. Our stepwise and lockstep properties are {\em intensional},
+focusing on the internal behavior.
 
 For example, \citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
 using tag-based \emph{micro-policies}~\citep{pump_oakland2015}.
@@ -397,9 +416,9 @@ according to the activation that is currently executing. Roessler and Dehon
 explore alternative versions of this basic idea, with different ways of identifying
 functions and deciding exactly which accesses are allowed, to enable different ways
 of maintaining the connection between an activation identity and the memory it owns.
-These vary in their efficiency and in the spatial and temporal precision of their security
-guarantees.
-For example, their \emph{Depth Isolation} policy  requires a strict mapping from a function
+These vary in their efficiency and in the spatial and temporal precision of their
+security guarantees.
+Their \emph{Depth Isolation} policy requires a strict mapping from a function
 to its frame from the start of the call to its end, and permits the function to write
 only into that frame.
 This seems simple and intuitively correct, but it can be expensive to implement the strict
@@ -409,6 +428,21 @@ permits  ``illicit'' writes to inaccessible stack frames so long as the
 written locations are not subsequently read by their ``real'' owners. The justification
 for this form of laziness is that any genuinely dangerous writes will ultimately be
 detected before they can affect program behavior.
+
+To address this, we develop an \emph{observational integrity} property that
+is supports enforcement mechanisms that detect violations between the point when
+they occur and the point when they make an observable impact. Intuitively this property
+can be phrased as ``no visible reads after dangerous writes.''  We prove (in Coq) that stepwise
+integrity implies observational integrity.
+\sna{There is a bit of massaging old proofs to do here, and I don't recall if we
+  established that this was important.}
+We additionally sketch an associated {\em observational confidentiality} property
+makes confidentiality extensional in the same way, though we do not know of a real
+enforcement mechanism that weakens confidentiality in this way. Together,
+these form an {\em observational stack safety} that is highly extensional.
+We therefore argue that, despite its somewhat greater complexity,
+it may be a better minimal specification for
+stack safety enforcement mechanisms in general.
 
 To illustrate the applicability of these properties, we perform randomized testing to
 validate that \citeauthor{DBLP:conf/sp/RoesslerD18}'s Depth Isolation micro-policy enforces
@@ -426,30 +460,18 @@ it is an argument in favor of their correctness.
 %  such an evaluation is to see whether property-based testing against this
 %  spec can distinguish correct implementations of the mechanism from buggy
 %  ones...''}
-
-However, as our testing reveals, \citeauthor{DBLP:conf/sp/RoesslerD18}'s Lazy Tagging and
+Of course, as our testing reveals, \citeauthor{DBLP:conf/sp/RoesslerD18}'s Lazy Tagging and
 Clearing micro-policy does not enforce stepwise integrity.
-To address this, we develop an \emph{observational stack integrity} property that
-is intended to specify enforcement mechanisms that
-detect integrity violations between the point when they occur and the point when they make
-an observable impact. Intuitively this property can be phrased as ``no visible reads after dangerous writes.''  We prove (in Coq) that stepwise integrity implies observational integrity.
-\sna{There is a bit of massaging old proofs to do here, and I don't recall if we
-  established that this was important.}
-
 Unfortunately the existing Lazy Tagging and Clearing
-micro-policy does not quite enforce this property either, as we show in
-testing~\apt{really??}, but formalizing the ideal property allows us to see how it falls short.
+micro-policy does not quite enforce observable confidentiality either. %, as we show in
+%testing~\apt{really??},
+but formalizing the ideal property allows us to see how it falls short.
 We propose  a variant of Lazy Tagging and Clearing that we believe \emph{does} enforce
 observational integrity, at some performance cost.\apt{but we're not testing that, right?}
 \rb{Not sure about the property part right now, the machine side of this is
   pretty much done}
 \sna{It's aspirational so far, but there's no fundamental reason we can't test it. We may
   need a caveat about how it's harder to test?}
-
-Observational integrity is attractive in being significantly more \emph{extensional} than
-stepwise integrity.  We therefore argue that, despite its somewhat greater complexity,
-it may be a better minimal specification for
-stack safety enforcement mechanisms in general.
 
 Our initial description of these properties assumes a single simple stack with no sharing between callers and
 callees: all parameters and return values are passed in registers.  However,
@@ -656,7 +678,7 @@ and describe testing (\cref{sec:testing}).
 Intuititively, stack safety means that a caller's stack frame is protected
 from a confused or malicious callee's
 attempts to read or write its private data or hijack its control flow. And in fact the caller,
-while presumably\bcp{not ``presumably'': {\em by definition}!} not malicious, may itself be confused or erroneous. Our attacker
+while not malicious, may itself be confused or erroneous. Our attacker
 model reflects this intention\bcp{I don't understand how it reflects this
   intuition about the caller---indeed, I don't understand the point about
   the caller.} by assuming that both the attacker and the defender
