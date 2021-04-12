@@ -494,9 +494,9 @@ Definition mpstep (mp : MPState) : option (MPState * Observation) :=
   trace ("Entering mpstep with" ++ show (word.unsigned (getPc (ms mp))) ++ " @ " ++ show (pctags (ps mp)) ++ " : " ++ show instr ++ nl
         )%string
         (
-  p' <- pstep mp;
+  (*  p' <- pstep mp; *)
   match step (ms mp) with
-  | (m', o) => Some (m', p', o)
+  | (m', o) => Some (m',ps mp, o)
   end
     )
 .
