@@ -277,7 +277,7 @@ to be a lower bound that captures stack safety for any reasonable enforcement me
 
 The call stack is a perennial target for low-level attacks
 based on memory-safety vulnerabilities, leading to consequences
-from leakage or corruption of private stack data to
+that range from leakage or corruption of private stack data to
 control-flow hijacking. To detect or prevent such attacks, a profusion of
 software and hardware protections have been proposed,
 %
@@ -295,8 +295,8 @@ useful).}
 %
 The protections offered by such mechanisms are generally described in terms
 of a set of concrete examples of attacks that they can prevent, such as corruption
-of return addresses, buffer overflows, or use of uninitialized variables. This leaves a
-more general characterization to the reader's intuition.
+of return addresses, buffer overflows, or use of uninitialized variables. This leaves the
+task of formulating a more general characterization to the reader's intuition.
 Moreover, the details of these mechanisms can be quite intricate
 and often involve trading off protection and efficiency.
 Thus, it would be useful to have a precise, generic, and formal
@@ -344,19 +344,19 @@ from the idealized machine to an ordinary machine equipped with the enforcement.
 %% the bad behaviors we associate with unsafe stack behavior, but weak enough that
 %% other reasonable enforcement mechanisms can enforce it.
 
-In this work, we take the (informal) definitions of WBCF and LSE as a starting
+In this work, we take the (informal) definitions of WBCF\apt{or maybe not?}  and LSE as a starting
 point, but choose a different approach to formalizing them, based on the
 technical framework of language-based security~\citep{??}. We define
 trace-based properties of \emph{stepwise stack integrity} and
-\emph{lockstep stack confidentiality}.
+\emph{lockstep stack confidentiality}.\apt{Could we just say ``stepwise'' for both?}
 In applying these security concepts, we treat each caller as needing protection
 from its callee, even as that callee may need protection from its callee in turn.
-This differs from common instances in language-based security in that the
+This differs from common practice in language-based security in that the
 confidentiality property applies to many nested subtraces within a single execution.
-\sna{How novel is this nesting?}
+\sna{How novel is this nesting?} \apt{Lost the reasoning principle that was here?}
 {\em Integrity} says that a caller's local data is protected from modification by its callee,
-and its {\em stepwise} interpretation formalizes this very naturally as a caller's local data
-never being modified during a call. {\em Confidentiality} says that a caller's data is protected
+and its {\em stepwise} interpretation formalizes this very naturally: a caller's local data
+is never modified during a call. {\em Confidentiality} says that a caller's data is protected
 from being leaked into its callee, and also that the callee cannot see uninitialized data.
 As a reasoning principle, confidentiality guarantees that the callee's
 behavior is determined only by a predictable interface that does not include the caller's
@@ -365,70 +365,88 @@ local state or the uninitialized portion of the stack. This is formalized as a
 compares a pair of subtraces for each call, nested within other calls. The term
 {\em lockstep} describes the behavior of these pairs: they step together, and any
 deviation is recognized as a violation of confidentiality.
-Together, these properties capture the rough intuition of LSE, but are not identical --
-confidentiality contains temporal protections that LSE does not address.
+Together, these properties capture the rough intuition of LSE, but are somewhat stronger:
+confidentiality contains temporal protections that LSE does not address.\apt{Maybe want to
+  say a little more about this here, since it is a novelty wrt/ existing work?}
 
 Since our stack safety occupies the same conceptual space as LSE, we should consider how it
-relates to WBCF. First, we observe that some degree of bracketed control flow is implicit
-in any notion stack safety, simply because calls and returns must be recognizeable; callers
-and callees, distinct. We treat control flow that creates an ambiguity between caller and
-callee as keeping the callee in control, and therefore such behavior can never give access
+relates to WBCF.\apt{Or maybe not. This disucssion seems too detailed for this spot in the intro.
+  While it is good to note that our integrity/confidentiality properties make sense without
+  WBCF-or-similar, LSE is also described independently from WBCF, so there's no novelty in that.}
+First, we observe that some degree of bracketed control flow is implicit
+in any notion of stack safety, simply because calls and returns must be recognizeable so
+that callers and callees are distinguished. We treat control flow that creates an ambiguity between caller and
+callee\apt{this is obscure}  as keeping the callee in control, and therefore such behavior can never give access
 to the caller's data. An example would be if the callee attempts to ``return'' to the
 wrong location, hoping to execute code on behalf of the caller: it may make the jump
 without violating stack safety, but it gains no privileges on the caller's data.
 Alternatively a callee might return past its immediate caller, to somewhere deeper in the
-stack, and stack safety does not inherently rule this out. We then define WBCF as an additional
-restriction, describing the standard control flow principle that a return pops exactly one frame
+stack, and stack safety does not inherently rule this out. We therefore define WBCF as an additional
+restriction \apt{on what? in what way is it formalized differently than by Skorstengaard?},
+describing the standard control flow principle that a return pops exactly one frame
 from the stack.
 \sna{We got side-tracked a bit from talk of entry integrity, and Andrew made some good points
   about it, so let's not rule that out just yet. But I focused on returns because there's a
   clear story already.}
 
-Part of the challenge in fully characterizing stack safety is that at a low level,
-without built-in stacks, we are at the mercy of architectural choices that
-do not relate to the abstract notion of stack safety. We abstract over these choices
+Part of the challenge in fully\apt{omit?} characterizing stack safety is that in a low-level machine
+without built-in stacks, we are at the mercy of architectural
+choices that do not relate to the abstract notion of stack safety\apt{a bit vague. what kind of choices?}.
+We abstract over these choices
 as much as possible, so that our model can be applied to a wide range of architectures
-and enforcement mechanisms. But a second challenge is the diversity of enforcement
-mechanisms and their need for efficiency. In the name of efficiency, enforcement
-mechanisms may weaken their protections, arguing that the protections they do provide
-still capture stack safety in a meaningful sense. This calls for an {\em extensional}
-characterization of stack safety, one that describes the externally visible behavior
-of a stack safe system. Our stepwise and lockstep properties are {\em intensional},
+and enforcement mechanisms.
+
+\apt{Intra-paragraph flow seemed awkward.}
+A second challenge is
+% the diversity of enforcement mechanisms APT:already implied above
+enforcement mechanisms may weaken their protections that in the name of efficiency,
+while arguing that they still capture stack safety in a meaningful sense.
+\apt{Remainder of this paragraph might be better \emph{after} the R+DH para below.}
+This calls \apt{not
+  immediately obvious why. is this true for anything other than laziness?}
+for an {\em extensional}
+characterization of stack safety that describes the externally observable behavior
+of a stack-safe system. In contract, our stepwise and lockstep properties are {\em intensional},
 focusing on the internal behavior.
 
 For example, \citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
 using tag-based \emph{micro-policies}~\citep{pump_oakland2015}.
-Intuitively, memory cells within each stack frame are tagged with the
+Memory cells within each stack frame are tagged with the
 identity of the function activation
 that owns the frame, and access to those locations is then gated
-according to the activation that is currently executing. Roessler and Dehon
+according to the activation that is currently executing. Roessler and DeHon
 explore alternative versions of this basic idea, with different ways of identifying
-functions and deciding exactly which accesses are allowed, to enable different ways
-of maintaining the connection between an activation identity and the memory it owns.
+functions and deciding exactly which accesses are allowed.
+% APT: seem repetitive:
+%, to enable different ways
+%of maintaining the connection between an activation identity and the memory it owns.
 These vary in their efficiency and in the spatial and temporal precision of their
 security guarantees.
-Their \emph{Depth Isolation} policy requires a strict mapping from a function
-to its frame from the start of the call to its end, and permits the function to write
+The \emph{Depth Isolation} policy requires a strict mapping from a function
+to its frame from the start of the call to its end\apt{unclear. why not simply say
+  what depth is?}, and permits the function to write
 only into that frame.
 This seems simple and intuitively correct, but it can be expensive to implement the strict
-mapping. Conversely, their \emph{Lazy Tagging and Clearing} policy improves
+mapping. Conversely, the \emph{Lazy Tagging and Clearing} policy improves
 performance by assigning locations to the active function when they are written, which
 permits  ``illicit'' writes to inaccessible stack frames so long as the
-written locations are not subsequently read by their ``real'' owners. The justification
+written locations are not subsequently read by their ``real'' owners. The intuitive justification
 for this form of laziness is that any genuinely dangerous writes will ultimately be
 detected before they can affect program behavior.
 
-To address this, we develop an \emph{observational integrity} property that
-is supports enforcement mechanisms that detect violations between the point when
+To formalize this intuition, we develop an \emph{observational integrity} property which
+characterizes enforcement mechanisms that detect violations between the point when
 they occur and the point when they make an observable impact. Intuitively this property
 can be phrased as ``no visible reads after dangerous writes.''  We prove (in Coq) that stepwise
 integrity implies observational integrity.
 \sna{There is a bit of massaging old proofs to do here, and I don't recall if we
-  established that this was important.}
+  established that this was important.\apt{medium importance. it is obvious that
+    observational integerity allows behaviors that stepwise does not, but
+    maybe not obvious that the converse is not true too.}}
 We additionally sketch an associated {\em observational confidentiality} property
-makes confidentiality extensional in the same way, though we do not know of a real
-enforcement mechanism that weakens confidentiality in this way. Together,
-these form an {\em observational stack safety} that is highly extensional.
+makes confidentiality extensional in the same way, although we do not know of a real
+enforcement mechanism that weakens confidentiality in this way.\apt{why bother mentioning it then?}
+Together, these form an {\em observational stack safety} that is highly extensional.
 We therefore argue that, despite its somewhat greater complexity,
 it may be a better minimal specification for
 stack safety enforcement mechanisms in general.
@@ -461,7 +479,9 @@ observational integrity, at some performance cost.\apt{but we're not testing tha
 \rb{Not sure about the property part right now, the machine side of this is
   pretty much done}
 \sna{It's aspirational so far, but there's no fundamental reason we can't test it. We may
-  need a caveat about how it's harder to test?}
+  need a caveat about how it's harder to test?}\apt{As per email discussion,
+  maybe we could have a property variant that \emph{does} match depth-based Lazy Tagging and Clearing,
+  by loosening the temporal safety properties?}
 
 Our initial description of these properties assumes a single simple stack with no sharing between callers and
 callees: all parameters and return values are passed in registers.  However,
@@ -475,7 +495,10 @@ compose multiple such policies.)
   Section 3, however it looks like things get tricky rather quickly.}
 \sna{The trick is that if a programmer is passing pointers, we can't presume their
   intent -- how long should we permit memory to be shared? But if the compiler is passing
-  pointers, as in pass by reference, we have a clear sense of where sharing should stop.}
+  pointers, as in pass by reference, we have a clear sense of where sharing should stop.
+  \apt{N.B.Doing call-by-reference properly requires that the passed variable is accessible
+    by all descendents, not just immediate callee, which is doable with depth tags but not
+    obviously with per-activation tags }}
 
 Finally, we define integrity and confidentiality properties for a coroutine system featuring
 finitely-bounded stacks.
@@ -597,7 +620,7 @@ In summary, we offer the following contributions: \bcp{Section numbers are
 \item
   We adapt formulations of integrity and confidentiality from
   language-based security
-  to formalize a parameterized {\em stepwise stack-safety property} and argue that
+  to formalize a parameterized {\em stepwise stack-safety property} \apt{lockstep?} and argue that
   it captures the intuitive concepts of local stack encapsulation, well-bracketed control
   flow, and temporal stack safety~(\cref{sec:lse-and-wbcf}).
 \item
@@ -628,27 +651,28 @@ and describe testing (\cref{sec:testing}).
 \newcommand*{\rsp}{\textsc{sp}}
 
 Our properties are defined in terms of an abstract machine model that makes very few
-assumptions about the machine that instantiates it.  We assume a register
-machine with a program counter \(\PCname\) and stack pointer \(\rsp\); other
+assumptions about the concrete machine that instantiates it.  We assume a register
+machine with a program counter \(\PCname\) and stack pointer \(\rsp\)\apt{do we really
+  need these except for WBCF?}; other
 details of the machine's ISA are unimportant. We assume that we know ahead of time
-the layout of memory, including code and which addresses are within
+the layout of memory, including where code lives and which addresses are within
 the bounds of the stack.
 
 Our stack-safety concepts depend
 critically on the notions of ``call'' and ``return,'' which are not fully explicit
-in machine code (the same instruction opcode may be used in some places as part of
-a call or return sequence and in other places for other purposes).
+in machine code---the same instruction opcode may be used in some places as part of
+a call or return sequence and in other places for other purposes.
 %
-We assume we are given a machine language program annotated with the locations of
-instructions representing calls, returns, and function entry points. Although this
-information would typically come from a compiler together with the machine code,
+So we assume we are given a machine language program annotated with the locations of
+instructions representing calls, returns, and function entry points. Although these
+annotations would typically come from a compiler together with the machine code,
 we do not assume anything about their provenance.
 
 We further parameterize over the structure of the stack, particularly the means by
 which a caller identifies the data that should be protected during a call. We term
 this the {\em sealing convention} and model it as a relation between machine states
-and addresses. Then from any call, those the sealing convention relates to the
-state will be protected until the return.
+and addresses. From any call, those addresses that the sealing convention relates to the
+state\apt{rephrased, but still obscure} will be protected until the return.
 
 We model the base machine as a step function over machine states, and a machine
 enhanced with an enforcement mechanism (in the language of tag-based enforcement,
@@ -670,11 +694,11 @@ target address. Typically the shadow stack is isolated using a separate protecti
 mechanism.
 
 The separation is less useful in protection mechanisms that interact more directly
-with application code, such as Cheri-style capabilities. In these instances
+with application code, such as Cheri-style capabilities\citep{??}. Here
 the policy would not have auxiliary state, but would still refine the machine step
-function to create a distinct failstop condition. Other techniques such as software-based
-ones might never actually failstop, but fulfill the properties by never creating
-traces that violate them.
+function to create a distinct failstop condition. Other techniques such as
+software fault isolation~\citep{??} might never actually failstop, but fulfill
+the properties by rewriting code so that traces can never violate them.
 
 \paragraph*{Threat Model}
 
@@ -687,7 +711,7 @@ at varying points.
 We take a very strong threat model in which both caller and callee may execute
 arbitrary machine code. This means that even the defender might be ill-behaved
 to the point that it attempts to undermine its own protections, and we expect
-enforcement mechanisms to ensure that it fails.
+enforcement mechanisms to ensure that it fails.\apt{obscure}
 Hardware and timing attacks are out of scope, however.
 
 \paragraph*{Well-formedness and Bad Annotations}
@@ -703,9 +727,9 @@ the enforcement mechanism must still protect the caller's memory.
 
 Alternatively, an annotated instruction might not really be a call or return.
 In the context of \citeauthor{DBLP:conf/sp/RoesslerD18}'s micro-policies, well-behaved calls
-and returns are identified with ``blessed sequences'' of instructions, which the tag policy
-will force to be executed from start to finish. The annotated instruction should always
-be the final instruction of the sequence. What if an annotated instruction exists outside
+and returns are implemented by fixed sequences of instructions which the tag policy
+will force to be executed from start to finish. The annotated call or return instruction should always
+be the final instruction of the appropriate sequence. What if an annotated instruction exists outside
 such a sequence? We will statically rule out some scenarios with a well-formedness criterion
 on initial states: annotated instructions will initially be tagged apropriately, as the
 final instruction in the call or return sequence. This is all we need for the policy to
@@ -739,7 +763,7 @@ discussed in section \ref{sec:cheri}.
 
 This enforcement model directly describes micro-policies~\citep{pump_oakland2015}.
 We believe that it is flexible enough to capture code-altering approaches, such as code
-rewriting or capability-based techniques, perhaps with less elegance.
+rewriting or capability-based techniques, though perhaps with less elegance.
 
 \newcommand{\TAGS}{\mathcal{T}}
 \newcommand{\tagname}{t}
