@@ -496,7 +496,7 @@ compose multiple such policies.)
 \sna{The trick is that if a programmer is passing pointers, we can't presume their
   intent -- how long should we permit memory to be shared? But if the compiler is passing
   pointers, as in pass by reference, we have a clear sense of where sharing should stop.
-  \apt{N.B.Doing call-by-reference properly requires that the passed variable is accessible
+  \apt{N.B.Doing pass-by-reference properly requires that the passed variable is accessible
     by all descendents, not just immediate callee, which is doable with depth tags but not
     obviously with per-activation tags }}
 
@@ -857,6 +857,7 @@ rewriting or capability-based techniques, though perhaps with less elegance.
 %the middle of the code block of {\tt g}.\apt{describe result of this?}
 
 \section{Stack Safety, Intuitively}
+\apt{section title is a bit sad since we're trying to convert intuition to formal spec!}
 \label{sec:running-example}
 \colorlet{lgray}{gray!40}
 \colorlet{lred}{red!40}
@@ -883,7 +884,7 @@ int main() {
 }
 
 int f() {
-10:     $SP-2 = 0;
+10:     *($SP-2) = 0;
 11[R]:  return 5;
 }
 \end{verbatim}
@@ -926,8 +927,8 @@ int f() {
 
 \vspace{\abovedisplayskip}
 \end{subfigure}
+\caption{An Integrity Violation}
 \label{fig:int1}
-\caption{Integrity Violation}
 \end{figure}
 
 This section will elucidate the intuition behind the properties through a series
@@ -936,19 +937,25 @@ of bad behavior that it prevents; we will insert our model between the enforceme
 the examples, arguing that:
 
 \begin{itemize}
-\item Examples that appear to violate stack safety, violate at least one of our properties
-\item We do not find desireable behaviors that appear stack-safe yet violate our properties
-\item Our properties are testably implemented by stack safety micro-policies from the
+\item examples that appear to violate stack safety violate at least one of our properties;
+\item we do not find desireable behaviors that appear stack-safe yet violate our properties; and
+\item our properties are testably implemented by stack safety micro-policies from the
   literature, and the micro-policies are not significantly more conservative
-  (i.e., policy failstops usually correspond to imminent property violations)
+  (i.e., policy failstops usually correspond to imminent property violations).
 \end{itemize}
 
 Our examples are written in C-like syntax, labeled with line numbers for reference,
 but to reflect the increased power of the underlying assembly code, we allow code
-to access the stack pointer directly, written {\tt \$SP}. The layout of the stack
-is given to the right, with a box representing a word of memory, and variables stored
-in declaration order from left to right. The stack grows upward in memory and to the
-right on paper.
+to read the stack pointer ({\tt \$SP}) directly and use
+it to form pointers.\apt{I've added some strategic *'s}
+Call and return annotations are marked {\tt[C]} and {\tt[R]}
+respectively. Local variables are assumed to be stored in the stack frame,
+in declaration order. Unless otherwise stated, arguments and return values are passed in registers.
+The machine is word-addressed. The stack grows upward in
+memory and {\tt \$SP} points to the first unused word above the top of the stack. 
+At the right of each example, we show the layout of stack memory just before
+the specified line number is executed; each box represents a memory word and
+addresses increase to the right. 
 
 %The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
 %at the time of the call. The stack can be used to pass arguments or return results
@@ -960,7 +967,7 @@ right on paper.
 %\ifaftersubmission\bcp{This implicitly amounts to choosing a caller-saves register
 %  convention, though, doesn't it?\apt{I think it is neutral; we could add separate caller register protection if we wanted.}}\fi
 
-Example \ref{fig:int1} shows an integrity violation. It consists of a {\tt main}
+Figure~\ref{fig:int1} shows a simple integrity violation. It consists of a {\tt main}
 function that performs a call to a function {\tt f}, which overwrites {\tt main}'s
 variable {\tt x}. In the initial memory layout the entire stack is {\em unsealed},
 meaning that it is eligible to be written to. At the call from {\tt main} to
@@ -974,8 +981,8 @@ refers to the fact that the property must hold on every step. %Later we will
 %cares about changes it can see after the return, not changes during execution.
 In this case, after line 10, {\tt f} has violated integrity by writing to {\tt x}.
 
-The black rectangle represents the return address. In a typical calling convention
-this will have been passed in a register during the call itself, and {\tt f} stores
+The black rectangle represents the return address. In a typical RISC calling convention
+this will have been stored in a register by call itself, and {\tt f} stores
 it in the stack during its preamble, so it is not itself sealed.
 
 \begin{figure}
@@ -991,7 +998,7 @@ int main() {
 int f() {
 10:     int y,z;
 11:     y = 5;
-12:     z = $SP-2;
+12:     z = *($SP-4);
 13[R]:  return y+z;
 }
 \end{verbatim}
@@ -1076,38 +1083,38 @@ int f() {
 
 \vspace{\abovedisplayskip}
 
-\label{fig:conf1}
 \end{subfigure}
 \caption{A Confidentiality Violation}
+\label{fig:conf1}
 \end{figure}
 
 Meanwhile confidentiality intuitively states that a callee is unaware
 of the context of its call (except for its arguments and any global variables).
-We state this in a style similar to {\em noninterference}, a well-known concept in theoretical
-security. Noninterference describes knowledge: it states that for some system components
+We state this in a style similar to {\em noninterference}~\citep{??}.
+Noninterference describes knowledge: it states that for some system components
 containing secret values, we can substitute any values whatsoever without changing the results
 of our computation. If there exists some value for which we see different results, then
 in fact we can learn something about the initial state by observing those results, violating
 confidentiality.
 
-In example \ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
+In Figure~\ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
 by reading {\tt main}'s variable {\tt x}. The trace
 shows how noninterference applies to this scenario. At line 11, we create a {\em variant}
 state with arbitrary values \(v_0\), etc., in place of the values that should
 be hidden from {\tt f}. At line 12, we note that the callee's first variable, {\tt y}, has
 changed to 5 in both the primary trace and the variant. The primary and variant agree on
-the location that changed, so confidentiality was not violated. But after line 13,
+the value in the changed location, so confidentiality was not violated. But after line 13,
 the other variable, {\tt z}, has changed. In the primary trace it changed to 42, but
-in the variant trace it might have any value \(v_2\). Say \(v_2 = 43\) -- then the variant
+in the variant trace it might have any value \(v_2\). If \(v_2 \neq 42\) then the variant
 has behaved differently than the primary, violating confidentiality.
 
 This form of confidentiality we will term {\em lockstep confidentiality}, defined informally
 as: for any state at the entry to a function, for any variant over the values in the stack,
-the primary state and its variant will step in lockstep until they return. Any system components
-whose values update will be identical between the primary and variant traces. This includes not
+the primary state and its variant will step in lockstep until they return. Any system components\apt{first use of this?}
+whose values change will be identical between the primary and variant traces. This includes not
 just memory, but registers as well, so that returning a secret is a violation. And when we
-extend the model with a notion of external output, it will include any values that are
-outputted.
+extend the model with a notion of external output, it\apt{what?}  will include any values that
+emitted.
 
 We alternatively could imagine a stepwise form of confidentiality in which we explicitly
 track which addresses may be read (i.e., which have been initialized), and at each step
@@ -1116,7 +1123,7 @@ wouldn't need to divide up the execution by calls. But we can see in this exampl
 a single variant at the start of the call effectively captures initialization: when {\tt y} is
 initialized, the primary and the variant agree on its value, so it can now be safely read.
 This treatment is roughly in line with more standard uses of noninterference, which typically
-vary states at the starts of whole program runs.
+vary states at the starts of whole program runs.\apt{This is all a bit cryptic.}
 
 Together, stepwise integrity and lockstep confidentiality form the stepwise version of
 local state encapsulation.
@@ -1201,7 +1208,10 @@ int g() {
   \circled{\tt 02} &
   \multicolumn{2}{c}{
     \memoryaddrs{8em}
-    \memory{4}{\unsealc}
+%    \memory{4}{\unsealc}
+    \memory{1}{\unsealc}
+    \memory{1}{\retptrc}
+    \memory{2}{\unsealc}
     ~$\cdots$
     \MemoryLabel{-18em}{0.75em}{5}
     \MemoryLabel{-14em}{0.75em}{2}
@@ -1246,10 +1256,12 @@ int g() {
 \label{fig:conf2}
 \end{figure}
 
-It may be unclear in figure \ref{fig:conf1} why we also vary the initial values of {\tt y}
-and {\tt z}. In figure \ref{fig:conf2}, we watch as {\tt f} leaves behind a value in {\tt y}
+It may be unclear in figure \ref{fig:conf1} why we vary the initial values of {\tt y}
+and {\tt z} as well as that of {\tt x}. This is to detect violations of so-called
+temporal stack safety.
+In Figure~\ref{fig:conf2}, we watch as {\tt f} leaves behind a value in {\tt y}
 that corresponds to {\tt main}'s variable, {\tt x}. Then {\tt g} is able to access
-{\tt y} without even directly using its ability to read the stack pointer. In
+{\tt y} without even directly reading the stack pointer. In
 this case, {\tt g} branches on that value, which is a different way of
 violating lockstep confidentiality. Technically, this violation
 occurs because the program counter is also a component of the state that must change
@@ -1361,7 +1373,7 @@ the program counters will differ, breaking the lockstep.
   \centering
   \begin{subfigure}{.45\textwidth}
 \begin{verbatim}
-int stash = 0;
+int *stash = 0;
 
 int main() {
 0:         int x, y;
@@ -1373,9 +1385,9 @@ int main() {
 
 void f(int &a) {
 10:    if(!stash)
-11:      stash = &a;
+11:      stash = a;
 12:    *stash = 5;
-13[R]:   return;
+13[R]: return;
 }
 \end{verbatim}
   \end{subfigure}
@@ -1388,7 +1400,7 @@ void f(int &a) {
       \memory{1}{\retptrc}
       \memory{1}{\unsealc}
       ~$\cdots$ \\
-      {\tt 11} &
+      {\tt 13} &
       \memoryaddrs{17em}
       \memory{1}{\mainpassc}
       \memory{1}{\mainsealc}
@@ -1412,7 +1424,7 @@ void f(int &a) {
       ~$\cdots$
       \MemoryLabel{-18em}{0.75em}{0}
       \\
-      {\tt 11} &
+      {\tt 13} &
       \memoryaddrs{17em}
       \memory{1}{\mainsealc}
       \memory{1}{\mainpassc}
@@ -1422,25 +1434,30 @@ void f(int &a) {
       \MemoryLabel{-18em}{0.75em}{\bf 5}
 \end{tabular}
 \end{subfigure}
-
+\caption{A violation with pass-by-reference}
 \label{fig:passing}
 \end{figure}
 
-Up til now we have ignored function arguments, since our simplest model places them in
-registers. This is an oversimplication, which we will now correct, starting with the more
-interesting case: call-by-reference. There are important stack safety concerns
-when passing arguments by reference, as seen in example \ref{fig:passing}. In this example,
+To this point we have ignored function arguments, since our simplest model places them in
+registers. This is an oversimplification, which we will now correct, starting with the more
+interesting case: pass-by-reference.
+\apt{This is a nice and clear example, but I think the ordering here is confusing. Pass-by-reference and passing arguments on the stack are
+  entirely separable issues. I think it would be easiest to explain the latter first, as the
+  simplest example of passed arguments.}
+There are important stack safety concerns
+when passing arguments by reference, as seen in Figure~\ref{fig:passing}. In this example,
 {\tt main} calls {\tt f} with a reference to {\tt x}, but then clears {\tt x} and instead
 passes a reference to {\tt y}. We would expect that the first call to {\tt f} might modify
 {\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
 {\tt x} in the second call.
 
-At each call, we add a new annotation \(P(x)\) or \(P(y)\) identifying the memory to be
-passed, and our stack model marks it in magenta. Then the caller's frame that are not
-passed are sealed, as usual. Just as we marked sealed memory with the depth of its owner,
-we do the same to passed memory. We keep track of the current depth of the active function
-next to the stack pointer in the diagram. A passed address may only be accessed when the
-current depth is one higher than the one it is sealed with.
+At each call, we add a new annotation \(P(x)\) or \(P(y)\) identifying a memory location to be
+passed, and our diagram displays it in magenta. The caller's frame locations that are not
+passed are sealed as usual. Just as we marked sealed memory with the depth of its owner,
+we do the same for passed memory. We keep track of the current depth of the active function
+next to the stack pointer in the diagram.\apt{Not seeing that}  A passed address may only be accessed when the
+current depth is one higher than the one it is sealed with. \apt{This is not good enough!
+  The callee can in turn pass the same argument by reference to its callee...}
 
 So at the initial call, {\tt x} is passed, and {\tt f} is free to write to it. Then upon
 return, {\tt main}'s frame is unsealed. At the second call it is {\tt y} that is passed,
@@ -1449,15 +1466,18 @@ a future call with no arguments passed by reference would also violate integrity
 to either variable.
 
 Passed addresses are also excluded from confidentiality: at the start of each call, we vary
-only stack addresses that are not passed. This is important, as we use the passing label
-for those arguments that are passed by value on the stack, as well. We might instead
-treat them as unsealed, but then we would treat them as confidential like the rest of the stack.
+only stack addresses that are not passed. This is important, as we also use the passing label
+for those arguments that are passed by value on the stack. \apt{this is hidden like an afterthought...}
+We might instead
+treat them as unsealed, but then we would treat them as confidential like the rest of the stack.\apt{unclear.
+  would this work or not?}
 
 We do not model permanent sharing, in which a variable's address is taken and it might be
 passed far afield before use, because this situation is uninteresting and hard to motivate
 as an instance of stack safety. We would expect to treat such sharing as completely
 unprotected, and perhaps attach a separate memory safety policy to add some protection
-to such variables.
+to such variables.\apt{Neither clear nor convincing! Taking explicit addresses of stack
+  variables is very interesting to many reviewers!}
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
