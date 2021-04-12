@@ -137,15 +137,31 @@ Import RecordSetNotations.
 
   (* Observations are values, or silent (tau) *)
   Inductive Observation : Type := 
-  | Out (w:Value) 
+  | Out (w:Value)
   | Tau. 
+
+  (* TODO: Temporarily define a fixed address to monitor for changes,
+     to be interpreted as observations. *)
+  Definition obsAddr : Z := 152.
+
+  Definition w32_eqb (w1 w2 : w32) : bool :=
+    let l1 := HList.tuple.to_list w1 in
+    let l2 := HList.tuple.to_list w2 in
+    let l12 := List.combine l1 l2 in
+    forallb (fun '(b1, b2) => Byte.eqb b1 b2) l12.
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
     (* returns option unit * state *)
     (* TODO: What's an observation? *)
     match Run.run1 RV32IM m with
-    | (_, s') => (s', Tau)
+    (* | (_, s') => (s', Tau) *)
+    | (_, s') =>
+      match loadWord (getMem m) (wrap obsAddr), loadWord (getMem s') (wrap obsAddr) with
+      | Some w, Some w' =>
+        if w32_eqb w w' then (s', Tau) else (s', Out (combine 4 w'))
+      | _, _ => (s', Tau)
+      end
     end
   .
 
