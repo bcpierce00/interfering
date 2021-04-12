@@ -148,32 +148,25 @@ We propose a formal criterion for stack safety, phrased in terms of
 language-based security: a combination of an integrity property (``each
 caller's stack frame is invariant by the callee'') and a confidentiality
 property (``the callee's behavior is insensitive to differences in the
-caller's state''). These are defined in terms of a control flow model
-in which callees are meaningfully distinct from their callers due to being
-bracketed by calls and returns. We further apply a straightforward notion of
-``well-bracketed control flow'' that ensures that callers' control flow
-can continue predictably after the return.
+caller's state''). These properties are sensible even in the presence of
+abnormal control flow. We further apply a straightforward notion of
+``well-bracketed control flow'' that restricts control flow to the
+typical pattern matched calls and returns.
 
-  \bcp{I am still not clear
-  how well-bracketedness fits into the story.  (For me, it is the bracketing
-  that {\em defines} where calls and returns happen, so there is something
-  tautological about saying that `` well-bracketedness condition ensures
-  that callers and callees remain meaningfully distinct''!)}
-  \sna{Attempted to resolve this, it may need some work.}
+We show that our properties describe the behavior the stack-safety
+``micro-policies'' of~\citet{DBLP:conf/sp/RoesslerD18}
+using property-based randomized testing. An eager micropolicy
+that catches violations immediately enforces our primary ``stepwise''
+properties, and we define weaker, more extensional ``observational''
+properties that are enforced even by a ``lazy'' micropolicy -- one
+that, for performance reasons, may catch violations after they occur
+but before they become visible.
 
-Our criterion is inspired by hardware tagging mechanisms for stack
-protection, in particular the stack-safety ``micro-policies''
-of~\citet{DBLP:conf/sp/RoesslerD18}, but its core reflects general
-principles of stack safety\bcp{I wish we did not have to be so apologetic
-  about being tied to micro-policies (and it is still not clear to me that
-  we have to be... do we have a clear statement someplace of why our
-  definition would not apply to CFI, for example? This seems like a critical
-  discussion...)}. Finally, we show that micro-policies do indeed enforce
-our properties using property-based randomized testing. An eager micropolicy
-that catches violations immediately enforces our stronger property, and we
-define a weaker, more extensional form of the property that is enforced
-by a ``lazy'' micropolicy -- one that, for performance reasons, may permit
-local violations as long as they do not influence future behavior.
+We argue that our properties are suited to a range of other enforcement
+mechanisms. The strict stepwise properties can describe mechanisms
+that catch errors immediately, as is typical. While the observational
+properties are closely linked to lazy micropolicies they are weak enough
+to be a lower bound that captures stack safety for any reasonable enforcement.
 
   \ifaftersubmission\bcp{should we mention stktokens here?}
   \leo{Not sure. We almost never cite stuff in the abstract, do we?}
@@ -293,7 +286,8 @@ useful).}
 \fi
 %
 The protections offered by such mechanisms are generally described in terms
-of a set of concrete examples of attacks that they can prevent, leaving a
+of a set of concrete examples of attacks that they can prevent, such as corruption
+of return addresses, buffer overflows, or use of uninitialized variables. This leaves a
 more general characterization to the reader's intuition.
 Moreover, the details of these mechanisms can be quite intricate
 and often involve trading off protection and efficiency.
@@ -303,11 +297,6 @@ safety, both as a basis for comparing the security claims of different
 enforcement techniques and for validating more rigorously that these claims
 are met by particular implementations.
 
-So how should we formally define stack safety? Definitions in the literature are commonly
-informal and proceed by enumerating the specific bad things that a given enforcement mechanism
-prevents, such as corruption of return addresses, buffer overflows, or
-use of uninitialized variables.\bcp{Most of that sentence should be merged
-  into the similar sentence above.  Doesn't belong here.}
 %\bcp{Does use of unitialized variables lead to stack safety attacks?\apt{sure, via buffer overflow}}
 %with the notion usually being
 %defined negatively: through examples of stack-based exploits
@@ -347,24 +336,16 @@ from the idealized machine to an ordinary machine equipped with the enforcement.
 %% the bad behaviors we associate with unsafe stack behavior, but weak enough that
 %% other reasonable enforcement mechanisms can enforce it.
 
-\bcp{If we end up adopting my recent proposal for defining subtraces and
-  separating WBCF, I think we can be a bit stronger here: We define stack
-  safety in IFC terminology based on the same intuitions as their LSE, but
-  we consider (and define) WBCF to be a separate thing---desirable, but
-  distinct from safety.  (If we make this argument, we'll need to show an
-  example of a program that is stack safe but doesn't have WBCF.)}
 In this work, we take the (informal) definitions of WBCF and LSE as a starting
 point, but choose a different approach to formalizing them, based on the
 technical framework of language-based security~\citep{??}. We define
 trace-based properties of \emph{stepwise stack integrity} and
 \emph{lockstep stack confidentiality}.
-In applying these security concepts, we treat each caller-callee pair as
-mutually distrustful, with the caller needing protection from the callee. \apt{Need more explanation of
-  ``nesting'' and our novelty factor here? Also about domains??}
+In applying these security concepts, we treat each caller as needing protection
+from its callee, even as that callee may need protection from its callee in turn.
 This differs from common instances in language-based security in that the
 confidentiality property applies to many nested subtraces within a single execution.
-\sna{Thinking about how to express domains, or whether to. I'm not sure it's
-  an interesting detail at this level. Also not sure how strongly to talk about this novelty.}
+\sna{How novel is this nesting?}
 {\em Integrity} says that a caller's local data is protected from modification by its callee,
 and its {\em stepwise} interpretation formalizes this very naturally as a caller's local data
 never being modified during a call. {\em Confidentiality} says that a caller's data is protected
@@ -494,12 +475,6 @@ Though simplistic, this extension is a step toward concurrency and demonstrates 
 our approach is flexible enough to handle more sophisticated styles of
 control flow.
 
-While our property definitions were developed with micro-policy enforcement
-in mind, they agnostic about many implementation details and should be
-applicable to other systems with minor adjustment.\apt{move this up?} \bcp{I
-  am still hoping to get a clearer understanding for myself of just what is
-  micropolicy-specific about our definitions...}
-
 %% \paragraph*{The Use of Stack Safety}
 
 %% How does the programmer rely on stack safety? The stack makes implicit promises about
@@ -627,54 +602,20 @@ In summary, we offer the following contributions: \bcp{Section numbers are
   the Lazy Tagging and Clearing policy of~\citet{DBLP:conf/sp/RoesslerD18}
   enhanced with unique tags on each activation~(\cref{sec:lazy}).
 \item
-  We show how our models can be instantiated and extended to handle passing
-  arguments on the stack~(\cref{sec:??}) and simple
-  coroutines~(\cref{sec:??}).\bcp{``instantiated and extended'' is awkward.
-  Maybe ``We show how our models can be instantiated to handle passing
-  arguments on the stack~(\cref{sec:??}) and extended with simple
-  coroutines~(\cref{sec:??}).''  If that's what we mean.}
-%  This policy does not enforce our strict
-%  local state encapsulation property,
-%  but a modified version of it using unique per-activation tags enforces
-%  an (also provably) weaker lazy variant of the property, which still prohibits
-%  the same intuitively stack unsafe behaviors.
-%
-% \apt{Awkward, but the truth I fear.} \bcp{I agree the phrasing is awkward,
-%   but the point we can make is still strong: To make the property easier
-%   to enforce, we can slightly weaken its guarantees; the weaker version is
-%   a bit more complicated to state but still retains the pragmatic
-%%   protections of the original.}\apt{To clarify: Nick's LT\&C policy uses
-%   depth-based tags, which do not enforce even our lazy policy. So we need to
-%   introduce a version of LT\&C that uses unique activation tags.}
-
-  %\item As evidence that the property is not too strong\apt{But we add the lazy version because the strict version \emph{is} too strong, in some sense.}, we show that it is
-%  realizible by
-%  a previously proposed micro-policy enforcement
-%  mechanism~(\Cref{sec:micro-policy}). \leo{And it says yes on a
-%    substantial body of code}. We also present a variation of the
-%  property + policy that is lazy, easier/more efficient to implement,
-%  and provably weaker (\Cref{sec:lazy}).
-%\item A provably stronger (inductive? step-by-step/stepwise) variant
-%  of this property tuned for testing/verification.  We test the whole
-%  thing with a cool framework. \bcp{Which section?}
+  We extend our model so that it can be instantiated in systems that pass arguments
+  on the stack~(\cref{sec:??}) and in those with simple coroutines~(\cref{sec:??}).
 \end{itemize}
-\Cref{sec:relwork} discusses related work, and
-\cref{sec:future} sketches directions for future work.
 
 We begin with a description of our assumptions and threat model (\cref{sec:threat}),
 then show how our properties apply to examples of stack unsafety 
 (\cref{sec:running-example}). Then, after some technical preliminaries
 (\cref{sec:prelim}), we formalize the properties (\cref{sec:eager}, \cref{sec:lazy})
 and describe testing (\cref{sec:testing}).
+\Cref{sec:relwork} discusses related work, and
+\cref{sec:future} sketches directions for future work.
 
 \section{Assumptions and Threat Model}
 \label{sec:threat}
-
-\bcp{Again, I think we need to put ``Assumptions'' (i.e., our basic picture
-  of the world) first, as context.  E.g., none of the threat model
-  discussion makes sense until the reader understands that we {\em define}
-  function calls and returns by means of annotations (and that we MUST do
-  something like that because we are talking about machine code).}
 
 \newcommand*{\rsp}{\textsc{sp}}
 
@@ -710,6 +651,7 @@ action that would violate the security property;
 our properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
+\sna{This is awkward.}
 This division of policy state from machine state is helpful when reasoning about
 enforcement mechanisms that keep a significant amount of data separate from the
 primary execution data to inform security. Obviously tag-based systems do this,
@@ -728,7 +670,7 @@ traces that violate them.
 
 \paragraph*{Threat Model}
 
-Intuititively, stack safety means that a caller's stack frame is protected
+Intuitively, stack safety means that a caller's stack frame is protected
 from a confused or malicious callee's attempts to read or write its private data.
 The attacker model therefore treats every caller as a defender and its callee as
 an attacker, meaning that with nested calls, a single function may play both roles
@@ -740,14 +682,9 @@ to the point that it attempts to undermine its own protections, and we expect
 enforcement mechanisms to ensure that it fails.
 Hardware and timing attacks are out of scope, however.
 
-%\leo{Anything else to add here?}
-%\leo{Maybe a good place to discuss calling conventions and that they
-%  are essentially enforced by the policy or sth?}
-%\rb{Intuition that the callee can do anything in principle, but the machine will
-%halt if it does not follow the calling convention, etc.?}
-
 \paragraph*{Well-formedness and Bad Annotations}
 
+\sna{TODO: Need to rewrite this for the new model of WBCF.}
 Since we rely heavily on code annotations, we must ask: what if the annotations
 are wrong? First, suppose a call or return occurs that is not annotated.
 In this case, the answer is simple: as far as the properties are concerned, there has
