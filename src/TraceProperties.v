@@ -9,13 +9,6 @@ Section WITH_CONTEXT.
   Variable context : Type.
   Variable updateC : MachineState -> context -> context.
 
-  (* Not really using this one.*)
-(*  Definition TraceIntegrityEager (K : Component -> Prop) (MPC:MPCTrace) : Prop :=
-    forall k (mcp':@MPCState context),
-      K k->
-      Last MPC mcp' ->
-      proj (mstate (head MPC)) k = proj (mstate mcp') k.*)
-  
   Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
     forall k, ~ K k -> proj m k = proj n k.
 
@@ -65,50 +58,26 @@ Section WITH_CONTEXT.
              (K : Component -> Prop)
              (P : MPCState -> Prop)
              (M : @MPCTrace context) : Prop :=
-    forall m p c n N,
+    forall m p c n N Om On, 
       head M = (m,p,c) ->
       variantOf K m n ->
       MPCTraceToWhen updateC P (n,p,c) N ->
-      (exists mend nend pend cend,
-          Last M (mend,pend,cend) /\
-          Last N (nend,pend,cend) /\
-          P (mend,pend,cend) /\
-          P (nend,pend,cend) /\
-          let K := fun k => mend <> nend in
-          TraceConfidentialityStep K P (MPCTraceOf updateC (mend,pend,cend))) \/
-      (exists mpcend npcend,
-          Last M mpcend /\
-          Last N npcend /\
-          ~ P mpcend /\
-          ~ P npcend) \/
-      (Infinite M /\ Infinite N).
-
-(*Definition TraceConfidentialityEager
-             (K : Component -> Prop)
-             (P: MPCState -> Prop)
-             (MPC:@MPCTrace context) : Prop :=
-    forall MPC m c p n N Om On,
-      head MPC = (m,c,p) ->
-      variantOf K m n ->
-      MPCTraceToWhen updateC P (n,c,p) N ->
-      ObsOfMPC updateC MPC Om ->
+      ObsOfMPC updateC M Om ->
       ObsOfMPC updateC N On ->
-
       Om ~=_O On /\
+      ((exists mpcend, Last M mpcend /\ P mpcend) <->
+       (exists npcend, Last N npcend /\ P npcend)) /\
+      (forall mend nend pend cend n' Om' On',
+          Last M (mend,pend,cend) ->
+          Last N (nend,pend,cend) ->
+          P (mend,pend,cend) ->
+          P (nend,pend,cend) ->
+          let K' := fun k => proj mend k <> proj nend k in
+          variantOf K' mend n' ->
+          FullObsTrace updateC (mend,pend,cend) Om' ->
+          FullObsTrace updateC (n',pend,cend) On' ->
+          Om' ~=_O On').
 
-      ((exists mpcend npcend,
-          Last MPC mpcend /\
-          Last N npcend /\
-          P mpcend /\
-          P npcend /\
-          sameDifference m (mstate mpcend) n (mstate npcend)) \/
-      (Infinite MPC /\ Infinite N) \/
-      (exists mpcend npcend,
-          Last MPC mpcend /\
-          Last N npcend /\
-          ~ P mpcend /\
-          ~ P npcend)). *)
-      
 End WITH_CONTEXT.
 
 Arguments StepIntegrity {_} _ _.

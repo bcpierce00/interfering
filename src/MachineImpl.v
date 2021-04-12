@@ -709,4 +709,5 @@ Arguments StepsToWhenObs {_} _ _ _ _.
 Arguments StepsToWhen {_} _ _ _.
 Arguments ReachableSegment {_} _ _ _.
 Arguments NeverStepsToObs {_} _ _ _.
+Arguments FullObsTrace {_} _ _.
 

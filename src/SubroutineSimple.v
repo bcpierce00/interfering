@@ -111,7 +111,7 @@ Section WITH_MAPS.
   
   (* We will use the machinery defined at the end of Machine.v to extend traces of the
      machine with context that will inform our properties. In this case the context is a
-     pair of a DomainMap and a natural number representing the current depth of the stack. *)
+     pair of a DomainMap and a ReturnTargets. *)
   
   Definition context : Type := DomainMap * ReturnTargets.
 
