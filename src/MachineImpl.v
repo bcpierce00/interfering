@@ -479,24 +479,24 @@ Definition pstep (mp : MPState) : option PolicyState :=
   end).
 
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
-  let instr := 
+  let instr : string := 
       match loadWord (getMem (ms mp)) (getPc (ms mp)) with
       | Some w32 =>
         match decode RV32I (        LittleEndian.combine _ w32)  with
         | IInstruction inst =>
-          inst
-        | _ => exception "Not inst"
+          show inst
+        | _ => "<Not inst>"%string
         end
-      | _ => exception "Not inst2"
+      | _ => "<Not inst2>"%string
       end in
 
   
-  trace ("Entering mpstep with" ++ show (word.unsigned (getPc (ms mp))) ++ " @ " ++ show (pctags (ps mp)) ++ " : " ++ show instr ++ nl
+  trace ("Entering mpstep with" ++ show (word.unsigned (getPc (ms mp))) ++ " @ " ++ show (pctags (ps mp)) ++ " : " ++ instr ++ nl
         )%string
         (
-  (*  p' <- pstep mp; *)
+  p' <- pstep mp; 
   match step (ms mp) with
-  | (m', o) => Some (m',ps mp, o)
+  | (m', o) => Some (m', p', o)
   end
     )
 .

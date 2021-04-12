@@ -68,6 +68,7 @@ Record PtrInfo := { pID     : Register
                   }.
 
 Record RegInfo := { dataPtr : list PtrInfo
+                  ; loadPtr : list PtrInfo
                   ; codePtr : list PtrInfo
                   ; arith : list ArithInfo
                   }.
@@ -76,15 +77,17 @@ Record LayoutInfo := { instLo : Z
                      ; instHi : Z
                      ; dataLo : Z
                      ; dataHi : Z
-                     ; stack  : Z
+                     ; stackLo  : Z
+                     ; stackHi  : Z                                    
                      }.
 
 Definition defLayoutInfo :=
   {| dataLo := 1000
    ; dataHi := 1020
    ; instLo := 0
-   ; instHi := 400
-   ; stack  := 500
+   ; instHi := 499
+   ; stackLo  := 500
+   ; stackHi  := 600
   |}.                 
 
 Record TagInfo :=
@@ -180,7 +183,11 @@ Definition printMem (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (i 
                (show inst ++ " @ " ++ show t ++ " < " ++ show (CodeMap_fromImpl cm k) ++ " >")%string
              | _ => (show val ++ " <not-inst>")%string
              end
-           else (show val ++ " @" ++ show t ++ " < " ++ show (CodeMap_fromImpl cm k) ++ " >")%string in
+           else
+             (show val ++ " @" ++ show t ++ " < " ++ show (CodeMap_fromImpl cm k) ++ " >")%string in
+       if andb (Z.eqb val 0) (seq.nilp t) then
+         s
+       else
        (show k ++ " : " ++ printed ++ nl ++ s)%string
     ) "" mts.
 
@@ -252,26 +259,26 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
   let noSp p t :=
       andb (p t) (negb (existsb (tag_eqb Tsp) t)) in
   let getDataInfo :=
-      getInfo (noSp dataP) (dataLo i) (dataHi i) in 
+      getInfo (noSp dataP) (stackLo i) (stackHi i) in 
   let getCodeInfo :=
-      getInfo (noSp codeP) (instLo i) (instHi i) in 
-
-  
-  let dataRegs :=
+      getInfo (noSp codeP) (instLo i) (instHi i) in
+  let isStackLoc p t :=
+      andb (p t) (match t with
+                  | [Tstack _] => true
+                  | _ => false
+                  end) in
+  let getLoadInfo :=
+      getInfo (isStackLoc dataP) (stackLo i) (stackHi i) in
+  let processRegs f :=
       List.fold_right
         (fun '(rID, rVal, rTag) acc =>
-           match getDataInfo rID (word.signed rVal) rTag with
+           match f rID (word.signed rVal) rTag with
            | Some pi => pi :: acc
            | None => acc
            end) nil (listify2 regs tags) in
-  let codeRegs :=
-      List.fold_right
-        (fun '(rID, rVal, rTag) acc =>
-           match getCodeInfo rID (word.signed rVal) rTag with
-           | Some pi => pi :: acc
-           | None => acc
-           end) nil (listify2 regs tags) in
-
+  let dataRegs := processRegs getDataInfo in
+  let loadRegs := processRegs getLoadInfo in
+  let codeRegs := processRegs getCodeInfo in
   let arithRegs :=
       List.fold_right
         (fun '(rID, rVal, rTag) acc =>
@@ -282,6 +289,7 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
   {| codePtr := codeRegs
    ; dataPtr := dataRegs
    ; arith   := arithRegs
+   ; loadPtr := loadRegs
    |}.
 
 (*
@@ -299,6 +307,7 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
   let a := arith groups in
   let d := dataPtr groups in
   let c := codePtr groups in
+  let l := loadPtr groups in  
 
   let def_a := {| aID := 0 |} in
   let def_dp := {| pID := 0; pVal := 0;
@@ -319,22 +328,22 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           let instr := Addi rd (aID ai) imm in
           bindGen (genInstrTag instr) (fun tag =>
           ret (instr, tag))))))
-(*       ; (onNonEmpty d 3%nat,
+       ; (onNonEmpty l 3%nat,
           bindGen (elems_ def_dp d) (fun pi =>
           bindGen (genTargetReg m) (fun rd =>
           bindGen (genImm (pMaxImm pi - pMinImm pi)) (fun imm' =>
           let imm := pMinImm pi + imm' in
           let instr := Lw rd (pID pi) imm in
           bindGen (genInstrTag instr) (fun tag =>
-          ret (instr, tag)))))) *)
-(*       ; ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
+          ret (instr, tag)))))) 
+       ; ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
           bindGen (elems_ def_dp d) (fun pi =>
           bindGen (genSourceReg m) (fun rs =>
           bindGen (genImm (pMaxImm pi - pMinImm pi)) (fun imm' =>
           let imm := pMinImm pi + imm' in
           let instr := Sw (pID pi) rs imm in
           bindGen (genInstrTag instr) (fun tag => 
-          ret (instr, tag)))))) *)
+          ret (instr, tag)))))) 
        ; (onNonEmpty a 1%nat,
           bindGen (elems_ def_a a) (fun ai1 =>
           bindGen (elems_ def_a a) (fun ai2 =>
@@ -440,7 +449,7 @@ Definition genInstrSeq
   let fromInstr :=
       bindGen (genInstr l t m p dataP codeP genInstrTag)
               (fun it => returnGen ([it], f)) in
-  match genCall l t m p cm f callP with
+  match genCall l t m p cm nextF callP with
   | None => fromInstr
   | Some (len,g) =>
     freq_ g (cons (2%nat, g)
@@ -559,7 +568,7 @@ Fixpoint gen_exec_aux (steps : nat)
          match mpstep (m', p') with
          | Some ((m'', p''), o) =>
            trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string 
-                 (gen_exec_aux steps' i t m0' p0' m'' p'' cm' f nextF' its dataP codeP callP genInstrTag)
+                 (gen_exec_aux steps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP genInstrTag)
          | _ =>
            trace ("Couldn't step" ++ nl ++  printMachine m' p' cm' ++ nl)%string
                  (ret (m0', p0', cm'))
