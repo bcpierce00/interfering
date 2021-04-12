@@ -520,7 +520,7 @@ Abort. (* FIXME *)
 Section WITH_STATE.
   Variable CtxState : Type.
   Variable CtxStateUpdate : MachineState -> CtxState -> CtxState.
-  Variable initCtx : CtxState.
+  Variable initCtx : MachineState -> CtxState.
   
   Definition MPCState : Type := MachineState * PolicyState * CtxState.
   Definition MPCTrace := TraceOf MPCState.
@@ -565,7 +565,7 @@ Section WITH_STATE.
 
   Definition Reachable (mpc:MPCState) : Prop :=
     exists mpinit,
-      WFInitMPState mpinit /\ StepsTo (mpinit,initCtx) mpc.
+      WFInitMPState mpinit /\ StepsTo (mpinit,initCtx (fst mpinit)) mpc.
 
   CoFixpoint MPCTraceOf (mpc : MPCState) : MPCTrace :=
     match mpcstep mpc with
@@ -622,7 +622,7 @@ Section WITH_STATE.
 
   Definition ReachableSegment (f : MPCState -> Prop) (MPC:MPCTrace) : Prop :=
     exists mpinit,
-      WFInitMPState mpinit /\ Segment f (MPCTraceOf (mpinit,initCtx)) MPC.
+      WFInitMPState mpinit /\ Segment f (MPCTraceOf (mpinit,initCtx (fst mpinit))) MPC.
 
   Lemma ReachableStepsToWhenSegment :
     forall mpc mpc' P,

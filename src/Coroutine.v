@@ -31,18 +31,6 @@ Section DOMAIN_MODEL.
   .
 
   Definition DomainMap := Component -> TopDomain.
-
-  (* We will additionally track the depths of all the stack simultaneously. *)
-  Definition DepthMap := StackID -> nat.
-  Definition initDepM : DepthMap := fun sid => O.
-  Definition push (depm: DepthMap) (sid: StackID) :=
-    fun sid' => if stack_eqb sid sid'
-                then (depm sid)+1
-                else depm sid.
-  Definition pop (depm: DepthMap) (sid: StackID) :=
-    fun sid' => if stack_eqb sid sid'
-                then (depm sid)-1
-                else depm sid.
   
 End DOMAIN_MODEL.
 
@@ -50,14 +38,69 @@ Section WITH_MAPS.
 
   Variable cdm : CodeMap.
   Variable sm : StackMap.
-  Variable pOf : MachineState -> PolicyState.
+  Variable defaultsid : StackID.
 
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
-  Variable sc : SealingConvention.
+  Definition sc : SealingConvention :=
+    fun m a => wlt a (proj m (Reg SP)).
 
-  Definition context : Type := DomainMap * DepthMap.
+  (* Likewise, we need to describe what it means to return properly from a call. We parameterize
+     this as well, but the standard of course is that the stack pointer must match the original
+     call point and the program counter should be one instruction (four cell) later. *)
+  Definition ReturnConvention : Type := MachineState -> MachineState -> bool.
+  Definition rc : ReturnConvention :=
+    fun m1 m2 => weq (proj m1 (Reg SP)) (proj m2 (Reg SP)) &&
+                 weq (proj m1 PC) (wplus (proj m2 PC) 4).
+
+  Definition Target : Type := MachineState -> bool.
   
-  Definition initC : DomainMap * DepthMap :=
+  Definition ReturnTargets : Type := list Target.
+  Fixpoint popTo (m:MachineState) (rts : ReturnTargets) : option ReturnTargets :=
+    match rts with
+    | rt :: rts =>
+      if rt m
+      then Some rts
+      else popTo m rts
+    | [] => None
+    end.
+
+  Definition RTSMap : Type := StackID -> ReturnTargets.
+  Definition initRM : RTSMap := fun sid => [].
+  Definition push (rm : RTSMap) (sid: StackID) (rt : Target) :=
+    fun sid' => if stack_eqb sid sid'
+                then rt::(rm sid)
+                else rm sid.
+  Definition pop (rm: RTSMap) (sid: StackID) (m: MachineState) :=
+    fun sid' => if stack_eqb sid sid'
+                then match popTo m (rm sid') with
+                     | Some rts => rts
+                     | None => rm sid'
+                     end
+                else rm sid.
+
+  Definition YieldTargets := StackID -> option Target.
+  Definition updateYT (yt:YieldTargets) (sid:StackID) (t:Target) :=
+    fun sid' => if stack_eqb sid sid' then Some t else yt sid'.
+
+  (* We will use the machinery defined at the end of Machine.v to extend traces of the
+     machine with context that will inform our properties. In this case the context is a
+     pair of a DomainMap and a ReturnTargets. *)
+  Definition context : Type := DomainMap * RTSMap * YieldTargets * StackID.
+
+  Definition dmof (c:context) :=
+    let '(dm,_,_,_) := c in dm.
+  Definition rmof (c:context) :=
+    let '(_,rm,_,_) := c in rm.
+  Definition ytof (c:context) :=
+    let '(_,_,yt,_) := c in yt.
+  Definition sidof (c:context) :=
+    let '(_,_,_,sid) := c in sid.
+  
+  Definition initC (m:MachineState) : context :=
+    let sid := match activeStack sm m with
+               | Some sid => sid
+               | None => defaultsid
+               end in
     let dm := fun k =>
                 match k with
                 | Mem a =>
@@ -68,18 +111,13 @@ Section WITH_MAPS.
                 | Reg r => Outside
                 | PC => Outside
                 end in
-    (dm,initDepM).
+    (dm,initRM,fun _ => None,sid).
   
   (* Once again we need an update function for out context. Note that yields don't
      actually change the domain map, as they don't change which addresses belong to which
      stacks. So we still only consider sharing, calls, and returns. *)
-  Definition updateC (m:MachineState) (prev:context) :
-    context :=
-    let '(dm, depm) := prev in
-    match activeStack sm m with
-    | None => prev (* Shouldn't happen *)
-    | Some sid => 
-    let d := depm sid in
+  Definition updateC (m:MachineState) (prev:context) : context :=
+    let '(dm,rm,yt,sid) := prev in 
     match AnnotationOf cdm (proj m PC) with
     | Some (share f) =>
       let dm' := fun k =>
@@ -88,63 +126,74 @@ Section WITH_MAPS.
                      match f m a, dm k with
                      | Some true, Instack sid' Unsealed =>
                        if stack_eqb sid sid' 
-                       then Instack sid (Passed d)
+                         then Instack sid (Passed (length (rm sid)))
                        else dm k
-                     | Some false, Instack sid' Unsealed =>
-                       if stack_eqb sid sid' 
-                       then Instack sid (Shared d)
-                       else dm k
+                     (* | Some false, Instack sid' Unsealed =>
+                        if stack_eqb sid sid'  
+                        then Instack sid (Share  d d)
+                        else dm k *)
                      | _, _ => dm k
                      end
                    | _ => dm k
                    end in
-      (dm', depm)
+      (dm', rm, yt, sid)
     | Some call =>
       let dm' := fun k =>
-                    match k, dm k with                      
-                    | _, Instack sid' (Sealed d) => Instack sid' (Sealed d)
-                    | _, Outside => Outside
-                    | Mem a, Instack sid' _ =>
-                      if sc m a && stack_eqb sid sid'
-                      then Instack sid (Sealed d)
-                      else Instack sid Unsealed (* If addresses are marked to be shared but the sealing convention
-                                       wants them unsealed, the sealing convention takes precedence *)
-                    | _, _ => dm k
-                    end in
-      (dm', push depm sid)
-    | Some ret => 
+                   match k, dm k with                      
+                   | _, Instack sid' (Sealed d) => Instack sid' (Sealed d)
+                   | _, Outside => Outside
+                   | Mem a, Instack sid' _ =>
+                     if sc m a && stack_eqb sid sid'
+                     then Instack sid (Sealed (length (rm sid)))
+                     else Instack sid Unsealed (* If addresses are marked to be shared but the sealing convention
+                                                  wants them unsealed, the sealing convention takes precedence *)
+                   | _, _ => dm k
+                   end in
+      let rm' := push rm sid (rc m) in
+      (dm', rm', yt, sid)
+    | Some ret =>
+      let rm' := pop rm sid m in
+      let d := length (rm sid) in
       let dm' := fun k =>
-                    match dm k with
-                    | Instack sid' (Sealed d') =>
-                      if (d-1 =? d') && stack_eqb sid sid'
-                      then Instack sid Unsealed
-                      else dm k
-                    | Instack sid' (Passed d') =>
-                      if (d-1 =? d') && stack_eqb sid sid'
-                      then Instack sid Unsealed
-                      else dm k
-                    | Instack sid' (Shared d') =>
-                      if (d =? d') && stack_eqb sid sid'
-                      then Instack sid Unsealed
-                      else dm k
-                    | _ => dm k
-                    end in
-      (dm', pop depm sid)
-    | _ => (dm, depm)
-    end
+                   match dm k with
+                   | Instack sid' (Sealed d') =>
+                     if (d <=? d') && stack_eqb sid sid'
+                     then Instack sid Unsealed
+                     else dm k
+                   | Instack sid' (Passed d') =>
+                     if (d <=? d') && stack_eqb sid sid'
+                     then Instack sid Unsealed
+                     else dm k
+                   | _ => dm k
+                   end in
+      (dm', rm', yt, sid)
+    | Some yield =>
+      let m' := fst (step m) in
+      match activeStack sm m with
+      | Some sid' =>
+        match yt sid' with
+        | Some t =>
+          if t m'
+          then (dm,rm,updateYT yt sid (rc m),sid')
+          else prev
+        | None => (dm,rm,updateYT yt sid (rc m),sid')
+        end
+      | _ => prev
+      end
+    | _ => prev
     end.
 
   Definition StackInaccessible (c:context) (k:Component) : Prop :=
     exists sid d,
-      fst c k = Instack sid (Sealed d) \/
-      (fst c k = Instack sid (Passed d) /\ d < (snd c sid)-1).
+      dmof c k = Instack sid (Sealed d) \/
+      (dmof c k = Instack sid (Passed d) /\ d = (length (rmof c sid))+1).
 
   (* We split up our inaccessibility criterion into stack and coroutine variations.
      The coroutine version takes the active stack, and prohibits accessing other stacks
      except for shared objects. *)
   Definition CoroutineInaccessible (c:context) (sid:StackID) (k:Component) : Prop :=
     forall sid' sd d,
-      fst c k = Instack sid' sd ->
+      dmof c k = Instack sid' sd ->
       (sid <> sid /\ sd <> Shared d).
 
   Definition StackIntegrityUE : Prop :=
@@ -169,9 +218,9 @@ Section WITH_MAPS.
 
   Definition StackConfidentialityEager : Prop :=
     forall sid MCP d m dm depm p,
-      let P := (fun '(m,p,c) => snd c sid >= d) in
+      let P := (fun '(m,p,c) => length (rmof c sid) >= d) in
       let K := (fun k => StackInaccessible (cstate (head MCP)) k \/
-                         fst (cstate (head MCP)) k = Instack sid Unsealed) in
+                         dmof (cstate (head MCP)) k = Instack sid Unsealed) in
       ReachableSegment updateC initC P MCP ->
       head MCP = (m,p,(dm,depm)) ->
       TraceConfidentialityStep updateC K P MCP.
@@ -209,7 +258,7 @@ Section WITH_MAPS.
 
   Definition ReturnIntegrity : Prop :=
     forall d sid MCP m c p m' c' p',
-      let P := fun '(m,p,c) => activeStack sm m = Some sid /\ (snd c) sid >= d in
+      let P := fun '(m,p,c) => activeStack sm m = Some sid /\ length (rmof c sid) >= d in
       ReachableSegment updateC initC P MCP ->
       head MCP = (m,c,p) ->
       Last MCP (m',c',p') ->

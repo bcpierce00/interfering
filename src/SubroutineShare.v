@@ -81,7 +81,7 @@ Section WITH_MAPS.
 
   (* For the initial context, we construct a domain map that maps the stack to Unsealed
      and everything else to Outside. The stack depth is 0. *)
-  Definition initC : context :=
+  Definition initC (m:MachineState) : context :=
     let dm := fun k =>
                 match k with
                 | Mem a =>
