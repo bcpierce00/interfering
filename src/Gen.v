@@ -510,7 +510,7 @@ Fixpoint gen_exec_aux (steps : nat)
          (genInstrTag : InstructionI -> G TagSet)
          (* num calls? *)
   : G (MachineState * PolicyState * CodeMap_Impl) :=
-  trace (show ("GenExec...", steps, its) ++ nl)%string
+  trace (show ("GenExec...", steps, its, printPC m p) ++ nl)%string
   (match steps with
   | O =>
     (* Out-of-fuel: End generation. *)
@@ -531,8 +531,9 @@ Fixpoint gen_exec_aux (steps : nat)
       end
       )
     | _ =>
+      trace ("No instruction found " ++ nl)%string
       (* Check if there is anything left to put *)
-      bindGen (match its with
+      (bindGen (match its with
                | [] =>
                  (* Generate an instruction sequence. *)
                  (* TODO: Sequences, calls. *)
@@ -562,7 +563,7 @@ Fixpoint gen_exec_aux (steps : nat)
          | _ =>
            trace ("Couldn't step" ++ nl ++  printMachine m' p' cm' ++ nl)%string
                  (ret (m0', p0', cm'))
-         end)
+         end))
     end
   end).
 

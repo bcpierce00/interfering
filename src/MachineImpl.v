@@ -173,7 +173,13 @@ Extract Constant exception =>
     (* returns option unit * state *)
     (* TODO: What's an observation? *)
     match Run.run1 RV32IM m with
-    | (_, s') => (s', Tau)
+    | (_, s') =>
+      if Z.eqb (word.unsigned (getPc m))
+               (word.unsigned (getPc s'))
+      then
+        exception "Equal pc after step!"
+      else          
+      (s', Tau)
     end
   .
 
