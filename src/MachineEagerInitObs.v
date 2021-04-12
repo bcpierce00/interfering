@@ -160,7 +160,7 @@ Import RecordSetNotations.
   | call
   | ret
   | yield
-  | share (f: MachineState -> Addr -> option bool)
+  | scall (f: MachineState -> Addr -> bool)
   | normal
   .
 

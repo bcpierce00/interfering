@@ -119,34 +119,26 @@ Section WITH_MAPS.
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm,rm,yt,sid) := prev in 
     match AnnotationOf cdm (proj m PC) with
-    | Some (share f) =>
-      let dm' := fun k =>
-                   match k with
-                   | Mem a =>
-                     match f m a, dm k with
-                     | Some true, Instack sid' Unsealed =>
-                       if stack_eqb sid sid' 
-                         then Instack sid (Passed (length (rm sid)))
-                       else dm k
-                     (* | Some false, Instack sid' Unsealed =>
-                        if stack_eqb sid sid'  
-                        then Instack sid (Share  d d)
-                        else dm k *)
-                     | _, _ => dm k
-                     end
-                   | _ => dm k
-                   end in
-      (dm', rm, yt, sid)
     | Some call =>
       let dm' := fun k =>
                    match k, dm k with                      
-                   | _, Instack sid' (Sealed d) => Instack sid' (Sealed d)
-                   | _, Outside => Outside
-                   | Mem a, Instack sid' _ =>
+                   | Mem a, Instack sid' Unsealed =>
                      if sc m a && stack_eqb sid sid'
                      then Instack sid (Sealed (length (rm sid)))
-                     else Instack sid Unsealed (* If addresses are marked to be shared but the sealing convention
-                                                  wants them unsealed, the sealing convention takes precedence *)
+                     else Instack sid Unsealed
+                   | _, _ => dm k
+                   end in
+      let rm' := push rm sid (rc m) in
+      (dm', rm', yt, sid)
+    | Some (scall f) =>
+      let dm' := fun k =>
+                   match k, dm k with
+                   | Mem a, Instack sid' Unsealed =>
+                     if sc m a && stack_eqb sid sid'
+                     then if f m a
+                          then Instack sid (Passed (length (rm sid)))
+                          else Instack sid (Sealed (length (rm sid)))
+                     else Instack sid Unsealed
                    | _, _ => dm k
                    end in
       let rm' := push rm sid (rc m) in

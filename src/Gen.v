@@ -159,7 +159,7 @@ Instance ShowCodeAnnotation : Show CodeAnnotation :=
        match ca with
        | call => "call"
        | yield => "yield"
-       | share _ => "share"
+       | scall _ => "scall"
        | normal => "normal"
        | _  => "ret"
        end |}.

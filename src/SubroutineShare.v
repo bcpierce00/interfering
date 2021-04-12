@@ -95,29 +95,28 @@ Section WITH_MAPS.
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, rts) := prev in
     match AnnotationOf cdm (proj m PC) with
-    | Some (share f) =>
-      let dm' := fun k =>
-                   match k with
-                   | Mem a =>
-                     match f m a, dm k with
-                     | Some true, Unsealed => Passed (length rts)
-                     | _, _ => dm k
-                     end
-                   | _ => dm k
-                   end in
-      (dm', rts)
     | Some call =>
       let dm' := fun k =>
                     match k, dm k with
-                    | _, Sealed d => Sealed d (* Fix alll this *)
-                    | _, Outside => Outside
-                    | Mem a, _ =>
+                    | Mem a, Unsealed =>
                       if sc m a
                       then Sealed (length rts)
-                      else Unsealed (* If addresses are marked to be shared but the sealing convention
-                                       wants them unsealed, the sealing convention takes precedence *)
+                      else Unsealed
                     | _, _ => dm k
                     end in
+      let rt := rc m in
+      (dm', rt::rts)
+    | Some (scall f) =>
+      let dm' := fun k =>
+                   match k, dm k with
+                   | Mem a, Unsealed =>
+                     if sc m a
+                     then if f m a
+                          then Passed (length rts)
+                          else Sealed (length rts)
+                     else Unsealed
+                   | _, _ => dm k
+                   end in
       let rt := rc m in
       (dm', rt::rts)
     | Some ret =>
