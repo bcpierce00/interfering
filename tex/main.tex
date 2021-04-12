@@ -1747,7 +1747,7 @@ an external observer looking at two machine runs cannot (computably)
 distinguish between a machine that steps forever and a machine that
 steps for a long time before producing some output.
 
-\section{Local State Encapsulation, Formally}
+\section{Stack Safety, Formally}
 \label{sec:lse}
 
 We are finally ready for our definition of stack safety. We begin
@@ -1762,30 +1762,34 @@ We begin with our only annotations being {\em call} or {\em return}, and
 define our code map accordingly.
 
 \[\ann \in \ANNS ::= \callmap + \retmap\]
-\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \FUNIDS \times \powerset(\ANNS)\]
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \FUNIDS \times \ANNS\]
 
-\paragraph*{Call Depth and Domains}
+When a function makes a call, it establishes that its frame should be
+``sealed'' for later use. At any given step of a program, any number of
+activations may have claimed memory in this way, but which cells are sealed
+is dynamic information and cannot be deduced from the state alone. So it must
+be tracked separately. We must also track the conditions under which a caller
+considers itself to have been returned to.
 
-At any given step of a program, some number of callers have pushed their frames
-onto the stack, ``sealing'' that memory for later use; this number is the current
-{\em call depth}. The call depth, as well as the association between stack addresses
-and sealed frames, are dynamic and cannot be deduced from the state alone, so we will
-track them over the course of an execution as additional context that informs the property.
-
-Each component will be assigned to a {\em domain}, which may be {\em Outside} of the
-stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed} by a particular
-depth.
+Each system component will be assigned to a {\em domain}, which may be {\em Outside}
+of the stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed}
+at a particular depth. Each caller will register a {\em target} condition -- a
+predicate on machine states that must hold for it to consider itself active.
+A context is a pair of a ``domain map'' from components to domains, and a
+``return target list,'' which is a stack of targets, one for each caller awaiting
+return.
 
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth}\]
 \[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
-  \times (\depth \in \mathbb{N}) \]
+  \times (\rts \in \listT (\target \subseteq \MACHS)) \]
 
-An initial context \(\context_0 = \domMap_0, 0\) where \(\domMap_0\) maps
+An initial context \(\context_0 = \domMap_0, []\) where \(\domMap_0\) maps
 the stack to \(\unsealed\) and all other addresses and all registers to \(\outside\).
 Then at each step we update the context according to the context-step function,
 \(\stepsto_C\). We will define this in terms of the operations
-\(\push{\domMap}{n}{\components}\), in which \(\components \subseteq \COMPONENTS\),
-and \(\pop{\domMap}{n}\), pronounced ``push'' and ``pop'' and defined as follows.
+\(\push{\domMap}{\depth}{\components}\), in which \(\depth \in \mathbb{Z}\) and
+\(\components \subseteq \COMPONENTS\), and \(\pop{\domMap}{\depth}\), pronounced
+``push'' and ``pop'' and defined as follows.
 
 \[
 (\push{\domMap}{\depth}{\components}) ~ \component =
@@ -1798,55 +1802,70 @@ and \(\pop{\domMap}{n}\), pronounced ``push'' and ``pop'' and defined as follows
 \[
 (\pop{\domMap}{\depth}) ~ \component =
 \begin{cases}
-  \unsealed & \text{if } \domMap ~ \component = \sealed{\depth-1} \\
+  \unsealed & \text{if } \domMap ~ \component = \sealed{\depth'} \text{ where }
+              \depth' >= \depth\\
   \domMap ~ \component & \text{else} \\
 \end{cases}
 \]
+%
+Push seals a set of components with its depth argument, and pop unseals all components
+that were as deep as its argument or deeper.
 
-Then we can define the context update relation. Let \(\sealcon\) be the sealing convention
+Now we can define the context update relation. Let \(\sealcon\) be the sealing convention
 that maps a machine state to a set of components, typically the set of addresses below
-the stack pointer. The {\sc Default} rule applies only if neither of the others do.
+the stack pointer. Similarly, \(\retcon ~ \mach ~ \mach'\) will be the return convention
+that relates the call state \(\mach\) to return states \(\mach'\) that are valid returns.
+The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
+and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
 
-\begin{center}
-\begin{minipage}{.4\textwidth}
-  \judgment{}
-           {\(\mach,(\domMap,\depth),\{\callmap\} \stepstocon
-             \push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1\)}
-\end{minipage}
-\hspace*{0.1\textwidth}
-\begin{minipage}{.4\textwidth}
-  \judgment{}
-           {\(\mach,(\domMap,\depth),\{\retmap\} \stepstocon
-             \pop{\domMap}{\depth},\depth-1\)}
-\end{minipage}
-\end{center}
+The call rule pushes the components sealed by the sealing convention with the depth
+of the current caller, and determines the return target by partially applying the
+return convention to the machine state, and pushes that onto the targets stack.
+The return rule checks whether the attempted return actually manages to reach a
+return target, traversing down the stack until the first one it finds. Recall that
+we are not discussing well-bracketed control flow, so the return might skip over
+a waiting caller. When a target is reached, {\em all} sealed components at or above
+its depth are unsealed by the pop operation. If no target is reached, nothing is
+popped at all. These rules are given inductively, and apply in the listed order.
 
-\begin{center}
-  \judgment[Default]
-           {}
-           {\(\_,\context,\_ \stepstocon \context\)}
-\end{center}
+\judgmenttwo[Call]
+            {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
+            {\(\depth = |\rts|\)}
+            {\(\mach,(\domMap,\rts) \stepsto_C
+              \push{\domMap}{\depth}{\sealcon ~ \mach},(\retcon ~ \mach)::\rts\)}
 
-\subsection{Ultra-eager Integrity}
+\judgmentthree[ReturnFound]
+              {\(\codemap ~ (\mach ~ \PCname) = \retmap\)}
+              {\(\mach \stepsto \mach' \in \target\)}
+              {\(\depth = |\rts|\)}
+              {\(\mach,(\domMap,\target::\rts) \stepsto_C
+                \pop{\domMap}{\depth},\rts\)}
 
-Our first property will be {\em ultra eager}, meaning that it will be quantified over each step
-of execution from any initial state. The criterion for integrity is simple: sealed components do not
-change.
+\judgmentthree[ReturnRec]
+              {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
+              {\(\mach,(\domMap,\rts) \stepsto_C \_,\rts'\)}
+              {\(\depth = |\rts'|\)}
+              {\(\mach,(\domMap,\_::\rts) \stepsto_C
+                \pop{\domMap}{\depth},\rts'\)}
+                
+\judgment[Default]
+         {}
+         {\(\_,\context \stepsto_C \context\)}
 
-\definition A system enjoys {\em ultra-eager integrity} if for any reachable state
+When we build machine traces with this step function, we always know how deep in the
+call stack we are and which components are sealed. We may now proceed to state our properties.
+Our first property will be {\em stepwise stack integrity}, stepwise meaning that it will be
+quantified over each step of execution from any initial state. The criterion for integrity
+is simple: sealed components do not change.
+
+\definition A system enjoys {\em stepwise stack integrity} if for any reachable state
 \(\mpcstatename\), \(\mpcstatename'\) such that \(\mpcstatename \stepstocon \mpcstatename'\),
 and component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) and
 \(\domMap ~ \component = \sealed{\_}\), then \(\pi_\mach(\mpcstatename) ~ \component =
 \pi_\mach(\mpcstatename') ~ \component\).
 
-
-\subsection{Eager Integrity}
-
-\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \depth')\) hold when
-\(\depth' \geq \depth\). A system enjoys {\em eager integrity} if each reachable segment
-\(\MPCT \langle f_\depth \rangle\) satisfies \(\pi_m(\head(\MPCT)) ~ \component =
-\pi_m(\last(\MPCT)) ~ \component\) for all \(\component\) where \(\domMap ~ \component =
-\sealed{\_}\).
+Next we consider {\em lockstep stack confidentiality}. Here it behooves us to factor out
+the general notion of lockstep confidentiality independent of a particular context model.
 
 \subsection{Eager Confidentiality}
 
