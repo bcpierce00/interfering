@@ -43,7 +43,7 @@ Definition sp : Register := 2.
 (*- TODO: Sometimes we might want to use/target ra and sp to inject/find bugs? *)
 Definition minReg : Register := 8.
 Definition noRegs : nat := 3%nat.
-Definition maxReg : Register := minReg + Z.of_nat noRegs.
+Definition maxReg : Register := minReg + Z.of_nat noRegs - 1.
 
 (* Generate a random register for source, can include r0 *)
 Definition genSourceReg (m : MachineState) : G Register :=
@@ -572,7 +572,10 @@ Definition zeroedRiscvMachine: RiscvMachine := {|
                      ra (word.of_Z 0);
   getPc := ZToReg 0;
   getNextPc := ZToReg 4;
-  getMem := map.empty;
+  getMem := unchecked_store_byte_list
+              (word.of_Z 500)
+              (Z32s_to_bytes (repeat 0 125))
+              map.empty;
   (*unchecked_store_byte_list (word.of_Z 500)
                                       (Z32s_to_bytes (cons 0 nil))
                                       (map.empty); *)
@@ -635,7 +638,10 @@ Definition zeroedPolicyState : PolicyState :=
   {| nextid := 0
    ; pctags := [Tpc 0]
    ; regtags := map.put (map.put map.empty ra nil) sp (cons Tsp nil)
-   ; memtags := map.empty (* map.put map.empty 500 (cons Tsp nil) *)
+   ; memtags :=
+       snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
+                       (repeat nil 125))
+   (*map.empty (* map.put map.empty 500 (cons Tsp nil) *)*)
   |}. 
 
 (* Specialized to current policy *)
