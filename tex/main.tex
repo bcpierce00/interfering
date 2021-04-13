@@ -172,10 +172,12 @@ properties.
 
 \bcp{We should mention stack data and coroutines, I think?  Maybe in the
   context of an expectation-lowering hedge, like:}%
-For the sake of simplicity, most of our presentation assumes a RISC-V
+For the sake of concreteness, most of our presentation assumes a RISC-V
 machine architecture with a basic subroutine calling convention, where
 parameters are passed in registers.  We also show how stack-allocated
-parameter passing and coroutines can be accommodated.
+parameter passing and coroutines can be accommodated.  \bcp{this is also a
+  good place to admit that our definitions are tuned for micropolicies, if
+  we can find a succinct way to say it.}
 
 % We argue \apt{do we?}\bcp{I guess we will not have time to.  Propose
 %   deleting this para.} that our properties are suited to a range of other
@@ -299,7 +301,7 @@ parameter passing and coroutines can be accommodated.
 The call stack is a perennial target for low-level attacks
 based on memory-safety vulnerabilities, leading to consequences
 that range from leakage or corruption of private stack data to
-control-flow hijacking. To detect or prevent such attacks, a profusion of
+control-flow hijacking. To deter or detect such attacks, a profusion of
 software and hardware protections have been proposed,
 %
 including stack canaries~\citep{Cowan+98},
@@ -314,12 +316,12 @@ this is a well-studied mechanism (so formalizing its protections is
 useful).}
 \fi
 %
-The protections offered by such mechanisms are generally described in terms
-of a set of concrete examples of attacks that they can prevent, such as corruption
-of return addresses, buffer overflows, or use of uninitialized variables. This leaves the
-task of formulating a more general characterization to the reader's intuition.
-Moreover, the details of these mechanisms can be quite intricate
-and often involve trading off protection and efficiency.
+The protections offered by such mechanisms are commonly described in terms
+of concrete examples of attacks that they can prevent, such as corruption
+of return addresses, buffer overflows, or use of uninitialized variables,
+leaving a more abstract characterization to the reader's intuition.
+But these mechanisms can be quite intricate
+and often require trading off protection and efficiency.
 Thus, it would be useful to have a precise, generic, and formal
 specification for stack
 safety, both as a basis for comparing the security claims of different
@@ -332,19 +334,22 @@ are met by particular implementations.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
-The most abstract characterization of which we are aware is in
+The most abstract characterization stack safety of which we are aware is in
 recent work by \citet{Skorstengaard+19}, which defines stack safety as the conjunction of two
 properties:
 {\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
 Informally, LSE says that the contents of
 a caller's stack frame are not read and written while its callees (and their callees, etc.) are
 executing, and WBCF says that callees always
-return to the point just after their call (or don't return at all).
-\citet{Skorstengaard+19} formalize these properties by defining an idealized machine
-in which they visibly hold by construction; an enforcement mechanism (in their case, hardware
+return to the point just after their call (if they return at all).
+\citet{Skorstengaard+19} formalize these properties by defining an idealized
+machine in which they hold {\em by construction}; an enforcement mechanism (in their case, hardware
 capabilities)
-can then be shown to provide stack safety by giving a fully abstract embedding function
-from the idealized machine to an ordinary machine equipped with the enforcement.
+can then be shown to guarantee stack safety by exhibiting a fully abstract
+embedding function
+from the idealized machine to an ordinary machine equipped with this
+enforcement mechanism.  \bcp{Many OOPSLA readers/reviewers will not
+  understand that sentence.}
 %%
 %% While this work represents an important step in the right direction, we believe
 %% there is still room to craft an operational characterization
@@ -365,11 +370,19 @@ from the idealized machine to an ordinary machine equipped with the enforcement.
 %% the bad behaviors we associate with unsafe stack behavior, but weak enough that
 %% other reasonable enforcement mechanisms can enforce it.
 
-In this work, we take the (informal) definitions of WBCF\apt{or maybe not?}  and LSE as a starting
+In this work, we take the (informal) definitions of WBCF\apt{or maybe
+  not?}\bcp{Definitely not, if we're following the approach I proposed.
+  WBCF should be discussed second, and we should say that, while it is a
+  very reasonable property to want, we do not consider
+it as part of stack safety (an enforcement mechanism could be intuitively
+``safe'' in the information-flow sense while not enforcing it), but rather
+as a separate condition that can be stated straightforwardly using the same
+technical machinery.}  and LSE as a starting
 point, but choose a different approach to formalizing them, based on the
 technical framework of language-based security~\citep{??}. We define
 trace-based properties of \emph{stepwise stack integrity} and
-\emph{lockstep stack confidentiality}.\apt{Could we just say ``stepwise'' for both?}
+\emph{lockstep stack confidentiality}.\apt{Could we just say ``stepwise''
+  for both?}\bcp{+1}
 In applying these security concepts, we treat each caller as needing protection
 from its callee, even as that callee may need protection from its callee in turn.
 This differs from common practice in language-based security in that the
@@ -386,9 +399,9 @@ local state or the uninitialized portion of the stack. This is formalized as a
 compares a pair of subtraces for each call, nested within other calls. The term
 {\em lockstep} describes the behavior of these pairs: they step together, and any
 deviation is recognized as a violation of confidentiality.
-Together, these properties capture the rough intuition of LSE, but are somewhat stronger:
+Together, these properties capture roughly the same intuition as LSE, but are somewhat stronger:
 confidentiality contains temporal protections that LSE does not address.\apt{Maybe want to
-  say a little more about this here, since it is a novelty wrt/ existing work?}
+  say a little more about this here, since it is a novelty wrt/ existing work?}\bcp{+1}
 
 Since our stack safety occupies the same conceptual space as LSE, we should consider how it
 relates to WBCF.\apt{Or maybe not. This disucssion seems too detailed for this spot in the intro.
@@ -410,21 +423,25 @@ from the stack.
   about it, so let's not rule that out just yet. But I focused on returns because there's a
   clear story already.}
 
-Part of the challenge in fully\apt{omit?} characterizing stack safety is that in a low-level machine
+One challenge in characterizing stack safety formally is that in a low-level machine
 without built-in stacks, we are at the mercy of architectural
 choices that do not relate to the abstract notion of stack safety\apt{a bit vague. what kind of choices?}.
 We abstract over these choices
 as much as possible, so that our model can be applied to a wide range of architectures
-and enforcement mechanisms.
+and enforcement mechanisms.  \bcp{As APT has worried, this kind of claims of
+generality may be getting us onto thin ice.  Maybe remove the second
+sentence (and expand the first)?  }
 
-\apt{Intra-paragraph flow seemed awkward.}
-A second challenge is
+A second challenge is that
 % the diversity of enforcement mechanisms APT:already implied above
 enforcement mechanisms may weaken their protections that in the name of efficiency,
 while arguing that they still capture stack safety in a meaningful sense.
-\apt{Remainder of this paragraph might be better \emph{after} the R+DH para below.}
+\apt{Remainder of this paragraph might be better \emph{after} the R+DH para below.}\bcp{+1}
 This calls \apt{not
-  immediately obvious why. is this true for anything other than laziness?}
+  immediately obvious why. is this true for anything other than
+  laziness?}\bcp{Agreed.  If we move this later, we can just say that we can
+capture the more performant policies with a more extensional variant of the
+criteria that is a bit more complex but usefully weaker.  }
 for an {\em extensional}
 characterization of stack safety that describes the externally observable behavior
 of a stack-safe system. In contract, our stepwise and lockstep properties are {\em intensional},
@@ -472,6 +489,8 @@ We therefore argue that, despite its somewhat greater complexity,
 it may be a better minimal specification for
 stack safety enforcement mechanisms in general.
 
+\bcp{This paragraph doesn't apply to the lazy properties, so maybe it should
+be moved before they are introduced?}%
 To illustrate the applicability of these properties, we perform randomized testing to
 validate that \citeauthor{DBLP:conf/sp/RoesslerD18}'s Depth Isolation micro-policy enforces
 them. Randomized testing is a relatively low-cost way to validate a potential enforcement
@@ -479,7 +498,8 @@ mechanism; it finds flaws in the enforcement fast enough to be integrated into t
 of enforcement development \citep{TestingNI:ICFP}. To demonstrate that the testing adequately
 covers potentially erroneous programs, we test intentionally buggy policies alongside
 the real one. If the testing can differentiate correct implementations from buggy ones,
-it is an argument in favor of their correctness.
+it is an argument in favor of their correctness. \bcp{Hmm--don't understand
+  that sentence}
 %\apt{more to say?}\bcp{Yes---partly to underscore our claim that this is a
 %  significant contribution, and partly to give the reader some context for
 %  why this is part of our story.  E.g., ``One nice thing we can do with our
@@ -505,8 +525,9 @@ observational integrity, at some performance cost.\apt{but we're not testing tha
   by loosening the temporal safety properties?}
 
 Our initial description of these properties assumes a single simple stack with no sharing between callers and
-callees: all parameters and return values are passed in registers.  However,
-we can refine it to allow passing of scalar stack data, granting a callee
+callees: all parameters and return values are passed in registers.  Later,
+we show how to refine it to allow passing of scalar stack data, granting a
+callee
 access to the caller's data. (We do not model more sophisticated sharing, because to do
 so realistically would require a separate protection scheme, such as a capability
 model.\bcp{This is all a bit mysterious} While this is quite feasible in a tag-based enforcement mechanism, it is properly
@@ -522,7 +543,7 @@ compose multiple such policies.)
     obviously with per-activation tags }}
 
 Finally, we define integrity and confidentiality properties for a coroutine system featuring
-finitely-bounded stacks.
+finitely-bounded\bcp{What's that?} stacks.
 Though simplistic, this extension is a step toward concurrency and demonstrates that
 our approach is flexible enough to handle more sophisticated styles of
 control flow.
