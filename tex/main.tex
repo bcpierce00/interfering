@@ -140,48 +140,67 @@
 %  to leave it out of the title but hit it strongly in the abstract.}%
 What is stack safety? The phrase is associated with a variety of compiler,
 run-time, and hardware mechanisms for guarding against corruption of stack
-memory.  But these mechanisms typically lack rigorous specifications;
-they rely instead on informal descriptions of
-the safe stack manipulation behaviors that they allow,
-or specific examples of the bad behaviors that they prevent.
+memory.  But these mechanisms typically lack rigorous specifications,
+relying instead on informal descriptions of
+the safe stack manipulation behaviors that they allow
+and/or specific examples of the bad behaviors that they prevent.
 
-We propose a formal criterion \apt{criteria?} for stack safety, phrased in terms of
+We propose formal criteria for stack safety, phrased in terms of
 language-based security: a combination of an integrity property (``each
 caller's stack frame is held invariant by the callee'') and a confidentiality
 property (``the callee's behavior is insensitive to differences in the
-caller's state''). These properties are sensible even in the presence of
-abnormal control flow.\apt{Is this important enough to mention here?}
-We further apply\apt{what does this mean? we didn't
-  invent it} a straightforward notion of
-``well-bracketed control flow'' that restricts control flow to the
-typical pattern of matched calls and returns.
+caller's state'').
+% These properties are sensible even in the presence of
+% abnormal control flow.\apt{Is this important enough to mention here?}
+% BCP: I think not in the abstract, but maybe in the intro.
+% We further apply\apt{what does this mean? we didn't
+%  invent it} a straightforward notion of
+% ``well-bracketed control flow'' that restricts control flow to the
+% typical pattern of matched calls and returns.
+%
+We argue that these criteria match common intuitions (1) by showing that
+they are violated by a variety of intuitively unsafe examples and (2) by
+using property-based random testing to check that appropriate variants of
+the criteria are actually enforced by the stack-safety ``micro-policies''
+proposed by~\citet{DBLP:conf/sp/RoesslerD18} (and {\em not} enforced by
+broken versions of these enforcement mechanisms).  Specifically, Roessler
+and Dehon's ``eager'' micro-policy, which catches violations as early as
+possible, enforces the basic ``stepwise'' versions of our confidentiality
+and integrity properties, while their more performant ``lazy'' micro-policy
+enforces weaker, more extensional ``observational'' variants of the
+properties.
 
-We show that our properties describe the behavior of the stack-safety
-``micro-policies'' of~\citet{DBLP:conf/sp/RoesslerD18}
-using property-based randomized testing. An eager micro-policy
-that catches violations immediately enforces our primary ``stepwise''
-properties, and we define weaker, more extensional ``observational''
-properties that are enforced even by a ``lazy'' micro-policy -- one
-that, for performance reasons, may catch violations after they occur
-but before they become visible.
+\bcp{We should mention stack data and coroutines, I think?  Maybe in the
+  context of an expectation-lowering hedge, like:}%
+For the sake of simplicity, most of our presentation assumes a RISC-V
+machine architecture with a basic subroutine calling convention, where
+parameters are passed in registers.  We also show how stack-allocated
+parameter passing and coroutines can be accommodated.
 
-We argue \apt{do we?} that our properties are suited to a range of other enforcement
-mechanisms. The strict stepwise properties can describe mechanisms
-that catch errors immediately, as is typical. While the observational
-properties are closely linked to lazy micro-policies they are weak enough
-to be a lower bound that captures stack safety for any reasonable enforcement mechanism.
+% We argue \apt{do we?}\bcp{I guess we will not have time to.  Propose
+%   deleting this para.} that our properties are suited to a range of other
+% enforcement mechanisms. The strict stepwise properties can describe
+% mechanisms that catch errors immediately, as is typical. While the
+% observational properties are closely linked to lazy micro-policies they are
+% weak enough to be a lower bound that captures stack safety for any
+% reasonable enforcement mechanism.
 
 \apt{This is a good story, but does it describe the paper we are able to produce this week?
   We were rejected before exactly because we claimed to have
   a general criterion, but did not in fact demonstrate its generality (which is not
-  obvious). What has changed?}
+  obvious). What has changed?}\bcp{I agree with these concerns. Deleted the
+  para about the general story.  Does the rest now avoid making (or
+  implying) claims that we can't defend?}
+\bcp{Also, I think we should save
+  WBCF for the intro---I can't find a way to discuss it here that is brief
+  and not confusing/distracting.}
 
-  \ifaftersubmission\bcp{should we mention stktokens here?}
-  \leo{Not sure. We almost never cite stuff in the abstract, do we?}
-  \bcp{Some people say not to, but I think their argument is weak: I've
-    added Nick/Andre above.  But I'm not sure we want to get into stkTokens
-    in the abstract.}
-  \fi
+  % \ifaftersubmission\bcp{should we mention stktokens here?}
+  % \leo{Not sure. We almost never cite stuff in the abstract, do we?}
+  % \bcp{Some people say not to, but I think their argument is weak: I've
+  %   added Nick/Andre above.  But I'm not sure we want to get into stkTokens
+  %   in the abstract.}
+  % \fi
 \end{abstract}
 
 
@@ -209,7 +228,9 @@ to be a lower bound that captures stack safety for any reasonable enforcement me
 
 %% Keywords
 %% comma separated list
+\ifcameraready
 \keywords{Stack Safety, Micro-Policies}  %% \keywords are mandatory in final camera-ready submission
+\fi
 
 
 %% \maketitle
@@ -638,7 +659,7 @@ In summary, we offer the following contributions: \bcp{Section numbers are
 \end{itemize}
 
 We begin with a description of our assumptions and threat model (\cref{sec:threat}),
-then show how our properties apply to examples of stack unsafety 
+then show how our properties apply to examples of stack unsafety
 (\cref{sec:running-example}). Then, after some technical preliminaries
 (\cref{sec:prelim}), we formalize the properties (\cref{sec:eager}, \cref{sec:lazy})
 and describe testing (\cref{sec:testing}).
@@ -952,10 +973,10 @@ Call and return annotations are marked {\tt[C]} and {\tt[R]}
 respectively. Local variables are assumed to be stored in the stack frame,
 in declaration order. Unless otherwise stated, arguments and return values are passed in registers.
 The machine is word-addressed. The stack grows upward in
-memory and {\tt \$SP} points to the first unused word above the top of the stack. 
+memory and {\tt \$SP} points to the first unused word above the top of the stack.
 At the right of each example, we show the layout of stack memory just before
 the specified line number is executed; each box represents a memory word and
-addresses increase to the right. 
+addresses increase to the right.
 
 %The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
 %at the time of the call. The stack can be used to pass arguments or return results
@@ -1891,7 +1912,7 @@ popped at all. These rules are given inductively, and apply in the listed order.
               {\(\depth = |\rts'|\)}
               {\(\mach,(\domMap,\_::\rts) \stepsto_C
                 \pop{\domMap}{\depth},\rts'\)}
-                
+
 \judgment[Default]
          {}
          {\(\_,\context \stepsto_C \context\)}
