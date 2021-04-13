@@ -67,6 +67,15 @@ Record PtrInfo := { pID     : Register
                   ; pTag : TagSet
                   }.
 
+Instance ShowPtrInfo : Show PtrInfo :=
+  {| show p :=
+       "{| " ++ "pID: " ++ show (pID p) ++ " ; "
+             ++ "pVal: " ++ show (pVal p) ++ " ; "
+             ++ "pMinImm: " ++ show (pMinImm p) ++ " ; "
+             ++ "pMaxImm: " ++ show (pMaxImm p) ++ " ; "
+             ++ "pTag: " ++ show (pTag p) ++ " |}"
+  |}%string.
+
 Record RegInfo := { dataPtr : list PtrInfo
                   ; loadPtr : list PtrInfo
                   ; codePtr : list PtrInfo
@@ -220,7 +229,18 @@ Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl):=
   , dataMemLow  :: !Integer
   , dataMemHigh :: !Integer
 *)
-  
+
+Definition Zseq (lo hi : Z) :=
+  let len := Z.to_nat (Z.div (hi - lo) 4) in
+  let fix aux start len :=
+      match len with
+      | O => []
+      | S len' => start :: aux (start + 4) len'
+      end in
+  aux lo len.
+
+
+
 (* TODO: Policy state once that's done *)
 (*
 groupRegisters :: PolicyPlus -> GPR_File -> GPR_FileT ->
@@ -263,21 +283,60 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
   let getCodeInfo :=
       getInfo (noSp codeP) (instLo i) (instHi i) in
   let isStackLoc p t :=
+      trace ("Testing Loc: " ++ show t ++ nl)%string
+            (
       andb (p t) (match t with
                   | [Tstack _] => true
                   | _ => false
-                  end) in
-  let getLoadInfo :=
-      getInfo (isStackLoc dataP) (stackLo i) (stackHi i) in
+                  end)) in
+  let loadLocs :=
+      List.fold_right
+        (fun (i : Z) (acc : list Z) =>
+           match pctags p, map.get (memtags p) i with
+           | [Tpc pcdepth], Some (cons (Tstack depth) nil) =>
+             (* TODO: Likely to load bad stuff? *)
+             if Nat.leb pcdepth depth  then 
+               i :: acc
+             else acc
+           | _, _ => acc
+           end
+        ) nil (Zseq (stackLo i) (stackHi i)) in
+                         
+  let getLoadInfo (regTagP : TagSet -> bool)
+                  rID rVal rTag :=
+      trace ("Getting load info: " ++ show rID ++ " " ++ show (regTagP rTag) ++ " " ++ show loadLocs ++ nl)%string
+            (if (regTagP rTag) then
+        List.map (fun loc =>
+                    {| pID := rID; pVal := rVal
+                       ; pMinImm := 0
+                       ; pMaxImm := loc - rVal
+                       ; pTag := rTag 
+                    |}) loadLocs
+      else nil)
+  in
   let processRegs f :=
       List.fold_right
         (fun '(rID, rVal, rTag) acc =>
+(*           trace ("Processing: " ++ show (rID, rVal, rTag) ++ nl)*) (
            match f rID (word.signed rVal) rTag with
-           | Some pi => pi :: acc
+           | Some pi =>
+               pi :: acc
            | None => acc
-           end) nil (listify2 regs tags) in
+           end)) nil (listify2 regs tags) in
+
+  let processRegsList f :=
+      List.fold_right
+        (fun '(rID, rVal, rTag) acc =>
+           trace ("Processing: " ++ show (rID, rVal, rTag) ++ nl) (
+                   if Z.eqb rID 2 then
+           f rID (word.signed rVal) rTag ++ acc
+
+                   else acc
+                   
+        )) nil (listify2 regs tags) in
+
   let dataRegs := processRegs getDataInfo in
-  let loadRegs := processRegs getLoadInfo in
+  let loadRegs := processRegsList (getLoadInfo dataP) in
   let codeRegs := processRegs getCodeInfo in
   let arithRegs :=
       List.fold_right
@@ -299,7 +358,7 @@ genInstr :: PolicyPlus -> Machine_State -> PIPE_State ->
             (Instr_I -> Gen TagSet) -> Gen (Instr_I, TagSet)
 *)
 Definition genInstr (i : LayoutInfo) (t : TagInfo)
-           (m : MachineState) (p : PolicyState)
+           (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
            (dataP codeP : TagSet -> bool)
            (genInstrTag : InstructionI -> G TagSet)
   : G (InstructionI * TagSet) :=
@@ -307,8 +366,9 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
   let a := arith groups in
   let d := dataPtr groups in
   let c := codePtr groups in
-  let l := loadPtr groups in  
-
+  let l := loadPtr groups in
+  trace ("Grouped loads: " ++ show l ++ nl)%string
+(  
   let def_a := {| aID := 0 |} in
   let def_dp := {| pID := 0; pVal := 0;
                    pMinImm := 0; pMaxImm := 0;
@@ -320,7 +380,6 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
       | [] => O
       | _  => n
       end in
-
   freq [ (onNonEmpty a 1%nat,
           bindGen (elems_ def_a a) (fun ai =>
           bindGen (genTargetReg m) (fun rd =>
@@ -329,13 +388,13 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           bindGen (genInstrTag instr) (fun tag =>
           ret (instr, tag))))))
        ; (onNonEmpty l 3%nat,
-          bindGen (elems_ def_dp d) (fun pi =>
+          bindGen (elems_ def_dp l) (fun pi =>
           bindGen (genTargetReg m) (fun rd =>
-          bindGen (genImm (pMaxImm pi - pMinImm pi)) (fun imm' =>
-          let imm := pMinImm pi + imm' in
-          let instr := Lw rd (pID pi) imm in
+          let imm := pMaxImm pi in 
+          trace ("Generating... " ++ show (imm, pMaxImm pi))%string
+          (let instr := Lw rd (pID pi) imm in
           bindGen (genInstrTag instr) (fun tag =>
-          ret (instr, tag)))))) 
+          ret (instr, tag))))))
        ; ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
           bindGen (elems_ def_dp d) (fun pi =>
           bindGen (genSourceReg m) (fun rs =>
@@ -351,7 +410,7 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           let instr := Add rd (aID ai1) (aID ai2) in
           bindGen (genInstrTag instr) (fun tag => 
           ret (instr, tag))))))
-       ].
+       ]).
 (*
 -- TODO: Uncomment this and add stack.dpl rule
 --            , (onNonEmpty arithInfo 1,
@@ -367,15 +426,6 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
             ]
  *)
 
-
-Definition Zseq (lo hi : Z) :=
-  let len := Z.to_nat (Z.div (hi - lo) 4) in
-  let fix aux start len :=
-      match len with
-      | O => []
-      | S len' => start :: aux (start + 4) len'
-      end in
-  aux lo len.
 
 Definition headerSeq offset :=
   [ (Jal ra offset, [Tinstr; Tcall])
@@ -447,7 +497,7 @@ Definition genInstrSeq
            (cm : CodeMap_Impl) (f nextF : FunID)
            (genInstrTag : InstructionI -> G TagSet) :=
   let fromInstr :=
-      bindGen (genInstr l t m p dataP codeP genInstrTag)
+      bindGen (genInstr l t m p cm dataP codeP genInstrTag)
               (fun it => returnGen ([it], f)) in
   match genCall l t m p cm nextF callP with
   | None => fromInstr
@@ -577,8 +627,13 @@ Fixpoint gen_exec_aux (steps : nat)
   end).
 
 Definition zeroedRiscvMachine: RiscvMachine := {|
-  getRegs := map.put (map.put map.empty sp (word.of_Z 500))
-                     ra (word.of_Z 0);
+  getRegs :=
+    List.fold_right (fun '(i,v) m => map.put m i (word.of_Z v))
+                    map.empty
+                    ([ (0, 0)
+                    ; (1, 0)   (* ra *)
+                    ; (2, 500) (* sp *)
+                    ]);
   getPc := ZToReg 0;
   getNextPc := ZToReg 4;
   getMem := unchecked_store_byte_list
@@ -646,7 +701,13 @@ genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag sp
 Definition zeroedPolicyState : PolicyState :=
   {| nextid := 0
    ; pctags := [Tpc 0]
-   ; regtags := map.put (map.put map.empty ra nil) sp (cons Tsp nil)
+   ; regtags :=
+       List.fold_right (fun '(i,v) m => map.put m i v)
+                    map.empty
+                    ([ (0, [])
+                     ; (1, [])   (* ra *)
+                     ; (2, [Tsp]) (* sp *)
+                    ])
    ; memtags :=
        snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
                        (repeat nil 125))
