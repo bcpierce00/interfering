@@ -362,7 +362,8 @@ Definition policyJalr (p : PolicyState) (pc : word) (rd rs : Z) : option PolicyS
     end
   | [Tinstr; Tr3] =>
     match tpc, ttarget with
-    | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
+    | [Tpc _; Tr3], [Tpc old] => Some (p <| nextid := old |> (* should = pred (nextid p) *)
+                                         <| pctags := [Tpc old] |>
                                          <| regtags := map.put (regtags p) rd [] |>)
     | _, _ => None
     end
