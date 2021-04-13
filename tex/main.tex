@@ -1010,7 +1010,7 @@ refers to the fact that the property must hold on every step. %Later we will
 In this case, after line 10, {\tt f} has violated integrity by writing to {\tt x}.
 
 The black rectangle represents the return address. In a typical RISC calling convention
-this will have been stored in a register by call itself, and {\tt f} stores
+this will have been saved into a register by the call itself, and {\tt f} stores
 it in the stack during its preamble, so it is not itself sealed.
 
 \begin{figure}
@@ -1292,6 +1292,7 @@ occurs because the program counter is also a component of the state that must ch
 identically between the primary and variant traces. In a case where \(v_1 \not = 5\),
 the program counters will differ, breaking the lockstep.
 
+
 \paragraph*{Control Flow Attacks}
 \begin{figure}
   \centering
@@ -1334,10 +1335,10 @@ void f() {
       \memory{2}{\unsealc}%
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{1}
-      \MemoryLabel{-15em}{0.75em}{3}
+      \MemoryLabel{-15em}{0.75em}{\#3}
       \vspace{.5em} &
       \memory[3em]{1}{\mainsealc}[Target]%
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 3}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#3}
       \\
       {\tt 3} &
       \memoryaddrs{8em}
@@ -1351,9 +1352,9 @@ void f() {
       \memory{2}{\unsealc}%
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{-1}
-      \MemoryLabel{-15em}{0.75em}{5} &
+      \MemoryLabel{-15em}{0.75em}{\#5} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5}
       \\
       {\tt 15} &
       \memoryaddrs{12em}
@@ -1362,9 +1363,9 @@ void f() {
       \memory{2}{\unsealc}%
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{-1}
-      \MemoryLabel{-15em}{0.75em}{3} &
+      \MemoryLabel{-15em}{0.75em}{\#3} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5}
       \\
       {\tt 3} &
       \memoryaddrs{8em}
@@ -1373,7 +1374,7 @@ void f() {
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{-1} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5}
       \\
       {\tt 4} &
       \memoryaddrs{8em}
@@ -1382,30 +1383,33 @@ void f() {
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{\bf 1} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5} \\
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5} \\
     \end{tabular}
   \end{subfigure}
+  \caption{A Control Flow Attack.}
   \label{fig:controlflow}
-  \caption{A Control Flow Attack}
 \end{figure}
 
-From the classic stack smashing attack to return oriented programming, 
-one of the most pernicious ways to attack the stack is by hijacking control flow.
+%From the classic stack smashing attack to return oriented programming, 
+One of the most pernicious ways to attack the stack is by hijacking control flow.
 Our stack safety properties do not assume that control flow is well-bracketed; rather,
 they express what it means to protect data even in the presence of control-flow attacks.
-Consider example \ref{fig:controlflow}, a relative of the classic ``awkward example,''
-in which {\tt f} is called twice, at lines 2 and 4. It should therefore return to lines
+Consider example \ref{fig:controlflow}, a relative of the classic ``awkward example,''~\citep{??}.
+(Here we show return addresses explicitly as line numbers, in the form $\#n$.)
+\apt{what do the colors mean in this example?}
+Function {\tt f} is called twice, at lines 2 and 4; it should therefore return to lines
 3 and 5, respectively. But the first time, before returning, it stashes its
 return pointer away, and the second time it returns to line 3 instead of 5; then it ends
-up called a third time, at which point it returns to line 5.
+up being called a third time, at which point it returns to line 5.
 
 Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that we return
 -1. But because of {\tt f}'s interference, we negate {\tt x} twice, and return 1.
-This has the appearance of an integrity violation. But how can that be?
+This has the appearance of an integrity violation.  How do we capture this in our
+integrity property?
 
-The key intuition is that to return to {\tt main}, {\tt f} needs to do more than just
-execute a return-labeled instruction. It must then actually reach the appropriate
-{\em return target} in {\tt main}. In our context, we keep a stack of return targets,
+The key intuition is that to be considered as having returned to {\tt main}, {\tt f} needs to do more than just
+execute a return-labeled instruction: it must actually reach the appropriate
+{\em return target} in {\tt main}. In our context\apt{what's that?}, we keep a stack of return targets,
 which correspond to the depths at which stack frames have been sealed. A callee is
 only considered to have returned when it executes a return-annotated instruction
 and then reaches a valid return target. Only then do the sealed frames become unsealed.
@@ -1620,9 +1624,10 @@ its value copied from {\tt x}, and we note that {\tt f} can read it -- because i
 as passed between depths 0 and 1, it is not varied. Then from line 12 to 13 it is even
 modified, and naturally this is permitted as well.
 
-Passing on the stack is thus straightforward. The same mechanism can be used to pass
+The same annotation mechanism can be used to pass
 variables by reference, and here there are important stack safety concerns,
-as seen in Figure~\ref{fig:passing}. In this example,
+as seen in Figure~\ref{fig:passing}. In this example, where we revert to assuming
+that arguments are passed in registers,
 {\tt main} calls {\tt f} with a reference to {\tt x}, but then clears {\tt x} and instead
 passes a reference to {\tt y}. We would expect that the first call to {\tt f} might modify
 {\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
@@ -1635,19 +1640,24 @@ a future call with no arguments passed by reference would also violate integrity
 to either variable.
 
 When passing by reference, it is possible to repeatedly pass the same reference further
-and further down the stack. Note, however, that this must be a continuous chain; it will
-not skip over any calls in a chain. So we continue to track two depths, for each passed
+and further down the stack. Note, however, that this sharing of the reference must be over
+an unbroken chain of calls. So it suffices to track two depths for each passed
 cell: the original owner, and the highest depth it has been passed to. It is considered
 accessible anywhere between the two.
 
-We do not model permanent sharing, in which a variable's address is taken and it might be
-passed far afield before use, in detail. The appropriate way to do so in our model is
-for such a variable to have no protections except for temporal safety -- it would be
-unprotected until its original owner returns and it is deallocated. Then we would expect
-to separately require memory safety of such data. This is
-a separate property that is often enforced using capabilities, whether tag-based or
-otherwise. In fact, memory safety is the interesting part of this scenario, but is out of
-scope.
+Our model provides only limited support for handling fully first-class pointers into
+stack frames, e.g., pointers obtained by taking the address of a local variable.
+Unlike the case for pass-by-reference, there is no easy way to model the intended sharing behavior
+of such pointers in terms of stack frame activation patterns.  The best approximation we can make is to
+treat an address-taken variable in the same way as a passed argument, with the additional property
+that it remains accessible at \emph{all} stack depths above the caller. 
+This prevents most violations of temporal safety, although stale pointers can still be
+used in certain corner cases. \apt{Trying not to spell out the details, which are complex.}
+More seriously, callees are permitted to access the location without having
+been explicitly given a pointer to it.  Preventing the latter kind of abuse
+is the provence of a fine-grained memory safety policy, e.g. based on capabilities
+(implemented by tags or otherwise); we argue it is beyond the scope of stack safety
+\emph{per se}. 
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
