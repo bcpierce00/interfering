@@ -140,47 +140,76 @@
 %  to leave it out of the title but hit it strongly in the abstract.}%
 What is stack safety? The phrase is associated with a variety of compiler,
 run-time, and hardware mechanisms for guarding against corruption of stack
-memory.  But these mechanisms typically lack rigorous specifications;
-they rely instead on informal descriptions of
-the safe stack manipulation behaviors that they allow,
-or specific examples of the bad behaviors that they prevent.
+memory.  But these mechanisms typically lack rigorous specifications,
+relying instead on informal descriptions of
+the safe stack manipulation behaviors that they allow
+and/or specific examples of the bad behaviors that they prevent.
 
 We propose formal criteria for stack safety, phrased in terms of
 language-based security: a combination of an integrity property (``each
 caller's stack frame is held invariant by the callee'') and a confidentiality
 property (``the callee's behavior is insensitive to differences in the
-caller's state''). We show that our properties describe the behavior of the stack-safety
-``micro-policies'' of~\citet{DBLP:conf/sp/RoesslerD18}
-using property-based randomized testing. An eager micro-policy
-that catches violations immediately enforces our primary ``stepwise''
-properties, and we define weaker, more extensional ``observational''
-properties that are enforced even by a ``lazy'' micro-policy -- one
-that, for performance reasons, may catch violations after they occur
-but before they become visible.
+caller's state'').
+% These properties are sensible even in the presence of
+% abnormal control flow.\apt{Is this important enough to mention here?}
+% BCP: I think not in the abstract, but maybe in the intro.
+% We further apply\apt{what does this mean? we didn't
+%  invent it} a straightforward notion of
+% ``well-bracketed control flow'' that restricts control flow to the
+% typical pattern of matched calls and returns.
+%
+We argue that these criteria match common intuitions (1) by showing that
+they are violated by a variety of intuitively unsafe examples and (2) by
+using property-based random testing to check that appropriate variants of
+the criteria are actually enforced by the stack-safety ``micro-policies''
+proposed by~\citet{DBLP:conf/sp/RoesslerD18} (and {\em not} enforced by
+broken versions of these enforcement mechanisms).  Specifically, Roessler
+and Dehon's ``eager'' micro-policy, which catches violations as early as
+possible, enforces the basic ``stepwise'' versions of our confidentiality
+and integrity properties. Their more performant ``lazy'' micro-policy
+does not, but inspires weaker, more extensional ``observational'' variants of the
+properties. While we do not rule out other enforcement mechanisms, our
+definitions are strongly informed by micropolicy systems, especially our
+notion of observational integrity.
+\sna{Seems like the best place to admit we're tied to micropolicies is
+  while discussing micropolicies.}
 
-These two classes of properties are interesting points along a spectrum
-of notions of integrity and confidentiality. The strict stepwise properties can
-describe mechanisms that catch errors immediately, the expected behavior of most
-enforcement techniques. While the observational properties are closely linked to
-lazy micro-policies, they also have the benefit of being highly extensional,
-and therefore approaching a plausible minimum specification for stack safety in this
-setting.
+\bcp{We should mention stack data and coroutines, I think?  Maybe in the
+  context of an expectation-lowering hedge, like:}%
+For the sake of concreteness, most of our presentation assumes a RISC-V
+machine architecture with a basic subroutine calling convention, where
+parameters are passed in registers. We also show how to accomodate
+stack-allocated parameter passing and coroutines. 
+
+\bcp{this is also a
+  good place to admit that our definitions are tuned for micropolicies, if
+  we can find a succinct way to say it.}
+\sna{See above.}
+
+% We argue \apt{do we?}\bcp{I guess we will not have time to.  Propose
+%   deleting this para.} that our properties are suited to a range of other
+% enforcement mechanisms. The strict stepwise properties can describe
+% mechanisms that catch errors immediately, as is typical. While the
+% observational properties are closely linked to lazy micro-policies they are
+% weak enough to be a lower bound that captures stack safety for any
+% reasonable enforcement mechanism.
 
 \apt{This is a good story, but does it describe the paper we are able to produce this week?
   We were rejected before exactly because we claimed to have
   a general criterion, but did not in fact demonstrate its generality (which is not
-  obvious). What has changed?}
-\sna{It's a delicate line we have to walk, because while our generality may not be
-  easily demonstrable, {\em lack} of generality, as BCP pointed out, is also not
-  demonstrable. So now I've just taken it out, and I'll plan to talk in the
-  introduction about how we hope to be general later.}
+  obvious). What has changed?}\bcp{I agree with these concerns. Deleted the
+  para about the general story.  Does the rest now avoid making (or
+  implying) claims that we can't defend?}
+\bcp{Also, I think we should save
+  WBCF for the intro---I can't find a way to discuss it here that is brief
+  and not confusing/distracting.}
 
-  \ifaftersubmission\bcp{should we mention stktokens here?}
-  \leo{Not sure. We almost never cite stuff in the abstract, do we?}
-  \bcp{Some people say not to, but I think their argument is weak: I've
-    added Nick/Andre above.  But I'm not sure we want to get into stkTokens
-    in the abstract.}
-  \fi
+  % \ifaftersubmission\bcp{should we mention stktokens here?}
+  % \leo{Not sure. We almost never cite stuff in the abstract, do we?}
+  % \bcp{Some people say not to, but I think their argument is weak: I've
+  %   added Nick/Andre above.  But I'm not sure we want to get into stkTokens
+  %   in the abstract.}
+  % \fi
 \end{abstract}
 
 
@@ -208,7 +237,9 @@ setting.
 
 %% Keywords
 %% comma separated list
+\ifcameraready
 \keywords{Stack Safety, Micro-Policies}  %% \keywords are mandatory in final camera-ready submission
+\fi
 
 
 %% \maketitle
@@ -220,9 +251,9 @@ setting.
 \section{Introduction}
 
 \newcommand*{\MemoryLabel}[3]{\raisebox{#2}{\makebox(0,0){\hspace{#1}#3}}}
-\newcommand{\memoryaddrs}[1]
+\newcommand{\memoryaddrs}[2][]
   {
-    \MemoryLabel{#1}{2em}{\SP}
+    \MemoryLabel{#2}{2em}{\SP #1}
   }
 
 %\begin{figure}
@@ -277,7 +308,7 @@ setting.
 The call stack is a perennial target for low-level attacks
 based on memory-safety vulnerabilities, leading to consequences
 that range from leakage or corruption of private stack data to
-control-flow hijacking. To detect or prevent such attacks, a profusion of
+control-flow hijacking. To deter or detect such attacks, a profusion of
 software and hardware protections have been proposed,
 %
 including stack canaries~\citep{Cowan+98},
@@ -292,12 +323,12 @@ this is a well-studied mechanism (so formalizing its protections is
 useful).}
 \fi
 %
-The protections offered by such mechanisms are generally described in terms
-of a set of concrete examples of attacks that they can prevent, such as corruption
-of return addresses, buffer overflows, or use of uninitialized variables. This leaves the
-task of formulating a more general characterization to the reader's intuition.
-Moreover, the details of these mechanisms can be quite intricate
-and often involve trading off protection and efficiency.
+The protections offered by such mechanisms are commonly described in terms
+of concrete examples of attacks that they can prevent, such as corruption
+of return addresses, buffer overflows, or use of uninitialized variables,
+leaving a more abstract characterization to the reader's intuition.
+But these mechanisms can be quite intricate
+and often require trading off protection and efficiency.
 Thus, it would be useful to have a precise, generic, and formal
 specification for stack
 safety, both as a basis for comparing the security claims of different
@@ -310,19 +341,22 @@ are met by particular implementations.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
-The most abstract characterization of which we are aware is in
+The most abstract characterization stack safety of which we are aware is in
 recent work by \citet{Skorstengaard+19}, which defines stack safety as the conjunction of two
 properties:
 {\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
 Informally, LSE says that the contents of
 a caller's stack frame are not read and written while its callees (and their callees, etc.) are
 executing, and WBCF says that callees always
-return to the point just after their call (or don't return at all).
-\citet{Skorstengaard+19} formalize these properties by defining an idealized machine
-in which they visibly hold by construction; an enforcement mechanism (in their case, hardware
+return to the point just after their call (if they return at all).
+\citet{Skorstengaard+19} formalize these properties by defining an idealized
+machine in which they hold {\em by construction}; an enforcement mechanism (in their case, hardware
 capabilities)
-can then be shown to provide stack safety by giving a fully abstract embedding function
-from the idealized machine to an ordinary machine equipped with the enforcement.
+can then be shown to guarantee stack safety by exhibiting a fully abstract
+embedding function
+from the idealized machine to an ordinary machine equipped with this
+enforcement mechanism.  \bcp{Many OOPSLA readers/reviewers will not
+  understand that sentence.}
 %%
 %% While this work represents an important step in the right direction, we believe
 %% there is still room to craft an operational characterization
@@ -343,11 +377,14 @@ from the idealized machine to an ordinary machine equipped with the enforcement.
 %% the bad behaviors we associate with unsafe stack behavior, but weak enough that
 %% other reasonable enforcement mechanisms can enforce it.
 
-In this work, we take the (informal) definition of LSE as a starting
-point, but choose a different approach to formalizing it, based on the
-technical framework of language-based security~\citep{??}. 
+In this work, we also distinguish between protecting data (like LSE) and
+control flow (with WBCF), and formalize a data protection property
+based on the technical framework of language-based security~\citep{??}.
 Our core properties are \emph{stepwise stack integrity} and
-\emph{stepwise stack confidentiality}.
+\emph{stepwise stack confidentiality}. WBCF is a desireable property, but
+we can express safety in an information-flow sense without reference to it,
+even safety from attacks that hijack control flow.
+
 In applying these security concepts, we treat each caller as needing protection
 from its callee, even as that callee may need protection from its callee in turn.
 This differs from common practice in language-based security in that the
@@ -374,15 +411,14 @@ The attacker in such an instance is permitted to ``return'' so long as it avoids
 violating the integrity and confidentiality of the caller. Second, confidentiality
 contains temporal protections that LSE does not implicitly address.
 \apt{Maybe want to say a little more about this here, since it is a novelty wrt/ existing work?}
-\sna{TODO: Say a little more, but make sure it's accurate first.}
+\bcp{+1}\sna{TODO: Say a little more, but make sure it's accurate first.}
 
-One challenge in characterizing stack safety is that in a low-level machine
+One challenge in characterizing stack safety formally is that in a low-level machine
 without built-in stacks, we are at the mercy of architectural
 choices that do not relate to the abstract notion of stack safety. Some implementations
 may have only a stack pointer while others add a frame pointer, in some systems return
 addresses and data live in separate stacks, and so on. We abstract over these choices
-as much as possible, so that our model can be applied to a wide range of architectures
-and enforcement mechanisms.
+as much as possible.
 
 A second challenge is that
 enforcement mechanisms may weaken their protections that in the name of efficiency,
@@ -436,6 +472,8 @@ We therefore argue that, despite its somewhat greater complexity,
 it may be a better minimal specification for
 stack safety enforcement mechanisms in general.
 
+\bcp{This paragraph doesn't apply to the lazy properties, so maybe it should
+be moved before they are introduced?}%
 To illustrate the applicability of these properties, we perform randomized testing to
 validate that \citeauthor{DBLP:conf/sp/RoesslerD18}'s Depth Isolation micro-policy enforces
 them. Randomized testing is a relatively low-cost way to validate a potential enforcement
@@ -443,7 +481,8 @@ mechanism; it finds flaws in the enforcement fast enough to be integrated into t
 of enforcement development \citep{TestingNI:ICFP}. To demonstrate that the testing adequately
 covers potentially erroneous programs, we test intentionally buggy policies alongside
 the real one. If the testing can differentiate correct implementations from buggy ones,
-it is an argument in favor of their correctness.
+it is an argument in favor of their correctness. \bcp{Hmm--don't understand
+  that sentence}
 %\apt{more to say?}\bcp{Yes---partly to underscore our claim that this is a
 %  significant contribution, and partly to give the reader some context for
 %  why this is part of our story.  E.g., ``One nice thing we can do with our
@@ -465,17 +504,23 @@ observational integrity, at some performance cost.\apt{but we're not testing tha
   pretty much done}
 \sna{It's aspirational so far, but there's no fundamental reason we can't test it. We may
   need a caveat about how it's harder to test?}\apt{As per email discussion,
-  maybe we could have a property variant that \emph{does} match depth-based Lazy Tagging and Clearing,
-  by loosening the temporal safety properties?}
+  maybe we could have a property variant that \emph{does} match depth-based Lazy Tagging and
+  Clearing, by loosening the temporal safety properties?}
+\sna{I'm pretty sure for the main policy it's just lazy integrity, no confidentiality.
+  There was a variant Nick and Andre gave that would restrict the leaks to only be between
+  instances of the same function, so that's the same property under a weaker attacker model,
+  where we don't protect a function from itself.}
 
-Our initial description of these properties assumes a single simple stack with no sharing between callers and
-callees: all parameters and return values are passed in registers.  However,
-we can refine it to allow passing of scalar stack data, granting a callee
-access to the caller's data. (We do not model more sophisticated sharing, because to do
-so realistically would require a separate protection scheme, such as a capability
-model.\bcp{This is all a bit mysterious} While this is quite feasible in a tag-based enforcement mechanism, it is properly
-a separate policy outside the scope of stack safety. A tag-based approach can easily
-compose multiple such policies.)
+Our initial description of these properties assumes a single simple stack with no sharing
+between callers and callees: all parameters and return values are passed in registers.  Later,
+we show how to refine it to allow passing of scalar stack data, granting a
+callee access to the caller's data. We do not model more sophisticated sharing,
+such as taking the address of a variable and treating it like a pointer. Doing so without
+protecting the variable is not interesting, and protecting would be better suited to
+a different kind of enforcement, such as a memory safety micro-policy or Cheri-style capability.
+\bcp{This is all a bit mysterious} \sna{Any less mysterious now?}
+
+
 \rb{So no pointer passing? Pass by reference is now discussed at the end of
   Section 3, however it looks like things get tricky rather quickly.}
 \sna{The trick is that if a programmer is passing pointers, we can't presume their
@@ -486,7 +531,7 @@ compose multiple such policies.)
     obviously with per-activation tags }}
 
 Finally, we define integrity and confidentiality properties for a coroutine system featuring
-finitely-bounded stacks.
+a static layout, in which each coroutine's stack is constrained to a fixed region of memory.
 Though simplistic, this extension is a step toward concurrency and demonstrates that
 our approach is flexible enough to handle more sophisticated styles of
 control flow.
@@ -599,8 +644,7 @@ control flow.
 %% %  dishonest here: the stated advantage of the lazy policy is that it is more
 %% %efficient, but our variant is {\em not} efficient!}
 
-In summary, we offer the following contributions: \bcp{Section numbers are
-  wonky---why just 7.1, where is 8, etc.}
+In summary, we offer the following contributions:
 \begin{itemize}
 \item
   We adapt formulations of integrity and confidentiality from language-based security
@@ -619,7 +663,7 @@ In summary, we offer the following contributions: \bcp{Section numbers are
 \end{itemize}
 
 We begin with a description of our assumptions and threat model (\cref{sec:threat}),
-then show how our properties apply to examples of stack unsafety 
+then show how our properties apply to examples of stack unsafety
 (\cref{sec:running-example}). Then, after some technical preliminaries
 (\cref{sec:prelim}), we formalize the properties (\cref{sec:eager}, \cref{sec:lazy})
 and describe testing (\cref{sec:testing}).
@@ -923,15 +967,15 @@ the examples, arguing that:
 Our examples are written in C-like syntax, labeled with line numbers for reference,
 but to reflect the increased power of the underlying assembly code, we allow code
 to read the stack pointer ({\tt \$SP}) directly and use
-it to form pointers.\apt{I've added some strategic *'s}
+it to form pointers.
 Call and return annotations are marked {\tt[C]} and {\tt[R]}
 respectively. Local variables are assumed to be stored in the stack frame,
 in declaration order. Unless otherwise stated, arguments and return values are passed in registers.
 The machine is word-addressed. The stack grows upward in
-memory and {\tt \$SP} points to the first unused word above the top of the stack. 
+memory and {\tt \$SP} points to the first unused word above the top of the stack.
 At the right of each example, we show the layout of stack memory just before
 the specified line number is executed; each box represents a memory word and
-addresses increase to the right. 
+addresses increase to the right.
 
 %The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
 %at the time of the call. The stack can be used to pass arguments or return results
@@ -1084,25 +1128,21 @@ the other variable, {\tt z}, has changed. In the primary trace it changed to 42,
 in the variant trace it might have any value \(v_2\). If \(v_2 \neq 42\) then the variant
 has behaved differently than the primary, violating confidentiality.
 
-This form of confidentiality we will term {\em lockstep confidentiality}, defined informally
+This form of confidentiality we will term {\em stepwise confidentiality}, defined informally
 as: for any state at the entry to a function, for any variant over the values in the stack,
-the primary state and its variant will step in lockstep until they return. Any system components\apt{first use of this?}
-whose values change will be identical between the primary and variant traces. This includes not
-just memory, but registers as well, so that returning a secret is a violation. And when we
-extend the model with a notion of external output, it\apt{what?}  will include any values that
-emitted.
+the primary state and its variant will step in lockstep until they return. To step in lockstep
+means that if both states step -- that is, neither the primary nor the variant failstops --
+any {\em system component} (such as memory cell, register, program counter) that changes
+in one step has a matching value at the end of the other step. And when we
+extend the model with a notion of external output, values that are outputted will need
+to match as well.
 
-We alternatively could imagine a stepwise form of confidentiality in which we explicitly
+We alternatively could imagine a version of stepwise confidentiality in which we explicitly
 track which addresses may be read (i.e., which have been initialized), and at each step
 guarantee that the step alters state identically to a step from a variant state. Then we
-wouldn't need to divide up the execution by calls. But we can see in this example that taking
-a single variant at the start of the call effectively captures initialization: when {\tt y} is
-initialized, the primary and the variant agree on its value, so it can now be safely read.
-This treatment is roughly in line with more standard uses of noninterference, which typically
-vary states at the starts of whole program runs.\apt{This is all a bit cryptic.}
-
-Together, stepwise integrity and lockstep confidentiality form the stepwise version of
-local state encapsulation.
+wouldn't need to divide up the execution by calls. But the approach we take is more
+consistent with a typical noninterference approach, in that it varies the memory once
+at the beginning and trace changes through the execution.
 
 \begin{figure}
 
@@ -1132,7 +1172,7 @@ int g() {
 \begin{subfigure}{.65\textwidth}
 \begin{center}
 \begin{tabular}{l r | l}
-  \circled{\tt 01} &
+  {\tt 01} &
   \multicolumn{2}{c}{
     \memoryaddrs{8em}
     \memory{4}{\unsealc}
@@ -1143,7 +1183,7 @@ int g() {
     \MemoryLabel{-7em}{0.75em}{0}
     \vspace{.5em}
   } \\
-  \circled{\tt 11} &
+  {\tt 11} &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
@@ -1162,7 +1202,7 @@ int g() {
   \MemoryLabel{-10em}{0.75em}{\(v_1\)}
   \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
-  \circled{\tt 12} &
+  {\tt 12} &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
@@ -1181,7 +1221,7 @@ int g() {
   \MemoryLabel{-10em}{0.75em}{\(5\)}
   \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
-  \circled{\tt 02} &
+  {\tt 02} &
   \multicolumn{2}{c}{
     \memoryaddrs{8em}
 %    \memory{4}{\unsealc}
@@ -1196,7 +1236,7 @@ int g() {
     \vspace{.5em}
   }
   \\
-  \circled{\tt 21} &
+  {\tt 21} &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
@@ -1215,10 +1255,10 @@ int g() {
   \MemoryLabel{-10em}{0.75em}{\(v_4\)}
   \MemoryLabel{-6em}{0.75em}{\(v_5\)}
   \\ &
-  \circled{\bf 22}
+  {\bf 22}
   ~$\cdots$
   &
-  \circled{\bf 24}
+  {\bf 24}
   ~$\cdots$
   \\
 \end{tabular}
@@ -1244,13 +1284,10 @@ occurs because the program counter is also a component of the state that must ch
 identically between the primary and variant traces. In a case where \(v_1 \not = 5\),
 the program counters will differ, breaking the lockstep.
 
-\sna{Not terribly happy with the circles yet; the idea is that instead of a meta-level
-  label for the line numbers we could treat the PC as a part of the system we're showing.}
-
 \paragraph*{Control Flow Attacks}
 \begin{figure}
   \centering
-  \begin{minipage}{.4\textwidth}
+  \begin{subfigure}{.4\textwidth}
 \begin{verbatim}
 int *stash = 0;
  
@@ -1268,32 +1305,229 @@ void f() {
         // store return pointer
 11:       stash = $SP-1;
 12:     } else {
-13:       $SP-1 = stash;
+13:       *($SP-1) = stash;
 14:       stash = 0;
         }
 15[R]:    return;
 }
 \end{verbatim}
-  \end{minipage}
-\label{fig:controlflow}
- %  \begin{subfigure}[t]{.4\textwidth}
- %\begin{verbatim}
- %int counter = 0;
-@@ -1194,42 +1090,43 @@ the program counters will differ, breaking the lockstep.
- %\end{verbatim}
- %\label{fig:WBCF2}
- %  \end{subfigure}
--%  \caption{Control Flow Attacks}
--%  \label{fig:WBCF}
--%\end{figure}
-+  \caption{Control Flow Attacks}
-+  \label{fig:WBCF}
-+\end{figure}
+  \end{subfigure}
+  \begin{subfigure}{.5\textwidth}
+    \begin{tabular}{l l l}
+      {\tt 2} &
+      \memoryaddrs{8em}
+      \memory{4}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-19em}{0.75em}{1} \\
+      {\tt 15} &
+      \memoryaddrs{12em}
+      \memory{1}{\mainsealc}[Seal(0)]%
+      \memory{1}{\goodc}[RetPtr]%
+      \memory{2}{\unsealc}%
+      ~$\cdots$
+      \MemoryLabel{-19em}{0.75em}{1}
+      \MemoryLabel{-15em}{0.75em}{3}
+      \vspace{.5em} &
+      \memory[3em]{1}{\mainsealc}[Target]%
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 3}
+      \\
+      {\tt 3} &
+      \memoryaddrs{8em}
+      \memory{4}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-19em}{0.75em}{1} \\
+      {\tt 10} &
+      \memoryaddrs{12em}
+      \memory{1}{\mainsealc}
+      \memory{1}{\goodc}
+      \memory{2}{\unsealc}%
+      ~$\cdots$
+      \MemoryLabel{-19em}{0.75em}{-1}
+      \MemoryLabel{-15em}{0.75em}{5} &
+      \memory[3em]{1}{\mainsealc}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5}
+      \\
+      {\tt 15} &
+      \memoryaddrs{12em}
+      \memory{1}{\mainsealc}
+      \memory{1}{\badc}
+      \memory{2}{\unsealc}%
+      ~$\cdots$
+      \MemoryLabel{-19em}{0.75em}{-1}
+      \MemoryLabel{-15em}{0.75em}{3} &
+      \memory[3em]{1}{\mainsealc}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5}
+      \\
+      {\tt 3} &
+      \memoryaddrs{8em}
+      \memory{1}{\mainsealc}
+      \memory{3}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-19em}{0.75em}{-1} &
+      \memory[3em]{1}{\mainsealc}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5}
+      \\
+      {\tt 4} &
+      \memoryaddrs{8em}
+      \memory{1}{\mainsealc}
+      \memory{3}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-19em}{0.75em}{\bf 1} &
+      \memory[3em]{1}{\mainsealc}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5} \\
+    \end{tabular}
+  \end{subfigure}
+  \label{fig:controlflow}
+  \caption{A Control Flow Attack}
+\end{figure}
 
+From the classic stack smashing attack to return oriented programming, 
+one of the most pernicious ways to attack the stack is by hijacking control flow.
+Our stack safety properties do not assume that control flow is well-bracketed; rather,
+they express what it means to protect data even in the presence of control-flow attacks.
+Consider example \ref{fig:controlflow}, a relative of the classic ``awkward example,''
+in which {\tt f} is called twice, at lines 2 and 4. It should therefore return to lines
+3 and 5, respectively. But the first time, before returning, it stashes its
+return pointer away, and the second time it returns to line 3 instead of 5; then it ends
+up called a third time, at which point it returns to line 5.
+
+Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that we return
+-1. But because of {\tt f}'s interference, we negate {\tt x} twice, and return 1.
+This has the appearance of an integrity violation. But how can that be?
+
+The key intuition is that to return to {\tt main}, {\tt f} needs to do more than just
+execute a return-labeled instruction. It must then actually reach the appropriate
+{\em return target} in {\tt main}. In our context, we keep a stack of return targets,
+which correspond to the depths at which stack frames have been sealed. A callee is
+only considered to have returned when it executes a return-annotated instruction
+and then reaches a valid return target. Only then do the sealed frames become unsealed.
+
+In the example, on its first return, {\tt f} reaches its return target, because the
+\(\PCname\) is 3 after its return. But on the second, {\tt f} does not properly return,
+but rather changes its stack pointer and jumps into {\tt main}'s code. Then {\tt f}
+attempts to overwrite the sealed value of {\tt x}, violating integrity.
 
 \paragraph*{Pass by Reference and Stack Arguments}
 
 \newcommand{\mainpassc}{magenta}
+
+\begin{figure}
+  \centering
+  \begin{subfigure}{.3\textwidth}
+\begin{verbatim}
+int main() {
+0:           int x;
+1:           x = 5;
+2[P($SP)C]:  x = f(x);
+3[R]:        return x;
+}
+
+int f(int a) {
+10:    int y;
+11:    y = 2*a;
+12:    a = 0;
+13[R]: return y;
+}
+\end{verbatim}
+  \end{subfigure}
+\begin{subfigure}{.65\textwidth}
+\begin{center}
+\begin{tabular}{l r | l}
+  {\tt 2} &
+  \multicolumn{2}{c}{
+    \memoryaddrs[(0)]{8em}
+    \memory{4}{\unsealc}
+    ~$\cdots$
+    \MemoryLabel{-19em}{0.75em}{5}
+    \MemoryLabel{-14em}{0.75em}{0}
+    \MemoryLabel{-10em}{0.75em}{0}
+    \MemoryLabel{-7em}{0.75em}{0}
+    \vspace{.5em}
+  } \\
+  {\tt 11} &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}[Seal(0)]%
+  \memory{1}{\mainpassc}[P(0-1)]%
+  \memory{1}{\retptrc}[RetPtr]%
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{5}
+  \MemoryLabel{-14em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{0}
+  &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}
+  \memory{1}{\mainpassc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-14em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{\(v_1\)}
+  \\
+  {\tt 12} &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}
+  \memory{1}{\mainpassc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{5}
+  \MemoryLabel{-14em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{10}
+  &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}
+  \memory{1}{\mainpassc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-14em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{10}
+  \\
+  {\tt 13} &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}
+  \memory{1}{\mainpassc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{5}
+  \MemoryLabel{-14em}{0.75em}{0}
+  \MemoryLabel{-6em}{0.75em}{10}
+  &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}
+  \memory{1}{\mainpassc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-14em}{0.75em}{0}
+  \MemoryLabel{-6em}{0.75em}{10}
+  \\
+  {\tt 3} &
+  \multicolumn{2}{c}{
+    \memoryaddrs[(0)]{8em}
+    \memory{4}{\unsealc}
+    ~$\cdots$
+    \MemoryLabel{-19em}{0.75em}{10}
+    \MemoryLabel{-14em}{0.75em}{0}
+    \MemoryLabel{-10em}{0.75em}{3}
+    \MemoryLabel{-7em}{0.75em}{10}
+    \vspace{.5em}
+  } \\
+\end{tabular}
+\end{center}
+
+\vspace{\abovedisplayskip}
+
+\end{subfigure}
+
+\caption{Sharing on the Stack}
+\label{fig:passingsimple}
+\end{figure}
 
 \begin{figure}
   \centering
@@ -1320,14 +1554,14 @@ void f(int &a) {
   \begin{subfigure}{.5\textwidth}
     \begin{tabular}{l l}
       {\tt 10} &
-      \memoryaddrs{17em}
-      \memory{1}{\mainpassc}[{\makebox[0pt]{Pass(0)}}]%
+      \memoryaddrs[(0)]{17em}
+      \memory{1}{\mainpassc}[{\makebox[0pt]{P(0-1)}}]%
       \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
       \memory{1}{\retptrc}
       \memory{1}{\unsealc}
       ~$\cdots$ \\
       {\tt 13} &
-      \memoryaddrs{17em}
+      \memoryaddrs[(1)]{17em}
       \memory{1}{\mainpassc}
       \memory{1}{\mainsealc}
       \memory{1}{\retptrc}
@@ -1336,22 +1570,22 @@ void f(int &a) {
       \MemoryLabel{-18em}{0.75em}{5}
       \\
       {\tt 3} &
-      \memoryaddrs{12em}
+      \memoryaddrs[(0)]{12em}
       \memory{4}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-18em}{0.75em}{0}
       \\
       {\tt 10} &
-      \memoryaddrs{17em}
+      \memoryaddrs[(0)]{17em}
       \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
-      \memory{1}{\mainpassc}[{\makebox[0pt]{Pass(0)}}]%
+      \memory{1}{\mainpassc}[{\makebox[0pt]{P(0-1)}}]%
       \memory{1}{\retptrc}
       \memory{1}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-18em}{0.75em}{0}
       \\
       {\tt 13} &
-      \memoryaddrs{17em}
+      \memoryaddrs[(0)]{17em}
       \memory{1}{\mainsealc}
       \memory{1}{\mainpassc}
       \memory{1}{\retptrc}
@@ -1365,25 +1599,26 @@ void f(int &a) {
 \end{figure}
 
 To this point we have ignored function arguments, since our simplest model places them in
-registers. This is an oversimplification, which we will now correct, starting with the more
-interesting case: pass-by-reference.
-\apt{This is a nice and clear example, but I think the ordering here is confusing. Pass-by-reference and passing arguments on the stack are
-  entirely separable issues. I think it would be easiest to explain the latter first, as the
-  simplest example of passed arguments.}
-There are important stack safety concerns
-when passing arguments by reference, as seen in Figure~\ref{fig:passing}. In this example,
+registers. This is an oversimplification, which we will now correct, starting with the simple
+case: passing by value on the stack. Example \ref{fig:passingsimple} shows a sample trace of
+a program that passes a value on the stack, without an attack.
+At the call, we add a new annotation \(P(\$SP)\) identifying a memory location to be
+passed, and our diagram displays it in magenta. The caller's frame locations that are not
+passed are sealed as usual. Just as we marked sealed memory with the depth of its owner,
+we do the same for passed memory -- but it has multiple owners. We keep track of the
+current depth of the active function next to the stack pointer in the diagram, for reference.
+The argument {\tt a} has
+its value copied from {\tt x}, and we note that {\tt f} can read it -- because it is marked
+as passed between depths 0 and 1, it is not varied. Then from line 12 to 13 it is even
+modified, and naturally this is permitted as well.
+
+Passing on the stack is thus straightforward. The same mechanism can be used to pass
+variables by reference, and here there are important stack safety concerns,
+as seen in Figure~\ref{fig:passing}. In this example,
 {\tt main} calls {\tt f} with a reference to {\tt x}, but then clears {\tt x} and instead
 passes a reference to {\tt y}. We would expect that the first call to {\tt f} might modify
 {\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
 {\tt x} in the second call.
-
-At each call, we add a new annotation \(P(x)\) or \(P(y)\) identifying a memory location to be
-passed, and our diagram displays it in magenta. The caller's frame locations that are not
-passed are sealed as usual. Just as we marked sealed memory with the depth of its owner,
-we do the same for passed memory. We keep track of the current depth of the active function
-next to the stack pointer in the diagram.\apt{Not seeing that}  A passed address may only be accessed when the
-current depth is one higher than the one it is sealed with. \apt{This is not good enough!
-  The callee can in turn pass the same argument by reference to its callee...}
 
 So at the initial call, {\tt x} is passed, and {\tt f} is free to write to it. Then upon
 return, {\tt main}'s frame is unsealed. At the second call it is {\tt y} that is passed,
@@ -1391,19 +1626,20 @@ and when {\tt f} instead tries to write to {\tt x}, it violates integrity. For t
 a future call with no arguments passed by reference would also violate integrity if it wrote
 to either variable.
 
-Passed addresses are also excluded from confidentiality: at the start of each call, we vary
-only stack addresses that are not passed. This is important, as we also use the passing label
-for those arguments that are passed by value on the stack. \apt{this is hidden like an afterthought...}
-We might instead
-treat them as unsealed, but then we would treat them as confidential like the rest of the stack.\apt{unclear.
-  would this work or not?}
+When passing by reference, it is possible to repeatedly pass the same reference further
+and further down the stack. Note, however, that this must be a continuous chain; it will
+not skip over any calls in a chain. So we continue to track two depths, for each passed
+cell: the original owner, and the highest depth it has been passed to. It is considered
+accessible anywhere between the two.
 
 We do not model permanent sharing, in which a variable's address is taken and it might be
-passed far afield before use, because this situation is uninteresting and hard to motivate
-as an instance of stack safety. We would expect to treat such sharing as completely
-unprotected, and perhaps attach a separate memory safety policy to add some protection
-to such variables.\apt{Neither clear nor convincing! Taking explicit addresses of stack
-  variables is very interesting to many reviewers!}
+passed far afield before use, in detail. The appropriate way to do so in our model is
+for such a variable to have no protections except for temporal safety -- it would be
+unprotected until its original owner returns and it is deallocated. Then we would expect
+to separately require memory safety of such data. This is
+a separate property that is often enforced using capabilities, whether tag-based or
+otherwise. In fact, memory safety is the interesting part of this scenario, but is out of
+scope.
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
