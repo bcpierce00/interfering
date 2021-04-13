@@ -436,12 +436,6 @@ Definition headerSeq offset :=
   (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
   (* 12 *) IInstruction (Addi SP SP 12); (* H2 *)
 *)
-Definition returnSeq :=
-  [ (Lw ra sp (-4), [Tinstr; Tr1])
-  ; (Addi sp sp 8 , [Tinstr; Tr2])
-  ; (Jalr ra ra 0 , [Tinstr; Tr3])
-  ].
-
 Definition genCall (l : LayoutInfo) (t : TagInfo)
            (m : MachineState) (p : PolicyState)
            (cm : CodeMap_Impl) (nextF : FunID)
@@ -490,6 +484,24 @@ genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
     Some (S (List.length xs), elems_ x (x :: xs))
   end.
 
+Definition returnSeq :=
+  [ (Lw   ra sp (-12) , [Tinstr; Tr1])
+  ; (Addi sp sp (-12) , [Tinstr; Tr2])
+  ; (Jalr ra ra 0     , [Tinstr; Tr3])
+  ].
+
+Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) :=
+  match map.get (getRegs m) sp with
+  | Some spv =>
+    (* See if spv - 12 is indeed a pc_depth *)
+    match map.get (memtags p) (word.unsigned spv - 12) with
+    | Some (cons (Tpc depth) nil) =>
+      Some (returnGen (returnSeq, depth))
+    | _ => None
+    end
+  | _ => None
+  end.
+
 Definition genInstrSeq
            (l : LayoutInfo) (t : TagInfo)
            (m : MachineState) (p : PolicyState)
@@ -499,12 +511,20 @@ Definition genInstrSeq
   let fromInstr :=
       bindGen (genInstr l t m p cm dataP codeP genInstrTag)
               (fun it => returnGen ([it], f)) in
-  match genCall l t m p cm nextF callP with
-  | None => fromInstr
-  | Some (len,g) =>
-    freq_ g (cons (2%nat, g)
-                  (cons (5%nat, fromInstr)
-                        nil))
+  match genCall l t m p cm nextF callP,
+        genRetSeq m p cm with
+  | None, None => fromInstr
+  | None, Some g2 =>
+    freq_ g2 ([ (5, fromInstr)
+              ; (2, g2) ])%nat
+  | Some (_, g1), None =>
+    freq_ g1 ([ (5, fromInstr)
+              ; (2, g1) ])%nat
+  | Some (_, g1), Some g2 =>
+    freq_ g1 ([ (5, fromInstr)
+              ; (2, g1)
+              ; (1, g2)
+             ])%nat
   end.
 
 Definition replicateGen {A} (n : nat) (g : G A) : G (list A) :=
