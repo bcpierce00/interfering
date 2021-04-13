@@ -1010,7 +1010,7 @@ refers to the fact that the property must hold on every step. %Later we will
 In this case, after line 10, {\tt f} has violated integrity by writing to {\tt x}.
 
 The black rectangle represents the return address. In a typical RISC calling convention
-this will have been stored in a register by call itself, and {\tt f} stores
+this will have been saved into a register by the call itself, and {\tt f} stores
 it in the stack during its preamble, so it is not itself sealed.
 
 \begin{figure}
@@ -1334,10 +1334,10 @@ void f() {
       \memory{2}{\unsealc}%
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{1}
-      \MemoryLabel{-15em}{0.75em}{3}
+      \MemoryLabel{-15em}{0.75em}{\#3}
       \vspace{.5em} &
       \memory[3em]{1}{\mainsealc}[Target]%
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 3}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#3}
       \\
       {\tt 3} &
       \memoryaddrs{8em}
@@ -1351,9 +1351,9 @@ void f() {
       \memory{2}{\unsealc}%
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{-1}
-      \MemoryLabel{-15em}{0.75em}{5} &
+      \MemoryLabel{-15em}{0.75em}{\#5} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5}
       \\
       {\tt 15} &
       \memoryaddrs{12em}
@@ -1362,9 +1362,9 @@ void f() {
       \memory{2}{\unsealc}%
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{-1}
-      \MemoryLabel{-15em}{0.75em}{3} &
+      \MemoryLabel{-15em}{0.75em}{\#3} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5}
       \\
       {\tt 3} &
       \memoryaddrs{8em}
@@ -1373,7 +1373,7 @@ void f() {
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{-1} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5}
       \\
       {\tt 4} &
       \memoryaddrs{8em}
@@ -1382,30 +1382,33 @@ void f() {
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{\bf 1} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = 5} \\
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5} \\
     \end{tabular}
   \end{subfigure}
+  \caption{A Control Flow Attack.}
   \label{fig:controlflow}
-  \caption{A Control Flow Attack}
 \end{figure}
 
-From the classic stack smashing attack to return oriented programming, 
-one of the most pernicious ways to attack the stack is by hijacking control flow.
+%From the classic stack smashing attack to return oriented programming, 
+One of the most pernicious ways to attack the stack is by hijacking control flow.
 Our stack safety properties do not assume that control flow is well-bracketed; rather,
 they express what it means to protect data even in the presence of control-flow attacks.
-Consider example \ref{fig:controlflow}, a relative of the classic ``awkward example,''
+Consider example \ref{fig:controlflow}, a relative of the classic ``awkward example,''~\citep{??}
 in which {\tt f} is called twice, at lines 2 and 4. It should therefore return to lines
 3 and 5, respectively. But the first time, before returning, it stashes its
 return pointer away, and the second time it returns to line 3 instead of 5; then it ends
-up called a third time, at which point it returns to line 5.
+up being called a third time, at which point it returns to line 5.
+\apt{I added \# marks to the line numbers to avoid confusion; this should
+  probably be explained. What do the colors mean in this example?}
 
 Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that we return
 -1. But because of {\tt f}'s interference, we negate {\tt x} twice, and return 1.
-This has the appearance of an integrity violation. But how can that be?
+This has the appearance of an integrity violation.  How do we capture this in our
+integrity property?
 
-The key intuition is that to return to {\tt main}, {\tt f} needs to do more than just
-execute a return-labeled instruction. It must then actually reach the appropriate
-{\em return target} in {\tt main}. In our context, we keep a stack of return targets,
+The key intuition is that to be considered as having returned to {\tt main}, {\tt f} needs to do more than just
+execute a return-labeled instruction: it must actually reach the appropriate
+{\em return target} in {\tt main}. In our context\apt{what's that?}, we keep a stack of return targets,
 which correspond to the depths at which stack frames have been sealed. A callee is
 only considered to have returned when it executes a return-annotated instruction
 and then reaches a valid return target. Only then do the sealed frames become unsealed.
