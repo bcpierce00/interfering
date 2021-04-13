@@ -1292,6 +1292,9 @@ occurs because the program counter is also a component of the state that must ch
 identically between the primary and variant traces. In a case where \(v_1 \not = 5\),
 the program counters will differ, breaking the lockstep.
 
+\apt{How about an example incorporating temporal safety violations due to
+   reading uninitialized values?}
+
 \paragraph*{Control Flow Attacks}
 \begin{figure}
   \centering
@@ -1393,13 +1396,13 @@ void f() {
 One of the most pernicious ways to attack the stack is by hijacking control flow.
 Our stack safety properties do not assume that control flow is well-bracketed; rather,
 they express what it means to protect data even in the presence of control-flow attacks.
-Consider example \ref{fig:controlflow}, a relative of the classic ``awkward example,''~\citep{??}
-in which {\tt f} is called twice, at lines 2 and 4. It should therefore return to lines
+Consider example \ref{fig:controlflow}, a relative of the classic ``awkward example,''~\citep{??}.
+(Here we show return addresses explicitly as line numbers, in the form $\#n$.)
+\apt{what do the colors mean in this example?}
+Function {\tt f} is called twice, at lines 2 and 4; it should therefore return to lines
 3 and 5, respectively. But the first time, before returning, it stashes its
 return pointer away, and the second time it returns to line 3 instead of 5; then it ends
 up being called a third time, at which point it returns to line 5.
-\apt{I added \# marks to the line numbers to avoid confusion; this should
-  probably be explained. What do the colors mean in this example?}
 
 Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that we return
 -1. But because of {\tt f}'s interference, we negate {\tt x} twice, and return 1.
@@ -1623,9 +1626,10 @@ its value copied from {\tt x}, and we note that {\tt f} can read it -- because i
 as passed between depths 0 and 1, it is not varied. Then from line 12 to 13 it is even
 modified, and naturally this is permitted as well.
 
-Passing on the stack is thus straightforward. The same mechanism can be used to pass
+The same annotation mechanism can be used to pass
 variables by reference, and here there are important stack safety concerns,
-as seen in Figure~\ref{fig:passing}. In this example,
+as seen in Figure~\ref{fig:passing}. In this example, where we revert to assuming
+that arguments are passed in registers,
 {\tt main} calls {\tt f} with a reference to {\tt x}, but then clears {\tt x} and instead
 passes a reference to {\tt y}. We would expect that the first call to {\tt f} might modify
 {\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
@@ -1638,19 +1642,22 @@ a future call with no arguments passed by reference would also violate integrity
 to either variable.
 
 When passing by reference, it is possible to repeatedly pass the same reference further
-and further down the stack. Note, however, that this must be a continuous chain; it will
-not skip over any calls in a chain. So we continue to track two depths, for each passed
+and further down the stack. Note, however, that this sharing of the reference must be over
+an unbroken chain of calls. So it suffices to track two depths for each passed
 cell: the original owner, and the highest depth it has been passed to. It is considered
 accessible anywhere between the two.
 
-We do not model permanent sharing, in which a variable's address is taken and it might be
-passed far afield before use, in detail. The appropriate way to do so in our model is
-for such a variable to have no protections except for temporal safety -- it would be
-unprotected until its original owner returns and it is deallocated. Then we would expect
-to separately require memory safety of such data. This is
-a separate property that is often enforced using capabilities, whether tag-based or
-otherwise. In fact, memory safety is the interesting part of this scenario, but is out of
-scope.
+Our model provides only limited support for handling fully first-class pointers into
+stack frames, e.g., pointers obtained by taking the address of a local variable.
+Unlike the case for pass-by-reference, there is no easy way to model the intended sharing behavior
+of such pointers in terms of stack frame activation patterns.  The best approximation we can make is to
+treat a location whose address is taken as unsealed for the rest of its lifetime, i.e., until
+its original owner deallocates it (typically by returning).  This prevents violations
+of temporal safety (use after free), but still permits callees to access the location without having
+been explicitly given a pointer to it.  Preventing the latter kind of abuse
+is the provence of a fine-grained memory safety policy, e.g. based on capabilities
+(implemented by tags or some other mechanism); we believe it is beyond the scope of stack safety
+\emph{per se}. 
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
