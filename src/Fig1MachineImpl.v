@@ -21,7 +21,7 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Z.HexNotation.
 Require coqutil.Map.SortedList.
 
-From StackSafety Require Import Trace MachineEagerInit.
+From StackSafety Require Import Trace MachineImpl.
 
 Let stack_init : Z := 100.
 Let data_words : nat := 8.
@@ -53,7 +53,7 @@ Definition program : list Instruction :=
   (* f *)
   (* 68 *) IInstruction (Sw SP RA 0); (* H1 *)
   (* 72 *) IInstruction (Addi SP SP 4); (* H2 *)
-  (* 76 *) IInstruction (Sw SP 0 (-12)); (* IInstruction (Addi RTMP 0 0); *)
+  (* 76 *) IInstruction (Sw SP 0 (-4)); (* IInstruction (Addi RTMP 0 0); *)
   (* 80 *) IInstruction (Add RRES RARG RARG);
   (* 84 *) IInstruction (Lw RA SP (-4)); (* R1 *)
   (* 88 *) IInstruction (Addi SP SP (-4)); (* R2 *)
@@ -67,7 +67,8 @@ Let h2Tags    := [Tinstr; Th2].
 Let r1Tags    := [Tinstr; Tr1].
 Let r2Tags    := [Tinstr; Tr2].
 Let r3Tags    := [Tinstr; Tr3].
-Let initTags  := [Tinstr; Tinit].
+(* Let initTags  := [Tinstr; Tinit]. *)
+Let initTags  := instrTags.
 
 Let initDataTags := [Tstack 0].
 
@@ -126,5 +127,5 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-(* Gets stuck at instruction 76 *)
+(* Gets stuck at instruction 84 *)
 Compute (run 30 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
