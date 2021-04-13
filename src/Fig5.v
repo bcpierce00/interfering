@@ -136,7 +136,4 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-(* Without a policy, the program will run to completion and the result
-   register will contain the value 5, surreptitiously reassigned to x
-   after it was reset to 0. *)
 Compute (run 25 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
