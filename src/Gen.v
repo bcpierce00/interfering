@@ -78,6 +78,7 @@ Instance ShowPtrInfo : Show PtrInfo :=
 
 Record RegInfo := { dataPtr : list PtrInfo
                   ; loadPtr : list PtrInfo
+                  ; badPtr  : list PtrInfo 
                   ; codePtr : list PtrInfo
                   ; arith : list ArithInfo
                   }.
@@ -283,7 +284,7 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
   let getCodeInfo :=
       getInfo (noSp codeP) (instLo i) (instHi i) in
   let isStackLoc p t :=
-      trace ("Testing Loc: " ++ show t ++ nl)%string
+(*      trace ("Testing Loc: " ++ show t ++ nl)%string *)
             (
       andb (p t) (match t with
                   | [Tstack _] => true
@@ -291,27 +292,27 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
                   end)) in
   let loadLocs :=
       List.fold_right
-        (fun (i : Z) (acc : list Z) =>
+        (fun (i : Z) '(acc1,acc2) =>
            match pctags p, map.get (memtags p) i with
            | [Tpc pcdepth], Some (cons (Tstack depth) nil) =>
              (* TODO: Likely to load bad stuff? *)
              if Nat.leb pcdepth depth  then 
-               i :: acc
-             else acc
-           | _, _ => acc
+               (i :: acc1, acc2)
+             else (acc1, i::acc2)
+           | _, _ => (acc1, acc2)
            end
-        ) nil (Zseq (stackLo i) (stackHi i)) in
+        ) (nil,nil) (Zseq (stackLo i) (stackHi i)) in
                          
-  let getLoadInfo (regTagP : TagSet -> bool)
+  let getLoadInfo proj (regTagP : TagSet -> bool)
                   rID rVal rTag :=
-      trace ("Getting load info: " ++ show rID ++ " " ++ show (regTagP rTag) ++ " " ++ show loadLocs ++ nl)%string
+(*      trace ("Getting load info: " ++ show rID ++ " " ++ show (regTagP rTag) ++ " " ++ show loadLocs ++ nl)%string *)
             (if (regTagP rTag) then
         List.map (fun loc =>
                     {| pID := rID; pVal := rVal
                        ; pMinImm := 0
-                       ; pMaxImm := loc - rVal
+                       ; pMaxImm :=  loc - rVal
                        ; pTag := rTag 
-                    |}) loadLocs
+                    |}) (proj loadLocs)
       else nil)
   in
   let processRegs f :=
@@ -327,7 +328,8 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
   let processRegsList f :=
       List.fold_right
         (fun '(rID, rVal, rTag) acc =>
-           trace ("Processing: " ++ show (rID, rVal, rTag) ++ nl) (
+           (*           trace ("Processing: " ++ show (rID, rVal, rTag) ++ nl)%string *)
+           (
                    if Z.eqb rID 2 then
            f rID (word.signed rVal) rTag ++ acc
 
@@ -336,7 +338,8 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
         )) nil (listify2 regs tags) in
 
   let dataRegs := processRegs getDataInfo in
-  let loadRegs := processRegsList (getLoadInfo dataP) in
+  let loadRegs := processRegsList (getLoadInfo fst dataP) in
+  let badRegs  := processRegsList (getLoadInfo snd dataP) in  
   let codeRegs := processRegs getCodeInfo in
   let arithRegs :=
       List.fold_right
@@ -349,7 +352,8 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
    ; dataPtr := dataRegs
    ; arith   := arithRegs
    ; loadPtr := loadRegs
-   |}.
+   ; badPtr  := badRegs                  
+  |}.
 
 (*
 -- TODO: This might need to be further generalized in the future
@@ -367,7 +371,7 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
   let d := dataPtr groups in
   let c := codePtr groups in
   let l := loadPtr groups in
-  trace ("Grouped loads: " ++ show l ++ nl)%string
+(*  trace ("Grouped loads: " ++ show l ++ nl)%string *)
 (  
   let def_a := {| aID := 0 |} in
   let def_dp := {| pID := 0; pVal := 0;
@@ -388,13 +392,14 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           bindGen (genInstrTag instr) (fun tag =>
           ret (instr, tag))))))
        ; (onNonEmpty l 3%nat,
-          bindGen (elems_ def_dp l) (fun pi =>
+          bindGen (elems_ l ([l; l ++ badPtr groups])) (fun l' =>
+          bindGen (elems_ def_dp l') (fun pi =>
           bindGen (genTargetReg m) (fun rd =>
           let imm := pMaxImm pi in 
-          trace ("Generating... " ++ show (imm, pMaxImm pi))%string
+(*          trace ("Generating... " ++ show (imm, pMaxImm pi))%string *)
           (let instr := Lw rd (pID pi) imm in
           bindGen (genInstrTag instr) (fun tag =>
-          ret (instr, tag))))))
+          ret (instr, tag)))))))
        ; ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
           bindGen (elems_ def_dp d) (fun pi =>
           bindGen (genSourceReg m) (fun rs =>
@@ -589,7 +594,7 @@ Fixpoint gen_exec_aux (steps : nat)
          (genInstrTag : InstructionI -> G TagSet)
          (* num calls? *)
   : G (MachineState * PolicyState * CodeMap_Impl) :=
-  trace (show ("GenExec...", steps, its, printPC m p) ++ nl)%string
+(*  trace (show ("GenExec...", steps, its, printPC m p) ++ nl)%string *)
   (match steps with
   | O =>
     (* Out-of-fuel: End generation. *)
@@ -597,7 +602,7 @@ Fixpoint gen_exec_aux (steps : nat)
   | S steps' =>
     match map.get (getMem m) (getPc m) with
     | Some _ =>
-      trace ("Existing instruction found: " ++ nl)%string
+(*      trace ("Existing instruction found: " ++ nl)%string *)
       (            
       (* Instruction already exists, step... *)
       match mpstep (m,p) with
@@ -610,7 +615,7 @@ Fixpoint gen_exec_aux (steps : nat)
       end
       )
     | _ =>
-      trace ("No instruction found " ++ nl)%string
+(*      trace ("No instruction found " ++ nl)%string *)
       (* Check if there is anything left to put *)
       (bindGen (match its with
                | [] =>
@@ -620,7 +625,7 @@ Fixpoint gen_exec_aux (steps : nat)
                          (fun '(ists, f') =>
                             match ists with
                             | ist :: ists' =>
-                              trace (show (f',ist, ists') ++ nl)%string
+(*                              trace (show (f',ist, ists') ++ nl)%string*)
                                     (returnGen (f', ist, ists'))
                             | _ => exception "EmptyInstrSeq"
                             end)
@@ -637,10 +642,10 @@ Fixpoint gen_exec_aux (steps : nat)
          let cm' := map.put cm (word.unsigned (getPc m)) (inFun f' normal) in
          match mpstep (m', p') with
          | Some ((m'', p''), o) =>
-           trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string 
+(*            trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string  *)
                  (gen_exec_aux steps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP genInstrTag)
          | _ =>
-           trace ("Couldn't step" ++ nl ++  printMachine m' p' cm' ++ nl)%string
+(*           trace ("Couldn't step" ++ nl ++  printMachine m' p' cm' ++ nl)%string *)
                  (ret (m0', p0', cm'))
          end))
     end
@@ -747,13 +752,14 @@ Definition genMach :=
 
 From StackSafety Require Import SubroutineSimple.
 
-Sample1 (genMach).
+(* Sample1 (genMach). *)
 
-(*
 Definition prop_integrity :=
-  let cm := fun _ => notCode in
   let sm := fun _ => true in
-  forAll genMach (fun '(m,p) =>
-  (SimpleStackIntegrityStepP cm 42 m p (initC sm))).
-*)
-(* QuickCheck prop_integrity. *)
+  forAll genMach (fun '(m,p,cm) =>
+(*  trace ("Next Run Starting..." ++ nl)%string *)
+  (SimpleStackIntegrityStepP (CodeMap_fromImpl cm) 42 m p (initC sm m))).
+
+Extract Constant defNumTests => "1000".
+QuickCheck prop_integrity. 
+
