@@ -44,44 +44,44 @@ Let Nop : InstructionI := Addi 0 0 0.
    surreptitiously turn it off so that both the eager policies will
    run and the vulnerability will be exhibited when a policy is not
    running. However, we will not do clearing. *)
-Definition program : list Instruction :=
-  (* 000 *) [IInstruction (Jal RA 8); (* Call main *)
-  (* 004 *) IInstruction (Beq 0 0 0); (* Finish execution (loop) *)
+Definition program : list Instruction := map IInstruction
+  (* 000 *) [Jal RA 8; (* Call main *)
+  (* 004 *) Beq 0 0 0; (* Finish execution (loop) *)
   (* main *)
-  (* 008 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 012 *) IInstruction (Addi SP SP 8); (* H2 *)
-  (* 016 *) IInstruction (Sw SP 0 (-4)); (* Init x *)
-  (* 020 *) IInstruction (Jal RA 28); (* Call f *)
-  (* 024 *) IInstruction (Sw SP RRES (-4));
-  (* 028 *) IInstruction (Jal RA 56); (* Call g *)
-  (* (* 032 *) IInstruction (Sw SP 0 (-4)); (* Clear x *) *) IInstruction Nop;
-  (* 036 *) IInstruction (Lw RA SP (-8)); (* R1 *)
-  (* 040 *) IInstruction (Addi SP SP (-8)); (* R2 *)
-  (* 044 *) IInstruction (Jalr RA RA 0); (* R3 *)
+  (* 008 *) Sw SP RA 0; (* H1 *)
+  (* 012 *) Addi SP SP 8; (* H2 *)
+  (* 016 *) Sw SP 0 (-4); (* Init x *)
+  (* 020 *) Jal RA 28; (* Call f *)
+  (* 024 *) Sw SP RRES (-4);
+  (* 028 *) Jal RA 56; (* Call g *)
+  (* (* 032 *) Sw SP 0 (-4); (* Clear x *) *) Nop;
+  (* 036 *) Lw RA SP (-8); (* R1 *)
+  (* 040 *) Addi SP SP (-8); (* R2 *)
+  (* 044 *) Jalr RA RA 0; (* R3 *)
   (* f *)
-  (* 048 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 052 *) IInstruction (Addi SP SP 8); (* H2 *)
-  (* 056 *) IInstruction (Sw SP 0 (-4)); (* Init y *)
-  (* 060 *) IInstruction (Addi RRES 0 5);
-  (* 064 *) IInstruction (Sw SP RRES (-4));
-  (* (* 068 *) IInstruction (Sw SP 0 (-4)); (* Clear y *) *) IInstruction Nop;
-  (* 072 *) IInstruction (Lw RA SP (-8)); (* R1 *)
-  (* 076 *) IInstruction (Addi SP SP (-8)); (* R2 *)
-  (* 080 *) IInstruction (Jalr RA RA 0); (* R3 *)
+  (* 048 *) Sw SP RA 0; (* H1 *)
+  (* 052 *) Addi SP SP 8; (* H2 *)
+  (* 056 *) Sw SP 0 (-4); (* Init y *)
+  (* 060 *) Addi RRES 0 5;
+  (* 064 *) Sw SP RRES (-4);
+  (* (* 068 *) Sw SP 0 (-4); (* Clear y *) *) Nop;
+  (* 072 *) Lw RA SP (-8); (* R1 *)
+  (* 076 *) Addi SP SP (-8); (* R2 *)
+  (* 080 *) Jalr RA RA 0; (* R3 *)
   (* g *)
-  (* 084 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 088 *) IInstruction (Addi SP SP 8); (* H2 *)
-  (* (* 092 *) IInstruction (Sw SP 0 (-4)); (* Init z *) *) IInstruction Nop;
-  (* 096 *) IInstruction (Lw RTMP1 SP (-4));
-  (* 100 *) IInstruction (Addi RTMP2 0 5);
-  (* 104 *) IInstruction (Bne RTMP1 RTMP2 12);
-  (* 108 *) IInstruction (Addi RRES 0 100);
-  (* 112 *) IInstruction (Beq 0 0 8); (* Jump to return *)
-  (* 116 *) IInstruction (Addi RRES 0 10); (* Cascade down to return *)
-  (* (* 120 *) IInstruction (Sw SP 0 (-4)); (* Clear z *) *) IInstruction Nop;
-  (* 124 *) IInstruction (Lw RA SP (-8)); (* R1 *)
-  (* 128 *) IInstruction (Addi SP SP (-8)); (* R2 *)
-  (* 132 *) IInstruction (Jalr RA RA 0)] (* R3 *)
+  (* 084 *) Sw SP RA 0; (* H1 *)
+  (* 088 *) Addi SP SP 8; (* H2 *)
+  (* (* 092 *) Sw SP 0 (-4); (* Init z *) *) Nop;
+  (* 096 *) Lw RTMP1 SP (-4);
+  (* 100 *) Addi RTMP2 0 5;
+  (* 104 *) Bne RTMP1 RTMP2 12;
+  (* 108 *) Addi RRES 0 100;
+  (* 112 *) Beq 0 0 8; (* Jump to return *)
+  (* 116 *) Addi RRES 0 10; (* Cascade down to return *)
+  (* (* 120 *) Sw SP 0 (-4); (* Clear z *) *) Nop;
+  (* 124 *) Lw RA SP (-8); (* R1 *)
+  (* 128 *) Addi SP SP (-8); (* R2 *)
+  (* 132 *) Jalr RA RA 0] (* R3 *)
 .
 
 Let instrTags := [Tinstr].

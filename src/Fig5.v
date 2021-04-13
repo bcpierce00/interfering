@@ -34,32 +34,32 @@ Let RARG : Z := 19.
 Let RRES : Z := 18.
 Let RTMP : Z := 20.
 
-Definition program : list Instruction :=
-  (* 000 *) [IInstruction (Jal RA 8); (* Call main *)
-  (* 004 *) IInstruction (Beq 0 0 0); (* Finish execution (loop) *)
+Definition program : list Instruction := map IInstruction
+  (* 000 *) [Jal RA 8; (* Call main *)
+  (* 004 *) Beq 0 0 0; (* Finish execution (loop) *)
   (* main *)
-  (* 008 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 012 *) IInstruction (Addi SP SP 8); (* H2 *)
-  (* 016 *) IInstruction (Addi RTMP 0 5); (* For brevity, initial values in sequence *)
-  (* 020 *) IInstruction (Sw SP RTMP (-4)); (* Init x *)
-  (* 024 *) IInstruction (Sw SP RTMP 0); (* Store argument to f *)
-  (* 028 *) IInstruction (Jal RA 20); (* Call f *)
-  (* 032 *) IInstruction (Sw SP RRES (-4)); (* Assign result to x and return *)
-  (* IInstruction (Sw SP 0 (-4)); (* Clear x *) *) (* No stack clearing *)
-  (* 036 *) IInstruction (Lw RA SP (-8)); (* R1 *)
-  (* 040 *) IInstruction (Addi SP SP (-8)); (* R2 *)
-  (* 044 *) IInstruction (Jalr RA RA 0); (* R3 *)
+  (* 008 *) Sw SP RA 0; (* H1 *)
+  (* 012 *) Addi SP SP 8; (* H2 *)
+  (* 016 *) Addi RTMP 0 5; (* For brevity, initial values in sequence *)
+  (* 020 *) Sw SP RTMP (-4); (* Init x *)
+  (* 024 *) Sw SP RTMP 0; (* Store argument to f *)
+  (* 028 *) Jal RA 20; (* Call f *)
+  (* 032 *) Sw SP RRES (-4); (* Assign result to x and return *)
+  (* Sw SP 0 (-4); (* Clear x *) *) (* No stack clearing *)
+  (* 036 *) Lw RA SP (-8); (* R1 *)
+  (* 040 *) Addi SP SP (-8); (* R2 *)
+  (* 044 *) Jalr RA RA 0; (* R3 *)
   (* f *)
-  (* 048 *) IInstruction (Sw SP RA 4); (* H1 (stores RA after the arg in SP+0) *)
-  (* 052 *) IInstruction (Addi SP SP 8); (* H2 (increments SP by two: arg and RA) *)
-  (* 056 *) IInstruction (Sw SP 0 0); (* Init y (could actually live in a register) *)
-  (* 060 *) IInstruction (Lw RARG SP (-8)); (* Load a and operate *)
-  (* 064 *) IInstruction (Add RRES RARG RARG);
-  (* 068 *) IInstruction (Sw SP RRES 0); (* Store result in y (again, superfluous) *)
-  (* 072 *) IInstruction (Sw SP 0 (-8)); (* Clear a *)
-  (* 076 *) IInstruction (Lw RA SP (-4)); (* R1 *)
-  (* 080 *) IInstruction (Addi SP SP (-8)); (* R2 *)
-  (* 084 *) IInstruction (Jalr RA RA 0)] (* R3 *)
+  (* 048 *) Sw SP RA 4; (* H1 (stores RA after the arg in SP+0) *)
+  (* 052 *) Addi SP SP 8; (* H2 (increments SP by two: arg and RA) *)
+  (* 056 *) Sw SP 0 0; (* Init y (could actually live in a register) *)
+  (* 060 *) Lw RARG SP (-8); (* Load a and operate *)
+  (* 064 *) Add RRES RARG RARG;
+  (* 068 *) Sw SP RRES 0; (* Store result in y (again, superfluous) *)
+  (* 072 *) Sw SP 0 (-8); (* Clear a *)
+  (* 076 *) Lw RA SP (-4); (* R1 *)
+  (* 080 *) Addi SP SP (-8); (* R2 *)
+  (* 084 *) Jalr RA RA 0] (* R3 *)
 .
 
 Let instrTags  := [Tinstr].

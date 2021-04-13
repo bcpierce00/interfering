@@ -35,39 +35,39 @@ Let RRES  : Z := 18.
 Let RTMP1 : Z := 20.
 Let RTMP2 : Z := 21.
 
-Definition program : list Instruction :=
-  (* 000 *) [IInstruction (Sw SP 0 (-4)); (* Hackily initialize stash *)
-  (* 004 *) IInstruction (Jal RA 8); (* Call main *)
-  (* 008 *) IInstruction (Beq 0 0 0); (* Finish execution (loop) *)
+Definition program : list Instruction := map IInstruction
+  (* 000 *) [Sw SP 0 (-4); (* Hackily initialize stash *)
+  (* 004 *) Jal RA 8; (* Call main *)
+  (* 008 *) Beq 0 0 0; (* Finish execution (loop) *)
   (* main *)
-  (* 012 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 016 *) IInstruction (Addi SP SP 8); (* H2 *)
-  (* 020 *) IInstruction (Addi RTMP1 0 1); (* For brevity, initial values in sequence *)
-  (* 024 *) IInstruction (Sw SP RTMP1 (-4)); (* Init x *)
-  (* 028 *) IInstruction (Jal RA 40); (* First call to f *)
-  (* 032 *) IInstruction (Lw RTMP1 SP (-4));
-  (* 036 *) IInstruction (Sub RTMP1 0 RTMP1);
-  (* 040 *) IInstruction (Sw SP RTMP1 (-4));
-  (* 044 *) IInstruction (Jal RA 24); (* Second call to f *)
-  (* 048 *) IInstruction (Lw RRES SP (-4));
-  (* 052 *) IInstruction (Sw SP 0 (-4)); (* Clear x *)
-  (* 056 *) IInstruction (Lw RA SP (-8)); (* R1 *)
-  (* 060 *) IInstruction (Addi SP SP (-8)); (* R2 *)
-  (* 064 *) IInstruction (Jalr RA RA 0); (* R3 *)
+  (* 012 *) Sw SP RA 0; (* H1 *)
+  (* 016 *) Addi SP SP 8; (* H2 *)
+  (* 020 *) Addi RTMP1 0 1; (* For brevity, initial values in sequence *)
+  (* 024 *) Sw SP RTMP1 (-4); (* Init x *)
+  (* 028 *) Jal RA 40; (* First call to f *)
+  (* 032 *) Lw RTMP1 SP (-4);
+  (* 036 *) Sub RTMP1 0 RTMP1;
+  (* 040 *) Sw SP RTMP1 (-4);
+  (* 044 *) Jal RA 24; (* Second call to f *)
+  (* 048 *) Lw RRES SP (-4);
+  (* 052 *) Sw SP 0 (-4); (* Clear x *)
+  (* 056 *) Lw RA SP (-8); (* R1 *)
+  (* 060 *) Addi SP SP (-8); (* R2 *)
+  (* 064 *) Jalr RA RA 0; (* R3 *)
   (* f *)
-  (* 068 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 072 *) IInstruction (Addi SP SP 4); (* H2 *)
-  (* 076 *) IInstruction (Addi RTMP1 0 stash_addr);
-  (* 080 *) IInstruction (Lw RTMP2 RTMP1 0);
-  (* 084 *) IInstruction (Bne RTMP2 0 16); (* Does stash hold a value? *)
-  (* 088 *) IInstruction (Lw RTMP2 SP (-4));
-  (* 092 *) IInstruction (Sw RTMP1 RTMP2 0); (* If it doesn't, store RA *)
-  (* 096 *) IInstruction (Beq 0 0 12); (* Jump to return *)
-  (* 100 *) IInstruction (Sw SP RTMP2 (-4)); (* If it does, overwrite RA *)
-  (* 104 *) IInstruction (Sw RTMP1 0 0); (* Cascade down to return *)
-  (* 108 *) IInstruction (Lw RA SP (-4)); (* R1 *)
-  (* 112 *) IInstruction (Addi SP SP (-4)); (* R2 *)
-  (* 116 *) IInstruction (Jalr RA RA 0)] (* R3 *)
+  (* 068 *) Sw SP RA 0; (* H1 *)
+  (* 072 *) Addi SP SP 4; (* H2 *)
+  (* 076 *) Addi RTMP1 0 stash_addr;
+  (* 080 *) Lw RTMP2 RTMP1 0;
+  (* 084 *) Bne RTMP2 0 16; (* Does stash hold a value? *)
+  (* 088 *) Lw RTMP2 SP (-4);
+  (* 092 *) Sw RTMP1 RTMP2 0; (* If it doesn't, store RA *)
+  (* 096 *) Beq 0 0 12; (* Jump to return *)
+  (* 100 *) Sw SP RTMP2 (-4); (* If it does, overwrite RA *)
+  (* 104 *) Sw RTMP1 0 0; (* Cascade down to return *)
+  (* 108 *) Lw RA SP (-4); (* R1 *)
+  (* 112 *) Addi SP SP (-4); (* R2 *)
+  (* 116 *) Jalr RA RA 0] (* R3 *)
 .
 
 Let instrTags  := [Tinstr].
