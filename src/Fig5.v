@@ -23,65 +23,43 @@ Require coqutil.Map.SortedList.
 
 From StackSafety Require Import Trace MachineEagerInitArgGlobal.
 
-Let global_words : nat := 1.
+Let global_words : nat := 0.
 Let data_words : nat := 8.
 (* TODO: Compute addresses (also based on program) *)
-Let stash_addr := 128.
-Let stack_init : Z := 132.
+(* Let stash_addr := 128. *)
+Let stack_init : Z := 88.
 
 (* Writing programs more abstractly *)
-Let RARG  : Z := 19.
-Let RRES  : Z := 18.
-Let RTMP1 : Z := 20.
-Let RTMP2 : Z := 21.
+Let RARG : Z := 19.
+Let RRES : Z := 18.
+Let RTMP : Z := 20.
 
-(* In this program, arguments are passed on the stack (though return
-   values are still passed by register). By convention, the caller
-   stores the arguments immediately after its own frame (that is, from
-   SP upwards). Those store instructions need a special tag so that
-   they are allowed and tagged with the upcoming activation id. The
-   blessed entry sequence then stores the RA on top of the designated
-   number of arguments (and initializes any local state it may
-   need). This means the offsets used by the blessed sequences depend
-   on the arity of the function as well as the amount of local data
-   needed. The related well-formedness checks are assumed here.  No
-   restrictions are currently put on the use of passed arguments,
-   e.g., in the case of pointers. *)
 Definition program : list Instruction :=
-  (* 000 *) [IInstruction (Sw SP 0 (-4)); (* Hackily initialize stash *)
-  (* 004 *) IInstruction (Jal RA 8); (* Call main *)
-  (* 008 *) IInstruction (Beq 0 0 0); (* Finish execution (loop) *)
+  (* 000 *) [IInstruction (Jal RA 8); (* Call main *)
+  (* 004 *) IInstruction (Beq 0 0 0); (* Finish execution (loop) *)
   (* main *)
-  (* 012 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 016 *) IInstruction (Addi SP SP 12); (* H2 *)
-  (* 020 *) IInstruction (Sw SP 0 (-8)); (* Init x *)
-  (* 024 *) IInstruction (Sw SP 0 (-4)); (* Init y *)
-  (* 028 *) IInstruction (Addi RARG SP (-8));
-  (* 032 *) IInstruction (Sw SP RARG 0); (* Store argument to f *)
-  (* 036 *) IInstruction (Jal RA 44); (* First call to f *)
-  (* 040 *) IInstruction (Sw SP 0 (-8)); (* Reset x *)
-  (* 044 *) IInstruction (Addi RARG SP (-4));
-  (* 048 *) IInstruction (Sw SP RARG 0); (* Store argument to f *)
-  (* 052 *) IInstruction (Jal RA 28); (* Second call to f *)
-  (* 056 *) IInstruction (Lw RRES SP (-8));
-  (* 060 *) IInstruction (Sw SP 0 (-8)); (* Clear x *)
-  (* 064 *) IInstruction (Sw SP 0 (-4)); (* Clear y *)
-  (* 068 *) IInstruction (Lw RA SP (-12)); (* R1 *)
-  (* 072 *) IInstruction (Addi SP SP (-12)); (* R2 *)
-  (* 076 *) IInstruction (Jalr RA RA 0); (* R3 *)
+  (* 008 *) IInstruction (Sw SP RA 0); (* H1 *)
+  (* 012 *) IInstruction (Addi SP SP 8); (* H2 *)
+  (* 016 *) IInstruction (Addi RTMP 0 5); (* For brevity, initial values in sequence *)
+  (* 020 *) IInstruction (Sw SP RTMP (-4)); (* Init x *)
+  (* 024 *) IInstruction (Sw SP RTMP 0); (* Store argument to f *)
+  (* 028 *) IInstruction (Jal RA 20); (* Call f *)
+  (* 032 *) IInstruction (Sw SP RRES (-4)); (* Assign result to x and return *)
+  (* IInstruction (Sw SP 0 (-4)); (* Clear x *) *) (* No stack clearing *)
+  (* 036 *) IInstruction (Lw RA SP (-8)); (* R1 *)
+  (* 040 *) IInstruction (Addi SP SP (-8)); (* R2 *)
+  (* 044 *) IInstruction (Jalr RA RA 0); (* R3 *)
   (* f *)
-  (* 080 *) IInstruction (Sw SP RA 4); (* H1 (stores RA after the arg in SP+0) *)
-  (* 084 *) IInstruction (Addi SP SP 8); (* H2 (increments SP by two: arg and RA) *)
-  (* 088 *) IInstruction (Addi RTMP1 0 stash_addr);
-  (* 092 *) IInstruction (Lw RTMP2 RTMP1 0); (* Keep the updated contents of stash in RTMP2 *)
-  (* 096 *) IInstruction (Bne RTMP2 0 12); (* Does stash hold a value? *)
-  (* 100 *) IInstruction (Lw RTMP2 SP (-8));
-  (* 104 *) IInstruction (Sw RTMP1 RTMP2 0); (* If it doesn't, store argument *)
-  (* 108 *) IInstruction (Addi RTMP1 0 5); (* Either way, write 5 to that address *)
-  (* 112 *) IInstruction (Sw RTMP2 RTMP1 0);
-  (* 116 *) IInstruction (Lw RA SP (-4)); (* R1 *)
-  (* 120 *) IInstruction (Addi SP SP (-8)); (* R2 *)
-  (* 124 *) IInstruction (Jalr RA RA 0)] (* R3 *)
+  (* 048 *) IInstruction (Sw SP RA 4); (* H1 (stores RA after the arg in SP+0) *)
+  (* 052 *) IInstruction (Addi SP SP 8); (* H2 (increments SP by two: arg and RA) *)
+  (* 056 *) IInstruction (Sw SP 0 0); (* Init y (could actually live in a register) *)
+  (* 060 *) IInstruction (Lw RARG SP (-8)); (* Load a and operate *)
+  (* 064 *) IInstruction (Add RRES RARG RARG);
+  (* 068 *) IInstruction (Sw SP RRES 0); (* Store result in y (again, superfluous) *)
+  (* 072 *) IInstruction (Sw SP 0 (-8)); (* Clear a *)
+  (* 076 *) IInstruction (Lw RA SP (-4)); (* R1 *)
+  (* 080 *) IInstruction (Addi SP SP (-8)); (* R2 *)
+  (* 084 *) IInstruction (Jalr RA RA 0)] (* R3 *)
 .
 
 Let instrTags  := [Tinstr].
@@ -98,16 +76,14 @@ Let globalTags := [Tglobal].
 Let initDataTags := [Tstack 0].
 
 Definition tags : list (list Tag) :=
-  [instrTags; callTags; instrTags]
+  [callTags; instrTags]
     (* main *)
-    ++ [h1Tags; h2Tags; initTags; initTags]
-    ++ [instrTags; argTags; callTags]
-    ++ [instrTags; instrTags; argTags; callTags; instrTags]
-    ++ [initTags; initTags; r1Tags; r2Tags; r3Tags]
+    ++ [h1Tags; h2Tags; instrTags; initTags]
+    ++ [argTags; callTags; instrTags]
+    ++ [r1Tags; r2Tags; r3Tags]
     (* f *)
-    ++ [h1Tags; h2Tags]
-    ++ [instrTags; globalTags; instrTags]
-    ++ [instrTags; globalTags; instrTags; instrTags]
+    ++ [h1Tags; h2Tags; initTags]
+    ++ repeat instrTags 4
     ++ [r1Tags; r2Tags; r3Tags]
     (* Data segment *)
     ++ repeat globalTags global_words
@@ -163,4 +139,4 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
 (* Without a policy, the program will run to completion and the result
    register will contain the value 5, surreptitiously reassigned to x
    after it was reset to 0. *)
-Compute (run 45 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
+Compute (run 25 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
