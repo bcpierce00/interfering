@@ -157,10 +157,12 @@ Extract Constant exception =>
                               (RiscvMachine.getRegs m))) in
     (* Non-zero memory-locs. *)
     let mem :=
-        List.map (fun x => Mem (word.unsigned x))
-                 (List.rev
-                    (map.fold (fun acc z v => z :: acc) nil 
-                              (RiscvMachine.getMem m))) in
+        List.rev
+          (map.fold (fun acc w v =>
+                       let z := word.unsigned w in
+                       if Z.eqb (snd (Z.div_eucl z 4)) 0
+                       then (Mem z) :: acc else acc) nil 
+                    (RiscvMachine.getMem m)) in
     pc ++ regs ++ mem.
   
   (* Observations are values, or silent (tau) *)
@@ -398,7 +400,7 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
     match tpc, taddr with
     | [Tpc pcdepth], [Tstack memdepth] =>
       if Nat.leb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
-      else (exception "Reaching bug")
+      else None 
     | _, _ => None
     end
                      
@@ -429,8 +431,13 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
   match tinstr with
   | [Tinstr] =>
     (* TODO: Relaxed in order for program to work: no stack-indexed writes? *)
-    match tpc, existsb (tag_eqb Tsp) taddr, trs, existsb (tag_eqb Tinstr) tmem with
-    | [Tpc depth], (*false*)_, [], false => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
+    match tpc, existsb (tag_eqb Tsp) taddr, trs, tmem with
+    | [Tpc depth], (*false*)_, [], [] =>
+        Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
+    | [Tpc depth], (*false*)_, [], [Tstack memdepth] =>
+      if Nat.eqb depth memdepth then
+        Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
+      else None
     | _, _, _, _ => None
     end
   | [Tinstr; Th1] =>

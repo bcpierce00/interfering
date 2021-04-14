@@ -773,27 +773,41 @@ From StackSafety Require Import SubroutineSimple.
 
 (* Property with printing. *)
 
-Definition prop_SimpleStackIntegrityStep fuel m p c :=
-  let fix aux fuel m p c :=
+Derive Show for Component.
+
+Instance ShowValue : Show Value :=
+  {| show v := show v |}.
+
+Fixpoint walk (ks : list Component) cm m p (c : context) m' (p' : PolicyState) (c' : context)
+         (cont : unit -> Checker) : Checker :=
+  match ks with
+  | [] => cont tt
+  | k :: ks' =>
+    match fst c k with
+    | Sealed _ =>
+      if Z.eqb (proj m k) (proj m' k)
+      then walk ks' cm m p c m' p' c' cont
+      else whenFail ("Integrity failure at component: " ++ show k ++ nl ++
+                                                        "Component values: " ++ show (proj m k) ++ " vs " ++ show (proj m' k) ++ nl ++
+                                                        printMachine m p cm)%string false
+    | _ => walk ks' cm m p c m' p' c' cont
+    end
+  end.
+
+Definition prop_SimpleStackIntegrityStep fuel m p cm ctx
+  : Checker.Checker :=
+  let fix aux fuel m p ctx : Checker.Checker :=
       match fuel with
-      | O => true
+      | O => collect "Out-of-Fuel" true
       | S fuel' => 
-        match mpcstep updateC (m,p,c) with
-        | None => true
+        match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
+        | None => collect "Failstop" true
         | Some (m', p', c', o) =>
-          andb
-            (List.forallb (fun k =>
-                             match fst c k with
-                             | Sealed _ =>
-                               Z.eqb (proj m k) (proj m' k)
-                             | _ => true
-                             end)
-                          (getComponents m'))
-            (aux fuel' m' p' c')
+          walk (getComponents m') cm m p ctx m' p' c'
+               (fun tt => aux fuel' m' p' c')
         end
       end in
-  aux fuel m p c.
-
+  aux fuel m p ctx.
 
 Definition defstackmap (i : LayoutInfo) (a : Addr) :=
   if (andb (Z.leb (stackLo i) a)
@@ -805,8 +819,7 @@ Definition defstackmap (i : LayoutInfo) (a : Addr) :=
 Definition prop_integrity :=
   let sm := defstackmap defLayoutInfo in
   forAll genMach (fun '(m,p,cm) =>
-(*  trace ("Next Run Starting..." ++ nl)%string *)
-  (SimpleStackIntegrityStepP (CodeMap_fromImpl cm) 42 m p (initC sm m))).
+                    (prop_SimpleStackIntegrityStep 42 m p cm (initC sm m))).
 
 Extract Constant defNumTests => "1000".
 QuickCheck prop_integrity. 
