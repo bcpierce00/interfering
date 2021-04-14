@@ -56,6 +56,7 @@
 \input{example1}
 
 \newcommand{\powerset}{\raisebox{.15\baselineskip}{\Large\ensuremath{\wp}}}
+\newcommand*{\rsp}{\textsc{sp}}
 
 \begin{document}
 
@@ -175,41 +176,12 @@ passed in registers) and a micropolicy-like enforcement mechanism. We
 also show how to accomodate stack-allocated parameter passing and
 coroutines.
 
-\bcp{this is also a
-  good place to admit that our definitions are tuned for micropolicies, if
-  we can find a succinct way to say it.}
-\sna{See above.}
-\BCP{I added it to the last paragraph (which is pretty close to the preceding
-  paragraph :-)  We should follow this up with some discussion in the (new)
+\bcp{ We should follow this up with some discussion in the (new)
   Assumptions section about how different enforcement mechanisms (us,
   StkTokens, maybe others) adopt different perspectives on what the stack is
 for and how it is organized and so lead to somewhat different notions of
 low-level safety.}
 
-% We argue \apt{do we?}\bcp{I guess we will not have time to.  Propose
-%   deleting this para.} that our properties are suited to a range of other
-% enforcement mechanisms. The strict stepwise properties can describe
-% mechanisms that catch errors immediately, as is typical. While the
-% observational properties are closely linked to lazy micro-policies they are
-% weak enough to be a lower bound that captures stack safety for any
-% reasonable enforcement mechanism.
-
-\apt{This is a good story, but does it describe the paper we are able to produce this week?
-  We were rejected before exactly because we claimed to have
-  a general criterion, but did not in fact demonstrate its generality (which is not
-  obvious). What has changed?}\bcp{I agree with these concerns. Deleted the
-  para about the general story.  Does the rest now avoid making (or
-  implying) claims that we can't defend?}
-\bcp{Also, I think we should save
-  WBCF for the intro---I can't find a way to discuss it here that is brief
-  and not confusing/distracting.}
-
-  % \ifaftersubmission\bcp{should we mention stktokens here?}
-  % \leo{Not sure. We almost never cite stuff in the abstract, do we?}
-  % \bcp{Some people say not to, but I think their argument is weak: I've
-  %   added Nick/Andre above.  But I'm not sure we want to get into stkTokens
-  %   in the abstract.}
-  % \fi
 \end{abstract}
 
 
@@ -350,13 +322,17 @@ a caller's stack frame are not read and written while its callees (and their cal
 executing, and WBCF says that callees always
 return to the point just after their call (if they return at all).
 \citet{Skorstengaard+19} formalize these properties by defining an idealized
-machine in which they hold {\em by construction}; an enforcement mechanism (in their case, hardware
-capabilities)
-can then be shown to guarantee stack safety by exhibiting a fully abstract
-embedding function
-from the idealized machine to an ordinary machine equipped with this
-enforcement mechanism.  \bcp{Many OOPSLA readers/reviewers will not
-  understand that sentence.}
+machine in which they hold {\em by construction};
+they then show that an enforcement
+mechanism (in their case, hardware capabilities) guarantees stack safety by
+proving that an ordinary machine with enforcement can simulate the idealized machine.
+%an enforcement mechanism (in their case, hardware
+%capabilities)
+%can then be shown to guarantee stack safety by exhibiting a fully abstract
+%embedding function
+%from the idealized machine to an ordinary machine equipped with this
+%enforcement mechanism.  \bcp{Many OOPSLA readers/reviewers will not
+%  understand that sentence.}
 %%
 %% While this work represents an important step in the right direction, we believe
 %% there is still room to craft an operational characterization
@@ -389,7 +365,6 @@ In applying these security concepts, we treat each caller as needing protection
 from its callee, even as that callee may need protection from its callee in turn.
 This differs from common practice in language-based security in that the
 confidentiality property applies to many nested subtraces within a single execution.
-\sna{How novel is this nesting?}
 {\em Integrity} says that a caller's local data is protected from modification by its callee,
 motivated by the reasoning principle that local data persists across a call. Its
 {\em stepwise} interpretation formalizes this very naturally: a caller's local data
@@ -409,9 +384,31 @@ is treated as a mere jump within the callee, and does not grant access to the ca
 data. So, even without WBCF, our stack safety properties rule out many control flow attacks.
 The attacker in such an instance is permitted to ``return'' so long as it avoids
 violating the integrity and confidentiality of the caller. Second, confidentiality
-contains temporal protections that LSE does not implicitly address.
-\apt{Maybe want to say a little more about this here, since it is a novelty wrt/ existing work?}
-\bcp{+1}\sna{TODO: Say a little more, but make sure it's accurate first.}
+contains temporal protections that LSE does not necessarily address. The intuition
+for LSE is that it protects the caller's stack frame, not necessarily memory that was
+previously allocated but now outside of the caller's frame. (Cheri-capability-based
+implementations of LSE {\em do} protect previously allocated data, typically by clearing
+it, but because it is a potential vector for leaking capabilities into the caller's frame,
+not as a goal of the property.)
+
+To illustrate the applicability of these properties, we perform randomized testing to
+validate that an existing enforcement mechanism does enforce them.
+\citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
+using tag-based \emph{micro-policies}~\citep{pump_oakland2015}, but offer no formal properties.
+We test against their {\em Depth Isolation} micro-policy, in which memory cells within each stack
+frame are tagged with the identity of the function activation
+that owns the frame, and access to those locations is then gated
+according to the activation that is currently executing. This is simple and corresponds
+to intuitive notions of stack safety, and we argue that by describing its behavior
+we approach a reasonable stack-safety property that other micro-policies can be
+validated against.
+
+Randomized testing is a relatively low-cost way to validate a potential enforcement
+mechanism; it finds flaws in the enforcement fast enough to be integrated into the workflow
+of enforcement development \citep{TestingNI:ICFP}. To demonstrate that the testing adequately
+covers potentially erroneous programs, we test intentionally buggy policies alongside
+the real one. If we can catch known bugs, we gain confidence that we can catch unknown ones,
+strengthening the validation of the enforcement mechanism.
 
 One challenge in characterizing stack safety formally is that in a low-level machine
 without built-in stacks, we are at the mercy of architectural
@@ -420,30 +417,24 @@ may have only a stack pointer while others add a frame pointer, in some systems 
 addresses and data live in separate stacks, and so on. We abstract over these choices
 as much as possible.
 
-A second challenge is that
-enforcement mechanisms may weaken their protections that in the name of efficiency,
-while arguing that they still capture stack safety in a meaningful sense.
-For example, \citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
-using tag-based \emph{micro-policies}~\citep{pump_oakland2015}.
-Memory cells within each stack frame are tagged with the
-identity of the function activation
-that owns the frame, and access to those locations is then gated
-according to the activation that is currently executing. Roessler and DeHon
-explore alternative versions of this basic idea, with different ways of identifying
-functions and deciding exactly which accesses are allowed.
+A second challenge is that enforcement mechanisms may weaken their protections
+in the name of efficiency, while arguing that they still capture stack safety in a meaningful sense.
+\citet{DBLP:conf/sp/RoesslerD18} explore alternative micro-policies, with different
+ways of identifying functions and deciding exactly which accesses are allowed.
 These vary in their efficiency and in the spatial and temporal precision of their
 security guarantees.
-The \emph{Depth Isolation} policy prevents a callee from writing outside its frame
+The Depth Isolation policy prevents a callee from writing outside its frame
 at all, which is simple and intuitively correct, but it must manually clear the tags
-on the frame on each return, which is very expensive. Conversely, the
+on the frame on each return, which is very expensive. Conversely, their
 \emph{Lazy Tagging and Clearing} policy improves
 performance by assigning locations to the active function when they are written, which
 permits  ``illicit'' writes to inaccessible stack frames so long as the
-written locations are not subsequently read by their ``real'' owners. Intuitively,
+written locations are not subsequently read by their ``real'' owners. This violates our
+straightforward properties, but ntuitively,
 this form of laziness is justified if any dangerous writes will
 ultimately be detected before they can affect program behavior.
 
-But what does ``affecting program behavior'' really mean? This micro-policy
+What does ``affecting program behavior'' really mean? This micro-policy
 calls for a second characterization of stack safety in terms of the externally
 observable behavior of a stack-safe system. Such a characterization will have the
 additional benefit of being more {\em extensional}, concerned primarily with the
@@ -454,35 +445,15 @@ To formalize this intuition, we develop an \emph{observational integrity} proper
 characterizes enforcement mechanisms that detect violations between the point when
 they occur and the point when they make an observable impact. Intuitively this property
 can be phrased as ``no visible reads after dangerous writes.''  We prove (in Coq) that stepwise
-integrity implies observational integrity.
-\sna{There is a bit of massaging old proofs to do here, and I don't recall if we
-  established that this was important.\apt{medium importance. it is obvious that
-    observational integerity allows behaviors that stepwise does not, but
-    maybe not obvious that the converse is not true too.}}
+integrity implies observational integrity. \sna{TODO: check this.}
+
 We additionally sketch an associated {\em observational confidentiality} property
-makes confidentiality extensional in the same way, although we do not know of a real
-enforcement mechanism that weakens confidentiality in this way.
-\apt{why bother mentioning it then?}
-\sna{If a relatively extensional characterization is a worthwhile contribution
-  in its own right, then it's worth mentioning that we have one. If not, then indeed,
-  we shouldn't mention it -- or get too excited about extensionality in general, because
-  lockstep isn't extensional.}
-Together, these form an {\em observational stack safety} that is highly extensional.
+makes confidentiality extensional in the same way, in order to form an
+{\em observational stack safety} that is highly extensional.
 We therefore argue that, despite its somewhat greater complexity,
 it may be a better minimal specification for
 stack safety enforcement mechanisms in general.
 
-\BCP{This paragraph doesn't apply to the lazy properties, so maybe it should
-be moved before they are introduced?}%
-To illustrate the applicability of these properties, we perform randomized testing to
-validate that \citeauthor{DBLP:conf/sp/RoesslerD18}'s Depth Isolation micro-policy enforces
-them. Randomized testing is a relatively low-cost way to validate a potential enforcement
-mechanism; it finds flaws in the enforcement fast enough to be integrated into the workflow
-of enforcement development \citep{TestingNI:ICFP}. To demonstrate that the testing adequately
-covers potentially erroneous programs, we test intentionally buggy policies alongside
-the real one. If the testing can differentiate correct implementations from buggy ones,
-it is an argument in favor of their correctness. \bcp{Hmm--don't understand
-  that sentence}
 %\apt{more to say?}\bcp{Yes---partly to underscore our claim that this is a
 %  significant contribution, and partly to give the reader some context for
 %  why this is part of our story.  E.g., ``One nice thing we can do with our
@@ -491,44 +462,20 @@ it is an argument in favor of their correctness. \bcp{Hmm--don't understand
 %  such an evaluation is to see whether property-based testing against this
 %  spec can distinguish correct implementations of the mechanism from buggy
 %  ones...''}
-Of course, as our testing reveals, \citeauthor{DBLP:conf/sp/RoesslerD18}'s Lazy Tagging and
-Clearing micro-policy does not enforce stepwise integrity.
-Unfortunately the existing Lazy Tagging and Clearing
-micro-policy does not quite enforce observable confidentiality either. %, as we show in
-%testing~\apt{really??},
+As it turns out, \citeauthor{DBLP:conf/sp/RoesslerD18}'s Lazy Tagging and
+Clearing micro-policy enforces observational integrity, but not confidentiality,
+whether stepwise or observational.
 But formalizing the ideal property allows us to see how it falls short -- a specific
-violation of the temporal aspect of confidentiality.
+violation of the temporal aspect of confidentiality occurs in corner cases where callees
+can leak data between one another.
 We propose  a variant of Lazy Tagging and Clearing that we believe \emph{does} enforce
-observational integrity, at some performance cost.\apt{but we're not testing that, right?}
-\rb{Not sure about the property part right now, the machine side of this is
-  pretty much done}
-\sna{It's aspirational so far, but there's no fundamental reason we can't test it. We may
-  need a caveat about how it's harder to test?}\apt{As per email discussion,
-  maybe we could have a property variant that \emph{does} match depth-based Lazy Tagging and
-  Clearing, by loosening the temporal safety properties?}
-\sna{I'm pretty sure for the main policy it's just lazy integrity, no confidentiality.
-  There was a variant Nick and Andre gave that would restrict the leaks to only be between
-  instances of the same function, so that's the same property under a weaker attacker model,
-  where we don't protect a function from itself.}
+confidentiality, albeit at some performance cost.
 
 Our initial description of these properties assumes a single simple stack with no sharing
 between callers and callees: all parameters and return values are passed in registers.  Later,
 we show how to refine it to allow passing of scalar stack data, granting a
 callee access to the caller's data. We do not model more sophisticated sharing,
-such as taking the address of a variable and treating it like a pointer. Doing so without
-protecting the variable is not interesting, and protecting would be better suited to
-a different kind of enforcement, such as a memory safety micro-policy or Cheri-style capability.
-\bcp{This is all a bit mysterious} \sna{Any less mysterious now?}
-
-
-\rb{So no pointer passing? Pass by reference is now discussed at the end of
-  Section 3, however it looks like things get tricky rather quickly.}
-\sna{The trick is that if a programmer is passing pointers, we can't presume their
-  intent -- how long should we permit memory to be shared? But if the compiler is passing
-  pointers, as in pass by reference, we have a clear sense of where sharing should stop.
-  \apt{N.B.Doing pass-by-reference properly requires that the passed variable is accessible
-    by all descendents, not just immediate callee, which is doable with depth tags but not
-    obviously with per-activation tags }}
+such as taking the address of a variable and treating it like a pointer.
 
 Finally, we define integrity and confidentiality properties for a coroutine system featuring
 a static layout, in which each coroutine's stack is constrained to a fixed region of memory.
@@ -670,22 +617,17 @@ and describe testing (\cref{sec:testing}).
 \Cref{sec:relwork} discusses related work, and
 \cref{sec:future} sketches directions for future work.
 
-\section{Assumptions and Threat Model}
-\label{sec:threat}
-
-\BCP{I would still advocate splitting this into two sections, just so the
-  transition from one to the other and the division of responsibility are
-  clear.  The first section could be called ``Setup'' or something like
-  that.}
-
-\newcommand*{\rsp}{\textsc{sp}}
+\section{Setup}
+\label{sec:setup}
 
 Our properties are defined in terms of an abstract machine model that makes very few
 assumptions about the concrete machine that instantiates it.  We assume a register
 machine with a program counter \(\PCname\); other
 details of the machine's ISA are unimportant. We assume that we know ahead of time
 the layout of memory, including where code lives and which addresses are within
-the bounds of the stack.  \BCP{What should we say about the heap?}
+the bounds of the stack. We do not model a heap; programs might choose to use memory
+that is neither code nor stack to store global variables, as a heap, etc., but our
+properties do not protect it or assume any particular behavior.
 
 Our stack-safety concepts depend
 critically on the notions of ``call'' and ``return,'' which are not fully explicit
@@ -712,8 +654,7 @@ action that would violate the security property;
 our properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
-\sna{This is awkward.}
-This division of policy state from machine state is helpful when reasoning about
+Dividing policy state from machine state helps us reason about
 enforcement mechanisms that keep a significant amount of data separate from the
 primary execution data to inform security. Obviously tag-based systems do this,
 with tags and extra policy state separated from and untouchable by application code.
@@ -729,7 +670,8 @@ function to create a distinct failstop condition. Other techniques such as
 software fault isolation~\citep{??} might never actually failstop, but fulfill
 the properties by rewriting code so that traces can never violate them.
 
-\paragraph*{Threat Model}
+\section{Threat Model}
+\label{sec:threat}
 
 Intuitively, stack safety means that a caller's stack frame is protected
 from a confused or malicious callee's attempts to read or write its private data.
@@ -2541,6 +2483,35 @@ harmless one? The properties in this section rely on our notion of
 observations to draw this distinction.
 
 \subsection{Observable Integrity}
+
+We will describe observable integrity in our most detailed setting. In the
+presence
+
+\definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
+\(f_\depth ~ \mach ~ (\_, \rtm, \_, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
+For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
+\(\components\) be the set of components \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid}{\sealed}\) or \(\instack{\stackid}{\passed{\depth,\depth'}}\)
+where \(|\rtm ~ \stackid| < \depth\) or \(\depth' < |\rtm ~ \stackid|\) .
+Then a system enjoys observable
+
+Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
+\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
+{\em stepwise stack confidentiality} in the coroutine setting if for all
+such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
+
+\definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
+\(f_\depth ~ \mach ~ (\_, \rtm, \_, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
+For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
+\(\components\) be the set of components \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid}{\_}\).
+Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
+\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
+{\em stepwise coroutine confidentiality} in the coroutine setting if for all
+such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
+
 
 \subsection{Observable Confidentiality}
 
