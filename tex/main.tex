@@ -14,7 +14,7 @@
 %% use defaults for review submission.
 \acmJournal{PACMPL}
 \acmVolume{1}
-\acmNumber{POPL} % CONF = POPL or ICFP or OOPSLA
+\acmNumber{SPLASH} % CONF = POPL or ICFP or OOPSLA
 \acmArticle{1}
 \acmYear{2021}
 \acmMonth{1}
@@ -679,7 +679,7 @@ machine with a program counter (\(\PCname\)); other
 details of the machine's ISA are unimportant. We assume that we know ahead of time
 the layout of memory, including where code lives and which addresses are within
 the bounds of the stack.\bcp{This implies no run-time code generation,
-  right?  This should probably be called out.}  
+  right?  This should probably be called out.}
 
 \BCP{What should we say about the heap?}
 
@@ -742,7 +742,7 @@ the properties by rewriting code so that traces can never violate them.
 Intuitively, stack safety means that the stack frame of each caller (and its
 those of its ancestors) is protected
 from attempts by a confused or malicious callee (including all its descendants)
-to read or write its private data. 
+to read or write its private data.
 The attacker model therefore treats every caller as a defender and its callee as
 an attacker, meaning that with nested calls, a single function invocation
 may be viewed in both ways.
@@ -771,7 +771,7 @@ will force to be executed from start to finish. The annotated call or return ins
 be the final instruction of the appropriate sequence. What if an annotated instruction exists outside
 such a sequence? We will statically rule out some scenarios with a well-formedness criterion
 on initial states: annotated instructions will initially be tagged apropriately, as the
-final instruction in the call or return sequence, and all blessed sequences will end with
+final instruction in the call or return sequence, and all blessed\bcp{undefined} sequences will end with
 annotated instructions. This is all we need for the policy to
 protect itself: it can then failstop if it would execute the blessed sequence out of order.
 So, even in our strong attacker model, we need very little in the way of restrictions on
@@ -1001,7 +1001,7 @@ addresses increase to the right.  \BCP{I am worried about the C-like syntax:
 I think the mental complexity and imprecision that it introduces may not be
 worth the concision that we get from it.  Couldn't we get most of the
 concision by just assuming an ISA with CISC-style single-instruction Call
-and Return?} 
+and Return?}
 
 %The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
 %at the time of the call. The stack can be used to pass arguments or return results
@@ -1140,7 +1140,7 @@ int f() {
 Meanwhile confidentiality intuitively states that a callee is unaware
 of the context of its call (except for its arguments and any global
 variables\bcp{We haven't talked about global variables.  We should.}).
-We state this in a style similar to {\em noninterference}~\citep{??}.
+We state this in a style similar\bcp{??} to {\em noninterference}~\citep{??}.
 Noninterference describes knowledge: it states that for some system components
 containing secret values, we can substitute any values whatsoever without changing the results
 of our computation. If there exists some value for which we see different results, then
@@ -1167,7 +1167,7 @@ in one step has a matching value at the end of the other step. And when we
 extend the model with a notion of external output, values that are outputted will need
 to match as well.
 
-We alternatively could imagine a version of stepwise confidentiality in which we explicitly
+\bcp{Remove this para?}We alternatively could imagine a version of stepwise confidentiality in which we explicitly
 track which addresses may be read (i.e., which have been initialized), and at each step
 guarantee that the step alters state identically to a step from a variant state. Then we
 wouldn't need to divide up the execution by calls. But the approach we take is more
@@ -1414,9 +1414,10 @@ void f() {
 
 %From the classic stack smashing attack to return oriented programming,
 One of the most pernicious ways to attack the stack is by hijacking control flow.
-Our stack safety properties do not assume that control flow is well-bracketed; rather,
+Our stack safety properties do not assume that control flow is
+well-bracketed\bcp{undefined term}; rather,
 they express what it means to protect data even in the presence of control-flow attacks.
-Consider example \ref{fig:controlflow}, a relative of the classic ``awkward example,''~\citep{??}.
+Consider example \ref{fig:controlflow}, a relative of the classic ``awkward example,''\bcp{??}~\citep{??}.
 (Here we show return addresses explicitly as line numbers, in the form $\#n$.)
 \apt{what do the colors mean in this example?}
 Function {\tt f} is called twice, at lines 2 and 4; it should therefore return to lines
@@ -1431,10 +1432,11 @@ integrity property?
 
 The key intuition is that to be considered as having returned to {\tt main}, {\tt f} needs to do more than just
 execute a return-labeled instruction: it must actually reach the appropriate
-{\em return target} in {\tt main}. In our context\apt{what's that?}, we keep a stack of return targets,
+{\em return target} in {\tt main}. In our context\apt{what's that?}, we keep
+a stack of return targets\bcp{do we still},
 which correspond to the depths at which stack frames have been sealed. A callee is
 only considered to have returned when it executes a return-annotated instruction
-and then reaches a valid return target. Only then do the sealed frames become unsealed.
+and then reaches a valid return target\bcp{what's that?}. Only then do the sealed frames become unsealed.
 
 In the example, on its first return, {\tt f} reaches its return target, because the
 \(\PCname\) is 3 after its return. But on the second, {\tt f} does not properly return,
@@ -1442,6 +1444,8 @@ but rather changes its stack pointer and jumps into {\tt main}'s code. Then {\tt
 attempts to overwrite the sealed value of {\tt x}, violating integrity.
 
 \paragraph*{Pass by Reference and Stack Arguments}
+\bcp{I wonder if this could be postponed so that we get to the formal
+  definitions for the basic property sooner...}
 
 \newcommand{\mainpassc}{magenta}
 
@@ -1638,7 +1642,7 @@ case: passing by value on the stack. Example \ref{fig:passingsimple} shows a sam
 a program that passes a value on the stack, without an attack.
 At the call, we add a new annotation \(P(\$SP)\) identifying a memory location to be
 passed, and our diagram displays it in magenta. The caller's frame locations that are not
-passed are sealed as usual. Just as we marked sealed memory with the depth of its owner,
+passed are sealed as usual. Just as we marked sealed memory with the depth of its owner\bcp{??},
 we do the same for passed memory -- but it has multiple owners. We keep track of the
 current depth of the active function next to the stack pointer in the diagram, for reference.
 The argument {\tt a} has
@@ -1684,10 +1688,10 @@ is the provence of a fine-grained memory safety policy, e.g. based on capabiliti
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
 
-We next describe our machine model. To make our definition of stack safety
+We next define our machine model precisely. To make our definition of stack safety
 as generic as possible, this section proposes an abstract interface to a
 machine model plus some kind of (software- or hardware-enforced) policy monitor.
-In~\cref{sec:enforcement}, we will instantiate this model with a concrete dynamic
+In~\cref{sec:enforcement}, we instantiate this model with a concrete dynamic
 policy enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
 
 \subsection{Values, States, and Observations}
@@ -1695,7 +1699,8 @@ policy enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
 The basic building blocks of the machine are {\em values} and {\em addresses}.
 Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\).
 %
-Our machine states are composed of {\em components} \(\component\), addressed either by
+Our machine states are composed of {\em components} \(\component\),
+addressed\bcp{no, the components are not addressed, they are addresses!} either by
 words (memory addresses) or by register names (\(\reg\)) drawn from some set
 \(\REGS\).
 %
@@ -1749,12 +1754,12 @@ written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
 \subsection{Policies}
 
 We now present our model of enforcement, which we introduced informally in \Cref{sec:threat}.
-A policy is a general model of an enforcement mechanism, consisting of a set of policy
+A {\em policy} consists of a set of policy
 states \(\pol \in \POLS\) and a policy step function \((\mach, \pol) \polstep \pol' \in
 \MACHS \times \POLS \rightharpoonup \POLS\). This step function is partial;
 it is undefined on input configurations that correspond to a policy fault. The policy
 can see the machine state, but cannot modify it. We assume that the
-compiler provides an initial policy state \(\pol_0\) to accompany the initial machine state.
+compiler\bcp{why?} provides an initial policy state \(\pol_0\) to accompany the initial machine state.
 %
 A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
 \Cref{sec:enforcement}.
@@ -1780,14 +1785,15 @@ will be finite iff a policy fault occurs.
 
 Separate from the machine state, our formal properties will keep track of additional context
 information representing the history of the run. The following definitions are parameterized
-over an arbitrary set of context states, \(\CONTEXTS\), annotations \(\ANNS\),
+over an arbitrary\bcp{why?} set of context states, \(\CONTEXTS\), annotations \(\ANNS\),
 an initial context state \(\context_0 \in \CONTEXTS\), and a context step function
 \(\mach, \context, \anns \constep \context' \in \MACHS \times \CONTEXTS
 \times \powerset(\ANNS) \rightarrow \CONTEXTS\). We also assume a set of function identifiers
 \(\FUNIDS\) and the existence of a \emph{code map} \(\codemap \in \WORDS \rightharpoonup \FUNIDS \times \powerset(\ANNS)\)
 that relates each code address to its owning function and set of annotations.
 We lift contexts into an MP trace in much the same way as we lifted policy states to get
-a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times \CONTEXTS\).
+a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
+\CONTEXTS\).  \bcp{I don't get the intuition for this whole para.}
 
 \judgmentthree{\(\mpstate{\mach}{\pol} \stepstopol[\obs] \mpstate{\mach'}{\pol'}\)}
               {\(\codemap ~ (\mach ~ \PCname) = \funid, \anns\)}
@@ -1798,7 +1804,7 @@ a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times \CONTEXTS\).
 \subsection{Traces}
 \label{sec:traces}
 
-A trace over a type \(\TRACEELEMS\) is a nonempty, finite or infinite sequence of
+A trace over a type \(\TRACEELEMS\)\bcp{``over a type A'' is a Coq-ism} is a nonempty, finite or infinite sequence of
 \(\TRACEELEMS\)s; we write \(\TRACE{\TRACEELEMS}\) for the set of traces over
 \(\TRACEELEMS\). We will mostly be concerned with sequences of MPC-states,
 called \emph{machine traces} and denoted \(\MPCT \in \TRACE{\MPCS}\). %, and of observations.
@@ -1809,7 +1815,7 @@ The ``trace-of'' operator, written \(\mpcstatename \hookrightarrow \MPCT\),
 coinductively relates an initial state with the trace of states
 produced by repeated application of step, and potentially cut short by
 the policy component. The {\sc Default} rule applies only if the other does not.
-(We use juxtaposition of an element and a trace to represent ``cons.'')
+(We use juxtaposition of an element and a trace to represent ``cons.''\bcp{Ugh})
 
 \begin{minipage}{.4\textwidth}
 \judgmenttwo{\(\mpcstatename \stepstocon \mpcstatename'\)}
@@ -1831,6 +1837,8 @@ these operators to project out of an machine-trace a trace of machine states,
 policy states, and contexts, respectively.
 
 \paragraph*{Observations-Of}
+
+\bcp{Could any of this be postponed?}
 
 The ``observations-of'' operator, written \(\pi_\obs\), \apt{since this isn't
   actually a projection, it is slightly confusing to use \(\pi\)} takes a machine trace and
@@ -1919,7 +1927,7 @@ running \(\mpcstatename\) up to \(f\)'') and similarly\apt{??} for traces with p
 In particular, we wish to formulate properties about consecutive subtraces
 in which the context obeys a given predicate. This will commonly be used to extract
 individual calls from a trace by taking subtraces in which the stack is
-at or below a given depth. If \(f \subseteq \MACHS \times \CONTEXTS\), then
+at or below a given depth\bcp{needed??}. If \(f \subseteq \MACHS \times \CONTEXTS\), then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 ``\(\mpcstatename\) segmented by \(f\) yields a subtrace \(\MPCT\).''
 
@@ -2005,7 +2013,8 @@ steps for a long time before producing some output.
 We are finally ready for our definition of stack safety. We begin
 by describing how we model knowledge about the program structure,
 then dive into the formal definitions of local state encapsulation and
-well-bracketed control flow, which together constitute stack safety.
+well-bracketed control flow, which together constitute stack safety\bcp{not
+  any more?}.
 Initially we will focus on a simple stack model, with a single stack
 that doesn't share between caller and callee. All arguments are passed
 in registers.
@@ -2025,11 +2034,11 @@ considers itself to have been returned to.
 
 Each system component will be assigned to a {\em domain}, which may be {\em Outside}
 of the stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed}
-at a particular depth. Each caller will register a {\em target} condition -- a
+at a particular depth\bcp{What about code??}. Each caller will register a {\em target} condition -- a
 predicate on machine states that must hold for it to consider itself active.
 A context is a pair of a ``domain map'' from components to domains, and a
 ``return target list,'' which is a stack of targets, one for each caller awaiting
-return.
+return.  \ifaftersubmission\bcp{spacing is funny}\fi
 
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth}\]
 \[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
@@ -2103,7 +2112,8 @@ if for all components \(\component\) such that \(\mach ~ \component \not = \mach
 This is written \(\mach,\mach' \diamond \nach,\nach'\).
 
 \definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep} if their adjacent pairs
-change together, written as a coinductive relation \(\machT \doteq \nachT\):
+change together, written as a coinductive relation \(\machT \doteq
+\nachT\):\bcp{People may not be familiar with the notation}
 
 \begin{minipage}{.3\textwidth}
 \judgment{}
@@ -2336,7 +2346,7 @@ Depth Isolation from \citet{DBLP:conf/sp/RoesslerD18}, can implement
 the formal stack-safety property described in the previous section: it in
 fact enforces a stronger, inductive version of that property which strengthens the
 local state encapsulation component by checking for integrity and
-confidentiality violations at every step of the callee's execution trace.
+confidentiality violations at every step of the callee's execution trace. \bcp{Examples?}
 
 %\paragraph*{Micro-Policies}
 %
@@ -2355,7 +2365,8 @@ the instruction's inputs ($\PCname$, registers, memory) and on the instruction i
 one of two outcomes: either the instruction is allowed to execute (and generates
 tags for the result of the operation and the new $\PCname$), or the machine
 fail-stops with a policy violation.
-\citeauthor{pump_oakland2015} have shown that a wide range of micro-policies can
+\citeauthor{pump_oakland2015}\bcp{and PIPE, if there are any references to
+  cite} have shown that a wide range of micro-policies can
 be defined using this scheme.
 
 Efficient execution of these micro-policies relies on hardware implementations,
@@ -2424,7 +2435,7 @@ the program where the contour of the stack-safety property changes:
 \end{itemize}
 
 This discipline suffices to enforce local stack encapsulation.
-To implement it,  we define blessed instruction sequences
+To implement it,  we define ``blessed'' instruction sequences
 intended to appear at the entry and exit of each function,
 which manipulate tags as just described in addition to performing the
 usual calling convention tasks of saving/restoring the return address to/from
@@ -2614,9 +2625,8 @@ convention that uses local capabilities to preserve local state
 encapsulation and well-bracketed control flow, using a logical
 relation to reason about the stack safety of concrete
 programs. Although the required hardware support is readily available
-in capability machines like CHERI\bcp{including linear capabilities?? or
-  don't they use them in this paper?}, this technique incurs significant
-costs\bcp{This is the pot calling the kettle black}, because it requires the entire unused part of the stack to be
+in capability machines like CHERI, this technique incurs significant
+costs, because it requires the entire unused part of the stack to be
 cleared whenever a security boundary is crossed. Their logical
 relation captures capability safety without ``externally observable
 side-effects (like console output or memory access traces).'' \bcp{Not very clear:}In the
@@ -2645,19 +2655,19 @@ Their proof of full abstraction uses a standard notion of components, which
 import and export functions through their interfaces; their model of
 observations is limited to cotermination.
 
-We believe that the linear capability machines introduced by
+We conjecture that the linear capability machines introduced by
 \citep{Skorstengaard+19}, in combination with the StkTokens calling convention,
 can be modeled in our framework and satisfy our definition of stack safety in
 \cref{sec:lse-and-wbcf}. Further, we expect them to satisfy the even stronger
-property developed in \cref{sec:enforcement}. Proving these conjectures would
-involve materializing their definitions of local state encapsulation and
-well-bracketed control flow, which exist only in enmeshed form as part of the
+property developed in \cref{sec:enforcement}. Proving\bcp{or testing!} these conjectures would
+involve materializing\bcp{?} their definitions of local state encapsulation and
+well-bracketed control flow, which exist only in enmeshed\bcp{?} form as part of the
 semantics of the capability machines. The main practical limitation of StkTokens
 is its reliance on linear capabilities, as it is unclear now they could be added
-to practical capability machines, especially in terms of efficiency---previous
+to practical capability machines, especially in terms of efficiency (previous
 work on micro-policies \citep{yannis-report} has shown how to use that framework
 to implement linear return capabilities.\bcp{But IIUC the Dover realization
-  of micro-policies can't do this...?}
+  of micro-policies can't do this...?})
 
 \paragraph{Protecting the Stack with Micro-Policies}
 %
@@ -2681,22 +2691,25 @@ performance.
 \paragraph{Heap Safety as a Security Property}
 
 Heap safety, like stack safety, may be framed as a security property
-in the form of noninterference~\citep{DBLP:conf/post/AmorimHP18}. Just
-like~\citeauthor{DBLP:conf/post/AmorimHP18} give a rigorous
+in the form of
+noninterference~\citep{DBLP:conf/post/AmorimHP18}\ifaftersubmission\bcp{Should
+be ``Azedevo et al.''}\fi. Just
+as~\citeauthor{DBLP:conf/post/AmorimHP18} give a rigorous
 characterization of the meaning of (heap) memory safety, in this paper
 we aim to do the same for the stack.\bcp{Let's describe their work in a bit
   more detail.}
 %
 Their model describing safety of shared stack-allocated
-objects extends naturally to heap safety, complicated by the fact that
-these objects are not deallocated by returns, and therefore a
+objects\bcp{??} extends naturally to heap safety, complicated by the fact that
+these objects are not deallocated by returns\bcp{??}, and therefore a
 function's privilege may increase or decrease after its entry
 point. For instance, if a callee allocates a heap object and returns
 the pointer to its caller, that object's addresses become accessible
 in contradiction to a contour computed at the caller's entry. So such
 an extension must enforce trace confidentiality and integrity
 properties separately on continuous segments of each call, with
-contours computed at each crossing between caller and callee.
+contours computed at each crossing between caller and callee.  \bcp{Didn't
+  understand last sentence.}
 
 \section{Future Work}
   \label{sec:future}
