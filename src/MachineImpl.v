@@ -177,7 +177,7 @@ Extract Constant exception =>
       if Z.eqb (word.unsigned (getPc m))
                (word.unsigned (getPc s'))
       then
-        exception "Equal pc after step!"
+        (s', Tau)
       else          
       (s', Tau)
     end
@@ -391,6 +391,9 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   let tpc := pctags p in
   trs <- map.get (regtags p) rs;
   match tinstr with
+  | [Tinstr] => Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR *)
+                     
+  (*
   | [Tinstr] =>
     match tpc, taddr with
     | [Tpc pcdepth], [Tstack memdepth] =>
@@ -398,6 +401,7 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
       else None
     | _, _ => None
     end
+   *)
   | [Tinstr; Tr1] =>
     match trs, taddr with
     | [Tsp], [Tpc _] => Some (p <| pctags := pctags p ++ [Tr2] |>
@@ -429,7 +433,8 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
     | _, _, _, _ => None
     end
   | [Tinstr; Th1] =>
-    trace (show (tpc, existsb (tag_eqb Th1) tpc, trs, taddr) ++ nl)%string (
+    (*    trace (show (tpc, existsb (tag_eqb Th1) tpc, trs, taddr) ++ nl)%string *)
+    ( 
     match existsb (tag_eqb Th1) tpc, trs, taddr with
     | true, cons (Tpc depth) nil, cons Tsp nil =>
       Some (p <| pctags := filter (tag_neqb Th1) tpc ++ [Th2] |>
@@ -448,7 +453,8 @@ Definition decodeI (w : w32) : option InstructionI :=
   end.
 
 Definition pstep (mp : MPState) : option PolicyState :=
-  trace ("Entering pstep..." ++ nl)%string (
+  (*  trace ("Entering pstep..." ++ nl)%string *)
+  (
   let '(m, p) := mp in
   let pc := getPc m in
   w <- loadWord (getMem m) pc;
@@ -491,12 +497,16 @@ Definition mpstep (mp : MPState) : option (MPState * Observation) :=
       end in
 
   
-  trace ("Entering mpstep with" ++ show (word.unsigned (getPc (ms mp))) ++ " @ " ++ show (pctags (ps mp)) ++ " : " ++ instr ++ nl
-        )%string
+(*  trace ("Entering mpstep with" ++ show (word.unsigned (getPc (ms mp))) ++ " @ " ++ show (pctags (ps mp)) ++ " : " ++ instr ++ nl
+        )%string*)
         (
   p' <- pstep mp; 
   match step (ms mp) with
-  | (m', o) => Some (m', p', o)
+  | (m', o) =>
+    if Z.eqb (word.unsigned (getPc (ms mp)))
+             (word.unsigned (getPc m'))
+    then None (* error *)
+    else Some (m', p', o)
   end
     )
 .
