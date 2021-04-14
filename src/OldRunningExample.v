@@ -160,4 +160,4 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-Compute (run 35 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
+Compute (run 40 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
