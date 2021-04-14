@@ -47,41 +47,42 @@ Let RTMP2 : Z := 21.
    needed. The related well-formedness checks are assumed here.  No
    restrictions are currently put on the use of passed arguments,
    e.g., in the case of pointers. *)
-Definition program : list Instruction :=
-  (* 000 *) [IInstruction (Sw SP 0 (-4)); (* Hackily initialize stash *)
-  (* 004 *) IInstruction (Jal RA 8); (* Call main *)
-  (* 008 *) IInstruction (Beq 0 0 0); (* Finish execution (loop) *)
+Definition program : list Instruction := map IInstruction
+  (* 000 *) [Sw SP 0 (-4); (* Hackily initialize stash *)
+  (* 004 *) Jal RA 8; (* Call main *)
+  (* 008 *) Beq 0 0 0; (* Finish execution (loop) *)
   (* main *)
-  (* 012 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 016 *) IInstruction (Addi SP SP 12); (* H2 *)
-  (* 020 *) IInstruction (Sw SP 0 (-8)); (* Init x *)
-  (* 024 *) IInstruction (Sw SP 0 (-4)); (* Init y *)
-  (* 028 *) IInstruction (Addi RARG SP (-8));
-  (* 032 *) IInstruction (Sw SP RARG 0); (* Store argument to f *)
-  (* 036 *) IInstruction (Jal RA 44); (* First call to f *)
-  (* 040 *) IInstruction (Sw SP 0 (-8)); (* Reset x *)
-  (* 044 *) IInstruction (Addi RARG SP (-4));
-  (* 048 *) IInstruction (Sw SP RARG 0); (* Store argument to f *)
-  (* 052 *) IInstruction (Jal RA 28); (* Second call to f *)
-  (* 056 *) IInstruction (Lw RRES SP (-8));
-  (* 060 *) IInstruction (Sw SP 0 (-8)); (* Clear x *)
-  (* 064 *) IInstruction (Sw SP 0 (-4)); (* Clear y *)
-  (* 068 *) IInstruction (Lw RA SP (-12)); (* R1 *)
-  (* 072 *) IInstruction (Addi SP SP (-12)); (* R2 *)
-  (* 076 *) IInstruction (Jalr RA RA 0); (* R3 *)
+  (* 012 *) Sw SP RA 0; (* H1 *)
+  (* 016 *) Addi SP SP 12; (* H2 *)
+  (* 020 *) Sw SP 0 (-8); (* Init x *)
+  (* 024 *) Sw SP 0 (-4); (* Init y *)
+  (* 028 *) Addi RARG SP (-8);
+  (* 032 *) Sw SP RARG 0; (* Store argument to f *)
+  (* 036 *) Jal RA 44; (* First call to f *)
+  (* 040 *) Sw SP 0 (-8); (* Reset x *)
+  (* 044 *) Addi RARG SP (-4);
+  (* 048 *) Sw SP RARG 0; (* Store argument to f *)
+  (* 052 *) Jal RA 28; (* Second call to f *)
+  (* 056 *) Lw RRES SP (-8);
+  (* 060 *) Sw SP 0 (-8); (* Clear x *)
+  (* 064 *) Sw SP 0 (-4); (* Clear y *)
+  (* 068 *) Lw RA SP (-12); (* R1 *)
+  (* 072 *) Addi SP SP (-12); (* R2 *)
+  (* 076 *) Jalr RA RA 0; (* R3 *)
   (* f *)
-  (* 080 *) IInstruction (Sw SP RA 4); (* H1 (stores RA after the arg in SP+0) *)
-  (* 084 *) IInstruction (Addi SP SP 8); (* H2 (increments SP by two: arg and RA) *)
-  (* 088 *) IInstruction (Addi RTMP1 0 stash_addr);
-  (* 092 *) IInstruction (Lw RTMP2 RTMP1 0); (* Keep the updated contents of stash in RTMP2 *)
-  (* 096 *) IInstruction (Bne RTMP2 0 12); (* Does stash hold a value? *)
-  (* 100 *) IInstruction (Lw RTMP2 SP (-8));
-  (* 104 *) IInstruction (Sw RTMP1 RTMP2 0); (* If it doesn't, store argument *)
-  (* 108 *) IInstruction (Addi RTMP1 0 5); (* Either way, write 5 to that address *)
-  (* 112 *) IInstruction (Sw RTMP2 RTMP1 0);
-  (* 116 *) IInstruction (Lw RA SP (-4)); (* R1 *)
-  (* 120 *) IInstruction (Addi SP SP (-8)); (* R2 *)
-  (* 124 *) IInstruction (Jalr RA RA 0)] (* R3 *)
+  (* 080 *) Sw SP RA 4; (* H1 (stores RA after the arg in SP+0) *)
+  (* 084 *) Addi SP SP 8; (* H2 (increments SP by two: arg and RA) *)
+  (* 088 *) Addi RTMP1 0 stash_addr;
+  (* 092 *) Lw RTMP2 RTMP1 0; (* Keep the updated contents of stash in RTMP2 *)
+  (* 096 *) Bne RTMP2 0 12; (* Does stash hold a value? *)
+  (* 100 *) Lw RTMP2 SP (-8);
+  (* 104 *) Sw RTMP1 RTMP2 0; (* If it doesn't, store argument *)
+  (* 108 *) Addi RTMP1 0 5; (* Either way, write 5 to that address *)
+  (* 112 *) Sw RTMP2 RTMP1 0;
+  (* Clear arguments! *)
+  (* 116 *) Lw RA SP (-4); (* R1 *)
+  (* 120 *) Addi SP SP (-8); (* R2 *)
+  (* 124 *) Jalr RA RA 0] (* R3 *)
 .
 
 Let instrTags  := [Tinstr].
