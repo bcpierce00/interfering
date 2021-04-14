@@ -1699,6 +1699,9 @@ communicates to the outside world:
 This step function is total, so the machine's execution traces
 (defined in \cref{sec:traces}) are infinite.
 
+Observations are only essential for describing the extensional properties
+described in Section~\ref{sec:lazy}, but for simplicity, we include them
+in the machine model from the beginning.
 We choose to model observations explicitly, rather than simply treating
 a subset of registers or memory as being observable.  This choice gives
 us the flexibility to treat programs as observationally equivalent even when
@@ -1711,7 +1714,8 @@ their internal states may differ.
 %does not allow for an interesting weaker-but-more-efficient enforcement
 %mechanism. We will come back to this point in \Cref{sec:lazy}.
 
-In the running example of \Cref{sec:running-example},
+\apt{This para is out of date. Do we want to say something equivalent
+  about new examples (hard, because they are C-based).}
 $\WORDS$ is the
 set of 64-bit integers and $\REGS$ is the set $\{r_0, \cdots, r_{31}\}
 \cup \{\PCname,\SP\}$. Observations are writes to the
@@ -1746,6 +1750,7 @@ by combining it with the regular step function for machine states.
             {\(\mpstate{\mach}{\pol} \stepstopol[\obs]
                \mpstate{\mach'}{\pol'}\)}
 
+\noindent
 This combined step function is also partial, and traces of the machine-with-policy
 will be finite iff a policy fault occurs.
 
@@ -1755,17 +1760,16 @@ Separate from the machine state, our formal properties will keep track of additi
 information representing the history of the run. The following definitions are parameterized
 over an arbitrary set of context states, \(\CONTEXTS\), annotations \(\ANNS\),
 an initial context state \(\context_0 \in \CONTEXTS\), and a context step function
-\(\mach, \context, \ann \in \powerset \ANNS \constep \context' \in \MACHS \times \CONTEXTS
-\times \ANNS \rightarrow \CONTEXTS\). We also assume for any set of annotations that we have
-code maps, with \(\FUNIDS\) a set of function identifiers:
-\[\codemap \in \WORDS \rightharpoonup \FUNIDS \times \powerset(\ANNS)\]
-
+\(\mach, \context, \anns \constep \context' \in \MACHS \times \CONTEXTS
+\times \powerset(\ANNS) \rightarrow \CONTEXTS\). We also assume a set of function identifiers
+\(\FUNIDS\) and the existence of a \emph{code map} \(\codemap \in \WORDS \rightharpoonup \FUNIDS \times \powerset(\ANNS)\)
+that relates each code address to its owning function and set of annotations.
 We lift contexts into an MP trace in much the same way as we lifted policy states to get
 a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times \CONTEXTS\).
 
 \judgmentthree{\(\mpstate{\mach}{\pol} \stepstopol[\obs] \mpstate{\mach'}{\pol'}\)}
-              {\(\codemap ~ (\mach ~ \PCname) = \funid, \ann\)}
-              {\(\mach, \context, \ann \constep \context'\)}
+              {\(\codemap ~ (\mach ~ \PCname) = \funid, \anns\)}
+              {\(\mach, \context, \anns \constep \context'\)}
               {\(\mpcstate{\mach}{\pol}{\context} \stepstocon[\obs]
                 \mpcstate{\mach'}{\pol'}{\context'}\)}
 
@@ -1775,7 +1779,7 @@ a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times \CONTEXTS\).
 A trace over a type \(\TRACEELEMS\) is a nonempty, finite or infinite sequence of
 \(\TRACEELEMS\)s; we write \(\TRACE{\TRACEELEMS}\) for the set of traces over
 \(\TRACEELEMS\). We will mostly be concerned with sequences of MPC-states,
-called \emph{machine traces} and denoted \(\MPCT \in \TRACE{\MPCS}\), and of observations.
+called \emph{machine traces} and denoted \(\MPCT \in \TRACE{\MPCS}\). %, and of observations.
 
 \paragraph*{Trace-Of}
 
@@ -1806,7 +1810,8 @@ policy states, and contexts, respectively.
 
 \paragraph*{Observations-Of}
 
-The ``observations-of'' operator, written \(\pi_\obs\), takes a machine trace and
+The ``observations-of'' operator, written \(\pi_\obs\), \apt{since this isn't
+  actually a projection, it is slightly confusing to use \(\pi\)} takes a machine trace and
 creates a trace of observations corresponding to the observations of each step in
 the trace. It uses a coinductive helper \(\mathit{obsforward}\) that relates an
 initial observation, a machine-trace, and an observation trace:
@@ -1826,7 +1831,8 @@ Then to take the observations from any particular trace, we start with a \(\tau\
 
 In a similar fashion, we define \(\mpcstatename \hookrightarrow \MPCT\)
 to relate a machine-policy-context state triple to the MPCO-trace
-induced by the step function.
+induced by the step function.\apt{?? This looks indistinguishable
+  from the \(\hookrightarrow\) we've already defined.}
 
 \paragraph*{Head and Last}
 
@@ -1878,7 +1884,7 @@ for convenience.
 %
 If \(f\) is a predicate on machine states, we define \(\mpcstatename
 \hookrightarrow \MPCT | f\) (read ``\(\MPCT\) is the prefix of
-running \(\mpcstatename\) up to \(f\)'') and similarly for traces with policies:
+running \(\mpcstatename\) up to \(f\)'') and similarly\apt{??} for traces with policies:
 
 \begin{center}
 \judgmenttwo{\(\mpcstatename \hookrightarrow \MPCT'\)}
@@ -1888,11 +1894,11 @@ running \(\mpcstatename\) up to \(f\)'') and similarly for traces with policies:
 
 \paragraph*{Context Segments}
 
-In particular, we wish to formulate properties around consecutive subtraces
+In particular, we wish to formulate properties about consecutive subtraces
 in which the context obeys a given predicate. This will commonly be used to extract
 individual calls from a trace by taking subtraces in which the stack is
 at or below a given depth. If \(f \subseteq \MACHS \times \CONTEXTS\), then
-we have \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
+we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 ``\(\mpcstatename\) segmented by \(f\) yields a subtrace \(\MPCT\).''
 
 \begin{center}
@@ -2221,17 +2227,17 @@ Now we can inductively define the context update function; as these could be amb
 they apply in the order presented.
 
 \begin{center}
-  \judgment{\(\mach,\context,\ann \stepstocon (\domMap,\depth)\)}
-           {\(\mach,\context,(\{\callmap\} \cup \ann) \stepstocon
+  \judgment{\(\mach,\context,\anns \stepstocon (\domMap,\depth)\)}
+           {\(\mach,\context,(\{\callmap\} \cup \anns) \stepstocon
              (\push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1)\)}
-  \judgment{\(\mach,\context,\ann \stepstocon (\domMap,\depth)\)}
-           {\(\mach,\context,(\{\retmap\} \cup \ann) \stepstocon
+  \judgment{\(\mach,\context,\anns \stepstocon (\domMap,\depth)\)}
+           {\(\mach,\context,(\{\retmap\} \cup \anns) \stepstocon
              \mach',(\pop{\domMap}{\depth},\depth-1)\)}
-  \judgment{\(\mach,\context,\ann \stepstocon (\domMap,\depth)\)}
-           {\(\mach,\context,(\{\passmap ~ P\} \cup \ann) \stepstocon
+  \judgment{\(\mach,\context,\anns \stepstocon (\domMap,\depth)\)}
+           {\(\mach,\context,(\{\passmap ~ P\} \cup \anns) \stepstocon
              \domMap[P ~ \mach \mapsto \passed{\depth}], \depth)\)}
-  \judgment{\(\mach,\context,\ann \stepstocon (\domMap,\depth)\)}
-           {\(\mach,\context,(\{\sharemap ~ P\} \cup \ann) \stepstocon
+  \judgment{\(\mach,\context,\anns \stepstocon (\domMap,\depth)\)}
+           {\(\mach,\context,(\{\sharemap ~ P\} \cup \anns) \stepstocon
              \domMap[P ~ \mach \mapsto \shared{\depth}], \depth)\)}
   \judgment{}
            {\(\mach,\context,\_ \stepstocon \context\)}
@@ -2324,9 +2330,9 @@ Recall that our properties use a compiler-derived code-map determine
 which addresses are instructions and which functions they belong to, as well
 as annotating them as calls, returns, and yields, as well as sharing information.
 We now extend it with an annotation for valid entry points:
-\[\ann \in \ANNS ::= \powerset(\{\callmap, \retmap, \yieldmap, \entmap\} \cup
-\{\sharemap ~ P | P \subseteq \MACHS \times \COMPONENTS \} \cup
-\{\passmap ~ P | P \subseteq \MACHS \times \COMPONENTS \})\]
+\[\ann \in \ANNS ::= \callmap + \retmap + \yieldmap +  \entmap + 
+\sharemap(P \subseteq \MACHS \times \COMPONENTS) +
+\passmap(P \subseteq \MACHS \times \COMPONENTS)\]
 
 \definition%{Control Separation}
 
