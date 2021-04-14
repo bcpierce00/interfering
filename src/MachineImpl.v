@@ -252,6 +252,8 @@ Inductive Tag : Type :=
 | Tcall
 | Th1
 | Th2
+| Th3
+| Th4    
 | Tinstr
 | Tpc (n : nat)
 | Tr1
@@ -269,6 +271,8 @@ Definition tag_eqb (t1 t2 :  Tag) : bool :=
   | Tcall, Tcall
   | Th1, Th1
   | Th2, Th2
+  | Th3, Th3
+  | Th4, Th4           
   | Tinstr, Tinstr
   | Tr1, Tr1
   | Tr2, Tr2
@@ -287,6 +291,14 @@ Definition calleeTag : Tag := Th1.
 Definition TagSet : Type := list Tag.
 Definition TagMap : Type := Zkeyed_map TagSet.
 
+Fixpoint TagSet_eqb l1 l2 :=
+  match l1, l2 with
+  | nil,nil => true
+  | cons t1 l1', cons t2 l2' =>
+    andb (tag_eqb t1 t2) (TagSet_eqb l1' l2')
+  | _, _ => false
+  end.
+
 (* Map of memory tags *)
 Record PolicyState : Type :=
   {
@@ -298,6 +310,23 @@ Record PolicyState : Type :=
 
 Instance etaPolicyState : Settable _ :=
   settable! Build_PolicyState <nextid; pctags; regtags; memtags>.
+
+  (* Project what we care about from the RiscV state. *)
+  Definition pproj (p:  PolicyState) (k: Component):  TagSet :=
+    match k with
+    | Mem a =>
+      match map.get (memtags p) a with
+      | Some t => t
+      | _ => nil
+      end
+    | Reg r =>
+      match map.get (regtags p) r with
+      | Some t => t
+      | _ => nil
+      end
+    | PC => pctags p
+    end.
+
 
 (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.
@@ -343,7 +372,7 @@ Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : op
     end
   | [Tinstr; Th2] =>
     match existsb (tag_eqb Th2) tpc, trs with
-    | true, [Tsp] => Some (p <| pctags := filter (tag_neqb Th2) tpc |>
+    | true, [Tsp] => Some (p <| pctags := filter (tag_neqb Th2) tpc ++ [Th3] |>
                              <| regtags := map.put (regtags p) rd [Tsp] |>)
     | _, _ => None
     end
@@ -449,7 +478,27 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
               <| memtags := map.put (memtags p) addr [Tpc depth] |>)
     | _, _, _ =>
       None
-    end
+    end)
+  | [Tinstr; Th3] =>
+    (* trace (show (tpc, existsb (tag_eqb Th3) tpc, trs, taddr) ++ nl)%string  *)
+    ( 
+    match tpc, taddr with
+    | ([Tpc depth; Th3]), cons Tsp nil =>
+      Some (p <| pctags := filter (tag_neqb Th3) tpc ++ [Th4] |>
+              <| memtags := map.put (memtags p) addr [Tpc depth] |>)
+    | _, _ =>
+      None
+    end)
+  | [Tinstr; Th4] =>
+    (*    trace (show (tpc, existsb (tag_eqb Th1) tpc, trs, taddr) ++ nl)%string *)
+    ( 
+    match tpc, taddr with
+    | ([Tpc depth; Th4]), cons Tsp nil =>
+      Some (p <| pctags := filter (tag_neqb Th4) tpc |>
+              <| memtags := map.put (memtags p) addr [Tpc depth] |>)
+    | _, _ =>
+      None
+    end      
       )
   | _ => None
   end.
