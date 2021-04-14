@@ -252,7 +252,7 @@ our attacker model. \BCP{I am still not clear in what way, exactly.}
 \newcommand*{\MemoryLabel}[3]{\raisebox{#2}{\makebox(0,0){\hspace{#1}#3}}}
 \newcommand{\memoryaddrs}[2][]
   {
-    \MemoryLabel{#2}{2em}{\SP #1}
+    \MemoryLabel{#2}{2em}{$\downarrow$\SP #1}
   }
 
 %\begin{figure}
@@ -915,49 +915,67 @@ rewriting or capability-based techniques, though perhaps with less elegance.
 
 \begin{figure}
 
-\begin{subfigure}{.4\textwidth}
+\begin{subfigure}{.2\textwidth}
+{\small
 \begin{verbatim}
 int main() {
-0:     int x, y;
-1:     y = 42;
-2[C]:  x = f();
-3[R]:  return x+y;
+  int x = 42;
+  return f()+x;
 }
 
 int f() {
-10:     *($SP-2) = 0;
-11[R]:  return 5;
+  int y;
+  *(&y-3) = 0;
+  return 5;
 }
 \end{verbatim}
+}
 \end{subfigure}
-\begin{subfigure}{.4\textwidth}
+\begin{subfigure}{.5\textwidth}
+{\small
+\begin{verbatim}
+1 main: add $1,%sp      ; allocate frame
+2       mov $42,-1(%sp) ; initialize local
+3       call f
+4       add -1(%sp),%ra ; set return value
+5       sub $1,%sp      ; deallocate frame
+6       ret
+7 f:    add $1,%sp      ; allocate frame
+8       mov $0,-3(%sp)  ; violation!
+9       mov $5, %ra     ; set return value
+10      sub $1,%sp      ; deallocate frame
+11      ret
+\end{verbatim}
+}
+\end{subfigure}
+\begin{subfigure}{.25\textwidth}
 \begin{center}
 \begin{tabular}{l l}
-{\tt 1} &
-\memoryaddrs{12em}
-\memory{4}{\unsealc}[Unseal]
+{\tt 2} &
+\memoryaddrs{8em}
+\memory{3}{\unsealc}[Unseal]
 ~$\cdots$
 \vspace{.5em}
 \\
-{\tt 2} &
-\memoryaddrs{12em}
-\memory{4}{\unsealc}
+{\tt 3} &
+\memoryaddrs{8em}
+\memory{3}{\unsealc}
 ~$\cdots$
     \MemoryLabel{-15em}{0.75em}{42}
     \vspace{.5em}
 \\
-{\tt 10} &
+{\tt 8} &
 \memoryaddrs{16em}
-\memory{2}{\mainsealc}[Seal(0)]%
+\memory{1}{\mainsealc}[Seal(0)]%
 \memory{1}{\retptrc}[RetPtr]%
 \memory{1}{\unsealc}[Unseal]
 ~$\cdots$
 \MemoryLabel{-15em}{0.75em}{42}
 \vspace{.5em}
 \\
-{\tt 11} &
+{\tt 9} &
 \memoryaddrs{16em}
-\memory{2}{\mainsealc}
+\memory{1}{\mainsealc}
 \memory{1}{\retptrc}
 \memory{1}{\unsealc}
 ~$\cdots$
@@ -985,23 +1003,17 @@ the examples\bcp{Didn't understand that}, arguing that:
   (i.e., policy failstops usually correspond to imminent property violations).
 \end{itemize}
 
-Our examples are written in C-like syntax, labeled with line numbers for reference,
-but to reflect the power of the underlying assembly code, we allow code
-to read the stack pointer ({\tt \$SP}) directly and use
-it to form pointers.
-Call and return annotations are marked {\tt[C]} and {\tt[R]}
-respectively. Local variables are assumed to be stored in the stack frame,
-in declaration order. \bcp{This sort of thing implies that readers will have
-to mentally compile the source programs we're showing them.}Unless otherwise stated, arguments and return values are passed in registers.
+We show our examples in C syntax and give the corresponding assembly code for a
+simple two-address machine, with {\tt call} and {\tt ret} instructions that
+push and pop the return address from the stack, implicitly adjusting the stack pointer.
+The assembly code reflects a simple compilation model in which  
+local variables are stored in the stack frame.
+Unless otherwise stated, arguments and return values are passed in registers.
 The machine is word-addressed. The stack grows upward in
 memory and {\tt \$SP} points to the first unused word above the top of the stack.
 At the right of each example, we show the layout of stack memory just before
-the specified line number is executed; each box represents a memory word and
-addresses increase to the right.  \BCP{I am worried about the C-like syntax:
-I think the mental complexity and imprecision that it introduces may not be
-worth the concision that we get from it.  Couldn't we get most of the
-concision by just assuming an ISA with CISC-style single-instruction Call
-and Return?}
+the specified instruction is executed; each box represents a memory word and
+addresses increase to the right.  
 
 %The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
 %at the time of the call. The stack can be used to pass arguments or return results
@@ -1020,17 +1032,17 @@ meaning that it is eligible to be written to. At the call from {\tt main} to
 {\tt f}, {\tt main}'s locals are {\em sealed} and labeled with the depth of
 their owner\bcp{are we still using depths?},
 in this case 0. Sealing is the fundamental integrity contract between the caller and callee:
-{\tt main} expects that {\tt x} and {\tt y} will be unchanged when it gets control back.
+{\tt main} expects that {\tt x} will be unchanged when it gets control back.
 This gives us our simple, intuitive statement of {\em stepwise integrity}:
 if a component is sealed before a step, it will be unchanged afterward. Stepwise
 refers to the fact that the property must hold on every step. %Later we will
 %loosen this condition in the interest of extensionality -- the caller only
 %cares about changes it can see after the return, not changes during execution.
-In this case, after line 10, {\tt f} has violated integrity by writing to {\tt x}.
+In this case, after instruction 8, {\tt f} has violated integrity by writing to {\tt x},
+so the final return value produced by {\tt main} is wrong.
 
-The black rectangle represents the return address. In a typical RISC calling convention
-this will have been saved into a register by the call itself, and {\tt f} stores
-it in the stack during its preamble, so it is not itself sealed.
+The black rectangle represents the return address, which is saved by the call
+instruction itself, so is not sealed.
 
 \begin{figure}
 \begin{subfigure}{.33\textwidth}
@@ -1065,7 +1077,7 @@ int f() {
     \vspace{.5em}
   } \\
   {\tt 10} &
-  \memoryaddrs{20em}
+  \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
   \memory{2}{\unsealc}
@@ -1074,7 +1086,7 @@ int f() {
   \MemoryLabel{-10em}{0.75em}{0}
   \MemoryLabel{-6em}{0.75em}{0}
   &
-  \memoryaddrs{20em}
+  \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
   \memory{2}{\unsealc}
@@ -1084,7 +1096,7 @@ int f() {
   \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
   {\tt 11} &
-  \memoryaddrs{20em}
+  \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
   \memory{1}{\goodc}
@@ -1094,7 +1106,7 @@ int f() {
   \MemoryLabel{-10em}{0.75em}{5}
   \MemoryLabel{-6em}{0.75em}{0}
   &
-  \memoryaddrs{20em}
+  \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
   \memory{1}{\goodc}
@@ -1105,7 +1117,7 @@ int f() {
   \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
   {\tt 12} &
-  \memoryaddrs{20em}
+  \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
   \memory{1}{\unsealc}
@@ -1116,7 +1128,7 @@ int f() {
   \MemoryLabel{-6em}{0.75em}{42}
   \vspace{.5em}
   &
-  \memoryaddrs{20em}
+  \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
   \memory{1}{\unsealc}
