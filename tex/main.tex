@@ -169,9 +169,9 @@ properties. While we do not rule out other enforcement mechanisms, our
 definitions are strongly informed by micropolicy systems, especially
 our attacker model.
 
-For the sake of concreteness, most of our presentation assumes a RISC-V
-machine architecture with a basic subroutine calling convention (passing
-parameters in registers) and a micropolicy-like enforcement mechanism. We
+For the sake of concreteness, most of our presentation assumes a standard RISC
+machine architecture with a basic subroutine calling convention (parameters
+passed in registers) and a micropolicy-like enforcement mechanism. We
 also show how to accomodate stack-allocated parameter passing and
 coroutines.
 
@@ -179,12 +179,12 @@ coroutines.
   good place to admit that our definitions are tuned for micropolicies, if
   we can find a succinct way to say it.}
 \sna{See above.}
-\bcp{I added it to the last paragraph (which is pretty close to the preceding
+\BCP{I added it to the last paragraph (which is pretty close to the preceding
   paragraph :-)  We should follow this up with some discussion in the (new)
   Assumptions section about how different enforcement mechanisms (us,
   StkTokens, maybe others) adopt different perspectives on what the stack is
 for and how it is organized and so lead to somewhat different notions of
-low-level safety.} 
+low-level safety.}
 
 % We argue \apt{do we?}\bcp{I guess we will not have time to.  Propose
 %   deleting this para.} that our properties are suited to a range of other
@@ -472,7 +472,7 @@ We therefore argue that, despite its somewhat greater complexity,
 it may be a better minimal specification for
 stack safety enforcement mechanisms in general.
 
-\bcp{This paragraph doesn't apply to the lazy properties, so maybe it should
+\BCP{This paragraph doesn't apply to the lazy properties, so maybe it should
 be moved before they are introduced?}%
 To illustrate the applicability of these properties, we perform randomized testing to
 validate that \citeauthor{DBLP:conf/sp/RoesslerD18}'s Depth Isolation micro-policy enforces
@@ -673,10 +673,10 @@ and describe testing (\cref{sec:testing}).
 \section{Assumptions and Threat Model}
 \label{sec:threat}
 
-\bcp{I would still advocate splitting this into two sections, just so the
+\BCP{I would still advocate splitting this into two sections, just so the
   transition from one to the other and the division of responsibility are
-  clear.  The first section could be called ``What is 'the Stack'?'' instead
-of ``Assumptions'' if we want.}
+  clear.  The first section could be called ``Setup'' or something like
+  that.}
 
 \newcommand*{\rsp}{\textsc{sp}}
 
@@ -685,7 +685,7 @@ assumptions about the concrete machine that instantiates it.  We assume a regist
 machine with a program counter \(\PCname\); other
 details of the machine's ISA are unimportant. We assume that we know ahead of time
 the layout of memory, including where code lives and which addresses are within
-the bounds of the stack.
+the bounds of the stack.  \BCP{What should we say about the heap?}
 
 Our stack-safety concepts depend
 critically on the notions of ``call'' and ``return,'' which are not fully explicit
@@ -761,7 +761,9 @@ final instruction in the call or return sequence, and all blessed sequences will
 annotated instructions. This is all we need for the policy to
 protect itself: it can then failstop if it would execute the blessed sequence out of order.
 So, even in our strong attacker model, we need very little in the way of restrictions on
-the code when considering micropolicy-based enforcement.
+the code when considering micropolicy-based enforcement.  \BCP{Is this
+  discussion still needed?  I had hoped that switching to our ``new''
+  definition on subtraces would eliminate such complexities!}
 
 In general, regardless of enforcement mechanism, we take this approach:
 a given enforcement mechanism may place a static well-formedness criterion
@@ -882,7 +884,7 @@ rewriting or capability-based techniques, though perhaps with less elegance.
 %If a {\jalr} instruction was added to {\tt main} with its target being
 %the middle of the code block of {\tt g}.\apt{describe result of this?}
 
-\section{Demonstrating Stack Safety}
+\section{Key Ideas}
 \label{sec:running-example}
 \colorlet{lgray}{gray!40}
 \colorlet{lred}{red!40}
@@ -1296,7 +1298,7 @@ the program counters will differ, breaking the lockstep.
   \begin{subfigure}{.4\textwidth}
 \begin{verbatim}
 int *stash = 0;
- 
+
 int main() {
 0:     int x;
 1:     x = 1;
@@ -1387,7 +1389,7 @@ void f() {
   \label{fig:controlflow}
 \end{figure}
 
-%From the classic stack smashing attack to return oriented programming, 
+%From the classic stack smashing attack to return oriented programming,
 One of the most pernicious ways to attack the stack is by hijacking control flow.
 Our stack safety properties do not assume that control flow is well-bracketed; rather,
 they express what it means to protect data even in the presence of control-flow attacks.
@@ -1647,14 +1649,14 @@ stack frames, e.g., pointers obtained by taking the address of a local variable.
 Unlike the case for pass-by-reference, there is no easy way to model the intended sharing behavior
 of such pointers in terms of stack frame activation patterns.  The best approximation we can make is to
 treat an address-taken variable in the same way as a passed argument, with the additional property
-that it remains accessible at \emph{all} stack depths above the caller. 
+that it remains accessible at \emph{all} stack depths above the caller.
 This prevents most violations of temporal safety, although stale pointers can still be
 used in certain corner cases. \apt{Trying not to spell out the details, which are complex.}
 More seriously, callees are permitted to access the location without having
 been explicitly given a pointer to it.  Preventing the latter kind of abuse
 is the provence of a fine-grained memory safety policy, e.g. based on capabilities
 (implemented by tags or otherwise); we argue it is beyond the scope of stack safety
-\emph{per se}. 
+\emph{per se}.
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
@@ -2086,7 +2088,7 @@ change together, written as a coinductive relation \(\machT \doteq \nachT\):
 \end{minipage}
 \begin{minipage}{.6\textwidth}
 \judgmenttwo{\(\mach, \head(\machT) \diamond \nach, \head(\nachT)\)}
-            {\(\machT \doteq \nachT\)}         
+            {\(\machT \doteq \nachT\)}
             {\(\mach \machT \doteq \nach \nachT\)}
 \end{minipage}
 
@@ -2171,7 +2173,7 @@ presented.
 
 \definition Let \(\mpcstatename\) and \(\mpcstatename'\) be reachable states such that
 \(\mpcstatename \stepstocon \mpcstatename'\), and \(\pi_\context(\mpcstatename) = \domMap,\rts\).
-Let \(\components\) be the set of components \(\component\) where 
+Let \(\components\) be the set of components \(\component\) where
 \(\domMap ~ \component = \sealed{\_}\) or \(\passed{\depth,\depth'}\) where \(|\rts| < \depth\)
 or \(|\rts| > \depth'\). A system enjoys {\em stepwise stack integrity with passing} if for all
 such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename') ~ \component\).
@@ -2225,7 +2227,7 @@ and likewise using the return target stacks. We will omit these rules and focus 
                 {\(\yts ~ \stackid'\)}
                 {\(\yts' = \yts[\stackid \mapsto \ycon ~ \mach]\)}
                 {\(\mach,(\domMap,\rts,\yts,\stackid) \stepsto_C \domMap,\rts,\yts',\stackid'\)}
-                
+
 This calls for some explanation. First, we determine which coroutine we are yielding to by
 checking which stack the stack pointer of the next state is pointing to. Then we can only yield
 if the next state is a valid yield target for that stack, and we update the yield target for
@@ -2235,7 +2237,7 @@ Now we can define both stack safety and coroutine safety under this model.
 
 \definition Let \(\mpcstatename\) and \(\mpcstatename'\) be reachable states such that
 \(\mpcstatename \stepstocon \mpcstatename'\), and \(\pi_\context(\mpcstatename) = \domMap,\rtm,\yts,\stackid\).
-Let \(\components\) be the set of components \(\component\) where 
+Let \(\components\) be the set of components \(\component\) where
 \(\domMap ~ \component = \instack{\stackid}{\sealed{\_}}\) or \(\instack{\stackid}{\passed{\depth,\depth'}}\)
 where \(|\rtm ~ \stackid| < \depth\) or \(|\rtm ~ \stackid| > \depth'\). A system enjoys
 {\em stepwise stack integrity} in the coroutine setting if for all
@@ -2243,7 +2245,7 @@ such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename')
 
 \definition Let \(\mpcstatename\) and \(\mpcstatename'\) be reachable states such that
 \(\mpcstatename \stepstocon \mpcstatename'\), and \(\pi_\context(\mpcstatename) = \domMap,\rtm,\yts,\stackid\).
-Let \(\components\) be the set of components \(\component\) where 
+Let \(\components\) be the set of components \(\component\) where
 \(\domMap ~ \component = \instack{\stackid'}{\_}\) where \(\stackid \not = \stackid'\).
 A system enjoys {\em stepwise coroutine integrity} in the coroutine setting if for all
 such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename') ~ \component\).
