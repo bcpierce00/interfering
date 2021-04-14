@@ -129,3 +129,9 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
 
 (* Gets stuck at instruction 84 *)
 Compute (run 30 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
+
+From StackSafety Require Import SubroutineSimple.
+
+Compute (SimpleStackIntegrityStepP (fun _ => notCode) 42
+                                   (initialRiscvMachine program)
+                                   (initialPumpPolicy tags) (initC (fun _ => true) (initialRiscvMachine program))).

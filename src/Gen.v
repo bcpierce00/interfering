@@ -378,7 +378,9 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
                    pMinImm := 0; pMaxImm := 0;
                    pTag := dataTag t
                 |} in
-  
+
+(*  trace (show (l, badPtr groups)%string) *)
+        (
   let onNonEmpty {A} (l : list A) n :=
       match l with
       | [] => O
@@ -391,8 +393,8 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           let instr := Addi rd (aID ai) imm in
           bindGen (genInstrTag instr) (fun tag =>
           ret (instr, tag))))))
-       ; (onNonEmpty l 3%nat,
-          bindGen (elems_ l ([l; l ++ badPtr groups])) (fun l' =>
+         ; (onNonEmpty l 3%nat,
+          bindGen (elems_ l ([l; badPtr groups])) (fun l' =>
           bindGen (elems_ def_dp l') (fun pi =>
           bindGen (genTargetReg m) (fun rd =>
           let imm := pMaxImm pi in 
@@ -415,7 +417,7 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           let instr := Add rd (aID ai1) (aID ai2) in
           bindGen (genInstrTag instr) (fun tag => 
           ret (instr, tag))))))
-       ]).
+       ])).
 (*
 -- TODO: Uncomment this and add stack.dpl rule
 --            , (onNonEmpty arithInfo 1,
@@ -755,7 +757,7 @@ From StackSafety Require Import SubroutineSimple.
 (* Sample1 (genMach). *)
 
 Definition prop_integrity :=
-  let sm := fun _ => true in
+  let sm := fun _ => false in
   forAll genMach (fun '(m,p,cm) =>
 (*  trace ("Next Run Starting..." ++ nl)%string *)
   (SimpleStackIntegrityStepP (CodeMap_fromImpl cm) 42 m p (initC sm m))).

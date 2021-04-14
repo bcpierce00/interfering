@@ -391,16 +391,19 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   let tpc := pctags p in
   trs <- map.get (regtags p) rs;
   match tinstr with
-  | [Tinstr] => Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR *)
-                     
-  (*
+
   | [Tinstr] =>
     match tpc, taddr with
     | [Tpc pcdepth], [Tstack memdepth] =>
       if Nat.leb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
-      else None
+      else (exception "Reaching bug")
     | _, _ => None
     end
+(*
+  | [Tinstr] =>
+      
+    Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR *)
+                     
    *)
   | [Tinstr; Tr1] =>
     match trs, taddr with
