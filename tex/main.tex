@@ -902,7 +902,7 @@ int main() {
 
 int f() {
   int y;
-  *(&y-3) = 0;
+  *(&y-2) = 0;
   return 5;
 }
 \end{verbatim}
@@ -917,11 +917,12 @@ int f() {
 4       add -1(%sp),%ra ; set return value
 5       sub $1,%sp      ; deallocate frame
 6       ret
-7 f:    add $1,%sp      ; allocate frame
-8       mov $0,-3(%sp)  ; violation!
-9       mov $5, %ra     ; set return value
-10      sub $1,%sp      ; deallocate frame
-11      ret
+
+10 f:   add $1,%sp      ; allocate frame
+11      mov $0,-3(%sp)  ; violation!
+12      mov $5, %ra     ; set return value
+13      sub $1,%sp      ; deallocate frame
+14      ret
 \end{verbatim}
 }
 \end{subfigure}
@@ -941,7 +942,7 @@ int f() {
     \MemoryLabel{-15em}{0.75em}{42}
     \vspace{.5em}
 \\
-{\tt 8} &
+{\tt 11} &
 \memoryaddrs{16em}
 \memory{1}{\mainsealc}[Seal(0)]%
 \memory{1}{\retptrc}[RetPtr]%
@@ -950,7 +951,7 @@ int f() {
 \MemoryLabel{-15em}{0.75em}{42}
 \vspace{.5em}
 \\
-{\tt 9} &
+{\tt 12} &
 \memoryaddrs{16em}
 \memory{1}{\mainsealc}
 \memory{1}{\retptrc}
@@ -980,14 +981,15 @@ the examples\bcp{Didn't understand that}, arguing that:
   (i.e., policy failstops usually correspond to imminent property violations).
 \end{itemize}
 
-We show our examples in C syntax and give the corresponding assembly code for a
-simple two-address machine, with {\tt call} and {\tt ret} instructions that
-push and pop the return address from the stack, implicitly adjusting the stack pointer.
+We show our examples both in C syntax and in corresponding assembly code for a
+simple two-address machine. The address of each instruction is shown to its left.
 The assembly code reflects a simple compilation model in which  
 local variables are stored in the stack frame.
 Unless otherwise stated, arguments and return values are passed in registers.
 The machine is word-addressed. The stack grows upward in
 memory and {\tt \$SP} points to the first unused word above the top of the stack.
+The {\tt call} and {\tt ret} instructions push and pop the return address from the stack,
+implicitly adjusting the stack pointer.
 At the right of each example, we show the layout of stack memory just before
 the specified instruction is executed; each box represents a memory word and
 addresses increase to the right.  
@@ -1022,46 +1024,66 @@ The black rectangle represents the return address, which is saved by the call
 instruction itself, so is not sealed.
 
 \begin{figure}
-\begin{subfigure}{.33\textwidth}
+\begin{subfigure}{.2\textwidth}
+{\small
 \begin{verbatim}
 int main() {
-0:     int x;
-1:     x = 42;
-2[C]:  x = f();
-3[R]:  return x+y;
+  int x = 42;
+  return f()+x;
 }
 
 int f() {
-10:     int y,z;
-11:     y = 5;
-12:     z = *($SP-4);
-13[R]:  return y+z;
+  int y,z;
+  y = 5;
+  z = *(&y-2);
+  return y+z;
 }
 \end{verbatim}
+}
+\end{subfigure}
+\begin{subfigure}{.5\textwidth}
+{\small
+\begin{verbatim}
+1 main: add $1,%sp      ; allocate frame
+2       mov $42,-1(%sp) ; initialize local
+3       call f
+4       add -1(%sp),%ra ; set return value
+5       sub $1,%sp      ; deallocate frame
+6       ret
+
+10 f:   add $2,%sp      ; allocate frame
+11      mov $5,-2(%sp)  ; assign into y
+12      mov -4(%sp),-1(%sp)  ; violation!
+13      mov -2(%sp),%ra ; calculate and
+14      add -1(%sp),%ra ; set return value
+15      sub $2,%sp      ; deallocate frame
+16      ret
+\end{verbatim}
+}
 \end{subfigure}
 \begin{subfigure}{.59\textwidth}
 \centering
 \begin{tabular}{l l | l}
-  {\tt 1} &
+  {\tt 2} &
   \multicolumn{2}{c}{
     \memoryaddrs{8em}
     \memory{4}{\unsealc}
     ~$\cdots$
-    \MemoryLabel{-18em}{0.75em}{0}
-    \MemoryLabel{-14em}{0.75em}{0}
-    \MemoryLabel{-10em}{0.75em}{0}
-    \MemoryLabel{-7em}{0.75em}{0}
+%    \MemoryLabel{-18em}{0.75em}{0}
+%    \MemoryLabel{-14em}{0.75em}{0}
+%    \MemoryLabel{-10em}{0.75em}{0}
+%    \MemoryLabel{-7em}{0.75em}{0}
     \vspace{.5em}
   } \\
-  {\tt 10} &
+  {\tt 11} &
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
   \memory{2}{\unsealc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{42}
-  \MemoryLabel{-10em}{0.75em}{0}
-  \MemoryLabel{-6em}{0.75em}{0}
+%  \MemoryLabel{-10em}{0.75em}{0}
+%  \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
@@ -1072,7 +1094,7 @@ int f() {
   \MemoryLabel{-10em}{0.75em}{\(v_1\)}
   \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
-  {\tt 11} &
+  {\tt 12} &
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
@@ -1081,7 +1103,7 @@ int f() {
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{42}
   \MemoryLabel{-10em}{0.75em}{5}
-  \MemoryLabel{-6em}{0.75em}{0}
+ % \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
@@ -1093,7 +1115,7 @@ int f() {
   \MemoryLabel{-10em}{0.75em}{5}
   \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
-  {\tt 12} &
+  {\tt 13} &
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
@@ -1120,9 +1142,7 @@ int f() {
 \vspace{\abovedisplayskip}
 
 \end{subfigure}
-\caption{A Confidentiality Violation \bcp{It would help if the SPs could
-    have a little arrow after them pointing to the cell that they are
-    associated with.}}
+\caption{A Confidentiality Violation\apt{Could save space by not repeating C or assemly code for {\tt main}.}}
 \label{fig:conf1}
 \end{figure}
 
@@ -1138,13 +1158,13 @@ confidentiality.
 
 In Figure~\ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
 by reading {\tt main}'s variable {\tt x}. The trace
-shows how noninterference applies to this scenario. At line 11, we create a {\em variant}
+shows how noninterference applies to this scenario. At instruction 10, we create a {\em variant}
 state with arbitrary values \(v_0\), etc., in place of the values that should
-be hidden from {\tt f}. At line 12, we note that the callee's first variable, {\tt y}, has
+be hidden from {\tt f}. At instruction 12, we note that the callee's first variable, {\tt y}, has
 changed to 5 in both the primary trace and the variant. The primary and variant agree on
-the value in the changed location, so confidentiality was not violated. But after line 13,
+the value in the changed location, so confidentiality was not violated. But at instruction 13,
 the other variable, {\tt z}, has changed. In the primary trace it changed to 42, but
-in the variant trace it might have any value \(v_2\). If \(v_2 \neq 42\) then the variant
+in the variant trace it might have any value \(v_0\). If \(v_0 \neq 42\) then the variant
 has behaved differently than the primary, violating confidentiality.
 
 This form of confidentiality we will term {\em stepwise confidentiality}, defined informally
@@ -1165,41 +1185,70 @@ at the beginning and trace changes through the execution.
 
 \begin{figure}
 
-\begin{subfigure}{.3\textwidth}
+\begin{subfigure}{.2\textwidth}
+  {\small
 \begin{verbatim}
 int main() {
-0:     int x;
-1[C]:  x = f();
-2[CR]: return g();
+  int x;
+  x = f();
+  return g();
 }
 
 int f() {
-10:     int y;
-11:     y = 5;
-12[R]:  return y;
+  int y = 5;
+  return y;
 }
 
 int g() {
-20:     int z;
-21:     if(z == 5)
-22[R]:    return 100;
-23:     else
-24[R]:    return 10;
+  int z;
+  if (z == 5)
+    return 10;
+  else
+    return 20;
 }
 \end{verbatim}
+}
+\end{subfigure}
+\begin{subfigure}{.5\textwidth}
+  {\small
+\begin{verbatim}
+1 main:  add $1,%sp ; allocate frame
+2        call f
+3        mov %rax,-1(%sp) ; store x
+4        call g
+5        sub $1,%sp ; deallocate frame
+6        ret 
+
+10 f:    add $1,%sp ; allocate frame
+11       mov $5,-1(%sp) ; initialize y
+12       mov -1(%sp),%rax ; set return value
+13       sub $1,%sp ; deallocate frame
+14       ret
+
+20 g:    add $1,%sp ; allocate frame
+21       cmp $5,-1(%sp) ; compare 
+22       brneq #25      ; branch if not equal
+23       mov $10,%rax ; set return value
+24       jmp #26
+25       mov $20,%rax  ; set return value
+26       sub $1,%sp ; deallocate frame
+27       ret 
+}
+\end{verbatim}
+}
 \end{subfigure}
 \begin{subfigure}{.65\textwidth}
 \begin{center}
 \begin{tabular}{l r | l}
-  {\tt 01} &
+  {\tt 2} &
   \multicolumn{2}{c}{
     \memoryaddrs{8em}
     \memory{4}{\unsealc}
     ~$\cdots$
-    \MemoryLabel{-18em}{0.75em}{0}
-    \MemoryLabel{-14em}{0.75em}{0}
-    \MemoryLabel{-10em}{0.75em}{0}
-    \MemoryLabel{-7em}{0.75em}{0}
+%    \MemoryLabel{-18em}{0.75em}{0}
+%    \MemoryLabel{-14em}{0.75em}{0}
+%    \MemoryLabel{-10em}{0.75em}{0}
+%    \MemoryLabel{-7em}{0.75em}{0}
     \vspace{.5em}
   } \\
   {\tt 11} &
@@ -1208,9 +1257,9 @@ int g() {
   \memory{1}{\retptrc}
   \memory{2}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{0}
-  \MemoryLabel{-10em}{0.75em}{0}
-  \MemoryLabel{-6em}{0.75em}{0}
+ % \MemoryLabel{-19em}{0.75em}{0}
+%  \MemoryLabel{-10em}{0.75em}{0}
+%  \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
@@ -1227,9 +1276,9 @@ int g() {
   \memory{1}{\retptrc}
   \memory{2}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{0}
+ % \MemoryLabel{-19em}{0.75em}{0}
   \MemoryLabel{-10em}{0.75em}{5}
-  \MemoryLabel{-6em}{0.75em}{0}
+%  \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
@@ -1240,7 +1289,7 @@ int g() {
   \MemoryLabel{-10em}{0.75em}{\(5\)}
   \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
-  {\tt 02} &
+  {\tt 4} &
   \multicolumn{2}{c}{
     \memoryaddrs{8em}
 %    \memory{4}{\unsealc}
@@ -1251,7 +1300,7 @@ int g() {
     \MemoryLabel{-18em}{0.75em}{5}
     \MemoryLabel{-14em}{0.75em}{2}
     \MemoryLabel{-10em}{0.75em}{5}
-    \MemoryLabel{-7em}{0.75em}{0}
+%    \MemoryLabel{-7em}{0.75em}{0}
     \vspace{.5em}
   }
   \\
@@ -1263,7 +1312,7 @@ int g() {
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{5}
   \MemoryLabel{-10em}{0.75em}{5}
-  \MemoryLabel{-6em}{0.75em}{0}
+ % \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
@@ -1296,12 +1345,13 @@ and {\tt z} as well as that of {\tt x}. This is to detect violations of so-calle
 temporal stack safety.
 In Figure~\ref{fig:conf2}, we watch as {\tt f} leaves behind a value in {\tt y}
 that corresponds to {\tt main}'s variable, {\tt x}. Then {\tt g} is able to access
-{\tt y} without even directly reading the stack pointer. In
+{\tt y} and hence {\tt x} without directly reading the stack pointer. In
 this case, {\tt g} branches on that value, which is a different way of
 violating lockstep confidentiality. Technically, this violation
 occurs because the program counter is also a component of the state that must change
-identically between the primary and variant traces. In a case where \(v_1 \not = 5\),
-the program counters will differ, breaking the lockstep.
+identically between the primary and variant traces. In a case where \(v_4 \not = 5\),
+the program counters will differ, breaking the lockstep.\apt{Is there any reason
+to complicate things like this by bringing in the PC?}
 
 
 \paragraph*{Control Flow Attacks}
