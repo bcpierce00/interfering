@@ -31,33 +31,33 @@ Let RARG : Z := 19.
 Let RRES : Z := 18.
 Let RTMP : Z := 20.
 
-Definition program : list Instruction :=
-  (* 00 *) [IInstruction (Jal RA 8); (* Call main *)
-  (* 04 *) IInstruction (Beq 0 0 0); (* Finish execution (loop) *)
+Definition program : list Instruction := map IInstruction
+  (* 00 *) [Jal RA 8; (* Call main *)
+  (* 04 *) Beq 0 0 0; (* Finish execution (loop) *)
   (* main *)
-  (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 12 *) IInstruction (Addi SP SP 12); (* H2 *)
-  (* 16 *) IInstruction (Addi RTMP 0 42); (* For brevity, initial values in sequence *)
-  (* 20 *) IInstruction (Sw SP RTMP (-8)); (* Init x *)
-  (* 24 *) IInstruction (Sw SP 0 (-4)); (* Init y *)
-  (* 28 *) IInstruction (Addi RARG 0 10);
-  (* 32 *) IInstruction (Jal RA 36); (* Call f *)
-  (* 36 *) IInstruction (Sw SP RRES (-4)); (* y not really necessary *)
-  (* 40 *) IInstruction (Lw RTMP SP (-8));
-  (* 44 *) IInstruction (Add RRES RRES RTMP);
-  (* 48 *) IInstruction (Sw SP 0 (-8)); (* Clear x *)
-  (* 52 *) IInstruction (Sw SP 0 (-4)); (* Clear y *)
-  (* 56 *) IInstruction (Lw RA SP (-12)); (* R1 *)
-  (* 60 *) IInstruction (Addi SP SP (-12)); (* R2 *)
-  (* 64 *) IInstruction (Jalr RA RA 0); (* R3 *)
+  (* 08 *) Sw SP RA 0; (* H1 *)
+  (* 12 *) Addi SP SP 12; (* H2 *)
+  (* 16 *) Addi RTMP 0 42; (* For brevity, initial values in sequence *)
+  (* 20 *) Sw SP RTMP (-8); (* Init x *)
+  (* 24 *) Sw SP 0 (-4); (* Init y *)
+  (* 28 *) Addi RARG 0 10;
+  (* 32 *) Jal RA 36; (* Call f *)
+  (* 36 *) Sw SP RRES (-4); (* y not really necessary *)
+  (* 40 *) Lw RTMP SP (-8);
+  (* 44 *) Add RRES RRES RTMP;
+  (* 48 *) Sw SP 0 (-8); (* Clear x *)
+  (* 52 *) Sw SP 0 (-4); (* Clear y *)
+  (* 56 *) Lw RA SP (-12); (* R1 *)
+  (* 60 *) Addi SP SP (-12); (* R2 *)
+  (* 64 *) Jalr RA RA 0; (* R3 *)
   (* f *)
-  (* 68 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 72 *) IInstruction (Addi SP SP 4); (* H2 *)
-  (* 76 *) IInstruction (Sw SP 0 (-4)); (* IInstruction (Addi RTMP 0 0); *)
-  (* 80 *) IInstruction (Add RRES RARG RARG);
-  (* 84 *) IInstruction (Lw RA SP (-4)); (* R1 *)
-  (* 88 *) IInstruction (Addi SP SP (-4)); (* R2 *)
-  (* 92 *) IInstruction (Jalr RA RA 0)] (* R3 *)
+  (* 68 *) Sw SP RA 0; (* H1 *)
+  (* 72 *) Addi SP SP 4; (* H2 *)
+  (* 76 *) Sw SP 0 (-4); (* Addi RTMP 0 0; *)
+  (* 80 *) Add RRES RARG RARG;
+  (* 84 *) Lw RA SP (-4); (* R1 *)
+  (* 88 *) Addi SP SP (-4); (* R2 *)
+  (* 92 *) Jalr RA RA 0] (* R3 *)
 .
 
 Let instrTags := [Tinstr].

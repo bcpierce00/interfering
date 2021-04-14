@@ -363,9 +363,9 @@ genInstr :: PolicyPlus -> Machine_State -> PIPE_State ->
 *)
 Definition genInstr (i : LayoutInfo) (t : TagInfo)
            (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
-           (dataP codeP : TagSet -> bool)
+           (dataP codeP : TagSet -> bool) (f : FunID)
            (genInstrTag : InstructionI -> G TagSet)
-  : G (InstructionI * TagSet) :=
+  : G (InstructionI * TagSet * FunID * CodeAnnotation) :=
   let groups := groupRegisters i t m p dataP codeP in
   let a := arith groups in
   let d := dataPtr groups in
@@ -392,7 +392,7 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           bindGen (genImm (dataHi i)) (fun imm =>
           let instr := Addi rd (aID ai) imm in
           bindGen (genInstrTag instr) (fun tag =>
-          ret (instr, tag))))))
+          ret (instr, tag, f, normal))))))
          ; (onNonEmpty l 3%nat,
           bindGen (elems_ l ([l; badPtr groups])) (fun l' =>
           bindGen (elems_ def_dp l') (fun pi =>
@@ -401,7 +401,7 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
 (*          trace ("Generating... " ++ show (imm, pMaxImm pi))%string *)
           (let instr := Lw rd (pID pi) imm in
           bindGen (genInstrTag instr) (fun tag =>
-          ret (instr, tag)))))))
+          ret (instr, tag, f, normal)))))))
        ; ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
           bindGen (elems_ def_dp d) (fun pi =>
           bindGen (genSourceReg m) (fun rs =>
@@ -409,14 +409,14 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           let imm := pMinImm pi + imm' in
           let instr := Sw (pID pi) rs imm in
           bindGen (genInstrTag instr) (fun tag => 
-          ret (instr, tag)))))) 
+          ret (instr, tag, f, normal)))))) 
        ; (onNonEmpty a 1%nat,
           bindGen (elems_ def_a a) (fun ai1 =>
           bindGen (elems_ def_a a) (fun ai2 =>
           bindGen (genTargetReg m) (fun rd =>
           let instr := Add rd (aID ai1) (aID ai2) in
           bindGen (genInstrTag instr) (fun tag => 
-          ret (instr, tag))))))
+          ret (instr, tag, f, normal))))))
        ])).
 (*
 -- TODO: Uncomment this and add stack.dpl rule
@@ -434,10 +434,14 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
  *)
 
 
-Definition headerSeq offset :=
-  [ (Jal ra offset, [Tinstr; Tcall])
-  ; (Sw sp ra 0  , [Tinstr; Th1])
-  ; (Addi sp sp 12, [Tinstr; Th2])
+Definition headerHead offset f :
+  list (InstructionI * TagSet * FunID * CodeAnnotation) := [(Jal ra offset , [Tinstr; Tcall], f    , call)].
+
+Definition headerSeq offset f nextF :
+  list (InstructionI * TagSet * FunID * CodeAnnotation) :=
+  headerHead offset f ++
+  [ (Sw sp ra 0    , [Tinstr; Th1]  , nextF, normal)
+  ; (Addi sp sp 12 , [Tinstr; Th2]  , nextF, normal)
   ].
 (* Based on Rob's 
   (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
@@ -445,9 +449,9 @@ Definition headerSeq offset :=
 *)
 Definition genCall (l : LayoutInfo) (t : TagInfo)
            (m : MachineState) (p : PolicyState)
-           (cm : CodeMap_Impl) (nextF : FunID)
+           (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
            (callP :  TagSet -> bool) :
-  option (nat * G (list (InstructionI * TagSet) * FunID))
+  option (G (list (InstructionI * TagSet * FunID * CodeAnnotation)))
   :=
 (*  
 genCall :: PolicyPlus -> Machine_State -> PIPE_State ->
@@ -477,33 +481,34 @@ genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
       not_used in
   let exOpts :=
         (* Existing callsites, lookup fun id *)
-      List.map (fun i =>
-                  match map.get cm i with
-                  | Some (inFun f _) =>
-                    (headerSeq i, f) 
-                  | _ => exception "genCall - nofid"
+      List.map (fun i => 
+                  match map.get cm (word.unsigned (getPc m) + i) with
+                  | Some (inFun _ _) =>
+                    (headerHead i f) 
+                  | _ => exception ("genCall - nofid: " ++ show (word.unsigned (getPc m) + i) ++ nl ++ printMachine m p cm)%string
                   end) existingSites  in
   let newOpts :=
-      List.map (fun i => (headerSeq i, nextF)) newCallSites in
-  match exOpts ++ newOpts with
+      List.map (fun i => headerSeq i f nextF) newCallSites in
+  (* TODO: re-call *)
+  match (* exOpts ++ *) newOpts with
   | [] => None
   | x :: xs =>
-    Some (S (List.length xs), elems_ x (x :: xs))
+    Some (elems_ x (x :: xs))
   end.
 
-Definition returnSeq :=
-  [ (Lw   ra sp (-12) , [Tinstr; Tr1])
-  ; (Addi sp sp (-12) , [Tinstr; Tr2])
-  ; (Jalr ra ra 0     , [Tinstr; Tr3])
+Definition returnSeq (f rf : FunID) :=
+  [ (Lw   ra sp (-12) , [Tinstr; Tr1], f, normal)
+  ; (Addi sp sp (-12) , [Tinstr; Tr2], f, normal)
+  ; (Jalr ra ra 0     , [Tinstr; Tr3], rf, MachineImpl.ret)
   ].
 
-Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) :=
+Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
   match map.get (getRegs m) sp with
   | Some spv =>
     (* See if spv - 12 is indeed a pc_depth *)
     match map.get (memtags p) (word.unsigned spv - 12) with
     | Some (cons (Tpc depth) nil) =>
-      Some (returnGen (returnSeq, depth))
+      Some (returnGen (returnSeq f depth))
     | _ => None
     end
   | _ => None
@@ -516,18 +521,18 @@ Definition genInstrSeq
            (cm : CodeMap_Impl) (f nextF : FunID)
            (genInstrTag : InstructionI -> G TagSet) :=
   let fromInstr :=
-      bindGen (genInstr l t m p cm dataP codeP genInstrTag)
-              (fun it => returnGen ([it], f)) in
-  match genCall l t m p cm nextF callP,
-        genRetSeq m p cm with
+      bindGen (genInstr l t m p cm dataP codeP f genInstrTag)
+              (fun itf => returnGen ([itf])) in
+  match genCall l t m p cm f nextF callP,
+        genRetSeq m p cm f with
   | None, None => fromInstr
   | None, Some g2 =>
     freq_ g2 ([ (5, fromInstr)
               ; (2, g2) ])%nat
-  | Some (_, g1), None =>
+  | Some g1, None =>
     freq_ g1 ([ (5, fromInstr)
               ; (2, g1) ])%nat
-  | Some (_, g1), Some g2 =>
+  | Some g1, Some g2 =>
     freq_ g1 ([ (5, fromInstr)
               ; (2, g1)
               ; (1, g2)
@@ -591,7 +596,7 @@ Fixpoint gen_exec_aux (steps : nat)
          (m0 : MachineState) (p0 : PolicyState)
          (m  : MachineState) (p  : PolicyState)
          (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
-         (its : list (InstructionI * TagSet))
+         (its : list (InstructionI * TagSet * FunID * CodeAnnotation))
          (dataP codeP callP : TagSet -> bool)
          (genInstrTag : InstructionI -> G TagSet)
          (* num calls? *)
@@ -604,19 +609,25 @@ Fixpoint gen_exec_aux (steps : nat)
   | S steps' =>
     match map.get (getMem m) (getPc m) with
     | Some _ =>
+      match its with
+      | nil =>
 (*      trace ("Existing instruction found: " ++ nl)%string *)
-      (            
-      (* Instruction already exists, step... *)
-      match mpstep (m,p) with
-      | Some ((m',p'),o) =>
-        (* ...and recurse. *)
-        gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP genInstrTag
+        (            
+          (* Instruction already exists, step... *)
+          match mpstep (m,p) with
+          | Some ((m',p'),o) =>
+            (* ...and recurse. *)
+            gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP genInstrTag
+          | _ =>
+            (* ... something went wrong. Trace something? *)
+            ret (m0, p0, cm)
+          end
+        )
       | _ =>
-        (* ... something went wrong. Trace something? *)
-        ret (m0, p0, cm)
+        trace ("Existing instruction mid-sequence" ++ nl)%string
+              (ret (m0, p0, cm))
       end
-      )
-    | _ =>
+   | _ =>
 (*      trace ("No instruction found " ++ nl)%string *)
       (* Check if there is anything left to put *)
       (bindGen (match its with
@@ -624,24 +635,24 @@ Fixpoint gen_exec_aux (steps : nat)
                  (* Generate an instruction sequence. *)
                  (* TODO: Sequences, calls. *)
                  bindGen (genInstrSeq i t m p dataP codeP callP cm f nextF genInstrTag)
-                         (fun '(ists, f') =>
-                            match ists with
-                            | ist :: ists' =>
+                         (fun itfas =>
+                            match itfas with
+                            | (i,t,f',a) :: itfs' =>
 (*                              trace (show (f',ist, ists') ++ nl)%string*)
-                                    (returnGen (f', ist, ists'))
+                                    (returnGen (a, f', (i,t), itfs'))
                             | _ => exception "EmptyInstrSeq"
                             end)
-               | ist::its' =>
-                 returnGen (f, ist, its')
+               | ((i,t,f',a)::itfs') =>
+                 returnGen (a, f', (i,t), itfs')
                end)
-      (fun '(f', (is,it), its) =>
+      (fun '(a, f', (is,it), its) =>
          let nextF' := if Nat.eqb f' nextF then
                          S nextF else nextF in
          let m0' := setInstrI (getPc m) m0 is in
          let m'  := setInstrI (getPc m) m  is in
          let p0' := setInstrTagI (word.unsigned (getPc m)) p0 it in
          let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
-         let cm' := map.put cm (word.unsigned (getPc m)) (inFun f' normal) in
+         let cm' := map.put cm (word.unsigned (getPc m)) (inFun f' a) in
          match mpstep (m', p') with
          | Some ((m'', p''), o) =>
 (*            trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string  *)
@@ -746,7 +757,11 @@ Definition genMach :=
   let codeP := fun tt => true in
   let dataP := fun tt => true in
   (* Fix this *)
-  let callP := fun tt => false in  
+  let callP := fun tt =>
+                 existsb (fun t => match t with
+                                   | Th1 => true
+                                   | _ => false
+                                   end) tt in  
   let genInstrTag : InstructionI -> G TagSet :=
       fun i => returnGen (cons Tinstr nil) in
   genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState map.empty
@@ -756,11 +771,55 @@ From StackSafety Require Import SubroutineSimple.
 
 (* Sample1 (genMach). *)
 
+(* Property with printing. *)
+
+Derive Show for Component.
+
+Instance ShowValue : Show Value :=
+  {| show v := show v |}.
+
+Fixpoint walk (ks : list Component) cm m p (c : context) m' (p' : PolicyState) (c' : context)
+         (cont : unit -> Checker) : Checker :=
+  match ks with
+  | [] => cont tt
+  | k :: ks' =>
+    match fst c k with
+    | Sealed _ =>
+      if Z.eqb (proj m k) (proj m' k)
+      then walk ks' cm m p c m' p' c' cont
+      else whenFail ("Integrity failure at component: " ++ show k ++ nl ++
+                                                        "Component values: " ++ show (proj m k) ++ " vs " ++ show (proj m' k) ++ nl ++
+                                                        printMachine m p cm)%string false
+    | _ => walk ks' cm m p c m' p' c' cont
+    end
+  end.
+
+Definition prop_SimpleStackIntegrityStep fuel m p cm ctx
+  : Checker.Checker :=
+  let fix aux fuel m p ctx : Checker.Checker :=
+      match fuel with
+      | O => collect "Out-of-Fuel" true
+      | S fuel' => 
+        match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
+        | None => collect "Failstop" true
+        | Some (m', p', c', o) =>
+          walk (getComponents m') cm m p ctx m' p' c'
+               (fun tt => aux fuel' m' p' c')
+        end
+      end in
+  aux fuel m p ctx.
+
+Definition defstackmap (i : LayoutInfo) (a : Addr) :=
+  if (andb (Z.leb (stackLo i) a)
+           (Z.leb a (stackHi i)))
+  then
+    true
+  else false.
+
 Definition prop_integrity :=
-  let sm := fun _ => false in
+  let sm := defstackmap defLayoutInfo in
   forAll genMach (fun '(m,p,cm) =>
-(*  trace ("Next Run Starting..." ++ nl)%string *)
-  (SimpleStackIntegrityStepP (CodeMap_fromImpl cm) 42 m p (initC sm m))).
+                    (prop_SimpleStackIntegrityStep 42 m p cm (initC sm m))).
 
 Extract Constant defNumTests => "1000".
 QuickCheck prop_integrity. 
