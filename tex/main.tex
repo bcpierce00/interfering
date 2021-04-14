@@ -50,9 +50,6 @@
                         %% http://ctan.org/pkg/booktabs
 \usepackage{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
-\usepackage{tikz}
-\newcommand*\circled[1]{\tikz[baseline=(char.base)]{
-    \node[shape=circle,draw,inner sep=2pt] (char) {#1};}}
 
 \input{macros}
 \input{examples}
@@ -2015,31 +2012,6 @@ return.
 
 An initial context \(\context_0 = \domMap_0, []\) where \(\domMap_0\) maps
 the stack to \(\unsealed\) and all other addresses and all registers to \(\outside\).
-Then at each step we update the context according to the context-step function,
-\(\stepsto_C\). We will define this in terms of the operations
-\(\push{\domMap}{\depth}{\components}\), in which \(\depth \in \mathbb{Z}\) and
-\(\components \subseteq \COMPONENTS\), and \(\pop{\domMap}{\depth}\), pronounced
-``push'' and ``pop'' and defined as follows.
-
-\[
-(\push{\domMap}{\depth}{\components}) ~ \component =
-\begin{cases}
-  \sealed{\depth} & \text{if } \domMap ~ \component = \unsealed
-                    \text{ and } \component \in \components \\
-  \domMap ~ \component & \text{else} \\
-\end{cases}
-\]
-\[
-(\pop{\domMap}{\depth}) ~ \component =
-\begin{cases}
-  \unsealed & \text{if } \domMap ~ \component = \sealed{\depth'} \text{ where }
-              \depth' >= \depth\\
-  \domMap ~ \component & \text{else} \\
-\end{cases}
-\]
-%
-Push seals a set of components with its depth argument, and pop unseals all components
-that were as deep as its argument or deeper.
 
 Now we can define the context update relation. Let \(\sealcon\) be the sealing convention
 that maps a machine state to a set of components, typically the set of addresses below
@@ -2047,36 +2019,34 @@ the stack pointer. Similarly, \(\retcon ~ \mach ~ \mach'\) will be the return co
 that relates the call state \(\mach\) to return states \(\mach'\) that are valid returns.
 The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
 and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
+Then at each step we update the context according to the context-step function,
+\(\stepsto_C\).
 
-The call rule pushes the components sealed by the sealing convention with the depth
-of the current caller, and determines the return target by partially applying the
-return convention to the machine state, and pushes that onto the targets stack.
-The return rule checks whether the attempted return actually manages to reach a
-return target, traversing down the stack until the first one it finds. Recall that
-we are not discussing well-bracketed control flow, so the return might skip over
-a waiting caller. When a target is reached, {\em all} sealed components at or above
-its depth are unsealed by the pop operation. If no target is reached, nothing is
-popped at all. These rules are given inductively, and apply in the listed order.
+The rules for \(\stepsto_C\) are given inductively, and apply in the listed order.
+A call simply pushes the return target onto the return stack and seals all components
+with the depth of the previous return stack. A return
+recursively searches for a valid return target at the next step, and unseals
+every component sealed at a depth that it passes.
 
-\judgmenttwo[Call]
-            {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
-            {\(\depth = |\rts|\)}
-            {\(\mach,(\domMap,\rts) \stepsto_C
-              \push{\domMap}{\depth}{\sealcon ~ \mach},(\retcon ~ \mach)::\rts\)}
+\judgmentthree[Call]
+              {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
+              {\(\components = \sealcon ~ \mach\)}
+              {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
+                {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
-\judgmentthree[ReturnFound]
+\judgmenttwobr[ReturnFound]
               {\(\codemap ~ (\mach ~ \PCname) = \retmap\)}
               {\(\mach \stepsto \mach' \in \target\)}
-              {\(\depth = |\rts|\)}
-              {\(\mach,(\domMap,\target::\rts) \stepsto_C
-                \pop{\domMap}{\depth},\rts\)}
+              {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
+              {\(\domMap' = \domMap[\components \mapsto \unsealed]\)}
+              {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
 
-\judgmentthree[ReturnRec]
-              {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
-              {\(\mach,(\domMap,\rts) \stepsto_C \_,\rts'\)}
-              {\(\depth = |\rts'|\)}
-              {\(\mach,(\domMap,\_::\rts) \stepsto_C
-                \pop{\domMap}{\depth},\rts'\)}
+\judgmenttwobr[ReturnRec]
+              {\(\codemap ~ (\mach ~ \PCname) = \retmap\)}
+              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
+              {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
+              {\(\domMap'' = \domMap'[\components \mapsto \unsealed]\)}
+              {\(\mach,(\domMap,\_::\rts) \stepsto_C \domMap'',\rts'\)}
 
 \judgment[Default]
          {}
@@ -2102,13 +2072,13 @@ initial state of a call, and requires that the traces from them move in {\em loc
 all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\). We write
 this \(\mach \approx_\components \nach\).
 
-\definition Machine state pairs \(\mach,\mach'\) and \(\nach,\nach'\) are {\em synched}
+\definition Machine state pairs \(\mach,\mach'\) and \(\nach,\nach'\) are said to change together
 if for all components \(\component\) such that \(\mach ~ \component \not = \mach' ~ \component\) or
 \(\nach ~ \component \not = \nach' ~ \component\), \(\mach' ~ \component = \nach' ~ \component\).
 This is written \(\mach,\mach' \diamond \nach,\nach'\).
 
 \definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep} if their adjacent pairs
-are synched, written as a coinductive relation \(\machT \doteq \nachT\):
+change together, written as a coinductive relation \(\machT \doteq \nachT\):
 
 \begin{minipage}{.3\textwidth}
 \judgment{}
@@ -2120,207 +2090,218 @@ are synched, written as a coinductive relation \(\machT \doteq \nachT\):
             {\(\mach \machT \doteq \nach \nachT\)}
 \end{minipage}
 
-\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \depth')\) hold for
-\(\depth' \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\depth)\) and
-\(\components\) be the set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
+\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
+\(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
+\(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \outside\).
 \(\MPCT\) corresponds to the trace of a subroutine from its call to its return.
 Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
 \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
 {\em stepwise stack confidentiality} if for all such \(\MPCT\) and \(\NPCT\),
 \(\MPCT \doteq \NPCT\).
 
-\subsection{Stack Safety with Sharing}
+\subsection{Stack Safety with Passing}
 
-Next we introduce sharing. We will need to extend the set of annotations to include
-sharing and passing, and now the code map may map a single instruction to multiple
-annotations, because in some calling conventions a single instruction might carry
-meaning as both a call and a pass. But we will never have a single instruction annotated
-as both a call and a return.
+Next we introduce variable passing. We will need to add extra information to our call
+annotations to reflect that they may now pass variables on the stack, and that the locations
+of those variables may be dynamic (as in the case of pass-by-reference).
+A call annotation now includes a predicate relating machine states to the components
+that should be passed -- when passing by value, this will typically give the memory cells
+at the appropriate offset from the stack pointer, while passing by reference gives the
+addresses of the appropriate variables wherever they happen to be.
 
-\[\ann \in \ANNS ::= \callmap + \retmap + \sharemap(P \subseteq \MACHS \times \COMPONENTS) +
-\passmap(P \subseteq \MACHS \times \COMPONENTS)\]
+\[\ann \in \ANNS ::= \callmap(P \subseteq \MACHS \times \COMPONENTS) + \retmap\]
 
-And we extend the set of domains to include shared and passed components, the latter of
-which are labeled with the depth of the caller that has passed them.
+And we extend the set of domains to include passed components,
+which are labeled with the range of depths of the caller that has passed them.
 
-\[\stackDom \in \STKDOMS ::= \outside + \unsealed + \shared{\depth} + \sealed{\depth} + \passed{\depth}\]
+\[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \passed{\depth,\depth'}\]
 \[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
-\times (\depth \in \mathbb{N}) \]
+\times (\rts \in \listT (\target \subseteq \MACHS)) \]
 
-What it means to push the stack is similar to above, but two details are worth noting.
-First, shared and passed components are not sealed by the sealing convention, and second,
-anything not touched by the sealing convention must be unsealed. Sharing and passing cannot
-apply to memory the callee could otherwise use.
+We straightforwardly describe how the sealing convention and passing predicate combine to
+update a domain map when pushing it, where \(\depth\) is an integer depth.
 
-\[
-(\push{\domMap}{\depth}{\components}) ~ \component =
+\[(\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) ~ \component =
 \begin{cases}
-  \sealed{\depth} & \text{if } \domMap ~ \component = \unsealed
-                    \text{ and } \component \in \components \\
-  \domMap ~ \component & \text{else if } \component \in \components \\
-  \unsealed & \text{else} \\
-\end{cases}
-\]
+  \sealed{\depth}              & \text{if } \domMap ~ \component = \unsealed \text{ and }
+                                 \sealcon ~ \mach ~ \component \text{ and } \neg P ~ \mach ~ \component \\
+  \passed{\depth,\depth+1}     & \text{if } \domMap ~ \component = \unsealed \text{ and }
+                                 \sealcon ~ \mach ~ \component \text{ and } P ~ \mach ~ \component \\
+  \passed{\depth',\depth+1}    & \text{if } \domMap ~ \component = \passed{\depth',\depth} \text{ and }
+                                 \sealcon ~ \mach ~ \component \text{ and } P ~ \mach ~ \component,
+                                 \text{ for any } \depth' \\
+  \domMap~\component & \text{else} \\
+\end{cases}\]
 
-Popping is simpler, but note that while passed components are unsealed on return to their
-passer, shared ones are unsealed on return {\em from} their sharer - on deallocation,
-in other words.
+And to pop we just unseal the components at depth \(\depth\):
 
-\[
-(\pop{\domMap}{\depth}) ~ \component =
+\[(\mathit{pop} ~ \domMap ~ \depth) ~ \component =
 \begin{cases}
-  \unsealed & \text{if } \domMap ~ \component = \sealed{\depth-1}
-              \text{ or } \domMap ~ \component = \passed{\depth-1}
-              \text{ or } \domMap ~ \component = \shared{\depth} \\
-  \domMap ~ \component & \text{else} \\
-\end{cases}
-\]
+  \unsealed                 & \text{if } \domMap ~ \component = \sealed{\depth} \\
+  \unsealed                 & \text{if } \domMap ~ \component = \passed{\depth,\depth} \\
+  \passed{\depth',\depth-1} & \text{if } \domMap ~ \component = \passed{\depth',\depth}
+                              \text{ for any } \depth' < \depth \\
+  \domMap~\component        & \text{else} \\
+\end{cases}\]
 
-Finally we introduce a more direct update. If \(P\) is a relation between machine states and
-components, we write \(\domMap[P ~ \mach \mapsto \stackDom]\) to say \(\domMap\) updated
-so that each component \(\component\) where \(P ~ \mach ~ \component\) holds is mapped to
-\(\stackDom\).
+Now we can inductively define the context update function; these again apply in the order
+presented.
 
-Now we can inductively define the context update function; as these could be ambiguous assume that
-they apply in the order presented.
+\judgmenttwo[Call]
+            {\(\codemap ~ (\mach ~ \PCname) = \callmap(P)\)}
+            {\(\domMap' = \mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ |\rts|\)}
+            {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
-\begin{center}
-  \judgment{\(\mach,\context,\anns \stepstocon (\domMap,\depth)\)}
-           {\(\mach,\context,(\{\callmap\} \cup \anns) \stepstocon
-             (\push{\domMap}{\depth}{\sealcon ~ \mach},\depth+1)\)}
-  \judgment{\(\mach,\context,\anns \stepstocon (\domMap,\depth)\)}
-           {\(\mach,\context,(\{\retmap\} \cup \anns) \stepstocon
-             \mach',(\pop{\domMap}{\depth},\depth-1)\)}
-  \judgment{\(\mach,\context,\anns \stepstocon (\domMap,\depth)\)}
-           {\(\mach,\context,(\{\passmap ~ P\} \cup \anns) \stepstocon
-             \domMap[P ~ \mach \mapsto \passed{\depth}], \depth)\)}
-  \judgment{\(\mach,\context,\anns \stepstocon (\domMap,\depth)\)}
-           {\(\mach,\context,(\{\sharemap ~ P\} \cup \anns) \stepstocon
-             \domMap[P ~ \mach \mapsto \shared{\depth}], \depth)\)}
-  \judgment{}
-           {\(\mach,\context,\_ \stepstocon \context\)}
-\end{center}
+\judgmentthree[ReturnFound]
+              {\(\codemap ~ (\mach ~ \PCname) = \retmap\)}
+              {\(\mach \stepsto \mach' \in \target\)}
+              {\(\domMap' = \mathit{pop} ~ \domMap ~ |\rts|\)}
+              {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
 
-\definition Let \(\MPCT\) be a reachable trace segment of the form
-\(\mpcstatename ~ \mpcstatename'\), where \(\pi_\context(\mpcstatename) = (\domMap,\depth)\).
-Let \(\components\) be the set of components \(\component\) such that either
-\(\domMap ~ \component = \sealed{\_}\) or \(\domMap ~ \component = \passed{\depth'}\) for
-some depth \(\depth' < \depth-1\). If any such \(\MPCT\) obeys trace integrity with respect
-to \(\components\), then the system enjoys {\em ultra-eager confidentiality} in the sharing
-model.
+\judgmentthree[ReturnRec]
+              {\(\codemap ~ (\mach ~ \PCname) = \retmap\)}
+              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
+              {\(\domMap'' = \mathit{pop} ~ \domMap ~ |\rts|\)}
+              {\(\mach,(\domMap,\_::\rts) \stepsto_C \domMap'',\rts'\)}
 
-\definition Let \(\MPCT \langle f \rangle\) be a reachable trace segment where \(f\) holds
-on contexts whose depth is less than or equal to some \(\depth\). Let \(\head(\MPCT) =
-\mpcstate{\mach}{\pol}{(\domMap,\depth')}\) and \(\components\) be the set of components
-\(\component\) such that either \(\domMap ~ \component = \sealed{\_}\) or
-\(\domMap ~ \component = \passed{\depth''}\) for some depth \(\depth'' < \depth'-1\).
-Then the system enjoys {\em eager integrity} in the sharing model if \(\MPCT\) obeys
-trace integrity with respect to \(\components\).
+\judgment[Default]
+         {}
+         {\(\_,\context \stepsto_C \context\)}
 
-\definition Let \(\MPCT \langle f \rangle\) be a reachable trace segment where \(f\) holds
-on contexts whose depth is less than or equal to some \(\depth\). Let \(\head(\MPCT) =
-\mpcstate{\mach}{\pol}{(\domMap,\depth')}\) and \(\components\) be the set of components
-\(\component\) such that either \(\domMap ~ \component = \outside\) or
-\(\domMap ~ \component = \shared{\_}\). Then the system enjoys {\em eager confidentiality}
-in the sharing model if \(\MPCT\) obeys trace confidentiality with respect to \(\components\)
-and \(f\).
+\definition Let \(\mpcstatename\) and \(\mpcstatename'\) be reachable states such that
+\(\mpcstatename \stepstocon \mpcstatename'\), and \(\pi_\context(\mpcstatename) = \domMap,\rts\).
+Let \(\components\) be the set of components \(\component\) where 
+\(\domMap ~ \component = \sealed{\_}\) or \(\passed{\depth,\depth'}\) where \(|\rts| < \depth\)
+or \(|\rts| > \depth'\). A system enjoys {\em stepwise stack integrity with passing} if for all
+such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename') ~ \component\).
+
+\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
+\(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\). Let
+\(\components\) be the set of components \(\component\) such that
+\(\domMap ~ \component = \unsealed\) or \(\passed{\depth,\depth'}\) where
+\(\depth \leq |\rts| \leq \depth'\) .
+Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
+\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
+{\em stepwise stack confidentiality with passing} if for all such \(\MPCT\) and \(\NPCT\),
+\(\MPCT \doteq \NPCT\).
 
 \subsection{Coroutine Safety}
 
 Our final extension to the model is to add coroutines. We assume a very simple model with
 a fixed number of coroutines, each with its own stack.
 Stack identifiers are drawn from a set \(\STACKS\), and there is a static partial map
-\(\stackof\) from addresses to stack ids. The ``active stack'' -- the stack belonging to the
-currently executing coroutine -- in any given machine state is \(\stackof(\mach ~ \SP)\).
-We extend the set of possible annotations with a yield.
+\(\stackof\) from addresses to stack ids. Note that we now explicitly reference the stack
+pointer, using the \(\stackof\) of the stack pointer to determine the target of a yield.
+We extend the set of possible annotations with a yield annotation.
 
-\[\ann \in \ANNS ::= \callmap + \retmap + \yieldmap +
-\sharemap(P \subseteq \MACHS \times \COMPONENTS) +
-\passmap(P \subseteq \MACHS \times \COMPONENTS)\]
+\[\ann \in \ANNS ::= \callmap(P \subseteq \MACHS \times \COMPONENTS) + \retmap + \yieldmap\]
 
-We use the same domain model as above, but instead of keeping track of a single depth
-we use a map from stacks to their depths.
+The first major difference in this model is the domains. Stack domains are now nested inside
+top-level domains, and associated with stack identifiers.
+Our context now consists of a domain map, a map from stack identifiers to return target stacks,
+an additional map of targets for yields, and a stack identifier of the active stack.
+Our yield target map \(\yts\) is a map from stack identifiers to targets.
+In a standard system an initial yield target map will map each stack identifier to the
+set of all states with their stack pointer at the stack base. When yielding from state \(\mach\),
+\(\ycon ~ \mach \subseteq \MACHS\) tells us what yielding back looks like.
 
+\[\stackDom \in \STKDOMS ::= \unsealed + \sealed{\depth} + \passed{\depth-\depth'}\]
+\[\topDom \in \TOPDOMS ::= \outside + \instack{\stackid}{\stackDom}\]
 \[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS) \times
-(\depthMap \in \STACKS \rightarrow \mathbb{N})\]
+(\rtm \in \STACKS \rightarrow \listT ~ \target) \times (\yts \in \STACKS \rightarrow
+\target) \times (\stackid \in \STACKS)\]
 
-\subsection{Local State Encapsulation}
+In our context update rules, calls and returns work the same as in the sharing model,
+with domain updates restricted to the top-level domain corresponding to the active stack,
+and likewise using the return target stacks. We will omit these rules and focus on the new yield rule.
 
-\definition A system enjoys {\em local state encapsulation} if it enjoys eager integrity and
-eager confidentiality.
+\judgmentthreebr[Yield]
+                {\(\codemap ~ (\mach ~ \PCname) = \yieldmap\)}
+                {\(\mach \stepsto \mach'\)}
+                {\(\stackid' = \stackof ~ (\mach'~ \rsp)\)}
+                {\(\stackid \not = \stackid'\)}
+                {\(\yts ~ \stackid'\)}
+                {\(\yts' = \yts[\stackid \mapsto \ycon ~ \mach]\)}
+                {\(\mach,(\domMap,\rts,\yts,\stackid) \stepsto_C \domMap,\rts,\yts',\stackid'\)}
+                
+This calls for some explanation. First, we determine which coroutine we are yielding to by
+checking which stack the stack pointer of the next state is pointing to. Then we can only yield
+if the next state is a valid yield target for that stack, and we update the yield target for
+the yielding stack. So it is once again possible for a coroutine to claim to yield but not
+actually change the active stack, with similar effects to when a callee fails to return properly.
+Now we can define both stack safety and coroutine safety under this model.
 
-\definition A system enjoys {\em lazy local state encapsulation} if it enjoys lazy integrity
-and eager confidentiality.
+\definition Let \(\mpcstatename\) and \(\mpcstatename'\) be reachable states such that
+\(\mpcstatename \stepstocon \mpcstatename'\), and \(\pi_\context(\mpcstatename) = \domMap,\rtm,\yts,\stackid\).
+Let \(\components\) be the set of components \(\component\) where 
+\(\domMap ~ \component = \instack{\stackid}{\sealed{\_}}\) or \(\instack{\stackid}{\passed{\depth,\depth'}}\)
+where \(|\rtm ~ \stackid| < \depth\) or \(|\rtm ~ \stackid| > \depth'\). A system enjoys
+{\em stepwise stack integrity} in the coroutine setting if for all
+such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename') ~ \component\).
 
-We do not give a confidentiality equivalent to lazy integrity, because the family of lazy
-enforcement mechanisms that we consider under the HOPE system in fact enforce eager confidentiality.
-A policy based on taint-tracking might require such a lazy confidentiality, and it would be constructed
-by replacing the ``same-difference'' condition with one that requires any differences to produce
-observationally equivalent states. But for our purposes it is irrelevant.
+\definition Let \(\mpcstatename\) and \(\mpcstatename'\) be reachable states such that
+\(\mpcstatename \stepstocon \mpcstatename'\), and \(\pi_\context(\mpcstatename) = \domMap,\rtm,\yts,\stackid\).
+Let \(\components\) be the set of components \(\component\) where 
+\(\domMap ~ \component = \instack{\stackid'}{\_}\) where \(\stackid \not = \stackid'\).
+A system enjoys {\em stepwise coroutine integrity} in the coroutine setting if for all
+such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename') ~ \component\).
 
-\section{Well-bracketed Control Flow}
+\definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
+\(f_\depth ~ \mach ~ (\_, \rtm, \_, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
+For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
+\(\components\) be the set of components \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid}{\unsealed}\) or \(\instack{\stackid}{\passed{\depth,\depth'}}\)
+where \(\depth \leq |\rtm ~ \stackid| \leq \depth'\) .
+Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
+\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
+{\em stepwise stack confidentiality} in the coroutine setting if for all
+such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
+
+\definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
+\(f_\depth ~ \mach ~ (\_, \rtm, \_, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
+For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
+\(\components\) be the set of components \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid}{\_}\).
+Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
+\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
+{\em stepwise coroutine confidentiality} in the coroutine setting if for all
+such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
+
+\subsection{Well-bracketed Control Flow}
 \label{sec:wbcf}
 
-Both the integrity and confidentiality components of local state
-encapsulation concern themselves only with the accessibility of data,
-and may still hold on a wide range of programs that violate expected
-control flow. The archetypal example of this is the {\em awkward example},
-in which an adversarial callee stores a return address and returns to it
-on a subsequent call, thus violating the expected control flow of the
-caller without actually violating the caller's integrity. But it also
-encompasses simpler violations, such as a function bypassing a password
-check by jumping (or returning) in the middle of a block of code.
-%
-Stack safety enforcement mechanisms like \citet{Skorstengaard+19}
-usually aim to prevent such unwanted flows: every jump between
-functions should either be a call or a return, and each return should
-be to the instruction after its corresponding call.
+Both the integrity and confidentiality components of stack safety
+are reasonable even in programs that violate expected
+control flow. But even though stack safety prevents control-flow violations
+from being used to gain privileges, it is worth protecting control flow as well.
+Indeed, all of the enforcement mechanisms we discuss do preserve well-bracketed
+control flow.
 
-To formally capture this aspect of stack safety, we introduce some more
-security properties. {\em Control separation} restricts transitions between
-functions to follow the interfaces set out by call, return, and yield, forming
-a foundation for all of the other properties that rely on those interfaces for
-meaning. {\em Entry integrity} ensures the validity of call targets,
-{\em return integrity} ensures that of return targets, and
-{\em yield-back integrity} ensures that of yield targets.
+When we focus on subroutines, the essence of well-bracketed control flow
+is that a caller can expect that if its callee ever returns, it returns
+to the caller at the appropriate return target. This is tantamount to saying
+that we never ``skip'' a return, or perform a ``false'' one. To formalize this in
+the simple model:
 
-Recall that our properties use a compiler-derived code-map determine
-which addresses are instructions and which functions they belong to, as well
-as annotating them as calls, returns, and yields, as well as sharing information.
-We now extend it with an annotation for valid entry points:
-\[\ann \in \ANNS ::= \callmap + \retmap + \yieldmap +  \entmap + 
-\sharemap(P \subseteq \MACHS \times \COMPONENTS) +
-\passmap(P \subseteq \MACHS \times \COMPONENTS)\]
+\definition A system enjoys {\em well-bracketed control flow} if for all
+reachable states \(\mpcstatename\) and \(\mpcstatename'\) such that
+\(\mpcstatename \stepstocon \mpcstatename'\), if
+\(\pi_c(\mpcstatename) = (\_, \_::\rts)\) and \(\pi_m(\mpcstatename)\)
+is annotated as a return, then \(\pi_c(\mpcstatename) = (\_, \rts)\).
 
-\definition%{Control Separation}
+Extending this idea to coroutines, we use the same notion that there are
+no ``false'' yields.
 
-Let \(\mpcstatename\) be a reachable state whose program counter points to code in
-function \(\funid\), and \(\mpcstatename \stepstopol \mpcstatename'\) where
-\(\mpcstatename'\) is state whose program counter points to a different function
-\(\funid'\). A system enjoys {\em control separation} when all such \(\mpcstatename\)
-are annotated \(\callmap\), \(\retmap\), or \(\yieldmap\).
-
-\definition%{Entry Integrity}
-A system enjoys {\em entry integrity} when, for any reachable \(\mpcstatename\) and
-\(\mpcstatename'\) such that \(\mpcstatename\) is annotated \(\callmap\) and
-\(\mpcstatename \stepstopol \mpcstatename'\), \(\mpcstatename'\) is annotated \(\entmap\).
-
-\definition%{Return Integrity}
-A system enjoys {\em return integrity}... [this one needs to talk about context.]
-
-\definition%{Yield-back Integrity}
-A system enjoys {\em yield-back integrity}... [same.]
-
-\definition% {Well-Bracketed Control Flow}
-The above properties are somewhat orthogonal, but together they
-capture a standard notion of control flow for a stack: functions keep
-their code separate outside of calls and returns, calls respect
-explicit entry points, and returns respect implicit entry points
-corresponding to their call.  A system with all three
-properties (with respect to a function map, call map, return map,
-and entry map) is said to enjoy
-{\em well-bracketed control flow} (with respect to those maps).
+\definition A system enjoys {\em well-structured control flow} if for all
+reachable states \(\mpcstatename\) and \(\mpcstatename'\) such that
+\(\mpcstatename \stepstocon \mpcstatename'\), if
+\(\pi_c(\mpcstatename) = (\_,\_,\_,\stackid)\) and \(\pi_m(\mpcstatename)\)
+is annotated as a return, then \(\pi_c(\mpcstatename) = (\_,\_,\_,\stackid')\)
+where \(\stackid \not = \stackid'\).
 
 \section{Enforcement}
 \label{sec:enforcement}
@@ -2557,253 +2538,7 @@ observations to draw this distinction.
 
 \subsection{Observable Integrity}
 
-\paragraph{Rolling Back to Idealized State}
-
-Observable integrity weakens eager integrity by allowing a returned
-state to differ from its call state at high integrity components,
-provided that the differences do not change the observable behavior of
-the rest of the program. The challenge here is to define what constitutes
-a change in behavior. We construct an idealized return state that
-contains only the changes that the caller was allowed to make, and use
-the trace from that state as a baseline against which the real trace
-will be compared.
-
-      \definition
-
-      Given a contour, a call state, and a returned state, we define a
-      {\em rollback} function \(\mathit{roll} \in \CONTOURS \times \MACHS \times
-      \MACHS \rightarrow \MACHS\). The rollback returns a state that matches
-      the call state on those components that are high integrity in its
-      contour, and matches the return state on low integrity components:
-      \[\mathit{roll}(\contour,\mach_e,\mach_r)(\component) =
-      \begin{cases}
-        \mach_e(\component) & \text{if } \contour(\component) = (\HIGHINT,\_) \\
-        \mach_r(\component) & \text{if } \contour(\component) = (\LOWINT,\_) \\
-      \end{cases}\]
-
-      If \(\mach_e\) is an entry to a call with contour \(\contour\)
-      and \(\mach_r\) its return, the result of
-      \(\mathit{roll}(\contour,\mach_e,\mach_r)\) agrees with the
-      entry \(\mach_e\) on every component the callee should not
-      change, and with the actual return \(\mach_r\) on those
-      components that it is permitted to change.  So the observable
-      behavior that follows is the idealized behavior to which we
-      compare the trace from \(\mach_r\).
-
-      Now we can define a version of trace integrity that compares the trace
-      from a returned state to that from its idealized counterpart.
-
-    \definition%{Observable Trace Integrity}
-
-      A trace enjoys {\em observable trace integrity} with respect to
-      some contour \(\contour\) if the trace induced by its final
-      state (if any) has observable behavior that prefixes that of its
-      idealized version (to account for premature halts due to policy
-      violations):
-
-      \[\begin{split}
-        \propdef{ObsTraceInt} ~ \contour ~ \MPT \ \ \triangleq \ \
-        & \head(\MPT) = \mpostate{\mach_e}{\_}{\_} ~ \land ~
-          \last(\MPT) = \mpostate{\mach_r}{\pol_r}{\_} ~ \land \\
-        & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' ~ \land ~
-          \mathit{roll}(\contour,\mach_e,\mach_r) \hookrightarrow \machT'
-          \Rightarrow \\
-        & \pi_o(\MPT') \lesssim_O \pi_o(\machT')
-      \end{split}\]
-
-%    \begin{figure}
-%      \integritylazyexample
-%      \caption{Rolling back from Figure \ref{fig:intex}.}
-        %\apt{But at 27, $[\rsp]$ contains 0, not 18, because of the change at 44. Could just fix diagram, but this complicates story.}}
-%      \label{fig:intlex}
-%    \end{figure}
-
-    For our example, we return to the violation of trace integrity in
-    \cref{fig:intex}, in which {\tt g} has written to {\tt z} and returned.
-    Whether observable integrity holds depends on the continuing trace, shown
-    in \cref{fig:intlex}. Above, we have the final state of \(\MPT\),
-    \(\mach_r\), and the rolled-back state, \(\mach_r' =
-    \mathit{roll}(\contour,\mach_e,\mach_r)\), in which high integrity
-    components are restored to their values as of \(\mach_e\). Specifically,
-    address 103 is restored to 0. When instruction 31 prints {\tt z} in the
-    trace from \(\mach_r\), it prints 18, but in the trace from \(\mach_r'\)
-    it prints 0. Only then is observable trace integrity violated.
-
-    However, consider instead if we modify the original code of \cref{fig:running-trace-b} to insert after instruction 44 a new
-    instruction \(44.5: [\rsp-4] \leftarrow 50\), overwriting {\tt w} in
-    {\tt f}'s frame. So \(\mach_r'\) maps address 105 to 50, while the
-    rolled-back state \(\mach_r'\) maps it to 0. But in the trace from either
-    state, instructions 27 and 28 load the return value (18) and store it to
-    105, eliminating the only difference. The remainder of the observation
-    traces must be identical, so this trace does obey observable trace
-    integrity.
-
-    \definition%{Observable Stack Integrity}
-
-      A system enjoys {\em observable stack integrity}, like stack integrity,
-      if, for any initial state and each \(n\)-transition from
-      \(\mpstate{\mach_c}{\pol_c}\) to \(\mpstate{\mach_e}{\pol_e}\) in its
-      induced trace, we take the prefix of the call
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} ~ | ~ \ret{\mach_c}\)
-      and observable trace integrity holds on \(\MPT_{\mathit{call}}\) with
-      contour \(\mathit{Cof}(\mach_c,n)\).
-
-  \subsection{Observable Confidentiality}
-
-      Two of the cases of trace confidentiality (\cref{def:trace-conf}), \(\mathit{InfCase}\)
-      and \(\mathit{FailCase}\), are defined solely in terms of
-      observation traces. If
-      the traces are infinite, they should be similar; if one
-      fail-stops, it should be a prefix. Only the
-      \(\mathit{ReturnCase}\) checks machine states, because in that
-      case the traces could continue, but have been cut off by a
-      return. The key to making confidentiality lazy is not to perform that
-      check but rather to consider the traces after that return,
-      checking only whether they are observationally similar.
-
-      This requires restoring varied components to their original
-      values in the trace from the variant state, since after return
-      they will once again be legitimately accessible. To return to
-      the example in \cref{fig:confex}, the varied final state
-      \(\mach_r'\) still has $-5$ as a return address for {\tt f}, so
-      the trace after that return will behave oddly in a way that
-      does not reflect a confidentiality violation.  That means we
-      cannot immediately compare traces from \(\mach_r\) and
-      \(\mach_r'\), but rather that we must restore the varied values
-      while preserving differences that have occurred during
-      execution.
-
-      \definition
-
-      The \(\mathit{restore}\) function takes four states: the
-      original entry state, a variant entry state, and corresponding return
-      states. It returns another state. The resulting state restores those
-      components that varied between entries to match the original entry,
-      unless they were changed during execution:
-      \[\mathit{restore}(\mach_e,\mach_e',\mach_r,\mach_r')
-        (\component) =
-        \begin{cases}
-          \mach_e(\component) & \text{if } \mach_e(\component) \not =
-                                \mach_e'(\component) \text { and } \\
-          & \mach_e(\component) = \mach_r(\component) \text{ and }
-            \mach_e'(\component) = \mach_r'(\component) \\
-          \mach_r'(\component) & \text{else} \\
-        \end{cases}\]
-
-      Now we can describe a trace property akin to trace confidentiality, but
-      continuing execution after the end of the callee trace.
-
-    \definition{%Observable Trace Confidentiality}
-
-      {\em Observable trace confidentiality} is the lazy analog to
-      trace confidentiality, and reuses the cases in which the traces
-      do not return.  For a return predicate \(R\) and a pair of
-      traces \(\MPT\) and \(\machT\), we consider the return case, in
-      which $\MPT$ has a last element
-      \(\mpostate{\mach_r}{\_}{\_}\) and that machine state is
-      a return, i.e. \(R ~ \mach_r\) holds.
-%
-      Observable trace confidentiality then requires that $\machT$
-      also has a final state \((\mach_r',\_)\) that is a return, i.e.
-      \(R ~ \mach_r'\) holds.
-%
-      In addition, just like in the eager case,
-      observations of \(\MPT\) are similar to those of \(\machT\).
-
-      The only thing that changes is the requirement that \(\mach_r\)
-      and \(\mach_r'\) agree on components. Instead, let \(\mach_e\)
-      be the machine state of \(\head(\MPT)\), and \(\mach_e'\) be
-      that of \(\head(\machT)\). We restore \(\mach_r'\) based on
-      \(\mach_e\) and \(\mach_e'\) to get \(\mach_r'' =
-      \mathit{restore}(\mach_e,\mach_e',\mach_r,\mach_r')\).  Then
-      observable trace confidentiality requires that the
-      induced trace from \(\mpstate{\mach_r}{\pol_r}\) should be an
-      observational prefix of the induced trace from \(\mach_r'\),
-      reflecting the possibility of a fail-stop after return.
-
-      \[\begin{split}
-        \mathit{ObsReturnCase} ~ R ~
-        (\mpostate{\mach_e}{\_}{\_}\MPT) ~
-        ((\mach_e',\_)\machT) \ \ \triangleq \ \
-        & \last(\MPT) = \mpostate{\mach_r}{\pol_r}{\_} ~ \land ~
-         \last(\machT) = (\mach_r',\_) ~ \land \\
-        & \mach_r'' = \mathit{restore}(\contour,\mach_e,\mach_e',\mach_r,\mach_r') ~ \land \\
-        & \mpstate{\mach_r}{\pol_r} \hookrightarrow \MPT' ~ \land ~
-        \mach_r'' \hookrightarrow \machT' \Rightarrow \\
-        & \pi_o(\MPT) \eqsim \pi_o(\machT) ~ \land ~
-        \pi_o(\MPT') \lesssim \pi_o(\machT') \\
-      \end{split}\]
-
-      We combine this case with the other two cases from ordinary trace
-      confidentiality:
-\[
-        \propdef{ObsTraceConf} ~  R ~ \MPT ~ \machT \ \ \triangleq \ \
-         \mathit{ObsReturnCase} ~ R ~ \MPT ~ \machT ~ \land
-         \mathit{InfCase} ~ \MPT ~ \machT \land \mathit{FailCase} ~ R ~
-          \MPT ~ \machT
-\]
-
-%      \begin{figure}
-%        \confidentialitylazyexample
-%        \caption{Continuing from \cref{fig:confex}.}
-%        \label{fig:conflex}
-%      \end{figure}
-
-      In our example, \cref{fig:conflex} shows how execution continues from
-      \(\mach_r'\) and the restored
-      \[\mach_r'' = \mathit{restore}(%\contour,
-      \mach_e,\mach_e',\mach_r,\mach_r').
-      \]
-      Addresses 106 and 107
-      are not restored; every address that was varied and not changed in one
-      of the executions is. So 107 contains 43 in the trace from \(\mach_r\),
-      and after returning from {\tt f}, {\tt main} prints 85. But in the trace
-      from \(\mach_r''\), 107 contains $-4$, and ultimately 38 is printed.
-      So observable trace confidentiality does not hold. This example
-      illustrates the weakness of observable confidentiality as a testing
-      property: it takes until the very end of the program to determine whether
-      a tainted value actually influences observable behavior.
-
-      On the other hand, suppose that we inserted an instruction at 43:
-      \(r_6 \leftarrow [\rsp-8]\). \(r_6\) would hold 42 in \(\mach_r\)
-      and $-5$ in both \(\mach_r'\) and \(\mach_r''\). But since \(r_6\) is
-      never used otherwise, the traces of {\tt f} will enjoy observable trace
-      confidentiality.
-
-    \definition%{Observable Stack Confidentiality}
-
-      {\em Observable stack confidentiality} is structured like stack
-      confidentiality. For each initial
-      state \((\mach_0, \pol_0)\) and \(n\)-transition from \(\mpstate{\mach_c}{\pol_c}\)
-      to \(\mpstate{\mach_e}{\pol_e}\) in the induced trace
-      \(\mpstate{\mach_0}{\pol_0} \hookrightarrow \MPT\), take any
-      variation \(\mach_e' \approx_{\mathit{Cof}(\mach_c,n)} \mach_e\). Let
-      \(\mpstate{\mach_e}{\pol_e} \hookrightarrow \MPT_{\mathit{call}} ~ | ~
-      \ret{\mach_c}\) and \(\mach_e' \hookrightarrow \machT_{\mathit{call}} ~ | ~
-      \ret{\mach_c}\). We must have \(\propdef{ObsTraceConf} ~
-      \ret{\mach_c} ~ \MPT_{\mathit{call}} ~ \machT_{\mathit{call}}\).
-
-      Additionally, for any variation \(\mach_0' \approx_{\mathit{Cof}(\mach_0),0}
-      \mach_0\), taking the induced trace  \(\mach_0' \hookrightarrow
-      \machT\), we must have \(\propdef{TraceConf} ~ \emptyset ~ \MPT ~ \machT\).
-
-      A system enjoys observable stack confidentiality if observable
-      confidentiality holds in all such cases.
-
-    \definition%{Observable Stack Safety}
-    A system enjoys {\em observable stack safety}
-    % with respect to a call map       and a function map
-    if it enjoys both observable stack integrity and
-      observable stack confidentiality with respect to them.
-
-      \medskip
-      \textsc{Theorem.}
-      Stack safety implies observable stack safety.
-      \smallskip
-
-      This is more straightforward than the implication in the previous
-      section (1,5K LoC in Coq) as the recursive
-      structure of the two properties is similar.
+\subsection{Observable Confidentiality}
 
     \paragraph{Connection to Policies}
 
