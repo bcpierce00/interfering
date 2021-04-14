@@ -2088,82 +2088,41 @@ and component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) an
 \(\domMap ~ \component = \sealed{\_}\), then \(\pi_\mach(\mpcstatename) ~ \component =
 \pi_\mach(\mpcstatename') ~ \component\).
 
-Next we consider {\em lockstep stack confidentiality}. Here it behooves us to factor out
-the general notion of lockstep confidentiality independent of a particular context model.
-
-\subsection{Eager Confidentiality}
+Next we consider {\em stepwise stack confidentiality}. There are a number of preliminary
+concepts we must discuss here -- confidentiality quantifies over {\em variants} of the
+initial state of a call, and requires that the traces from them move in {\em lockstep}.
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if, for
 all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\). We write
 this \(\mach \approx_\components \nach\).
 
-\definition Machine state pairs \(\mach,\mach'\) and \(\nach,\nach'\) have the {\em same differences}
+\definition Machine state pairs \(\mach,\mach'\) and \(\nach,\nach'\) are {\em synched}
 if for all components \(\component\) such that \(\mach ~ \component \not = \mach' ~ \component\) or
 \(\nach ~ \component \not = \nach' ~ \component\), \(\mach' ~ \component = \nach' ~ \component\).
 This is written \(\mach,\mach' \diamond \nach,\nach'\).
+
+\definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep} if their adjacent pairs
+are synched, written as a coinductive relation \(\machT \doteq \nachT\):
+
+\begin{minipage}{.3\textwidth}
+\judgment{}
+         {\(\mach \doteq \nach\)}
+\end{minipage}
+\begin{minipage}{.6\textwidth}
+\judgmenttwo{\(\mach, \head(\machT) \diamond \nach, \head(\nachT)\)}
+            {\(\machT \doteq \nachT\)}         
+            {\(\mach \machT \doteq \nach \nachT\)}
+\end{minipage}
 
 \definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \depth')\) hold for
 \(\depth' \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
 let \(\head(\MPCT) = \mach,\pol,(\domMap,\depth)\) and
 \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
-Then take any \(\nach\) such that \(\mach \approx_\components \nach\). \(\MPCT\) corresponds to the
-trace of a subroutine from its call to its return.
-
-If we take the induced trace from this variant until a return,
-\(\nach,\pol,\context \hookrightarrow \NPCT | \neg f_\depth\), we get a subtrace corresponding
-to the same subrouting called with the same (register) arguments but with a potentially different
-state at the call-site. A system enjoys {\em eager confidentiality} if for all such pairs of traces,
-they correspond according to one of four cases:
-
-\begin{enumerate}
-\item \(\MPCT\) may be finite and \(\pi_\context(\last(\MPCT)) = (\_,\depth')\) with \(\depth' < \depth\),
-  and \(\pi_\context(\last(\NPCT)) = (\_,\depth')\) with \(\depth' < \depth\). That is, both traces end
-  having left the call of depth \(\depth\). Further:
-  \begin{itemize}
-  \item They have the same observable behavior, \(\pi_\obs(\MPCT) \simeq \pi_\obs(\NPCT)\)
-  \item Their final states have the same differences:
-    \[\pi_\mach(\head(\MPCT)), \pi_\mach(\last(\MPCT)) \diamond
-    \pi_\mach(\head(\MPCT)), \pi_\mach(\last(\NPCT))\]
-  \end{itemize}
-\item \(\MPCT\) and \(\NPCT\) may both be infinite, with \(\pi_\obs(\MPCT) \simeq \pi_\obs(\NPCT)\)
-\item \(\MPCT\) may be finite but end without returning -- which can only have happened if it fail-stopped --
-  and its observable behavior prefixes that of \(\NPCT\), \(\pi_\obs(\MPCT) \lesssim \pi_\obs(\NPCT)\)
-\item \(\NPCT\) may end with a fail-stop as in case 3, with \(\pi_\obs(\NPCT) \lesssim \pi_\obs(\MPCT)\)
-\end{enumerate}
-
-\subsection{Trace Properties}
-
-Having seen instances of eager confidentiality and integrity, defined in terms of reachable trace
-segments, we can generalize them to properties of the trace segments themselves. Then as we expand
-our model, our further properties will be defined in terms of the trace properties.
-
-\definition Let \(\MPCT\) be a reachable segment and \(\components\) be any set of components.
-\(\MPCT\) enjoys {\em trace integrity} when \(\last(\MPCT) ~ \component = \head(\MPCT) ~ \component\)
-for all \(\component \in \components\), and when \(\last(\MPCT)\) is undefined.
-
-\definition Let \(\MPCT \langle f \rangle\) be a reachable segment delimited by the predicate \(f\)
-and the \(\components\) be any set of components. Let \(\head(\MPCT) = \mpcstate{\mach}{\pol}{\context}\)
-and \(\nach\) be a machine state such that \(\mach \approx_\components \nach\). Suppose we take the
-induced trace from \(\npcstatename = \mpcstate{\nach}{\pol}{\context}\) that corresponds to \(\MPCT\),
-\(\npcstatename \hookrightarrow \NPCT | \neg f\). The trace \(\MPCT\) enjoys {\em trace confidentiality}
-with respect to \(f\) and \(P\) if, for all such \(\NPCT\), they correspond according to the four cases
-above:
-
-\begin{enumerate}
-\item \(\MPCT\) may be finite and \(\pi_\context(\last(\MPCT)) = (\_,\depth')\) with \(\depth' < \depth\),
-  and \(\pi_\context(\last(\NPCT)) = (\_,\depth')\) with \(\depth' < \depth\). That is, both traces end
-  having left the call of depth \(\depth\). Further:
-  \begin{itemize}
-  \item They have the same observable behavior, \(\pi_\obs(\MPCT) \simeq \pi_\obs(\NPCT)\)
-  \item Their final states have the same differences:
-    \[\pi_\mach(\head(\MPCT)), \pi_\mach(\last(\MPCT)) \diamond
-    \pi_\mach(\head(\MPCT)), \pi_\mach(\last(\NPCT))\]
-  \end{itemize}
-\item \(\MPCT\) and \(\NPCT\) may both be infinite, with \(\pi_\obs(\MPCT) \simeq \pi_\obs(\NPCT)\)
-\item \(\MPCT\) may be finite but end without returning -- which can only have happened if it fail-stopped --
-  and its observable behavior prefixes that of \(\NPCT\), \(\pi_\obs(\MPCT) \lesssim \pi_\obs(\NPCT)\)
-\item \(\NPCT\) may end with a fail-stop as in case 3, with \(\pi_\obs(\NPCT) \lesssim \pi_\obs(\MPCT)\)
-\end{enumerate}
+\(\MPCT\) corresponds to the trace of a subroutine from its call to its return.
+Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
+\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
+{\em stepwise stack confidentiality} if for all such \(\MPCT\) and \(\NPCT\),
+\(\MPCT \doteq \NPCT\).
 
 \subsection{Stack Safety with Sharing}
 
