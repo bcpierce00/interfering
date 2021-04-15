@@ -58,6 +58,10 @@
 \newcommand{\powerset}{\raisebox{.15\baselineskip}{\Large\ensuremath{\wp}}}
 \newcommand*{\rsp}{\textsc{sp}}
 
+\newcommand{\TAGS}{\mathcal{T}}
+\newcommand{\tagname}{t}
+\newcommand{\uP}{{\mu P}}
+
 \begin{document}
 
 %% Title information
@@ -666,7 +670,12 @@ in machine code---the same instruction opcode may be used in some places as part
 a call or return sequence and in other places for other purposes.
 %
 So we assume we are given a machine language program {\em annotated} with the locations of
-instructions representing calls.%, returns, and function entry points\BCP{I
+instructions representing calls, and we determine when a return has occurred by tracking
+control flow and observing when we reach a {\em return target}. For a given state annotated
+as a call, in a standard calling convention, another state fulfills its return target if
+it has the same stack pointer and the program counter is at the instruction following
+the call, but we abstract over different conventions.
+%, returns, and function entry points\BCP{I
 %  still want to talk about whether returns and entry points need to be
 %  annotated.  To me, these annotations do not make intuitive sense: it is
 %  the caller's responsibility to know whether the address that it is calling
@@ -677,9 +686,8 @@ instructions representing calls.%, returns, and function entry points\BCP{I
 %instruction following the call with the SP reset to where it was at the
 %point of the call. (This is the point where it wants to be able to access
 %its own local state again and expected to find it unmolested.)}.
-Although these
-annotations would typically come from a compiler together with the machine code,
-we do not assume anything about their provenance.
+Although call annotations would typically come from a compiler together with
+the machine code, we do not assume anything about their provenance.
 
 We model the base machine as a step function over machine states, and a machine
 enhanced with an enforcement mechanism (in the language of tag-based enforcement,
@@ -724,35 +732,25 @@ arbitrary machine code. Hardware and timing attacks are out of scope.
 \BCP{I believe we could delete this section---and never mention WBCF at all
   (except to say that we leave it out, compared to STkTokens)---if we
   eliminated return (and entry point) annotations.}
+\sna{I'm not sure we can escape questions about annotations, even if we have
+  just calls, but I tried to abbreviate it.}
 
-Since we rely heavily on code annotations, we must ask: what if the annotations
-are wrong? First, suppose a call or return occurs that is not annotated.
+Since we rely heavily on call annotations, we must ask: what if the annotations
+are wrong? First, suppose a call occurs that is not annotated.
 In this case, the answer is simple: as far as the properties are concerned, there has
-been no call or return, only an instruction sequence resembling such an operation, and
-therefore no associated change in permissions. This is particularly interesting in the
-case of a false return, where control may appear to have returned to the caller, but
-the enforcement mechanism must still protect the caller's memory.
+been no call, only an instruction sequence resembling one, and
+therefore no associated change in permissions. Then the caller is guaranteed no
+protections.
 
-Alternatively, an annotated instruction might not really be a call or return.
+Alternatively, an annotated instruction might not obey the calling convention.
 In the context of \citeauthor{DBLP:conf/sp/RoesslerD18}'s micro-policies, well-behaved calls
 and returns are implemented by fixed sequences of instructions which the tag policy
-will force to be executed from start to finish. The annotated call or return instruction should always
-be the final instruction of the appropriate sequence. What if an annotated instruction exists outside
-such a sequence? We will statically rule out some scenarios with a well-formedness criterion
-on initial states: annotated instructions will initially be tagged apropriately, as the
-final instruction in the call or return sequence, and all blessed\bcp{undefined} sequences will end with
-annotated instructions. This is all we need for the policy to
-protect itself: it can then failstop if it would execute the blessed sequence out of order.
-So, even in our strong attacker model, we need very little in the way of restrictions on
-the code when considering micropolicy-based enforcement.  \BCP{Is this
-  discussion still needed?  I had hoped that switching to our ``new''
-  definition on subtraces would eliminate such complexities!}
-
-\BCP{Not sure what this is about.}In general, regardless of enforcement mechanism, we take this approach:
-a given enforcement mechanism may place a static well-formedness criterion
-on the code it applies to. Weaker enforcement mechanisms might also need dynamic
-reasonableness conditions to prevent the defender from sabotaging enforcement, as
-discussed in section \ref{sec:cheri}.  \BCP{Weak.}
+will force to be executed from start to finish, termed {\em blessed sequences}.
+When applying our properties to a micro-policy setting, we will statically rule out some
+scenarios with a well-formedness criterion on initial states: all annotated instructions will
+be situated at the appropriate instruction of a blessed sequence, tagged according to the policy.
+This is all we need for the policy to protect itself: it can then failstop if it would
+execute the blessed sequence out of order.
 
 %We model ordinary program state and policy-enforcement state separately to make it
 %easier to use well-established concepts from language-based security.
@@ -772,13 +770,9 @@ discussed in section \ref{sec:cheri}.  \BCP{Weak.}
 %% \leo{Policies of interest: null, micro, cherri, software-only}
 %% \leo{TODO: Write down carefully}
 
-This enforcement model directly describes micro-policies~\citep{pump_oakland2015}.
-We believe that it is flexible enough to capture code-altering approaches, such as code
-rewriting or capability-based techniques, though perhaps with less elegance.
-
-\newcommand{\TAGS}{\mathcal{T}}
-\newcommand{\tagname}{t}
-\newcommand{\uP}{{\mu P}}
+%This enforcement model directly describes micro-policies~\citep{pump_oakland2015}.
+%We believe that it is flexible enough to capture code-altering approaches, such as code
+%rewriting or capability-based techniques, though perhaps with less elegance.
 
 %\paragraph*{Micro-Policies}
 %
@@ -985,15 +979,11 @@ At the right of each example, we show the layout of stack memory just before
 the specified instruction is executed; each box represents a memory word and
 addresses increase to the right.  
 
-%The boundary between the frames of a caller and callee is indicated by the $\rsp$ register
-%at the time of the call. The stack can be used to pass arguments or return results
-%in the usual way, by placing them at the top of the caller's frame. This will be modeled
-%as a form of sharing in section \sna{cite the sharing section}.
-%Callers and callees can also communicate via registers if they wish; indeed, our
-%definitions say nothing at all about registers (except $\PCname$ and $\rsp$).
-
-%\iftrue\bcp{This implicitly amounts to choosing a caller-saves register
-%  convention, though, doesn't it?\apt{I think it is neutral; we could add separate caller register protection if we wanted.}}\fi
+Unless otherwise noted, colored boxes indicate an assignment of the address to a
+{\em domain} -- a label reflecting a particular set of access rights. Domains
+are \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
+(in the stack and reserved for the caller at depth \(\depth\)), and \(\outside\)
+(outside the stack entirely.)
 
 Figure~\ref{fig:int1} shows a simple integrity violation. It consists of a {\tt main}
 function that performs a call to a function {\tt f}, which overwrites {\tt main}'s
