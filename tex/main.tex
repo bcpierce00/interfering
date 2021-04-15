@@ -422,39 +422,48 @@ information flow property.  But our treatment of it is interestingly
 different from StkTokens, because of our call annotations, and we should
 discuss that.}
 
-In formalizing these security concepts, we treat {\em each} caller as needing
+\bcp{This para could be clearer.  (I can try to fix it later but I want to
+  keep reading now...)}In formalizing these security concepts, we treat {\em each} caller as needing
 protection from its callee (which, in turn, needs protection from its
 callee, etc.).
 This is novel in that the
 confidentiality property applies to many nested sub-traces within a single execution,
 as opposed to traces of entire executions.
-{\em Integrity} says that a caller's local data is protected from modification by its callee,
+{\em Integrity} says that each caller's local data is protected from
+modification by its callee(s),
 motivated by the reasoning principle that local data persists across a call. Its
-{\em stepwise} interpretation formalizes this very naturally: a caller's local data
-is never modified during a call. {\em Confidentiality} says that a caller's data is protected
-from being leaked into its callee, and also that the callee cannot see uninitialized data.
+{\em stepwise} interpretation\bcp{We're introducing ``stepwise'' in a pretty
+abrupt way---potentially confusing.} formalizes this very naturally: a caller's local data
+is never modified during a call. {\em Confidentiality} says that a caller's
+data is not leaked into its callee, and  that the callee cannot see uninitialized data.
 As a reasoning principle, confidentiality guarantees that the callee's
-behavior is determined only by a predictable interface that does not include the caller's
+behavior is determined only by a predictable interface (function arguments and
+register contents) that does not include the caller's
 local state or the uninitialized portion of the stack. This is formalized as a
 {\em noninterference}-style property that, rather than comparing pairs of whole program traces,
-compares a pair of sub-traces for each call, nested within other calls. Once again
-{\em stepwise} describes the granularity of enforcement: at every step of a call,
+compares a pair of sub-traces for each call, within other calls\bcp{?}. Once
+again
+{\em stepwise} describes the granularity of enforcement\bcp{?}: at every step of a call,
 changes in the state are independent of the caller's data.
 
-Together, these properties capture the rough intuition of LSE, but are somewhat stronger.
-First, we model returns as returns to a valid return target; an invalid return
+Together, these properties capture roughly the same intuition as LSE, but
+they are somewhat stronger.
+First, we model returns as returns to a valid return target\bcp{that will
+  make no sense to the reader at this point}; an invalid return
 is treated as a mere jump within the callee, and does not grant access to the caller's
 data. So, even without WBCF, our stack safety properties rule out many control flow attacks.
 The attacker in such an instance is permitted to ``return'' so long as it avoids
-violating the integrity and confidentiality of the caller. Second, confidentiality
-contains temporal protections that LSE does not necessarily address. The intuition
+violating the integrity and confidentiality of the caller.\bcp{ditto} Second, confidentiality
+contains\bcp{?} temporal protections that LSE does not necessarily address\bcp{?}. The intuition
 for LSE is that it protects the caller's stack frame, not necessarily memory that was
 previously allocated but now outside of the caller's frame. (Cheri-capability-based
 implementations of LSE {\em do} protect previously allocated data, typically by clearing
 it, but because it is a potential vector for leaking capabilities into the caller's frame,
-not as a goal of the property.)
+not as a goal of the property.\bcp{Oof.  We need to do better than that!})
 
-To illustrate the applicability of these properties, we perform randomized testing to
+To illustrate\bcp{IMO, this is not just an illustration; validating and
+  debugging a published enforcement mechanism is a top-level contribution.}
+the applicability of these properties, we perform randomized testing to
 validate that an existing enforcement mechanism does enforce them.
 \citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
 using tag-based \emph{micro-policies}~\citep{pump_oakland2015}, but offer no formal properties.
@@ -473,14 +482,16 @@ covers potentially erroneous programs, we test intentionally buggy policies alon
 the real one. If we can catch known bugs, we gain confidence that we can catch unknown ones,
 strengthening the validation of the enforcement mechanism.
 
-One challenge in characterizing stack safety formally is that in a low-level machine
-without built-in stacks, we are at the mercy of architectural
+One challenge in characterizing stack safety formally is that, in a low-level machine
+without built-in stacks, we are at the mercy\bcp{?} of architectural\bcp{?}
 choices that do not relate to the abstract notion of stack safety. Some implementations
 may have only a stack pointer while others add a frame pointer, in some systems return
 addresses and data live in separate stacks, and so on. We abstract over these choices
 as much as possible.
 
-A second challenge is that enforcement mechanisms may weaken their protections
+A second challenge is that enforcement mechanisms may weaken their
+protections\bcp{``weaken their protections'' doesn't convey what we mean
+  very well}
 in the name of efficiency, while arguing that they still capture stack safety in a meaningful sense.
 \citet{DBLP:conf/sp/RoesslerD18} explore alternative micro-policies, with different
 ways of identifying functions and deciding exactly which accesses are allowed.
@@ -497,6 +508,7 @@ straightforward properties, but ntuitively,
 this form of laziness is justified if any dangerous writes will
 ultimately be detected before they can affect program behavior.
 
+\bcp{This discussion is getting too long for the intro.  Could it be trimmed.}
 What does ``affecting program behavior'' really mean? This micro-policy
 calls for a second characterization of stack safety in terms of the externally
 observable behavior of a stack-safe system. Such a characterization will have the
@@ -504,6 +516,7 @@ additional benefit of being more {\em extensional}, concerned primarily with the
 external behavior of the system. In contract, our stepwise properties are {\em intensional},
 focusing on internal details that may not actually matter to overall security.
 
+\bcp{Ditto, even moreso.}
 To formalize this intuition, we develop an \emph{observational integrity} property which
 characterizes enforcement mechanisms that detect violations between the point when
 they occur and the point when they make an observable impact. Intuitively this property
@@ -513,8 +526,8 @@ integrity implies observational integrity. \sna{TODO: check this.}
 We additionally sketch an associated {\em observational confidentiality} property
 makes confidentiality extensional in the same way, in order to form an
 {\em observational stack safety} that is highly extensional.
-We therefore argue that, despite its somewhat greater complexity,
-it may be a better minimal specification for
+We argue that, despite its somewhat greater complexity,
+it may be a better specification for
 stack safety enforcement mechanisms in general.
 
 %\apt{more to say?}\bcp{Yes---partly to underscore our claim that this is a
@@ -532,7 +545,9 @@ But formalizing the ideal property allows us to see how it falls short -- a spec
 violation of the temporal aspect of confidentiality occurs in corner cases where callees
 can leak data between one another.
 We propose  a variant of Lazy Tagging and Clearing that we believe \emph{does} enforce
-confidentiality, albeit at some performance cost.
+confidentiality, albeit at some performance cost.  \bcp{Did Nick and Andre
+  know about this deficiency?  Did they mention it in their paper?  (If
+  neither, we should make a bigger deal out of the fact that we discovered it.)}
 
 Our initial description of these properties assumes a single simple stack with no sharing
 between callers and callees: all parameters and return values are passed in registers.  Later,
@@ -653,8 +668,8 @@ control flow.
 %% %\bcp{I worry that we are being a little
 %% %  dishonest here: the stated advantage of the lazy policy is that it is more
 %% %efficient, but our variant is {\em not} efficient!}
-
 In summary, we offer the following contributions:
+
 \begin{itemize}
 \item
   We adapt formulations of integrity and confidentiality from language-based security
@@ -675,12 +690,12 @@ In summary, we offer the following contributions:
 We begin with a description of our assumptions and threat model (\cref{sec:threat}),
 then show how our properties apply to examples of stack unsafety
 (\cref{sec:running-example}). Then, after some technical preliminaries
-(\cref{sec:prelim}), we formalize the properties (\cref{sec:eager}, \cref{sec:lazy})
-and describe testing (\cref{sec:testing}).
+(\cref{sec:prelim}), we formalize the properties (\cref{sec:eager}\bcp{??}, \cref{sec:lazy})
+and describe testing (\cref{sec:testing})\bcp{The sections are out of order?}.
 \Cref{sec:relwork} discusses related work, and
-\cref{sec:future} sketches directions for future work.
+\cref{sec:future} sketches directions for future work.  \bcp{Where is 7?}
 
-\section{Setup}
+\section{Set Up}
 \label{sec:setup}
 
 Our properties are defined in terms of an abstract machine model that makes very few
@@ -701,7 +716,7 @@ a call or return sequence and in other places for other purposes.
 So we assume we are given a machine language program {\em annotated} with the locations of
 instructions representing calls, and we determine when a return has occurred by tracking
 control flow and observing when we reach a {\em return target}. For a given state annotated
-as a call, in a standard calling convention, another state fulfills its return target if
+as a call, in a standard calling convention, another state fulfils its return target if
 it has the same stack pointer and the program counter is at the instruction following
 the call, but we abstract over different conventions.
 %, returns, and function entry points\BCP{I
@@ -745,18 +760,20 @@ techniques.
 \section{Threat Model}
 \label{sec:threat}
 
-Intuitively, stack safety means that the stack frame of each caller (and its
-those of its ancestors) is protected
-from attempts by a confused or malicious callee (including all its descendants)
+Intuitively, stack safety means that the stack frame of each caller (and 
+those of its ancestor callers) is protected
+from attempts by a confused or malicious callee (including all its
+descendant callees)
 to read or write its private data.
-The attacker model therefore treats every caller as a defender and its callee as
+That is, the attacker model treats every caller as a defender and its callee as
 an attacker, meaning that with nested calls, a single function invocation
 may be viewed in both ways.
 
-We take a very strong threat model in which both caller and callee may execute
+We adopt a strong threat model in which both caller and callee may execute
 arbitrary machine code. Hardware and timing attacks are out of scope.
 
 \paragraph*{Well-formedness and Bad Annotations}
+\bcp{What is ``well-formedness''??}
 
 \BCP{I believe we could delete this section---and never mention WBCF at all
   (except to say that we leave it out, compared to STkTokens)---if we
@@ -764,14 +781,14 @@ arbitrary machine code. Hardware and timing attacks are out of scope.
 \sna{I'm not sure we can escape questions about annotations, even if we have
   just calls, but I tried to abbreviate it.}
 
-Since we rely heavily on call annotations, we must ask: what if the annotations
+Since we rely on call annotations\bcp{to...}, we must ask: what if the annotations
 are wrong? First, suppose a call occurs that is not annotated.
 In this case, the answer is simple: as far as the properties are concerned, there has
 been no call, only an instruction sequence resembling one, and
 therefore no associated change in permissions. Then the caller is guaranteed no
 protections.
 
-Alternatively, an annotated instruction might not obey the calling convention.
+\bcp{Confusing:}Alternatively, an annotated instruction might not obey the calling convention.
 In the context of \citeauthor{DBLP:conf/sp/RoesslerD18}'s micro-policies, well-behaved calls
 and returns are implemented by fixed sequences of instructions which the tag policy
 will force to be executed from start to finish, termed {\em blessed sequences}.
@@ -979,11 +996,14 @@ int f() {
 
 \vspace{\abovedisplayskip}
 \end{subfigure}
-\caption{An Integrity Violation}
+\caption{An Integrity Violation\bcp{Can we align the C-like snippets with
+    the corresponding assembly?}  \ifaftersubmission\bcp{I wonder if we
+    could make the figures easier to read by putting very light, differently
+  colored backgrounds under the different parts}\fi}
 \label{fig:int1}
 \end{figure}
 
-This section will elucidate the intuition behind the properties through a series
+This section introduces the intuition behind the properties through a series
 of examples. Existing stack safety enforcement work mostly refers directly to examples
 of bad behavior that it prevents; we will argue that:
 
