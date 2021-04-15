@@ -1742,33 +1742,35 @@ that doesn't share between caller and callee. All arguments are passed
 in registers. Recall that we keep track of which addresses are
 annotated as calls, with a ``code map'':
 \[\codemap \in \CODEMAPS \subseteq \WORDS\]
+\apt{Doesn't match previous definition any more.}
 
 We parameterize over the structure of the stack, particularly the means by
 which a caller identifies the data that should be protected during a call. We term
 this the {\em sealing convention}, \(\sealcon \subseteq \MACHS \times \COMPONENTS\), which
-maps a machine state to a set of addresses.
+maps a machine state to a set of addresses. \apt{Is it a relation or a function (seems to
+  be the latter)?}
 If a state's \(\PCname\) is annotated as a call, the sealing convention tells us
 which addresses must be protected until the return. Similarly, we abstract over what
 it means to return with a {\em return convention}, \(\retcon \subseteq \MACHS \times \MACHS\),
-which relates call states to the states that can be considered valid returns to their caller.
+which relates call states to the states that can be considered valid returns to that call.
 The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
 and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
 But whatever the return convention, at each step we update the context according
-to the context-step function, \(\stepsto_C\).
+to the context-step function, \(\stepsto_C\).\apt{abrupt transition}
 
-Each system component will be assigned to a {\em domain}, which may be {\em Outside}
+Each system component is assigned to a {\em domain}, which may be {\em Outside}
 of the stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed}
-at a particular depth. Each caller will register a {\em target}
+at a particular depth. Each caller registers a {\em target}
 condition -- a predicate on machine states that must hold for it to consider itself active.
 A context is a pair of a ``domain map'' from components to domains, and a
 ``return target list,'' which is a stack of targets, one for each caller awaiting
 return.  \ifaftersubmission\bcp{spacing is funny}\fi
-
-\[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth}\]
-\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
-  \times (\rts \in \listT (\target \subseteq \MACHS)) \]
-
-An initial context \(\context_0 = \domMap_0, []\) where \(\domMap_0\) maps
+%
+\[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} \hspace*{0.5in} \target \subseteq \MACHS\]
+\[(\domMap,\rts) = \context \in \CONTEXTS ::= (\COMPONENTS \rightarrow \STKDOMS)
+  \times (\listT (\target)) \]
+%
+The initial context \(\context_0 = \domMap_0, []\), where \(\domMap_0\) maps
 the stack to \(\unsealed\) and all other addresses and all registers to \(\outside\).
 
 The rules for \(\stepsto_C\) are given inductively, and apply in the listed order.
@@ -1794,34 +1796,34 @@ that matches the topmost return target. If neither is true, the context remains 
          {\(\_,\context \stepsto_C \context\)}
 
 When we build machine traces with this step function, we always know how deep in the
-call stack we are and which components are sealed. We may now proceed to state our properties.
-Our first property will be {\em stepwise stack integrity}, stepwise meaning that it will be
+call stack we are and which components are sealed. We now proceed to state our properties.
+The first is {\em stepwise stack integrity}, where ``stepwise'' means that the property is 
 quantified over each step of execution from any initial state. The criterion for integrity
 is simple: sealed components do not change.
 
-\definition A system enjoys {\em stepwise stack integrity} if for any reachable state
-\(\mpcstatename\), \(\mpcstatename'\) such that \(\mpcstatename \stepstocon \mpcstatename'\),
-and component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) and
-\(\domMap ~ \component = \sealed{\_}\), then \(\pi_\mach(\mpcstatename) ~ \component =
-\pi_\mach(\mpcstatename') ~ \component\).
+\definition A system enjoys {\em stepwise stack integrity} if, for any reachable state
+\(\mpcstatename\) such that \(\mpcstatename \stepstocon \mpcstatename'\),
+and any component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) and
+\(\domMap ~ \component = \sealed{\_}\), then \(\pi_\mach(\mpcstatename') ~ \component =
+\pi_\mach(\mpcstatename) ~ \component\).
 
 Next we consider {\em stepwise stack confidentiality}. There are a number of preliminary
 concepts we must discuss here -- confidentiality quantifies over {\em variants} of the
 initial state of a call, and requires that the traces from them move in {\em lockstep}.
 
-\definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if, for
-all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\). We write
-this \(\mach \approx_\components \nach\).
+\definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
+written \(\mach \approx_\components \nach\), if, for
+all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\).
 
-\definition Machine state pairs \(\mach,\mach'\) and \(\nach,\nach'\) are said to change
-together if for all components \(\component\) such that
+\definition Machine state pairs \(\mach,\mach'\) and \(\nach,\nach'\) are said to
+\emph{change together}, written \(\mach,\mach' \diamond \nach,\nach'\), if,
+for all components \(\component\) such that
 \(\mach ~ \component \not = \mach' ~ \component\) or
 \(\nach ~ \component \not = \nach' ~ \component\),
 \(\mach' ~ \component = \nach' ~ \component\).
-This is written \(\mach,\mach' \diamond \nach,\nach'\).
 
 \definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep}
-if their adjacent pairs change together. We will represent this relation with
+if their adjacent pairs of states change together. We will represent this relation with
 \(\machT \doteq \nachT\). \bcp{People may not be familiar with the notation}
 \sna{It's a new notation, we use this enough that it seems worth picking an
   evocative symbol.}\bcp{Sorry -- I meant the notational convention of representing a
@@ -1838,15 +1840,26 @@ We define it as a coinductive relation:
             {\(\mach \machT \doteq \nach \nachT\)}
 \end{minipage}
 
-\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
-\(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
+\definition For any depth \(\depth\), define \(f_\depth ~ \mach ~ (\_, \rts)\) to be 
+\(|\rts| \geq \depth\). Then each reachable segment \(\MPCT \langle f_\depth \rangle\) 
+corresponds to a trace of a function from its call to its return.
+Given such a segment \(S\), let \(\mach,\_,(\domMap,\_)\)  = \(\head(S)\) and let 
 \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \outside\).
-\(\MPCT\) corresponds to the trace of a function from its call to its return.
-Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
-\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
-{\em stepwise stack confidentiality} if for all such \(\MPCT\) and \(\NPCT\),
-\(\MPCT \doteq \NPCT\).
+A system enjoys \emph{stepwise stack confidentiality} if, for all \(\MPCT\langle f_\depth\rangle\)
+with associated \(m\) and \(\components\) as above, and 
+for all \(\nach\) such that \(\mach \approx_\components \nach\) and
+ \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\), 
+ \(\MPCT\langle f_\depth\rangle \doteq \NPCT\langle f_\depth\rangle \).\apt{I found the previous
+   version hopelessly confusing, but I'm not at all sure that this one is right! SNA please check.}
+%% \definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
+%% \(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+%% let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
+%%  \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \outside\).
+%% \(\MPCT\) corresponds to the trace of a function from its call to its return.
+%% Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
+%% \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
+%% {\em stepwise stack confidentiality} if for all such \(\MPCT\) and \(\NPCT\),
+%% \(\MPCT \doteq \NPCT\).
 
 \subsection{Stack Safety with Passing}
 
