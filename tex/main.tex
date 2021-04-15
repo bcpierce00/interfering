@@ -1527,88 +1527,77 @@ policy enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
 
 \subsection{Values and States}
 
-The basic building blocks of the machine are {\em values} and {\em addresses}.
-Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\).
+The building blocks of the machine are {\em values} and {\em addresses}.
+Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\) and
+\(\addr\), respectively.
 %
 Our machine states are composed of {\em components} \(\component\),
-which are either memory addresses (words) or register names (\(\reg\)) drawn from some set
+which are either addresses or register names (\(\reg\)) drawn from some set
 \(\REGS\), which is assumed to include two special purpose registers: the
 program counter {\PCname} and the stack pointer \(\SP\).
+A {\em machine state} is a map from components to values.
 %
     \[\component \in \COMPONENTS ::= \WORDS + \REGS \]
 %
-A {\em machine state} is a map from components to values:
-%
-\[\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
+    \[\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
 %
 We have a total step function between machine states, written \(\mach \stepsto \mach'\).
-\apt{But just below we write $\mach \stepstoobs \mach'$. Which is it?}
-\apt{Say something about initial machine state?}
-
-\subsection{Policies}
 
 We now formalize the model of enforcement that we introduced in \Cref{sec:threat}.
 A {\em policy} consists of a set of policy
 states \(\pol \in \POLS\) and a policy step function \((\mach, \pol) \polstep \pol' \in
 \MACHS \times \POLS \rightharpoonup \POLS\). This step function is partial;
 it is undefined on input configurations that correspond to a policy fault. The policy
-can see the machine state, but cannot modify it. We assume that the
-compiler\bcp{why?} provides an initial policy state \(\pol_0\) to accompany the initial machine state.\apt{see comment above}
+can see the machine state, but cannot modify it. The policy also provides a
+well-formedness condition, \(\WF (\mpstatename \in \MACHS \times \POLS)\), describing
+initial states that are properly configured.
 %
 A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
 \Cref{sec:enforcement}.
 
-We write $\MPS$ for the set of all pairs of machine states and policy
-states.
-%
-\[\mpstatename \in \MPS = \MACHS \times \POLS\]
-%
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
-
-\judgmenttwo{\(\mach \stepstoobs \mach'\)}{\((\mach, \pol)
+%
+\judgmenttwo{\(\mach \stepsto \mach'\)}{\((\mach, \pol)
                \polstep \pol'\)}
             {\(\mpstate{\mach}{\pol} \stepstopol
                \mpstate{\mach'}{\pol'}\)}
-
-\noindent
-This combined step function is also partial, and traces of the machine-with-policy
-will be finite iff a policy fault occurs.
-
+%
+Note that the base machine has a total step function, and the policy-enhanced machine
+refines it as a partial step. The policy state never changes behavior, but can cause
+premature termination, which represents failstop behavior.
+            
 \subsection{Contexts}
 
-Separate from the machine state, our formal properties will keep track of additional context
-information representing the history of the run. The following definitions are parameterized
-over an arbitrary\bcp{why?} set of context states, \(\CONTEXTS\), annotations \(\ANNS\),
+Separate from the machine state, we will keep track of additional context
+information representing the history of the run. This has no influence on execution, it merely
+describes information relevant to the particular property. Different information is needed
+for different versions of the model, so the definitions are parameterized
+over an arbitrary set of context states, \(\CONTEXTS\), annotations \(\ANNS\),
 an initial context state \(\context_0 \in \CONTEXTS\), and a context step function
-\(\mach, \context, \anns \constep \context' \in \MACHS \times \CONTEXTS
-\times \powerset(\ANNS) \rightarrow \CONTEXTS\). We also assume a set of function identifiers
-\(\FUNIDS\) and the existence of a \emph{code map} \(\codemap \in \WORDS \rightharpoonup \FUNIDS \times \powerset(\ANNS)\)
-that relates each code address to its owning function and set of annotations.
+\(\mach, \context \constep \context' \in \MACHS \times \CONTEXTS
+\times \rightarrow \CONTEXTS\). We also assume the existence of a \emph{code map},
+\(\codemap \in \WORDS \rightharpoonup \ANNS\)
+that relates each code address to its annotation, if any.
 We lift contexts into an MP trace in much the same way as we lifted policy states to get
-a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
-\CONTEXTS\).  \bcp{I don't get the intuition for this whole para.}
+a triple state \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
+\CONTEXTS\).
 
-\judgmentthree{\(\mpstate{\mach}{\pol} \stepstopol \mpstate{\mach'}{\pol'}\)}
-              {\(\codemap ~ (\mach ~ \PCname) = \funid, \anns\)}
-              {\(\mach, \context, \anns \constep \context'\)}
+\judgmenttwo{\(\mpstate{\mach}{\pol} \stepstopol \mpstate{\mach'}{\pol'}\)}
+              {\(\mach, \context \constep \context'\)}
               {\(\mpcstate{\mach}{\pol}{\context} \stepstocon
                 \mpcstate{\mach'}{\pol'}{\context'}\)}
 
-\subsection{Traces}
+\subsection{Machine Traces}
 \label{sec:traces}
 
-A trace \(T \in \TRACE{\TRACEELEMS}\) is a nonempty, finite or infinite sequence of elements
-of some type \(\TRACEELEMS\).  We will mostly be concerned with sequences of MPC-states,
-called \emph{machine traces} and denoted \(\MPCT \in \TRACE{\MPCS}\). %, and of observations.
-
-\paragraph*{Trace-Of}
+A {\em machine trace} is a nonempty, finite or infinite sequence of elements
+of MPC-states, ranged over by \(\MPCT\) and \(\NPCT\).
+We use juxtaposition of an element and a trace to represent ``cons.'' (\bcp{Ugh})
 
 The ``trace-of'' operator, written \(\mpcstatename \hookrightarrow \MPCT\),
 coinductively relates an initial state with the trace of states
-produced by repeated application of \(\stepstocon\), and potentially cut short by
-the policy component. % The {\sc Default} rule applies only if the other does not.
-(We use juxtaposition of an element and a trace to represent ``cons.''\bcp{Ugh})
+produced by repeated application of \(\stepstocon\)
 
 \begin{center}
 \begin{minipage}{.4\textwidth}
@@ -1624,58 +1613,37 @@ the policy component. % The {\sc Default} rule applies only if the other does no
 \end{center}
 %
 
-\paragraph*{Projections}
-
 We project out the machine state of an MPC-state with \(\pi_\mach\), the
-policy state with \(\pi_\pol\), and the context with \(\pi_\context\). We overload
-these operators to project out of an machine-trace a trace of machine states,
-policy states, and contexts, respectively.
-
-\paragraph*{Head and Last}
-
-We take the first element of a trace with \(\head(\Trace)\), which is a total
+policy state with \(\pi_\pol\), and the context with \(\pi_\context\).
+We take the first element of a trace with \(\head(\MPCT)\), which is a total
 function since traces are non-empty, and the final element (if one exists) with
-\(\last(\Trace)\), which is partial.
+\(\last(\MPCT)\), which is partial.
 
 \paragraph*{Until}
-The operation \(\PUT ~ f ~ \Trace\) takes a trace
-\(\Trace \in \TRACE{\TRACEELEMS %\times \OBSS
-}  \) and a predicate
-on elements \(f \subset \TRACEELEMS\) and gives the prefix of
-\(\Trace\) ending with the first element on which \(f\) holds.
+The operation \(\PUT ~ f ~ \MPCT\) takes a trace \(\MPCT\)
+and a predicate on states \(f ~ \mpcstate \in \MPCS\) and gives the prefix of
+\(\MPCT\) ending with the first element on which \(f\) holds.
 
 \begin{center}
   \begin{minipage}{.3\textwidth}
-    \judgment{\(f ~ \traceelem\)}
-             {\(\PUT ~ f ~ \traceelem\Trace = \traceelem\)}
+    \judgment{\(f ~ \mpcstatename\)}
+             {\(\PUT ~ f ~ \mpcstatename\MPCT = \mpcstatename\)}
   \end{minipage}
 %
   \begin{minipage}{.3\textwidth}
     \judgment{}
-             {\(\PUT ~ f ~ \traceelem = \traceelem\)}
+             {\(\PUT ~ f ~ \mpcstatename = \mpcstatename\)}
 %
   \end{minipage}
   \begin{minipage}{.3\textwidth}
-    \judgmenttwo{\(\neg f ~ \traceelem\)}{\(\PUT ~ f ~ \Trace = \Trace'\)}
-                {\(\PUT ~ f ~ \traceelem\Trace = \traceelem\Trace'\)}
+    \judgmenttwo{\(\neg f ~ \mpcstatename\)}{\(\PUT ~ f ~ \MPCT = \MPCT'\)}
+                {\(\PUT ~ f ~ \mpcstatename\MPCT = \mpcstatename\MPCT'\)}
   \end{minipage}
 \end{center}
 %
-\apt{If we are writing \(f \subset \TRACEELEMS\), perhaps we should also
-  be writing \(a \in f\), etc.  rather than \(f a\), etc.?}
 If the resulting trace is a strict prefix of the parameter, then the
 predicate must hold on its final element. If the predicate always holds, then
 \(\PUT\) is the identity function.
-
-% The {\it join} operation, written \(T_1 \cdot T_2\) is the reverse of
-%$\mathit{split}$: it takes two traces and links them by replacing the
-%last element of the first (if it has one) with the first element of
-%the second
-
-%\judgment{} {\(t \cdot T = T\)}
-%\judgment{\(T_1 \cdot T_2 = T\)}{\(tT_1 \cdot T_2 = tT\)}
-%\leo{Lemma/theorem: split/join = id?}
-%\leo{TODO: FORMATTING: Remove force line break/par at end of judgments}
 
 We will frequently take a prefix of the trace from an initial state up
 through the first state where some condition holds on the machine state.
@@ -1684,8 +1652,8 @@ for convenience.
 %
 If \(f\) is a predicate on machine states, we define \(\mpcstatename
 \hookrightarrow \MPCT | f\) (read ``\(\MPCT\) is the prefix of
-running \(\mpcstatename\) up to \(f\)'') and similarly\apt{??} for traces with policies:
-
+running \(\mpcstatename\) up to \(f\)''):
+%
 \begin{center}
 \judgmenttwo{\(\mpcstatename \hookrightarrow \MPCT'\)}
             {\(\PUT ~ f ~ \mpcstatename ~ \MPCT' = \MPCT\)}
@@ -1697,37 +1665,37 @@ running \(\mpcstatename\) up to \(f\)'') and similarly\apt{??} for traces with p
 In particular, we wish to formulate properties about consecutive subtraces
 in which the context obeys a given predicate. This will commonly be used to extract
 individual calls from a trace by taking subtraces in which the stack is
-at or below a given depth\bcp{needed??}. If \(f \subseteq \MACHS \times \CONTEXTS\), then
-we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
-``\(\mpcstatename\) segmented by \(f\) yields a subtrace \(\MPCT\).''
+at or below a given depth. If \(f\) is still a predicate on states, then
+we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\):
 
 \begin{center}
   \judgmenttwo[Now]
-              {\(f ~ \mach ~ \context\)}
-              {\(\mach,\pol,\context \hookrightarrow \MPCT | \neg f\)}
-              {\(\mach,\pol,\context \hookrightarrow \MPCT \langle f \rangle\)}
+              {\(f ~ \mpcstatename\)}
+              {\(\mpcstatename \hookrightarrow \MPCT | \neg f\)}
+              {\(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\)}
 %
   \judgmentthree[Skip]
-                {\(f ~ \mach ~ \context\)}
-                {\(\mach,\pol,\context \hookrightarrow \MPCT | \neg f\)}
+                {\(f ~ \mpcstatename\)}
+                {\(\mpcstatename \hookrightarrow \MPCT | \neg f\)}
                 {\(\last(\MPCT) \hookrightarrow \MPCT' \langle f \rangle\)}
-                {\(\mach,\pol,\context \hookrightarrow \MPCT' \langle f \rangle\)}
+                {\(\mpcstatename \hookrightarrow \MPCT' \langle f \rangle\)}
 %
   \judgmentthree[Search]
-                {\(\neg f ~ \mach ~ \context\)}
-                {\(\mach,\pol,\context \hookrightarrow \MPCT | f\)}
+                {\(\neg f ~ \mpcstatename\)}
+                {\(\mpcstatename \hookrightarrow \MPCT | f\)}
                 {\(\last(\MPCT) \hookrightarrow \MPCT' \langle f \rangle\)}
-                {\(\mach,\pol,\context \hookrightarrow \MPCT' \langle f \rangle\)}
+                {\(\mpcstatename \hookrightarrow \MPCT' \langle f \rangle\)}
 \end{center}
 
 \paragraph*{Reachability}
 
 We often want to quantify over all traces from any initial state so that our
 properties apply to the system as a whole. We say that a state \(\mpcstatename'\)
-is {\em reachable} if for some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT\)
+is {\em reachable} if for some initial state \(\mpcstatename = \mach,\pol,\context_0\)
+where \(\WF ~ \mach,\pol\), \(\mpcstatename \hookrightarrow \MPCT\)
 and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
-such that from some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
-\apt{Unclear how there can be multiple initial states.}
+such that from some similarly well-formed initial state \(\mpcstatename\),
+\(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
 
 \section{Stack Safety, Formally}
 \label{sec:lse}
@@ -1844,7 +1812,7 @@ let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
 \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \outside\).
 \(\MPCT\) corresponds to the trace of a function from its call to its return.
 Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
-\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
+\(\nach \hookrightarrow \NPCT | \neg f_\depth \). A system enjoys
 {\em stepwise stack confidentiality} if for all such \(\MPCT\) and \(\NPCT\),
 \(\MPCT \doteq \NPCT\).
 
@@ -2638,7 +2606,7 @@ observation type \(\obs \in \OBSS\), containing at minimum the silent observatio
 \(\tau\). Our machine step function now takes a state and returns a state and an observation,
 which is carried over into the policy and context step functions.
 %
-\[\mach \stepstoobs[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS \]
+\[\mach \stepsto[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS \]
 %
 
 \paragraph*{Observations-Of}
