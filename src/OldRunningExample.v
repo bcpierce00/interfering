@@ -38,48 +38,48 @@ Let RTMP2 : Z := 21.
 (* Long running example with no stack clearing on exit and return
    values passed by register.
    TODO: Initialize OUT to non-zero value to catch first store. *)
-Definition program : list Instruction :=
-  (* 000 *) [IInstruction (Jal RA 8); (* Call main *)
-  (* 004 *) IInstruction (Beq 0 0 0); (* Finish execution (loop) *)
+Definition program : list Instruction := map IInstruction
+  (* 000 *) [Jal RA 8; (* Call main *)
+  (* 004 *) Beq 0 0 0; (* Finish execution (loop) *)
   (* main *)
-  (* 008 *) IInstruction (Sw SP RA 0); (* H1 *)
-  (* 012 *) IInstruction (Addi SP SP 12); (* H2 *)
-  (* 016 *) IInstruction (Addi RTMP1 0 42);
-  (* 020 *) IInstruction (Sw SP RTMP1 (-8)); (* Init x *)
-  (* 024 *) IInstruction (Sw SP 0 (-4)); (* Init y *)
-  (* 028 *) IInstruction (Sw SP 0 0); (* Store argument z to f *)
-  (* 032 *) IInstruction (Jal RA 36); (* Call f *)
-  (* 036 *) IInstruction (Sw SP RRES (-4)); (* Store result in y *)
-  (* 040 *) IInstruction (Lw RTMP1 SP (-8)); (* Load x *)
-  (* 044 *) IInstruction (Add RRES RRES RTMP1);
-  (* 048 *) IInstruction (Addi RTMP2 0 out_addr);
-  (* 052 *) IInstruction (Sw RTMP2 RRES 0); (* Print x + y *)
-  (* 056 *) IInstruction (Lw RA SP (-12)); (* R1 *)
-  (* 060 *) IInstruction (Addi SP SP (-12)); (* R2 *)
-  (* 064 *) IInstruction (Jalr RA RA 0); (* R3 *)
+  (* 008 *) Sw SP RA 0; (* H1 *)
+  (* 012 *) Addi SP SP 12; (* H2 *)
+  (* 016 *) Addi RTMP1 0 42;
+  (* 020 *) Sw SP RTMP1 (-8); (* Init x *)
+  (* 024 *) Sw SP 0 (-4); (* Init y *)
+  (* 028 *) Sw SP 0 0; (* Store argument z to f *)
+  (* 032 *) Jal RA 36; (* Call f *)
+  (* 036 *) Sw SP RRES (-4); (* Store result in y *)
+  (* 040 *) Lw RTMP1 SP (-8); (* Load x *)
+  (* 044 *) Add RRES RRES RTMP1;
+  (* 048 *) Addi RTMP2 0 out_addr;
+  (* 052 *) Sw RTMP2 RRES 0; (* Print x + y *)
+  (* 056 *) Lw RA SP (-12); (* R1 *)
+  (* 060 *) Addi SP SP (-12); (* R2 *)
+  (* 064 *) Jalr RA RA 0; (* R3 *)
   (* f *)
-  (* 068 *) IInstruction (Sw SP RA 4); (* H1 (stores RA after the arg in SP+0) *)
-  (* 072 *) IInstruction (Addi SP SP 12); (* H2 (increments SP by three: arg, RA and local w) *)
-  (* 076 *) IInstruction (Sw SP 0 (-4)); (* Init w *)
-  (* 080 *) IInstruction (Addi RTMP1 0 17);
-  (* 084 *) IInstruction (Sw SP RTMP1 0); (* Store argument v to g *)
-  (* 088 *) IInstruction (Jal RA 36); (* Call g *)
-  (* 092 *) IInstruction (Sw SP RRES (-4)); (* Set w to return value *)
-  (* 096 *) IInstruction (Lw RTMP1 SP (-12)); (* Load argument z *)
-  (* 100 *) IInstruction (Addi RTMP2 0 out_addr);
-  (* 104 *) IInstruction (Sw RTMP2 RTMP1 0); (* Print z *)
-  (* 108 *) IInstruction (Add RRES RRES RTMP1); (* Compute return value (g's return + z) *)
-  (* 112 *) IInstruction (Lw RA SP (-8)); (* R1 *)
-  (* 116 *) IInstruction (Addi SP SP (-12)); (* R2 *)
-  (* 120 *) IInstruction (Jalr RA RA 0); (* R3 *)
+  (* 068 *) Sw SP RA 4; (* H1 (stores RA after the arg in SP+0) *)
+  (* 072 *) Addi SP SP 12; (* H2 (increments SP by three: arg, RA and local w) *)
+  (* 076 *) Sw SP 0 (-4); (* Init w *)
+  (* 080 *) Addi RTMP1 0 17;
+  (* 084 *) Sw SP RTMP1 0; (* Store argument v to g *)
+  (* 088 *) Jal RA 36; (* Call g *)
+  (* 092 *) Sw SP RRES (-4); (* Set w to return value *)
+  (* 096 *) Lw RTMP1 SP (-12); (* Load argument z *)
+  (* 100 *) Addi RTMP2 0 out_addr;
+  (* 104 *) Sw RTMP2 RTMP1 0; (* Print z *)
+  (* 108 *) Add RRES RRES RTMP1; (* Compute return value (g's return + z) *)
+  (* 112 *) Lw RA SP (-8); (* R1 *)
+  (* 116 *) Addi SP SP (-12); (* R2 *)
+  (* 120 *) Jalr RA RA 0; (* R3 *)
   (* g *)
-  (* 124 *) IInstruction (Sw SP RA 4); (* H1 (stores RA after the arg in SP+0) *)
-  (* 128 *) IInstruction (Addi SP SP 8); (* H2 (increments SP by two: arg and RA) *)
-  (* 132 *) IInstruction (Lw RRES SP (-8)); (* Load argument v *)
-  (* 136 *) IInstruction (Addi RRES RRES 1); (* Increment and return *)
-  (* 140 *) IInstruction (Lw RA SP (-4)); (* R1 *)
-  (* 144 *) IInstruction (Addi SP SP (-8)); (* R2 *)
-  (* 148 *) IInstruction (Jalr RA RA 0)] (* R3 *)
+  (* 124 *) Sw SP RA 4; (* H1 (stores RA after the arg in SP+0) *)
+  (* 128 *) Addi SP SP 8; (* H2 (increments SP by two: arg and RA) *)
+  (* 132 *) Lw RRES SP (-8); (* Load argument v *)
+  (* 136 *) Addi RRES RRES 1; (* Increment and return *)
+  (* 140 *) Lw RA SP (-4); (* R1 *)
+  (* 144 *) Addi SP SP (-8); (* R2 *)
+  (* 148 *) Jalr RA RA 0] (* R3 *)
 .
 
 Let instrTags  := [Tinstr].
@@ -160,4 +160,4 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-Compute (run 35 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
+Compute (run 40 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
