@@ -687,7 +687,8 @@ In summary, we offer the following contributions:
   enhanced with unique tags on each activation~(\cref{sec:lazy}).
 \end{itemize}
 
-We begin with a description of our assumptions and threat model (\cref{sec:threat}),
+We begin with a description of our setting (\cref{sec:setup}) and threat
+model (\cref{sec:threat}),
 then show how our properties apply to examples of stack unsafety
 (\cref{sec:running-example}). Then, after some technical preliminaries
 (\cref{sec:prelim}), we formalize the properties (\cref{sec:eager}\bcp{??}, \cref{sec:lazy})
@@ -695,7 +696,7 @@ and describe testing (\cref{sec:testing})\bcp{The sections are out of order?}.
 \Cref{sec:relwork} discusses related work, and
 \cref{sec:future} sketches directions for future work.  \bcp{Where is 7?}
 
-\section{Set Up}
+\section{Setting}
 \label{sec:setup}
 
 Our properties are defined in terms of an abstract machine model that makes very few
@@ -760,7 +761,7 @@ techniques.
 \section{Threat Model}
 \label{sec:threat}
 
-Intuitively, stack safety means that the stack frame of each caller (and 
+Intuitively, stack safety means that the stack frame of each caller (and
 those of its ancestor callers) is protected
 from attempts by a confused or malicious callee (including all its
 descendant callees)
@@ -1005,7 +1006,8 @@ int f() {
 
 This section introduces the intuition behind the properties through a series
 of examples. Existing stack safety enforcement work mostly refers directly to examples
-of bad behavior that it prevents; we will argue that:
+of bad behavior that it prevents; we will argue that: \bcp{Not sure this
+  enumeration is useful.}
 
 \begin{itemize}
 \item examples that appear to violate stack safety violate at least one of our properties;
@@ -1019,18 +1021,19 @@ We show our examples both in C syntax and in corresponding assembly code for a
 simple two-address machine. The address of each instruction is shown to its left.
 The assembly code reflects a simple compilation model in which
 local variables are stored in the stack frame.
-Unless otherwise stated, arguments and return values are passed in registers.
+For the moment, arguments and return values are passed in registers.
 The machine is word-addressed. The stack grows upward in
 memory and {\tt \$SP} points to the first unused word above the top of the stack.
 The {\tt call} and {\tt ret} instructions push and pop the return address from the stack,
 implicitly adjusting the stack pointer.
 At the right of each example, we show the layout of stack memory just before
-the specified instruction is executed; each box represents a memory word and
+the specified instruction is executed; each box represents a memory word, and
 addresses increase to the right.
 
-Unless otherwise noted, colored boxes indicate an assignment of the address to a
+Unless otherwise noted\bcp{where is it ``otherwise noted''??}, colored boxes
+indicate an assignment of the address to a
 {\em domain} -- a label reflecting a particular set of access rights. Domains
-are \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
+are \(\unsealed\)\bcp{``unsealed'' would read better} (in the stack and accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), and \(\outside\)
 (outside the stack entirely.) For our purposes, \(\outside\) will apply to global
 variables. Domains are part of the {\em context} of a state.
@@ -1177,7 +1180,7 @@ int f() {
 \label{fig:conf1}
 \end{figure}
 
-Meanwhile confidentiality intuitively states that a callee is unaware
+Meanwhile, confidentiality intuitively states that a callee is unaware\bcp{??}
 of the context of its call (except for its arguments and any global
 variables).
 We state this as a kind of {\em noninterference} property~\citep{??}.
@@ -1190,7 +1193,8 @@ confidentiality.
 In Figure~\ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
 by reading {\tt main}'s variable {\tt x}. The trace
 shows how noninterference applies to this scenario. At instruction 10, we create a {\em variant}
-state with arbitrary values \(v_0\), etc., in place of the values that should
+state with arbitrary values\ifaftersubmission\bcp{IMO, it would be easier to
+understand if we chose concrete values for the examples}\fi \(v_0\), etc., in place of the values that should
 be hidden from {\tt f}. At instruction 12, we note that the callee's first variable, {\tt y}, has
 changed to 5 in both the primary trace and the variant. The primary and variant agree on
 the value in the changed location, so confidentiality was not violated. But at instruction 13,
@@ -1382,7 +1386,7 @@ violating lockstep confidentiality. Technically, this violation
 occurs because the program counter is also a component of the state that must change
 identically between the primary and variant traces. In a case where \(v_4 \not = 5\),
 the program counters will differ, breaking the lockstep.\apt{Is there any reason
-to complicate things like this by bringing in the PC?}
+to complicate things like this by bringing in the PC?}\bcp{+1}
 
 
 \paragraph*{Control Flow Attacks}
@@ -1511,7 +1515,7 @@ void f() {
 One of the most pernicious ways to attack the stack is by hijacking control flow.
 Our stack safety properties do not assume that control flow follows a typical structure
 of matching sets calls and returns nested within on another.
-Rather, they express what it means to protect data even in the presence of control-flow attacks.
+Rather, they aim to capture what it means to protect data even in the presence of control-flow attacks.
 Consider example \ref{fig:controlflow}.
 Here we show return addresses explicitly as line numbers, in the form $\#n$.
 Function {\tt f} is called twice, at instructions 2 and 4; it should therefore return to instructions
@@ -1808,19 +1812,21 @@ that matches the topmost return target. If neither is true, the context remains 
               {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
                 {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
+\vspace*{-1ex}
 \judgmentthree[ReturnFound]
               {\(\mach \stepsto \mach' \in \target\)}
               {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
               {\(\domMap' = \domMap[\components \mapsto \unsealed]\)}
               {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
 
+\vspace*{-3.5ex}
 \judgment[Default]
          {}
          {\(\_,\context \stepsto_C \context\)}
 
 When we build machine traces with this step function, we always know how deep in the
 call stack we are and which components are sealed. We now proceed to state our properties.
-The first is {\em stepwise stack integrity}, where ``stepwise'' means that the property is 
+The first is {\em stepwise stack integrity}, where ``stepwise'' means that the property is
 quantified over each step of execution from any initial state. The criterion for integrity
 is simple: sealed components do not change.
 
@@ -1863,15 +1869,15 @@ We define it as a coinductive relation:
             {\(\mach \machT \doteq \nach \nachT\)}
 \end{minipage}
 
-\definition For any depth \(\depth\), define \(f_\depth ~ \mach ~ (\_, \rts)\) to be 
-\(|\rts| \geq \depth\). Then each reachable segment \(\MPCT \langle f_\depth \rangle\) 
+\definition For any depth \(\depth\), define \(f_\depth ~ \mach ~ (\_, \rts)\) to be
+\(|\rts| \geq \depth\). Then each reachable segment \(\MPCT \langle f_\depth \rangle\)
 corresponds to a trace of a function from its call to its return.
-Given such a segment \(S\), let \(\mach,\_,(\domMap,\_)\)  = \(\head(S)\) and let 
+Given such a segment \(S\), let \(\mach,\_,(\domMap,\_)\)  = \(\head(S)\) and let
 \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \outside\).
 A system enjoys \emph{stepwise stack confidentiality} if, for all \(\MPCT\langle f_\depth\rangle\)
-with associated \(m\) and \(\components\) as above, and 
+with associated \(m\) and \(\components\) as above, and
 for all \(\nach\) such that \(\mach \approx_\components \nach\) and
- \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\), 
+ \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\),
  \(\MPCT\langle f_\depth\rangle \doteq \NPCT\langle f_\depth\rangle \).\apt{I found the previous
    version hopelessly confusing, but I'm not at all sure that this one is right! SNA please check.}
 %% \definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
