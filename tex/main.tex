@@ -140,16 +140,18 @@
 %\apt{maybe: ``Stack safety is a testable security property''?}\bcp{That
 %  would sacrifice a lot of oomph for a little bit of precision, IMO.  Prefer
 %  to leave it out of the title but hit it strongly in the abstract.}%
-What is stack safety? The phrase is associated with a variety of compiler,
+What does ``stack safety'' mean, exactly? The phrase is associated with a
+variety of compiler,
 run-time, and hardware mechanisms for guarding against corruption of stack
-memory.  But these mechanisms typically lack rigorous specifications,
-relying instead on informal descriptions and specific examples of the bad behaviors that they prevent.
+memory.  But these mechanisms typically lack precise specifications,
+relying instead on informal descriptions and specific examples of bad
+behaviors that they prevent.
 
 We propose formal criteria for stack safety, using the concepts of
-language-based security: a combination of an integrity property (``each
-caller's stack frame is held invariant by the callee'') and a confidentiality
-property (``the callee's behavior is insensitive to differences in the
-caller's state'').
+language-based security: a combination of an integrity property (``the private
+state in each caller's stack frame is held invariant by the callee'')
+and a confidentiality property (``the callee's behavior is insensitive to the
+caller's private state'').
 % These properties are sensible even in the presence of
 % abnormal control flow.\apt{Is this important enough to mention here?}
 % BCP: I think not in the abstract, but maybe in the intro.
@@ -167,12 +169,22 @@ broken variants).  Specifically, Roessler
 and Dehon's ``eager'' micro-policy, which catches violations as early as
 possible, enforces a basic ``stepwise'' versions of our confidentiality
 and integrity properties. Their more performant ``lazy'' micro-policy
-does not, but corresponds to weaker, more extensional ``observational'' variants
-of the
-properties.  While we do not rule out other enforcement mechanisms, our
+does not, but it does (almost) correspond to weaker, more extensional
+variants of the properties.
+%
+\BCP{I still don't think the next sentence really nails it.  And (sigh) I am
+  still not really clear yet on whether our definition applies / might apply
+  to other enforcement mechanisms or not.  Saying that our attacker model is
+  stronger does not help---that should make it easier for us to describe
+  their protections, not harder.  So I don't understand what we're saying
+  here.}%
+%
+While we do not rule out other enforcement mechanisms, our
 definitions are strongly informed by micropolicy systems, especially
 our attacker model, which is stronger than other enforcement mechanisms
 can enable.
+
+\bcp{We should decide between ``criteria'' and ``properties''...}
 
 % For the sake of concreteness, most of our presentation assumes a standard RISC
 % machine architecture with a basic subroutine calling convention (parameters
@@ -310,9 +322,9 @@ can enable.
 %\leo{I agree. I've clarified the writing in the top of the running example
 %  a bit to make sure though}
 
-The call stack is a perennial target for low-level attacks
-based on memory-safety vulnerabilities, leading to consequences
-that range from leakage or corruption of private stack data to
+The call stack is a perennial target for low-level attacks, leading to
+consequences
+from leakage or corruption of private stack data to
 control-flow hijacking. To deter or detect such attacks, a profusion of
 software and hardware protections have been proposed,
 %
@@ -329,11 +341,11 @@ useful).}
 \fi
 %
 The protections offered by such mechanisms are commonly described in terms
-of concrete examples of attacks that they can prevent, such as corruption
-of return addresses, buffer overflows, or use of uninitialized variables,
-leaving a more abstract characterization to the reader's intuition.
-But these mechanisms can be quite intricate
-and often require trading off protection and efficiency.
+of concrete examples of attacks that they can prevent---corruption
+of return addresses, buffer overflows, use of uninitialized variables,
+etc.---leaving a more abstract characterization to the reader's intuition.
+But these mechanisms can be quite intricate,
+and they often require trading off protection and efficiency.
 Thus, it would be useful to have a precise, generic, and formal
 specification for stack
 safety, both as a basis for comparing the security claims of different
@@ -346,7 +358,7 @@ are met by particular implementations.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
-The most abstract characterization stack safety of which we are aware is in
+The most abstract characterization stack safety that we are aware of is in
 recent work by \citet{Skorstengaard+19}, which defines stack safety as the conjunction of two
 properties:
 {\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
@@ -354,10 +366,10 @@ Informally, LSE says that the contents of
 a caller's stack frame are not read and written while its callees (and their callees, etc.) are
 executing, and WBCF says that callees always
 return to the point just after their call (if they return at all).
-\citet{Skorstengaard+19} formalize these properties by defining an idealized
+Skorstengaard et al.{} formalize these properties by defining an idealized
 machine in which they hold {\em by construction};
 they then show that an enforcement
-mechanism (in their case, hardware capabilities) guarantees stack safety by
+mechanism (in their case, hardware capabilities) guarantees stack safety, by
 proving that an ordinary machine with enforcement can simulate the idealized machine.
 %an enforcement mechanism (in their case, hardware
 %capabilities)
@@ -386,13 +398,27 @@ proving that an ordinary machine with enforcement can simulate the idealized mac
 %% the bad behaviors we associate with unsafe stack behavior, but weak enough that
 %% other reasonable enforcement mechanisms can enforce it.
 
-In this work, we also distinguish between protecting data (like LSE) and
-control flow (with WBCF), and formalize a data protection property
-based on the technical framework of language-based security~\citep{??}.
+In the present work, we also distinguish between protecting stack data (like
+LSE) and
+control flow (with WBCF).  But rather than defining stack safety as ``what
+a certain idealized machine does,'' we formalize explicit criteria
+based on the technical framework of language-based
+security\ifaftersubmission~\citep{??}\bcp{Maybe the Sabelfeld and Myers
+  survey?}\fi.
 Our core properties are \emph{stepwise stack integrity} and
 \emph{stepwise stack confidentiality}. WBCF is a desireable property, but
 we can express safety in an information-flow sense without reference to it,
-even safety from attacks that hijack control flow.
+even safety from attacks that hijack control flow.  \bcp{On consideration
+  (especially in light of the weird ``C confuses A by returning directly to
+  A instead of returning to B so that B can finish up some stuff before
+  returning to A'' example\footnote{Actually, this example is not so weird.
+  If C, the attacker, can return a {\em result} directly to A, who is
+  expecting a result from B, then that is clearly bad!}), I
+agree now that we should discuss WBCF.  It should be kept as distinct as
+possible from the ``data safety'' part, since it is not really an
+information flow property.  But our treatment of it is interestingly
+different from StkTokens, because of our call annotations, and we should
+discuss that.}
 
 In applying these security concepts, we treat each caller as needing protection
 from its callee, even as that callee may need protection from its callee in turn.
@@ -861,7 +887,7 @@ execute the blessed sequence out of order.
 %If a {\jalr} instruction was added to {\tt main} with its target being
 %the middle of the code block of {\tt g}.\apt{describe result of this?}
 
-\section{Key Ideas, By Example}
+\section{Key Ideas by Example}
 \label{sec:running-example}
 \colorlet{lgray}{gray!40}
 \colorlet{lred}{red!40}
@@ -968,7 +994,7 @@ of bad behavior that it prevents; we will argue that:
 
 We show our examples both in C syntax and in corresponding assembly code for a
 simple two-address machine. The address of each instruction is shown to its left.
-The assembly code reflects a simple compilation model in which  
+The assembly code reflects a simple compilation model in which
 local variables are stored in the stack frame.
 Unless otherwise stated, arguments and return values are passed in registers.
 The machine is word-addressed. The stack grows upward in
@@ -977,7 +1003,7 @@ The {\tt call} and {\tt ret} instructions push and pop the return address from t
 implicitly adjusting the stack pointer.
 At the right of each example, we show the layout of stack memory just before
 the specified instruction is executed; each box represents a memory word and
-addresses increase to the right.  
+addresses increase to the right.
 
 Unless otherwise noted, colored boxes indicate an assignment of the address to a
 {\em domain} -- a label reflecting a particular set of access rights. Domains
@@ -1199,7 +1225,7 @@ int g() {
 3        mov %ra,-1(%sp) ; store x
 4        call g
 5        sub $1,%sp      ; deallocate frame
-6        ret 
+6        ret
 
 10 f:    add $1,%sp      ; allocate frame
 11       mov $5,-1(%sp)  ; initialize y
@@ -1208,13 +1234,13 @@ int g() {
 14       ret
 
 20 g:    add $1,%sp      ; allocate frame
-21       cmp $5,-1(%sp)  ; compare 
+21       cmp $5,-1(%sp)  ; compare
 22       brneq #25       ; branch if not equal
 23       mov $10,%ra     ; set return value
 24       jmp #26
 25       mov $20,%ra     ; set return value
 26       sub $1,%sp      ; deallocate frame
-27       ret 
+27       ret
 }
 \end{verbatim}
 }
@@ -1372,11 +1398,11 @@ void f() {
 1  main:  add $1,%sp        ; allocate frame
 2         mov $1,-1(%sp)    ; initialize x
 3         call f
-4         neg -1(%sp)       ; x = -x 
-5         call f           
+4         neg -1(%sp)       ; x = -x
+5         call f
 6         mov -1(%sp),%ra   ; set return value
 7         sub $1,%sp        ; deallocate frame
-6         ret 
+6         ret
 
 10 f:     add $1,%sp        ; allocate frame
 11        cmp stash, $0     ; compare
@@ -1386,7 +1412,7 @@ void f() {
 15        mov stash,-2(%sp) ; retrieve stash
 16        mov $0,stash
 17        sub $1,%sp        ; deallocate frame
-18        ret 
+18        ret
 \end{verbatim}
 }
   \end{subfigure}
@@ -1798,7 +1824,8 @@ This is written \(\mach,\mach' \diamond \nach,\nach'\).
 if their adjacent pairs change together. We will represent this relation with
 \(\machT \doteq \nachT\). \bcp{People may not be familiar with the notation}
 \sna{It's a new notation, we use this enough that it seems worth picking an
-  evocative symbol.} 
+  evocative symbol.}\bcp{Sorry -- I meant the notational convention of representing a
+coinductive relation with inference rules in this way, not the symbol...}
 We define it as a coinductive relation:
 
 \begin{minipage}{.3\textwidth}
@@ -1815,7 +1842,7 @@ We define it as a coinductive relation:
 \(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
 let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
 \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \outside\).
-\(\MPCT\) corresponds to the trace of a subroutine from its call to its return.
+\(\MPCT\) corresponds to the trace of a function from its call to its return.
 Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
 \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
 {\em stepwise stack confidentiality} if for all such \(\MPCT\) and \(\NPCT\),
@@ -1983,7 +2010,7 @@ int main() {
 
 void f(int &a) {
   if(!stash)
-    stash = &a; 
+    stash = &a;
   *stash = 5;
   return;
 }
@@ -2004,14 +2031,14 @@ void f(int &a) {
 8         call f          ; SHARE: %sp-1
 9         mov -2(%sp),%ra ; set return value
 10        sub $2,%sp      ; deallocate frame
-11        ret 
+11        ret
 
 20 f:     cmp stash, $0   ; compare
 21        breq #13        ; branch if equal
 22        mov %ra,stash   ; stash = &a
 23        jmp #15
 24        mov $5, (stash) ; *stash = 5
-25        ret 
+25        ret
 }
 \end{verbatim}
 }
