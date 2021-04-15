@@ -1194,26 +1194,26 @@ int g() {
 \begin{subfigure}{.7\textwidth}
   {\small
 \begin{verbatim}
-1 main:  add $1,%sp       ; allocate frame
+1 main:  add $1,%sp      ; allocate frame
 2        call f
-3        mov %rax,-1(%sp) ; store x
+3        mov %ra,-1(%sp) ; store x
 4        call g
-5        sub $1,%sp       ; deallocate frame
+5        sub $1,%sp      ; deallocate frame
 6        ret 
 
-10 f:    add $1,%sp       ; allocate frame
-11       mov $5,-1(%sp)   ; initialize y
-12       mov -1(%sp),%rax ; set return value
-13       sub $1,%sp       ; deallocate frame
+10 f:    add $1,%sp      ; allocate frame
+11       mov $5,-1(%sp)  ; initialize y
+12       mov -1(%sp),%ra ; set return value
+13       sub $1,%sp      ; deallocate frame
 14       ret
 
-20 g:    add $1,%sp       ; allocate frame
-21       cmp $5,-1(%sp)   ; compare 
-22       brneq #25        ; branch if not equal
-23       mov $10,%rax     ; set return value
+20 g:    add $1,%sp      ; allocate frame
+21       cmp $5,-1(%sp)  ; compare 
+22       brneq #25       ; branch if not equal
+23       mov $10,%ra     ; set return value
 24       jmp #26
-25       mov $20,%rax     ; set return value
-26       sub $1,%sp       ; deallocate frame
+25       mov $20,%ra     ; set return value
+26       sub $1,%sp      ; deallocate frame
 27       ret 
 }
 \end{verbatim}
@@ -1339,93 +1339,119 @@ to complicate things like this by bringing in the PC?}
 \paragraph*{Control Flow Attacks}
 \begin{figure}
   \centering
-  \begin{subfigure}{.4\textwidth}
+  \begin{subfigure}{.3\textwidth}
+{\small
 \begin{verbatim}
 int *stash = 0;
 
 int main() {
-0:     int x;
-1:     x = 1;
-2[C]:  f();
-3:     x = -x;
-4[C]:  f();
-5[R]:  return x;
+  int x = 1;
+  f();
+  x = -x;
+  f();
+  return x;
 }
 
 void f() {
-10:     if(!stash) {
-        // store return pointer
-11:       stash = $SP-1;
-12:     } else {
-13:       *($SP-1) = stash;
-14:       stash = 0;
-        }
-15[R]:    return;
+  int y;
+  if (!stash) {
+    stash = *(&y-1);
+  } else {
+    *(&y-1) = stash;
+    stash = 0;
+  }
+  return;
 }
 \end{verbatim}
+}
+\end{subfigure}
+  \begin{subfigure}{.65\textwidth}
+{\small
+\begin{verbatim}
+   stash: .word 0
+1  main:  add $1,%sp        ; allocate frame
+2         mov $1,-1(%sp)    ; initialize x
+3         call f
+4         neg -1(%sp)       ; x = -x 
+5         call f           
+6         mov -1(%sp),%ra   ; set return value
+7         sub $1,%sp        ; deallocate frame
+6         ret 
+
+10 f:     add $1,%sp        ; allocate frame
+11        cmp stash, $0     ; compare
+12        breq #15          ; branch if equal
+13        mov -2(%sp),stash ; update stash
+14        jmp #17
+15        mov stash,-2(%sp) ; retrieve stash
+16        mov $0,stash
+17        sub $1,%sp        ; deallocate frame
+18        ret 
+\end{verbatim}
+}
   \end{subfigure}
-  \begin{subfigure}{.5\textwidth}
+  \begin{subfigure}{.4\textwidth}
     \begin{tabular}{l l l}
-      {\tt 2} &
+      {\tt 3} &
       \memoryaddrs{8em}
-      \memory{4}{\unsealc}
+      \memory{3}{\unsealc}
       ~$\cdots$
-      \MemoryLabel{-19em}{0.75em}{1} \\
-      {\tt 15} &
+      \MemoryLabel{-15em}{0.75em}{1} \\
+      {\tt 18} &
       \memoryaddrs{12em}
       \memory{1}{\mainsealc}[Seal(0)]%
       \memory{1}{\unsealc}[RetPtr]%
-      \memory{2}{\unsealc}%
+      \memory{1}{\unsealc}%
       ~$\cdots$
-      \MemoryLabel{-19em}{0.75em}{1}
-      \MemoryLabel{-15em}{0.75em}{\#3}
+      \MemoryLabel{-15em}{0.75em}{1}
+      \MemoryLabel{-11em}{0.75em}{\#4}
       \vspace{.5em} &
       \memory[3em]{1}{\mainsealc}[Target]%
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#3}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#4}
       \\
-      {\tt 3} &
+      {\tt 4} &
       \memoryaddrs{8em}
-      \memory{4}{\unsealc}
+      \memory{3}{\unsealc}
       ~$\cdots$
-      \MemoryLabel{-19em}{0.75em}{1} \\
-      {\tt 10} &
-      \memoryaddrs{12em}
+      \MemoryLabel{-15em}{0.75em}{1} \\
+      {\tt 11} &
+      \memoryaddrs{16em}
       \memory{1}{\mainsealc}
-      \memory{3}{\unsealc}%
+      \memory{2}{\unsealc}%
       ~$\cdots$
-      \MemoryLabel{-19em}{0.75em}{-1}
-      \MemoryLabel{-15em}{0.75em}{\#5} &
+      \MemoryLabel{-15em}{0.75em}{-1}
+      \MemoryLabel{-11em}{0.75em}{\#6} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6}
       \\
-      {\tt 15} &
+      {\tt 18} &
       \memoryaddrs{12em}
       \memory{1}{\mainsealc}
       \memory{1}{\badc}
-      \memory{2}{\unsealc}%
+      \memory{1}{\unsealc}%
       ~$\cdots$
-      \MemoryLabel{-19em}{0.75em}{-1}
-      \MemoryLabel{-15em}{0.75em}{\#3} &
+      \MemoryLabel{-15em}{0.75em}{-1}
+      \MemoryLabel{-11em}{0.75em}{\#4} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5}
-      \\
-      {\tt 3} &
-      \memoryaddrs{8em}
-      \memory{1}{\mainsealc}
-      \memory{3}{\unsealc}
-      ~$\cdots$
-      \MemoryLabel{-19em}{0.75em}{-1} &
-      \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6}
       \\
       {\tt 4} &
       \memoryaddrs{8em}
       \memory{1}{\mainsealc}
-      \memory{3}{\unsealc}
+      \memory{2}{\unsealc}
       ~$\cdots$
-      \MemoryLabel{-19em}{0.75em}{\bf 1} &
+      \MemoryLabel{-15em}{0.75em}{-1} &
       \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#5} \\
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6}
+      \\
+      {\tt 5} &
+      \memoryaddrs{8em}
+      \memory{1}{\mainsealc}
+      \memory{2}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-15em}{0.75em}{\bf 1} &
+      \memory[3em]{1}{\mainsealc}
+      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6} \\
     \end{tabular}
   \end{subfigure}
   \caption{A Control Flow Attack.}
@@ -1439,272 +1465,30 @@ of matching sets calls and returns nested within on another.
 Rather, they express what it means to protect data even in the presence of control-flow attacks.
 Consider example \ref{fig:controlflow}.
 Here we show return addresses explicitly as line numbers, in the form $\#n$.
-Function {\tt f} is called twice, at lines 2 and 4; it should therefore return to lines
+Function {\tt f} is called twice, at instructions 2 and 4; it should therefore return to instructions
 3 and 5, respectively. But the first time, before returning, it stashes its
-return pointer away, and the second time it returns to line 3 instead of 5; then it ends
-up being called a third time, at which point it returns to line 5.
+return pointer away, and the second time it returns to instruction 3 instead of 5; then it ends
+up being called a third time, at which point it finally returns to instruction 5.
 
-Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that we return
--1. But because of {\tt f}'s interference, we negate {\tt x} twice, and return 1.
+Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that {\tt main} returns
+-1. But because of {\tt f}'s interference, {\tt x} is negated twice, and {\tt main} returns 1.
 This has the appearance of an integrity violation.  How do we capture this in our
 integrity property?
 
 The key intuition is that to be considered as having returned to {\tt main}, {\tt f} needs
 to do more than just execute a return-labeled instruction: it must actually reach the
 appropriate {\em return target} in {\tt main}. A return target is a predicate on states,
-in this case one that holds on any state whose program counter points to the correct line.
+in this case one that holds on any state whose program counter points to the correct instruction.
 We introduce a new piece of context: we keep a stack of return targets, and a callee is
 only considered to have returned when it reaches a state that matches the caller's target.
 A return target is associated with a set of sealed locations that will become unsealed
 when it is reached, here represented by sharing a color with the sealed data.
 
 In the example, on its first return, {\tt f} reaches its return target, because the
-\(\PCname\) is 3 after its return. But on the second, {\tt f} does not properly return,
-but rather changes its stack pointer (shown in light red) and jumps into
-{\tt main}'s code. Then {\tt f}
-attempts to overwrite the (still sealed) value of {\tt x}, violating integrity.
-
-\paragraph*{Pass by Reference and Stack Arguments}
-\bcp{I wonder if this could be postponed so that we get to the formal
-  definitions for the basic property sooner...}
-
-\newcommand{\mainpassc}{magenta}
-
-\begin{figure}
-  \centering
-  \begin{subfigure}{.3\textwidth}
-\begin{verbatim}
-int main() {
-0:           int x;
-1:           x = 5;
-2[P($SP)C]:  x = f(x);
-3[R]:        return x;
-}
-
-int f(int a) {
-10:    int y;
-11:    y = 2*a;
-12:    a = 0;
-13[R]: return y;
-}
-\end{verbatim}
-  \end{subfigure}
-\begin{subfigure}{.65\textwidth}
-\begin{center}
-\begin{tabular}{l r | l}
-  {\tt 2} &
-  \multicolumn{2}{c}{
-    \memoryaddrs[(0)]{8em}
-    \memory{4}{\unsealc}
-    ~$\cdots$
-    \MemoryLabel{-19em}{0.75em}{5}
-    \MemoryLabel{-14em}{0.75em}{0}
-    \MemoryLabel{-10em}{0.75em}{0}
-    \MemoryLabel{-7em}{0.75em}{0}
-    \vspace{.5em}
-  } \\
-  {\tt 11} &
-  \memoryaddrs[(1)]{20em}
-  \memory{1}{\mainsealc}[Seal(0)]%
-  \memory{1}{\mainpassc}[P(0-1)]%
-  \memory{1}{\retptrc}[RetPtr]%
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{5}
-  \MemoryLabel{-14em}{0.75em}{5}
-  \MemoryLabel{-6em}{0.75em}{0}
-  &
-  \memoryaddrs[(1)]{20em}
-  \memory{1}{\mainsealc}
-  \memory{1}{\mainpassc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-14em}{0.75em}{5}
-  \MemoryLabel{-6em}{0.75em}{\(v_1\)}
-  \\
-  {\tt 12} &
-  \memoryaddrs[(1)]{20em}
-  \memory{1}{\mainsealc}
-  \memory{1}{\mainpassc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{5}
-  \MemoryLabel{-14em}{0.75em}{5}
-  \MemoryLabel{-6em}{0.75em}{10}
-  &
-  \memoryaddrs[(1)]{20em}
-  \memory{1}{\mainsealc}
-  \memory{1}{\mainpassc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-14em}{0.75em}{5}
-  \MemoryLabel{-6em}{0.75em}{10}
-  \\
-  {\tt 13} &
-  \memoryaddrs[(1)]{20em}
-  \memory{1}{\mainsealc}
-  \memory{1}{\mainpassc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{5}
-  \MemoryLabel{-14em}{0.75em}{0}
-  \MemoryLabel{-6em}{0.75em}{10}
-  &
-  \memoryaddrs[(1)]{20em}
-  \memory{1}{\mainsealc}
-  \memory{1}{\mainpassc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-14em}{0.75em}{0}
-  \MemoryLabel{-6em}{0.75em}{10}
-  \\
-  {\tt 3} &
-  \multicolumn{2}{c}{
-    \memoryaddrs[(0)]{8em}
-    \memory{4}{\unsealc}
-    ~$\cdots$
-    \MemoryLabel{-19em}{0.75em}{10}
-    \MemoryLabel{-14em}{0.75em}{0}
-    \MemoryLabel{-10em}{0.75em}{3}
-    \MemoryLabel{-7em}{0.75em}{10}
-    \vspace{.5em}
-  } \\
-\end{tabular}
-\end{center}
-
-\vspace{\abovedisplayskip}
-
-\end{subfigure}
-
-\caption{Sharing on the Stack}
-\label{fig:passingsimple}
-\end{figure}
-
-\begin{figure}
-  \centering
-  \begin{subfigure}{.45\textwidth}
-\begin{verbatim}
-int *stash = 0;
-
-int main() {
-0:         int x, y;
-1[P(x)C]:  f(x);
-2:         x = 0;
-3[P(y)C]:  f(y);
-4[R]:      return x;
-}
-
-void f(int &a) {
-10:    if(!stash)
-11:      stash = a;
-12:    *stash = 5;
-13[R]: return;
-}
-\end{verbatim}
-  \end{subfigure}
-  \begin{subfigure}{.5\textwidth}
-    \begin{tabular}{l l}
-      {\tt 10} &
-      \memoryaddrs[(0)]{17em}
-      \memory{1}{\mainpassc}[{\makebox[0pt]{P(0-1)}}]%
-      \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
-      \memory{1}{\retptrc}
-      \memory{1}{\unsealc}
-      ~$\cdots$ \\
-      {\tt 13} &
-      \memoryaddrs[(1)]{17em}
-      \memory{1}{\mainpassc}
-      \memory{1}{\mainsealc}
-      \memory{1}{\retptrc}
-      \memory{1}{\unsealc}
-      ~$\cdots$
-      \MemoryLabel{-18em}{0.75em}{5}
-      \\
-      {\tt 3} &
-      \memoryaddrs[(0)]{12em}
-      \memory{4}{\unsealc}
-      ~$\cdots$
-      \MemoryLabel{-18em}{0.75em}{0}
-      \\
-      {\tt 10} &
-      \memoryaddrs[(0)]{17em}
-      \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
-      \memory{1}{\mainpassc}[{\makebox[0pt]{P(0-1)}}]%
-      \memory{1}{\retptrc}
-      \memory{1}{\unsealc}
-      ~$\cdots$
-      \MemoryLabel{-18em}{0.75em}{0}
-      \\
-      {\tt 13} &
-      \memoryaddrs[(0)]{17em}
-      \memory{1}{\mainsealc}
-      \memory{1}{\mainpassc}
-      \memory{1}{\retptrc}
-      \memory{1}{\unsealc}
-      ~$\cdots$
-      \MemoryLabel{-18em}{0.75em}{\bf 5}
-\end{tabular}
-\end{subfigure}
-\caption{A violation with pass-by-reference}
-\label{fig:passing}
-\end{figure}
-
-To this point we have ignored function arguments, since our simplest model places them in
-registers. This is an oversimplification, which we will now correct, starting with the simple
-case: passing by value on the stack. Example \ref{fig:passingsimple} shows a sample trace of
-a program that passes a value on the stack, without an attack.
-At the call, we add a new annotation \(P(\$SP)\) identifying a memory location to be
-passed, and our diagram displays it in magenta. The caller's frame locations that are not
-passed are sealed as usual. Just as we marked sealed memory with the depth of its owner\bcp{??},
-we do the same for passed memory -- but it has multiple owners. We keep track of the
-current depth of the active function next to the stack pointer in the diagram, for reference.
-The argument {\tt a} has
-its value copied from {\tt x}, and we note that {\tt f} can read it -- because it is marked
-as passed between depths 0 and 1, it is not varied. Then from line 12 to 13 it is even
-modified, and naturally this is permitted as well.
-
-The same annotation mechanism can be used to pass
-variables by reference, and here there are important stack safety concerns,
-as seen in Figure~\ref{fig:passing}. In this example, where we revert to assuming
-that arguments are passed in registers,
-{\tt main} calls {\tt f} with a reference to {\tt x}, but then clears {\tt x} and instead
-passes a reference to {\tt y}. We would expect that the first call to {\tt f} might modify
-{\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
-{\tt x} in the second call.
-
-So at the initial call, {\tt x} is passed, and {\tt f} is free to write to it. Then upon
-return, {\tt main}'s frame is unsealed. At the second call it is {\tt y} that is passed,
-and when {\tt f} instead tries to write to {\tt x}, it violates integrity. For that matter
-a future call with no arguments passed by reference would also violate integrity if it wrote
-to either variable.
-
-When passing by reference, it is possible to repeatedly pass the same reference further
-and further down the stack. Note, however, that this sharing of the reference must be over
-an unbroken chain of calls. So it suffices to track two depths for each passed
-cell: the original owner, and the highest depth it has been passed to. It is considered
-accessible anywhere between the two.
-
-Our model provides only limited support for handling fully first-class pointers into
-stack frames, e.g., pointers obtained by taking the address of a local variable.
-Unlike the case for pass-by-reference, there is no easy way to model the intended sharing behavior
-of such pointers in terms of stack frame activation patterns.  The best approximation we can make is to
-treat an address-taken variable in the same way as a passed argument, with the additional property
-that it remains accessible at \emph{all} stack depths above the caller.
-This prevents most violations of temporal safety, although stale pointers can still be
-used in certain corner cases. \apt{Trying not to spell out the details, which are complex.}
-More seriously, callees are permitted to access the location without having
-been explicitly given a pointer to it.  Preventing the latter kind of abuse
-is the provence of a fine-grained memory safety policy, e.g. based on capabilities
-(implemented by tags or otherwise); we argue it is beyond the scope of stack safety
-\emph{per se}.
+\(\PCname\) is 3 after its return. But {\tt f}'s second return is to the wrong instruction
+(3 rather than 5) because the stack pointer has been overwritten (shown in light red).
+Thus {\tt x} is still sealed and {\tt f}'s attempt to overwrite it at instruction 4
+violates the integrity property.
 
 \section{Machines, Traces, and Observations}
 \label{sec:prelim}
@@ -2038,14 +1822,9 @@ well-bracketed control flow, which together constitute stack safety\bcp{not
   any more?}.
 Initially we will focus on a simple stack model, with a single stack
 that doesn't share between caller and callee. All arguments are passed
-in registers.
-
-We begin with our only annotations being {\em call} or {\em return}, and
-define our code map accordingly.
-
-\[\ann \in \ANNS ::= \callmap + \retmap\]
-\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \ANNS\]
-
+in registers. Recall that we keep track of which code addresses are
+annotated as calls, with a ``code map'':
+\[\codemap \in \CODEMAPS \subseteq \WORDS\]
 When a function makes a call, it establishes that its frame should be
 ``sealed'' for later use. At any given step of a program, any number of
 activations may have claimed memory in this way, but which cells are sealed
@@ -2055,8 +1834,8 @@ considers itself to have been returned to.
 
 Each system component will be assigned to a {\em domain}, which may be {\em Outside}
 of the stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed}
-at a particular depth\bcp{What about code??}. Each caller will register a {\em target} condition -- a
-predicate on machine states that must hold for it to consider itself active.
+at a particular depth. Each caller will register a {\em target}
+condition -- a predicate on machine states that must hold for it to consider itself active.
 A context is a pair of a ``domain map'' from components to domains, and a
 ``return target list,'' which is a stack of targets, one for each caller awaiting
 return.  \ifaftersubmission\bcp{spacing is funny}\fi
@@ -2075,22 +1854,17 @@ maps a machine state to a set of addresses.
 If a state's \(\PCname\) is annotated as a call, the sealing convention tells us
 which addresses must be protected until the return. Similarly, we abstract over what
 it means to return with a {\em return convention}, \(\retcon \subseteq \MACHS \times \MACHS\),
-which relates
-
-Now we can define the context update relation. Let \(\sealcon\) be the sealing convention
-that maps a machine state to a set of components, typically the set of addresses below
-the stack pointer. Similarly, \(\retcon ~ \mach ~ \mach'\) will be the return convention
-that relates the call state \(\mach\) to return states \(\mach'\) that are valid returns.
+which relates call states to the states that can be considered valid returns to their caller.
 The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
 and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
-Then at each step we update the context according to the context-step function,
-\(\stepsto_C\).
+But whatever the return convention, at each step we update the context according
+to the context-step function, \(\stepsto_C\).
 
 The rules for \(\stepsto_C\) are given inductively, and apply in the listed order.
-A call simply pushes the return target onto the return stack and seals all components
-with the depth of the previous return stack. A return
-recursively searches for a valid return target at the next step, and unseals
-every component sealed at a depth that it passes.
+A call annotation tells us to push the return target onto the return stack and
+seal all components with the depth of the previous return stack. If we aren't making a call,
+we identify a return by looking ahead and checking if we're about to step to a state
+that matches the topmost return target. If neither is true, the context remains unchanged.
 
 \judgmentthree[Call]
               {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
@@ -2098,8 +1872,7 @@ every component sealed at a depth that it passes.
               {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
                 {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
-\judgmenttwobr[ReturnFound]
-              {\(\codemap ~ (\mach ~ \PCname) = \retmap\)}
+\judgmentthree[ReturnFound]
               {\(\mach \stepsto \mach' \in \target\)}
               {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
               {\(\domMap' = \domMap[\components \mapsto \unsealed]\)}
@@ -2166,6 +1939,248 @@ Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
 \(\MPCT \doteq \NPCT\).
 
 \subsection{Stack Safety with Passing}
+
+\newcommand{\mainpassc}{magenta}
+
+\begin{figure}
+  \centering
+  \begin{subfigure}{.3\textwidth}
+\begin{verbatim}
+int main() {
+0:          int x;
+1:          x = 5;
+2[C($SP)]:  x = f(x);
+3[R]:       return x;
+}
+
+int f(int a) {
+10:    int y;
+11:    y = 2*a;
+12:    a = 0;
+13[R]: return y;
+}
+\end{verbatim}
+  \end{subfigure}
+\begin{subfigure}{.65\textwidth}
+\begin{center}
+\begin{tabular}{l r | l}
+  {\tt 2} &
+  \multicolumn{2}{c}{
+    \memoryaddrs[(0)]{8em}
+    \memory{4}{\unsealc}
+    ~$\cdots$
+    \MemoryLabel{-19em}{0.75em}{5}
+    \MemoryLabel{-14em}{0.75em}{0}
+    \MemoryLabel{-10em}{0.75em}{0}
+    \MemoryLabel{-7em}{0.75em}{0}
+    \vspace{.5em}
+  } \\
+  {\tt 11} &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}[Seal(0)]%
+  \memory{1}{\mainpassc}[P(0,1)]%
+  \memory{1}{\retptrc}[RetPtr]%
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{5}
+  \MemoryLabel{-14em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{0}
+  &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}
+  \memory{1}{\mainpassc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-14em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{\(v_1\)}
+  \\
+  {\tt 12} &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}
+  \memory{1}{\mainpassc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{5}
+  \MemoryLabel{-14em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{10}
+  &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}
+  \memory{1}{\mainpassc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-14em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{10}
+  \\
+  {\tt 13} &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}
+  \memory{1}{\mainpassc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{5}
+  \MemoryLabel{-14em}{0.75em}{0}
+  \MemoryLabel{-6em}{0.75em}{10}
+  &
+  \memoryaddrs[(1)]{20em}
+  \memory{1}{\mainsealc}
+  \memory{1}{\mainpassc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-14em}{0.75em}{0}
+  \MemoryLabel{-6em}{0.75em}{10}
+  \\
+  {\tt 3} &
+  \multicolumn{2}{c}{
+    \memoryaddrs[(0)]{8em}
+    \memory{4}{\unsealc}
+    ~$\cdots$
+    \MemoryLabel{-19em}{0.75em}{10}
+    \MemoryLabel{-14em}{0.75em}{0}
+    \MemoryLabel{-10em}{0.75em}{3}
+    \MemoryLabel{-7em}{0.75em}{10}
+    \vspace{.5em}
+  } \\
+\end{tabular}
+\end{center}
+
+\vspace{\abovedisplayskip}
+
+\end{subfigure}
+
+\caption{Sharing on the Stack}
+\label{fig:passingsimple}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \begin{subfigure}{.45\textwidth}
+\begin{verbatim}
+int *stash = 0;
+
+int main() {
+0:         int x, y;
+1[C(x)]:  f(x);
+2:         x = 0;
+3[C(y)]:  f(y);
+4[R]:      return x;
+}
+
+void f(int &a) {
+10:    if(!stash)
+11:      stash = a;
+12:    *stash = 5;
+13[R]: return;
+}
+\end{verbatim}
+  \end{subfigure}
+  \begin{subfigure}{.5\textwidth}
+    \begin{tabular}{l l}
+      {\tt 10} &
+      \memoryaddrs[(0)]{17em}
+      \memory{1}{\mainpassc}[{\makebox[0pt]{P(0,1)}}]%
+      \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
+      \memory{1}{\retptrc}
+      \memory{1}{\unsealc}
+      ~$\cdots$ \\
+      {\tt 13} &
+      \memoryaddrs[(1)]{17em}
+      \memory{1}{\mainpassc}
+      \memory{1}{\mainsealc}
+      \memory{1}{\retptrc}
+      \memory{1}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-18em}{0.75em}{5}
+      \\
+      {\tt 3} &
+      \memoryaddrs[(0)]{12em}
+      \memory{4}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-18em}{0.75em}{0}
+      \\
+      {\tt 10} &
+      \memoryaddrs[(0)]{17em}
+      \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
+      \memory{1}{\mainpassc}[{\makebox[0pt]{P(0-1)}}]%
+      \memory{1}{\retptrc}
+      \memory{1}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-18em}{0.75em}{0}
+      \\
+      {\tt 13} &
+      \memoryaddrs[(0)]{17em}
+      \memory{1}{\mainsealc}
+      \memory{1}{\mainpassc}
+      \memory{1}{\retptrc}
+      \memory{1}{\unsealc}
+      ~$\cdots$
+      \MemoryLabel{-18em}{0.75em}{\bf 5}
+\end{tabular}
+\end{subfigure}
+\caption{A violation with pass-by-reference}
+\label{fig:passing}
+\end{figure}
+
+To this point we have ignored function arguments, since our simplest model places them in
+registers. This is an oversimplification, which we will now correct, aiming at two kinds
+of sharing: passing by value on the stack, and passing by reference. First we will explore
+some examples at the same level of detail as our earlier ones, and then move on to
+extending our formalization.
+
+Example \ref{fig:passingsimple} shows a sample trace of
+a program that passes a value on the stack, without an attack.
+We extend our call annotation with an additional parameter identifying a memory location to be
+passed, and our diagram displays it in magenta. Our notion of domains is extended as well,
+to include \(\passed{\depth,\depth'}\), recording two depths. We note the
+current depth of the active function next to the stack pointer in the diagram, for reference.
+The argument {\tt a} has
+its value copied from {\tt x}, and we note that {\tt f} can read it -- because it is marked
+as passed between depths 0 and 1, it is not varied. Then from line 12 to 13 it is even
+modified, and naturally this is permitted as well.
+
+The same annotation mechanism can be used to pass
+variables by reference, and here there are important stack safety concerns,
+as seen in Figure~\ref{fig:passing}. In this example, where we revert to assuming
+that arguments are passed in registers,
+{\tt main} calls {\tt f} with a reference to {\tt x}, but then clears {\tt x} and instead
+passes a reference to {\tt y}. We would expect that the first call to {\tt f} might modify
+{\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
+{\tt x} in the second call.
+
+So at the initial call, {\tt x} is passed, and {\tt f} is free to write to it. Then upon
+return, {\tt main}'s frame is unsealed. At the second call it is {\tt y} that is passed,
+and when {\tt f} instead tries to write to {\tt x}, it violates integrity. For that matter
+a future call with no arguments passed by reference would also violate integrity if it wrote
+to either variable.
+
+When passing by reference, it is possible to repeatedly pass the same reference further
+and further down the stack. Note, however, that this sharing of the reference must be over
+an unbroken chain of calls. So it suffices to track two depths for each passed
+cell: the original owner, and the highest depth it has been passed to. It is considered
+accessible anywhere between the two.
+
+Our model provides only limited support for handling fully first-class pointers into
+stack frames, e.g., pointers obtained by taking the address of a local variable.
+Unlike the case for pass-by-reference, there is no easy way to model the intended
+sharing behavior of such pointers in terms of stack frame activation patterns.
+The best approximation we can make is to treat an address-taken variable in the
+same way as a passed argument, with the additional property
+that it remains accessible at \emph{all} stack depths above the caller.
+This prevents most violations of temporal safety, although stale pointers can still be
+used in certain corner cases.
+More seriously, callees are permitted to access the location without having
+been explicitly given a pointer to it.  Preventing the latter kind of abuse
+is the provence of a fine-grained memory safety policy, e.g. based on capabilities
+(implemented by tags or otherwise); we argue it is beyond the scope of stack safety
+\emph{per se}.
 
 Next we introduce variable passing. We will need to add extra information to our call
 annotations to reflect that they may now pass variables on the stack, and that the locations
