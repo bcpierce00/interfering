@@ -1505,29 +1505,29 @@ The basic building blocks of the machine are {\em values} and {\em addresses}.
 Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\).
 %
 Our machine states are composed of {\em components} \(\component\),
-which are either words (memory addresses) or by register names (\(\reg\)) drawn from some set
-\(\REGS\).
+which are either memory addresses (words) or register names (\(\reg\)) drawn from some set
+\(\REGS\), which is assumed to include two special purpose registers: the
+program counter {\PCname} and the stack pointer \(\SP\).
 %
     \[\component \in \COMPONENTS ::= \WORDS + \REGS \]
 %
-The register names are assumed to include two special purpose registers: the
-program counter {\PCname} and the stack pointer \(\SP\).
-
 A {\em machine state} is a map from components to values:
 %
 \[\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
-
-We have a total step function between machine states \(\mach \stepsto \mach'\).
+%
+We have a total step function between machine states, written \(\mach \stepsto \mach'\).
+\apt{But just below we write $\mach \stepstoobs \mach'$. Which is it?}
+\apt{Say something about initial machine state?}
 
 \subsection{Policies}
 
-We now present our model of enforcement, which we introduced informally in \Cref{sec:threat}.
+We now formalize the model of enforcement that we introduced in \Cref{sec:threat}.
 A {\em policy} consists of a set of policy
 states \(\pol \in \POLS\) and a policy step function \((\mach, \pol) \polstep \pol' \in
 \MACHS \times \POLS \rightharpoonup \POLS\). This step function is partial;
 it is undefined on input configurations that correspond to a policy fault. The policy
 can see the machine state, but cannot modify it. We assume that the
-compiler\bcp{why?} provides an initial policy state \(\pol_0\) to accompany the initial machine state.
+compiler\bcp{why?} provides an initial policy state \(\pol_0\) to accompany the initial machine state.\apt{see comment above}
 %
 A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
 \Cref{sec:enforcement}.
@@ -1572,29 +1572,30 @@ a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
 \subsection{Traces}
 \label{sec:traces}
 
-A trace over a type \(\TRACEELEMS\)\bcp{``over a type A'' is a Coq-ism} is a nonempty, finite or infinite sequence of
-\(\TRACEELEMS\)s; we write \(\TRACE{\TRACEELEMS}\) for the set of traces over
-\(\TRACEELEMS\). We will mostly be concerned with sequences of MPC-states,
+A trace \(T \in \TRACE{\TRACEELEMS}\) is a nonempty, finite or infinite sequence of elements
+of some type \(\TRACEELEMS\).  We will mostly be concerned with sequences of MPC-states,
 called \emph{machine traces} and denoted \(\MPCT \in \TRACE{\MPCS}\). %, and of observations.
 
 \paragraph*{Trace-Of}
 
 The ``trace-of'' operator, written \(\mpcstatename \hookrightarrow \MPCT\),
 coinductively relates an initial state with the trace of states
-produced by repeated application of step, and potentially cut short by
-the policy component. The {\sc Default} rule applies only if the other does not.
+produced by repeated application of \(\stepstocon\), and potentially cut short by
+the policy component. % The {\sc Default} rule applies only if the other does not.
 (We use juxtaposition of an element and a trace to represent ``cons.''\bcp{Ugh})
 
+\begin{center}
 \begin{minipage}{.4\textwidth}
 \judgmenttwo{\(\mpcstatename \stepstocon \mpcstatename'\)}
             {\(\mpcstatename' \hookrightarrow \MPCT\)}
             {\(\mpcstatename \hookrightarrow \mpcstatename' \MPCT\)}%
 \end{minipage}
 \begin{minipage}{.4\textwidth}
-\judgment[Default]
-         {}
+\judgment%[Default]
+         {\(\not\exists \mpcstatename'. \mpcstatename \stepstocon \mpcstatename'\)}
          {\(\mpcstatename \hookrightarrow \mpcstatename\)}
 \end{minipage}
+\end{center}
 %
 
 \paragraph*{Projections}
@@ -1612,7 +1613,8 @@ function since traces are non-empty, and the final element (if one exists) with
 
 \paragraph*{Until}
 The operation \(\PUT ~ f ~ \Trace\) takes a trace
-\(\Trace \in \TRACE{\TRACEELEMS \times \OBSS}\) and a predicate
+\(\Trace \in \TRACE{\TRACEELEMS %\times \OBSS
+}  \) and a predicate
 on elements \(f \subset \TRACEELEMS\) and gives the prefix of
 \(\Trace\) ending with the first element on which \(f\) holds.
 
@@ -1633,6 +1635,8 @@ on elements \(f \subset \TRACEELEMS\) and gives the prefix of
   \end{minipage}
 \end{center}
 %
+\apt{If we are writing \(f \subset \TRACEELEMS\), perhaps we should also
+  be writing \(a \in f\), etc.  rather than \(f a\), etc.?}
 If the resulting trace is a strict prefix of the parameter, then the
 predicate must hold on its final element. If the predicate always holds, then
 \(\PUT\) is the identity function.
@@ -1697,6 +1701,7 @@ properties apply to the system as a whole. We say that a state \(\mpcstatename'\
 is {\em reachable} if for some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT\)
 and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
 such that from some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
+\apt{Unclear how there can be multiple initial states.}
 
 \section{Stack Safety, Formally}
 \label{sec:lse}
