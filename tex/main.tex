@@ -1490,7 +1490,7 @@ In the example, on its first return, {\tt f} reaches its return target, because 
 Thus {\tt x} is still sealed and {\tt f}'s attempt to overwrite it at instruction 4
 violates the integrity property.
 
-\section{Machines, Traces, and Observations}
+\section{Machines and Traces}
 \label{sec:prelim}
 
 We next define our machine model precisely. To make our definition of stack safety
@@ -1499,62 +1499,25 @@ machine model plus some kind of (software- or hardware-enforced) policy monitor.
 In~\cref{sec:enforcement}, we instantiate this model with a concrete dynamic
 policy enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
 
-\subsection{Values, States, and Observations}
+\subsection{Values and States}
 
 The basic building blocks of the machine are {\em values} and {\em addresses}.
 Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\).
 %
 Our machine states are composed of {\em components} \(\component\),
-addressed\bcp{no, the components are not addressed, they are addresses!} either by
-words (memory addresses) or by register names (\(\reg\)) drawn from some set
+which are either words (memory addresses) or by register names (\(\reg\)) drawn from some set
 \(\REGS\).
 %
-    \[\component \in \COMPONENTS = \WORDS + \REGS \]
+    \[\component \in \COMPONENTS ::= \WORDS + \REGS \]
 %
 The register names are assumed to include two special purpose registers: the
 program counter {\PCname} and the stack pointer \(\SP\).
 
 A {\em machine state} is a map from components to values:
 %
-\[\mach \in \MACHS = \COMPONENTS \rightarrow \WORDS\]
+\[\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
 
-The step function of the machine takes a machine state and produces a
-pair of a machine state and an {\em observation}, which may be either
-silent (written \(\tau\)) or a word of data that the machine
-communicates to the outside world:
-\ifaftersubmission\bcp{This is a rather concrete
-  choice!  Why not leave the set of observations abstract?}\fi
-%
-\[\obs \in \OBSS = \{\tau\} \uplus \WORDS\]
-\[\mach \stepstoobs[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS \]
-%
-This step function is total, so the machine's execution traces
-(defined in \cref{sec:traces}) are infinite.
-
-Observations are only essential for describing the extensional properties
-described in Section~\ref{sec:lazy}, but for simplicity, we include them
-in the machine model from the beginning.
-We choose to model observations explicitly, rather than simply treating
-a subset of registers or memory as being observable.  This choice gives
-us the flexibility to treat programs as observationally equivalent even when
-their internal states may differ.
-%The choice of modelling observations is an interesting one. A first approach
-%would be to consider any change to the registers or memory as observable.
-%However, as some parts of the stack will be considered ``private''
-%this choice won't work. A relaxation of this to consider all changes
-%to ``non-private'' data as observable could work in principle, but
-%does not allow for an interesting weaker-but-more-efficient enforcement
-%mechanism. We will come back to this point in \Cref{sec:lazy}.
-
-\apt{This para is out of date. Do we want to say something equivalent
-  about new examples (hard, because they are C-based).}
-$\WORDS$ is the
-set of 64-bit integers and $\REGS$ is the set $\{r_0, \cdots, r_{31}\}
-\cup \{\PCname,\SP\}$. Observations are writes to the
-special $\rout$ location\ifaftersubmission\bcp{Which is 100! (do we need a name for it? seems
-  not...)}\fi, which can be thought of as a memory-mapped
-  output port: if during an execution step a word $w$ is
-written to $\rout$ then $\obs = w$, otherwise $\obs = \tau$.
+We have a total step function between machine states \(\mach \stepsto \mach'\).
 
 \subsection{Policies}
 
@@ -1577,9 +1540,9 @@ states.
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
 
-\judgmenttwo{\(\mach \stepstoobs[\obs] \mach'\)}{\((\mach, \pol)
+\judgmenttwo{\(\mach \stepstoobs \mach'\)}{\((\mach, \pol)
                \polstep \pol'\)}
-            {\(\mpstate{\mach}{\pol} \stepstopol[\obs]
+            {\(\mpstate{\mach}{\pol} \stepstopol
                \mpstate{\mach'}{\pol'}\)}
 
 \noindent
@@ -1600,10 +1563,10 @@ We lift contexts into an MP trace in much the same way as we lifted policy state
 a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
 \CONTEXTS\).  \bcp{I don't get the intuition for this whole para.}
 
-\judgmentthree{\(\mpstate{\mach}{\pol} \stepstopol[\obs] \mpstate{\mach'}{\pol'}\)}
+\judgmentthree{\(\mpstate{\mach}{\pol} \stepstopol \mpstate{\mach'}{\pol'}\)}
               {\(\codemap ~ (\mach ~ \PCname) = \funid, \anns\)}
               {\(\mach, \context, \anns \constep \context'\)}
-              {\(\mpcstate{\mach}{\pol}{\context} \stepstocon[\obs]
+              {\(\mpcstate{\mach}{\pol}{\context} \stepstocon
                 \mpcstate{\mach'}{\pol'}{\context'}\)}
 
 \subsection{Traces}
@@ -1640,34 +1603,6 @@ We project out the machine state of an MPC-state with \(\pi_\mach\), the
 policy state with \(\pi_\pol\), and the context with \(\pi_\context\). We overload
 these operators to project out of an machine-trace a trace of machine states,
 policy states, and contexts, respectively.
-
-\paragraph*{Observations-Of}
-
-\bcp{Could any of this be postponed?}
-
-The ``observations-of'' operator, written \(\pi_\obs\), \apt{since this isn't
-  actually a projection, it is slightly confusing to use \(\pi\)} takes a machine trace and
-creates a trace of observations corresponding to the observations of each step in
-the trace. It uses a coinductive helper \(\mathit{obsforward}\) that relates an
-initial observation, a machine-trace, and an observation trace:
-
-\judgmentthree{\(\mpcstatename \stepstocon[\obs'] \mpcstatename'\)}
-              {\(\mpcstatename' \hookrightarrow \MPCT\)}
-              {\(\mathit{obsforward} ~ \obs' ~ \MPCT = \obsT\)}
-              {\(\mathit{obsforward} ~ \obs ~ \mpcstatename \MPCT = \obs\obsT\)}%
-\judgment{}
-         {\(\mathit{obsforward} ~ \obs ~ \mpcstatename = \obs\)}
-
-Then to take the observations from any particular trace, we start with a \(\tau\) observation:
-
-\judgment{\(\mathit{obsforward} ~ \tau ~ \MPCT = \obsT\)}
-         {\(\pi_\obs(\MPCT) = \obsT\)}
-\noindent
-
-In a similar fashion, we define \(\mpcstatename \hookrightarrow \MPCT\)
-to relate a machine-policy-context state triple to the MPCO-trace
-induced by the step function.\apt{?? This looks indistinguishable
-  from the \(\hookrightarrow\) we've already defined.}
 
 \paragraph*{Head and Last}
 
@@ -1762,55 +1697,6 @@ properties apply to the system as a whole. We say that a state \(\mpcstatename'\
 is {\em reachable} if for some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT\)
 and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
 such that from some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
-
-\paragraph*{Observational Similarity}
-
-We say that a trace of observations $\obsT_1$ is a prefix of $\obsT_2$
-as far as an external observer is concerned, written \(\obsT_1 \lesssim
-\obsT_2\), if the sequence of
-non-silent observations of $\obsT_1$ is a prefix of those of
-$\obsT_2$; that is, we operate up to deletion of \(\tau\) observations,
-coinductively:
-
-\begin{minipage}{.3\textwidth}
-  \judgment{}{\(\obsT \lesssim \obsT\)}
-\end{minipage}
-\begin{minipage}{.3\textwidth}
-  \judgment{}{\(\tau \lesssim \obsT\)}
-\end{minipage}
-\begin{minipage}{.3\textwidth}
-  \judgment{}{\(w \lesssim w\obsT\)}
-\end{minipage}
-
-\begin{minipage}{.3\textwidth}
-  \judgment{\(\obsT_1 \lesssim \obsT_2\)}
-           {\(\tau \obsT_1 \lesssim \obsT_2\)}
-\end{minipage}
-\begin{minipage}{.3\textwidth}
-  \judgment{\(\obsT_1 \lesssim \obsT_2\)}
-           {\(\obsT_1 \lesssim \tau \obsT_2\)}
-\end{minipage}
-\begin{minipage}{.3\textwidth}
-  \judgment{\(\obsT_1 \lesssim \obsT_2\)}
-           {\(w\obsT_1 \lesssim w\obsT_2\)}
-\end{minipage}
-
-\smallskip
-We then define similarity of observation traces as traces prefixing each other:
-\[\obsT_1 \simeq \obsT_2 \triangleq \obsT_1 \lesssim \obsT_2 \land \obsT_2 \lesssim \obsT_1\]
-%
-%\leo{I still don't know how to do this transition. Maybe contrast
-%with the ``perhaps surprisingly'' later?} Note that
-%similarity of observation traces could alternatively be defined coinductively,
-%just like the prefix relation, but by dropping the asymmetric rules that allow
-%for a finite trace ($\tau \lesssim \obsT$ or $w \lesssim w\obsT$).\apt{Is this immportant?}\leo{I agree. Probably not}
-
-Note that an infinite silent trace is a
-prefix of (and similar to) any other trace. While this might seem
-surprising at first, it makes sense in a timing-insensitive context:
-an external observer looking at two machine runs cannot (computably)
-distinguish between a machine that steps forever and a machine that
-steps for a long time before producing some output.
 
 \section{Stack Safety, Formally}
 \label{sec:lse}
@@ -2611,16 +2497,24 @@ be efficiently implemented. Most of the performance overhead incurred
 stems from the need to set stack activation tags as a frame is created
 and reset them as it is destructed, as
 \citet{DBLP:conf/sp/RoesslerD18} confirm in their evaluation. To
-mitigate those costs, they propose optimizations called Lazy Tagging and
-Lazy Clearing that relax and defer some of the checks of the Depth Isolation
-policy. Under these optimizations, the policy does not initialize stack
-frames on entry or clear them on exit (thus speeding up execution),
+mitigate those costs, they propose a number of optimizations.
+
+First, they eliminate the initialization pass. In this {\em Lazy Tagging}
+system, the stack is initially tagged as ``clear.'' A function is permitted
+to overwrite clear memory, and when it does so its depth tag overwrites
+the clear tag, claiming the memory; the remainder of the policy functions
+as {\em Depth Isolation}. On return, the callee must clear its frame, which
+is still a heavy cost.
+
+To eliminate this cost, \citet{DBLP:conf/sp/RoesslerD18} introduce
+{\em Lazy Tagging and Lazy Clearing}. Under this optimizations,
+the policy does not initialize stack frames on entry or clear them on exit,
 and it permits all writes to the stack, even when the $\PCname$ tag
-does not match the memory tag.
-However, reads from the stack do still require $\PCname$ tag and memory tag
-to match. Thus, even if a callee illicitly writes to a private location
-in its caller, the caller will eventually detect this if it ever tries to read from
-that location.
+does not match the memory tag. Instead it propagates the \(\PCname\) tag
+to written memory. Then reads from the stack do still require $\PCname$
+tag and memory tag to match. Thus, even if a callee illicitly writes to
+a private location in its caller, the caller will eventually detect this
+if it ever tries to read from that location.
 %
 These \emph{lazy policies} admit more efficient implementations, but
 they deliberately allow violations of stack integrity temporarily,
@@ -2628,40 +2522,192 @@ with the checks deferred until the point a violation truly becomes
 harmful. The natural question then is, how do we characterize the
 protections provided by these policies once stack safety is broken?
 How does a harmful violation that must be caught later differ from a
-harmless one? The properties in this section rely on our notion of
-observations to draw this distinction.
+harmless one?
 
-\subsection{Lazy Stepwise Integrity}
+\paragraph*{Deferred Stepwise Integrity}
 
-\definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
-\(f_\depth ~ \mach ~ (\_, \rtm, \_, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
-For any reachable segment \(\MPCT \langle f_\depth \rangle\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
-\(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid}{\sealed}\) or \(\instack{\stackid}{\passed{\depth,\depth'}}\)
-where \(|\rtm ~ \stackid| < \depth\) or \(\depth' < |\rtm ~ \stackid|\) .
-Then a system enjoys observable
+We first notice that, in principle, these properties appear to enforce
+confidentiality outright. So we wish in particular to find an integrity
+property. The intuition is that sealed memory can change, but it is
+then tainted, and its original owner cannot actually read it. This
+leads us to a hybrid of integrity and confidentiality.
 
-Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
-\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
-{\em stepwise stack confidentiality} in the coroutine setting if for all
-such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
+For simplicity, our definitions return to the simple stack without sharing,
+but all properties in this section can be extended to more complex settings
+very naturally.
 
-\definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
-\(f_\depth ~ \mach ~ (\_, \rtm, \_, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
-For any reachable segment \(\MPCT \langle f_\depth \rangle\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
-\(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid}{\_}\).
-Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
-\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
-{\em stepwise coroutine confidentiality} in the coroutine setting if for all
-such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
+\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
+\(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
+\(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \sealed{\_}\).
 
+Then, supposing that \(\last(\MPCT) = \mach',\pol',\context'\) -- meaning that the
+call does return -- let \(\components'\) be the set of components that differ
+between \(\mach\) and \(\mach'\). Take any \(\nach\) such that
+\(\mach' \approx_{\components'} \nach\), \(\mach \hookrightarrow \MPCT\), and
+\(\nach \hookrightarrow \NPCT\). A system enjoys
+{\em deferred stepwise integrity} if for all such \(\MPCT\) and \(\NPCT\),
+\(\MPCT \doteq \NPCT\).
 
-\subsection{Observable Confidentiality}
+In short, if sealed components are modified during the call, the caller may not
+access their values. ``No reads after dangerous writes.''
 
-    \paragraph{Connection to Policies}
+\subsection{Observability}
+
+We argue that while deferred stepwise integrity meaningfully captures the intuition
+behind lazy tagging, it stops short of the kind of extensional characterization
+that would be viable as a weakest reasonable definition. Consider a hypothetical
+taint-tracking policy, that allows dangerous writes to be copied as long as the
+taint remains hidden from outside observers. In order to characterize
+such a policy, we would need a model of observation.
+Similarly, for such a taint-based policy, lockstep confidentiality would be too
+strong, as we might permit secrets to move about as long as they were not
+leaked to the outside world.
+
+So we extend our model with a notion of observations. We abstract over an
+observation type \(\obs \in \OBSS\), containing at minimum the silent observation
+\(\tau\). Our machine step function now takes a state and returns a state and an observation,
+which is carried over into the policy and context step functions.
+%
+\[\mach \stepstoobs[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS \]
+%
+
+\paragraph*{Observations-Of}
+
+The ``observations-of'' operator, written \(\obsof\), takes a machine trace and
+creates a trace of observations corresponding to the observations of each step in
+the trace. It uses a coinductive helper \(\mathit{obsforward}\) that relates an
+initial observation, a machine-trace, and an observation trace:
+
+\judgmentthree{\(\mpcstatename \stepstocon[\obs'] \mpcstatename'\)}
+              {\(\mpcstatename' \hookrightarrow \MPCT\)}
+              {\(\mathit{obsforward} ~ \obs' ~ \MPCT = \obsT\)}
+              {\(\mathit{obsforward} ~ \obs ~ \mpcstatename \MPCT = \obs\obsT\)}%
+\judgment{}
+         {\(\mathit{obsforward} ~ \obs ~ \mpcstatename = \obs\)}
+
+Then to take the observations from any particular trace, we start with a \(\tau\) observation:
+
+\judgment{\(\mathit{obsforward} ~ \tau ~ \MPCT = \obsT\)}
+         {\(\obsof(\MPCT) = \obsT\)}
+
+\paragraph*{Observational Similarity}
+
+We say that a trace of observations $\obsT_1$ is a prefix of $\obsT_2$
+as far as an external observer is concerned, written \(\obsT_1 \lesssim
+\obsT_2\), if the sequence of
+non-silent observations of $\obsT_1$ is a prefix of those of
+$\obsT_2$; that is, we operate up to deletion of \(\tau\) observations,
+coinductively:
+
+\begin{minipage}{.3\textwidth}
+  \judgment{}{\(\obsT \lesssim \obsT\)}
+\end{minipage}
+\begin{minipage}{.3\textwidth}
+  \judgment{}{\(\tau \lesssim \obsT\)}
+\end{minipage}
+\begin{minipage}{.3\textwidth}
+  \judgment{}{\(w \lesssim w\obsT\)}
+\end{minipage}
+
+\begin{minipage}{.3\textwidth}
+  \judgment{\(\obsT_1 \lesssim \obsT_2\)}
+           {\(\tau \obsT_1 \lesssim \obsT_2\)}
+\end{minipage}
+\begin{minipage}{.3\textwidth}
+  \judgment{\(\obsT_1 \lesssim \obsT_2\)}
+           {\(\obsT_1 \lesssim \tau \obsT_2\)}
+\end{minipage}
+\begin{minipage}{.3\textwidth}
+  \judgment{\(\obsT_1 \lesssim \obsT_2\)}
+           {\(w\obsT_1 \lesssim w\obsT_2\)}
+\end{minipage}
+
+\smallskip
+We then define similarity of observation traces as traces prefixing each other:
+\[\obsT_1 \simeq \obsT_2 \triangleq \obsT_1 \lesssim \obsT_2 \land \obsT_2 \lesssim \obsT_1\]
+%
+%\leo{I still don't know how to do this transition. Maybe contrast
+%with the ``perhaps surprisingly'' later?} Note that
+%similarity of observation traces could alternatively be defined coinductively,
+%just like the prefix relation, but by dropping the asymmetric rules that allow
+%for a finite trace ($\tau \lesssim \obsT$ or $w \lesssim w\obsT$).\apt{Is this immportant?}\leo{I agree. Probably not}
+
+Note that an infinite silent trace is a
+prefix of (and similar to) any other trace. While this might seem
+surprising at first, it makes sense in a timing-insensitive context:
+an external observer looking at two machine runs cannot (computably)
+distinguish between a machine that steps forever and a machine that
+steps for a long time before producing some output.
+
+\subsection{Observational Stack Safety}
+
+We now can sketch observational versions of both integrity and confidentiality.
+Integrity is already straightforward, simply weakening the condition that must hold
+after the return.
+
+\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
+\(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
+\(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \sealed{\_}\).
+
+Then, again supposing that \(\last(\MPCT) = \mach',\pol',\context'\),
+let \(\components'\) be the set of components that differ
+between \(\mach\) and \(\mach'\). Take any \(\nach\) such that
+\(\mach' \approx_{\components'} \nach\), \(\mach \hookrightarrow \MPCT\), and
+\(\nach \hookrightarrow \NPCT\). A system enjoys
+{\em observational integrity} if for all such \(\MPCT\) and \(\NPCT\),
+\(\obsof(\MPCT) \simeq \obsof(\NPCT)\).
+
+We amend our intuitive statement to: ``No visible reads after dangerous writes.''
+
+Confidentiality is more sophisticated. We must capture the intuition that
+secrets do not escape during a call {\em and} are not leaked during a return.
+This require us to be able to quantify over components that preserve our \(\diamond\)
+relation from earlier.
+
+\definition Let \(\components\) be a set of components and \(\mach,\mach'\) and \(\nach,\nach'\)
+be pairs of states. The {\em unsafe set} of \(\components\), written
+\(\bar{\Diamond}(\components,\mach,\mach',\nach,\nach')\), is the set of all components
+\(\component \in \components\) such that if
+\(\mach ~ \component \not = \mach' ~ \component\) or
+\(\nach ~ \component \not = \nach' ~ \component\), then
+\(\mach' ~ \component = \nach' ~ \component\).
+
+\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
+\(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
+\(\components\) be the set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
+Let \(\nach\) be a variant such that \(\mach \approx_\components \nach\) and
+\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\).
+
+A system enjoys {\em observational confidentiality} if for all such
+\(\MPCT\) and \(\NPCT\), the following conditions all hold:
+
+\begin{itemize}
+\item They are observationally equivalent, \(\obsof(\MPCT) = \obsof(\NPCT)\),
+  meaning that no secrets leak during the call
+\item \(f_\depth ~ \last(\MPCT) \leftrightarrow f_\depth ~ \last(\NPCT)\) --
+  if one call returns, so does the other
+\item Assuming both calls return, let \(\last(\MPCT) = \mach',\pol',\context'\)
+  and \(\pi_\mach(\last(\NPCT)) = \nach'\).
+  Let \(\components' = \bar{\Diamond}(\components,\mach,\mach',\nach,\nach'\).
+  And let \(\nach''\) be a state such that \(\mach' \approx_\components \nach''\).
+  Then if \(\mach',\pol',\context' \hookrightarrow \MPCT'\) and
+  \(\nach',\pol',\context' \hookrightarrow \NPCT'\), it must be
+  that \(\obsof(\MPCT') \simeq \obsof(\NPCT')\)
+\end{itemize}
+
+This last condition is the most interesting: we identify the components that
+contain leaked information on either side of the first pair of variant traces.
+This becomes the basis for the second variation, because all of these values
+must be protected from leaking for the remainder of the program.
+
+\sna{More to write here. The gist is: this is the extensional property.
+  The one that we would tentatively propose as a real characterization of stack
+  safety.}
+
+\subsection{Connection to Policies}
 
     Observable properties allow us to defer enforcement until a property
     violation would become visible, as in lazy policies. But by formalizing
