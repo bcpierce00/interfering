@@ -148,11 +148,12 @@ relying instead on informal descriptions and examples of bad
 behaviors that they prevent.
 
 We propose a formal characterization
-of stack safety, phrased using concepts from language-based security: a
+of stack safety, formulated with concepts from language-based security: a
 combination of an integrity property (``the private
 state in each caller's stack frame is held invariant by the callee'')
-and a confidentiality property (``the callee's behavior is insensitive to the
-caller's private state'')\bcp{and something about WBCF...}.
+a confidentiality property (``the callee's behavior is insensitive to the
+caller's private state''), and a well-bracketedness property (``each
+callee returns control to its immediate caller'').
 % These properties are sensible even in the presence of
 % abnormal control flow.\apt{Is this important enough to mention here?}
 % BCP: I think not in the abstract, but maybe in the intro.
@@ -161,14 +162,14 @@ caller's private state'')\bcp{and something about WBCF...}.
 % ``well-bracketed control flow'' that restricts control flow to the
 % typical pattern of matched calls and returns.
 %
-We use our characterization to validate the stack-safety ``micro-policies''
-proposed by~\citet{DBLP:conf/sp/RoesslerD18}.
-Specifically, we use property-based random testing to check that Roessler
-and Dehon's ``eager'' micro-policy, which catches violations as early as
-possible, enforces a simple ``stepwise'' variant of our properties (and
-detects several broken variants), and that a slightly repaired version of
-their more performant ``lazy'' micro-policy corresponds to weaker and more
-extensional variants of the properties.
+We use these properties to validate the stack-safety ``micro-policies''
+proposed by~\citet{DBLP:conf/sp/RoesslerD18}.  Specifically, we check (with
+property-based random testing) that Roessler and Dehon's ``eager''
+micro-policy, which catches violations as early as possible, enforces a
+simple ``stepwise'' variant of our properties and correctly detects several
+broken variants, and that (a repaired version of) their more performant
+``lazy'' micro-policy corresponds to a slightly weaker and more extensional
+variant of our properties.
 %
 % \BCP{I still don't think the next sentence really nails it.  And (sigh) I am
 %   still not really clear yet on whether our definition applies / might apply
@@ -354,8 +355,8 @@ are met by particular implementations.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
-The most abstract characterization stack safety that we are aware of is in
-recent work by \citet{Skorstengaard+19}, which defines stack safety as the conjunction of two
+The most abstract characterization stack safety that we are aware of is
+recent work by \citet{Skorstengaard+19b,Skorstengaard+19}, which defines stack safety as the conjunction of two
 properties:
 {\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
 Informally, LSE says that the contents of
@@ -366,7 +367,8 @@ Skorstengaard et al.{} formalize these properties by defining an idealized
 machine in which they hold {\em by construction};
 they then show that an enforcement
 mechanism (in their case, hardware capabilities) guarantees stack safety, by
-proving that an ordinary machine with enforcement can simulate the idealized machine.
+proving that an ordinary machine with enforcement simulates the idealized
+machine.
 %an enforcement mechanism (in their case, hardware
 %capabilities)
 %can then be shown to guarantee stack safety by exhibiting a fully abstract
@@ -394,42 +396,45 @@ proving that an ordinary machine with enforcement can simulate the idealized mac
 %% the bad behaviors we associate with unsafe stack behavior, but weak enough that
 %% other reasonable enforcement mechanisms can enforce it.
 
-In the present work, we also distinguish between protecting stack data (like
+In the present work, we also aim to protect both stack data (like
 LSE) and
-control flow (like WBCF).  But our formulations of both properties are
+control flow (like WBCF).  But our formulations of these properties are
 somewhat different from those of Skorstengaard et al.  Rather than
 defining stack safety implicitly,
-as ``what a certain idealized machine does,'' we formalize explicit properties
+as ``what a certain idealized machine does,'' our properties are
 based on the technical framework of language-based
 security\ifaftersubmission~\citep{??}\bcp{Maybe the Sabelfeld and Myers
   survey?}\fi.
-Our core properties are \emph{stepwise stack integrity} and
-\emph{stepwise stack confidentiality}.  WBCF is a desireable property, but
-we can express safety in an information-flow sense without reference to it,
-even safety from attacks that hijack control flow.  \BCP{On consideration
-  (especially in light of the weird ``C confuses A by returning directly to
-  A instead of returning to B so that B can finish up some stuff before
-  returning to A'' example\footnote{Actually, this example is not so weird.
-  If C, the attacker, can return a {\em result} directly to A, who is
-  expecting a result from B, then that is clearly bad!}), I
-agree now that we should discuss WBCF.  It should be kept as distinct as
-possible from the ``data safety'' part, since it is not really an
-information flow property.  But our treatment of it is interestingly
-different from StkTokens, because of our call annotations, and we should
-discuss that.}
+Our core properties are \emph{stepwise stack integrity},
+\emph{stepwise stack confidentiality}, and \emph{return to caller}.
+% \BCP{On consideration
+%   (especially in light of the weird ``C confuses A by returning directly to
+%   A instead of returning to B so that B can finish up some stuff before
+%   returning to A'' example\footnote{Actually, this example is not so weird.
+%   If C, the attacker, can return a {\em result} directly to A, who is
+%   expecting a result from B, then that is clearly bad!}), I
+% agree now that we should discuss WBCF.  It should be kept as distinct as
+% possible from the ``data safety'' part, since it is not really an
+% information flow property.  But our treatment of it is interestingly
+% different from StkTokens, because of our call annotations, and we should
+% discuss that.}
 
 \bcp{This para could be clearer.  (I can try to fix it later but I want to
   keep reading now...)}In formalizing these security concepts, we treat {\em each} caller as needing
-protection from its callee (which, in turn, needs protection from its
-callee, etc.).
-This is novel in that the
-confidentiality property applies to many nested sub-traces within a single execution,
+protection from its immediate callees (which, in turn, need protection from
+their immediate callees, etc.).
+This approach is novel in that the
+confidentiality\bcp{only?} property applies to many nested sub-traces within a single execution,
 as opposed to traces of entire executions.
 {\em Integrity} says that each caller's local data is protected from
 modification by its callee(s),
-motivated by the reasoning principle that local data persists across a call. Its
-{\em stepwise} interpretation\bcp{We're introducing ``stepwise'' in a pretty
-abrupt way---potentially confusing.} formalizes this very naturally: a caller's local data
+motivated by the reasoning principle that local data persists across a
+call.
+
+For the confidentiality and integrity properties, we consider two variants.
+The
+{\em stepwise} variants formalize the intuition that a caller's
+local data
 is never modified during a call. {\em Confidentiality} says that a caller's
 data is not leaked into its callee, and  that the callee cannot see uninitialized data.
 As a reasoning principle, confidentiality guarantees that the callee's
@@ -1571,6 +1576,10 @@ A {\em machine state} is a map from components to values.
 %
 We have a total step function between machine states, written \(\mach \stepsto \mach'\).
 
+% BCP: This will intentionally fail when someone adds the real intended
+% definition of \WF!
+\newcommand{\WF}{\mathit{WF}}
+
 We now formalize the model of enforcement that we introduced in \Cref{sec:threat}.
 A {\em policy} consists of a set of policy
 states \(\pol \in \POLS\) and a policy step function \((\mach, \pol) \polstep \pol' \in
@@ -1591,10 +1600,11 @@ by combining it with the regular step function for machine states.
             {\(\mpstate{\mach}{\pol} \stepstopol
                \mpstate{\mach'}{\pol'}\)}
 %
-Note that the base machine has a total step function, and the policy-enhanced machine
-refines it as a partial step. The policy state never changes behavior, but can cause
-premature termination, which represents failstop behavior.
-            
+Note that the base machine has a total step function, while the policy-enhanced machine
+refines it to a partial function. The extra policy state never changes behavior,
+but it can cause
+premature termination, representing failstop behavior.
+
 \subsection{Contexts}
 
 Separate from the machine state, we will keep track of additional context
@@ -1849,7 +1859,7 @@ for all \(\nach\) such that \(\mach \approx_\components \nach\) and
  \(\MPCT\langle f_\depth\rangle \doteq \NPCT | \neg f_\depth \).\apt{I found the previous
    version hopelessly confusing, but I'm not at all sure that this one is right! SNA please check.}
  \sna{It's right, but I need to rethink how the M<f> notation works...}
- 
+
 \subsection{Stack Safety with Passing}
 
 \newcommand{\mainpassc}{magenta}
