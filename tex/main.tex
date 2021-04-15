@@ -1822,15 +1822,22 @@ well-bracketed control flow, which together constitute stack safety\bcp{not
   any more?}.
 Initially we will focus on a simple stack model, with a single stack
 that doesn't share between caller and callee. All arguments are passed
-in registers. Recall that we keep track of which code addresses are
+in registers. Recall that we keep track of which addresses are
 annotated as calls, with a ``code map'':
 \[\codemap \in \CODEMAPS \subseteq \WORDS\]
-When a function makes a call, it establishes that its frame should be
-``sealed'' for later use. At any given step of a program, any number of
-activations may have claimed memory in this way, but which cells are sealed
-is dynamic information and cannot be deduced from the state alone. So it must
-be tracked separately. We must also track the conditions under which a caller
-considers itself to have been returned to.
+
+We parameterize over the structure of the stack, particularly the means by
+which a caller identifies the data that should be protected during a call. We term
+this the {\em sealing convention}, \(\sealcon \subseteq \MACHS \times \COMPONENTS\), which
+maps a machine state to a set of addresses.
+If a state's \(\PCname\) is annotated as a call, the sealing convention tells us
+which addresses must be protected until the return. Similarly, we abstract over what
+it means to return with a {\em return convention}, \(\retcon \subseteq \MACHS \times \MACHS\),
+which relates call states to the states that can be considered valid returns to their caller.
+The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
+and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
+But whatever the return convention, at each step we update the context according
+to the context-step function, \(\stepsto_C\).
 
 Each system component will be assigned to a {\em domain}, which may be {\em Outside}
 of the stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed}
@@ -1846,19 +1853,6 @@ return.  \ifaftersubmission\bcp{spacing is funny}\fi
 
 An initial context \(\context_0 = \domMap_0, []\) where \(\domMap_0\) maps
 the stack to \(\unsealed\) and all other addresses and all registers to \(\outside\).
-
-We parameterize over the structure of the stack, particularly the means by
-which a caller identifies the data that should be protected during a call. We term
-this the {\em sealing convention}, \(\sealcon \subseteq \MACHS \times \COMPONENTS\), which
-maps a machine state to a set of addresses.
-If a state's \(\PCname\) is annotated as a call, the sealing convention tells us
-which addresses must be protected until the return. Similarly, we abstract over what
-it means to return with a {\em return convention}, \(\retcon \subseteq \MACHS \times \MACHS\),
-which relates call states to the states that can be considered valid returns to their caller.
-The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
-and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
-But whatever the return convention, at each step we update the context according
-to the context-step function, \(\stepsto_C\).
 
 The rules for \(\stepsto_C\) are given inductively, and apply in the listed order.
 A call annotation tells us to push the return target onto the return stack and
@@ -1877,13 +1871,6 @@ that matches the topmost return target. If neither is true, the context remains 
               {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
               {\(\domMap' = \domMap[\components \mapsto \unsealed]\)}
               {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
-
-\judgmenttwobr[ReturnRec]
-              {\(\codemap ~ (\mach ~ \PCname) = \retmap\)}
-              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
-              {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
-              {\(\domMap'' = \domMap'[\components \mapsto \unsealed]\)}
-              {\(\mach,(\domMap,\_::\rts) \stepsto_C \domMap'',\rts'\)}
 
 \judgment[Default]
          {}
@@ -1909,14 +1896,19 @@ initial state of a call, and requires that the traces from them move in {\em loc
 all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\). We write
 this \(\mach \approx_\components \nach\).
 
-\definition Machine state pairs \(\mach,\mach'\) and \(\nach,\nach'\) are said to change together
-if for all components \(\component\) such that \(\mach ~ \component \not = \mach' ~ \component\) or
-\(\nach ~ \component \not = \nach' ~ \component\), \(\mach' ~ \component = \nach' ~ \component\).
+\definition Machine state pairs \(\mach,\mach'\) and \(\nach,\nach'\) are said to change
+together if for all components \(\component\) such that
+\(\mach ~ \component \not = \mach' ~ \component\) or
+\(\nach ~ \component \not = \nach' ~ \component\),
+\(\mach' ~ \component = \nach' ~ \component\).
 This is written \(\mach,\mach' \diamond \nach,\nach'\).
 
-\definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep} if their adjacent pairs
-change together, written as a coinductive relation \(\machT \doteq
-\nachT\):\bcp{People may not be familiar with the notation}
+\definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep}
+if their adjacent pairs change together. We will represent this relation with
+\(\machT \doteq \nachT\). \bcp{People may not be familiar with the notation}
+\sna{It's a new notation, we use this enough that it seems worth picking an
+  evocative symbol.} 
+We define it as a coinductive relation:
 
 \begin{minipage}{.3\textwidth}
 \judgment{}
@@ -2209,7 +2201,7 @@ that should be passed -- when passing by value, this will typically give the mem
 at the appropriate offset from the stack pointer, while passing by reference gives the
 addresses of the appropriate variables wherever they happen to be.
 
-\[\ann \in \ANNS ::= \callmap(P \subseteq \MACHS \times \COMPONENTS) + \retmap\]
+\[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \callmap(P \subseteq \MACHS \times \COMPONENTS)\]
 
 And we extend the set of domains to include passed components,
 which are labeled with the range of depths of the caller that has passed them.
@@ -2238,7 +2230,7 @@ And to pop we just unseal the components at depth \(\depth\):
 \[(\mathit{pop} ~ \domMap ~ \depth) ~ \component =
 \begin{cases}
   \unsealed                 & \text{if } \domMap ~ \component = \sealed{\depth} \\
-  \unsealed                 & \text{if } \domMap ~ \component = \passed{\depth,\depth} \\
+  \unsealed                 & \text{if } \domMap ~ \component = \passed{\depth-1,\depth} \\
   \passed{\depth',\depth-1} & \text{if } \domMap ~ \component = \passed{\depth',\depth}
                               \text{ for any } \depth' < \depth \\
   \domMap~\component        & \text{else} \\
@@ -2252,17 +2244,10 @@ presented.
             {\(\domMap' = \mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ |\rts|\)}
             {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
-\judgmentthree[ReturnFound]
-              {\(\codemap ~ (\mach ~ \PCname) = \retmap\)}
-              {\(\mach \stepsto \mach' \in \target\)}
-              {\(\domMap' = \mathit{pop} ~ \domMap ~ |\rts|\)}
-              {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
-
-\judgmentthree[ReturnRec]
-              {\(\codemap ~ (\mach ~ \PCname) = \retmap\)}
-              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
-              {\(\domMap'' = \mathit{pop} ~ \domMap ~ |\rts|\)}
-              {\(\mach,(\domMap,\_::\rts) \stepsto_C \domMap'',\rts'\)}
+\judgmenttwo[ReturnFound]
+            {\(\mach \stepsto \mach' \in \target\)}
+            {\(\domMap' = \mathit{pop} ~ \domMap ~ |\rts|\)}
+            {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
 
 \judgment[Default]
          {}
@@ -2293,9 +2278,10 @@ a fixed number of coroutines, each with its own stack.
 Stack identifiers are drawn from a set \(\STACKS\), and there is a static partial map
 \(\stackof\) from addresses to stack ids. Note that we now explicitly reference the stack
 pointer, using the \(\stackof\) of the stack pointer to determine the target of a yield.
-We extend the set of possible annotations with a yield annotation.
+We add a second annotation indicating yields.
 
-\[\ann \in \ANNS ::= \callmap(P \subseteq \MACHS \times \COMPONENTS) + \retmap + \yieldmap\]
+\[\ann \in \ANNS ::= \callmap(P \subseteq \MACHS \times \COMPONENTS) + \yieldmap\]
+\[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \ann \in \ANNS\]
 
 The first major difference in this model is the domains. Stack domains are now nested inside
 top-level domains, and associated with stack identifiers.
@@ -2328,14 +2314,16 @@ and likewise using the return target stacks. We will omit these rules and focus 
 This calls for some explanation. First, we determine which coroutine we are yielding to by
 checking which stack the stack pointer of the next state is pointing to. Then we can only yield
 if the next state is a valid yield target for that stack, and we update the yield target for
-the yielding stack. So it is once again possible for a coroutine to claim to yield but not
-actually change the active stack, with similar effects to when a callee fails to return properly.
-Now we can define both stack safety and coroutine safety under this model.
+the current stack, ensuring that when the system yields back we expect the current coroutine
+to continue from where it left off. So, it is possible for a coroutine to claim to yield
+but not actually change the active stack, with similar effects to when a callee fails
+to return properly. Now we can define both stack safety and coroutine safety under this model.
 
 \definition Let \(\mpcstatename\) and \(\mpcstatename'\) be reachable states such that
 \(\mpcstatename \stepstocon \mpcstatename'\), and \(\pi_\context(\mpcstatename) = \domMap,\rtm,\yts,\stackid\).
 Let \(\components\) be the set of components \(\component\) where
-\(\domMap ~ \component = \instack{\stackid}{\sealed{\_}}\) or \(\instack{\stackid}{\passed{\depth,\depth'}}\)
+\(\domMap ~ \component = \instack{\stackid}{\sealed{\_}}\) or
+\(\instack{\stackid}{\passed{\depth,\depth'}}\)
 where \(|\rtm ~ \stackid| < \depth\) or \(|\rtm ~ \stackid| > \depth'\). A system enjoys
 {\em stepwise stack integrity} in the coroutine setting if for all
 such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename') ~ \component\).
@@ -2352,7 +2340,8 @@ such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename')
 For any reachable segment \(\MPCT \langle f_\depth \rangle\),
 let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
 \(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid}{\unsealed}\) or \(\instack{\stackid}{\passed{\depth,\depth'}}\)
+\(\domMap ~ \component = \instack{\stackid}{\unsealed}\) or
+\(\instack{\stackid}{\passed{\depth,\depth'}}\)
 where \(\depth \leq |\rtm ~ \stackid| \leq \depth'\) .
 Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
 \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
@@ -2370,37 +2359,37 @@ Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
 {\em stepwise coroutine confidentiality} in the coroutine setting if for all
 such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
 
-\subsection{Well-bracketed Control Flow}
-\label{sec:wbcf}
+%\subsection{Well-bracketed Control Flow}
+%\label{sec:wbcf}
 
-Both the integrity and confidentiality components of stack safety
-are reasonable even in programs that violate expected
-control flow. But even though stack safety prevents control-flow violations
-from being used to gain privileges, it is worth protecting control flow as well.
-Indeed, all of the enforcement mechanisms we discuss do preserve well-bracketed
-control flow.
+%Both the integrity and confidentiality components of stack safety
+%are reasonable even in programs that violate expected
+%control flow. But even though stack safety prevents control-flow violations
+%from being used to gain privileges, it is worth protecting control flow as well.
+%Indeed, all of the enforcement mechanisms we discuss do preserve well-bracketed
+%control flow.
 
-When we focus on subroutines, the essence of well-bracketed control flow
-is that a caller can expect that if its callee ever returns, it returns
-to the caller at the appropriate return target. This is tantamount to saying
-that we never ``skip'' a return, or perform a ``false'' one. To formalize this in
-the simple model:
+%When we focus on subroutines, the essence of well-bracketed control flow
+%is that a caller can expect that if its callee ever returns, it returns
+%to the caller at the appropriate return target. This is tantamount to saying
+%that we never ``skip'' a return, or perform a ``false'' one. To formalize this in
+%the simple model:
 
-\definition A system enjoys {\em well-bracketed control flow} if for all
-reachable states \(\mpcstatename\) and \(\mpcstatename'\) such that
-\(\mpcstatename \stepstocon \mpcstatename'\), if
-\(\pi_c(\mpcstatename) = (\_, \_::\rts)\) and \(\pi_m(\mpcstatename)\)
-is annotated as a return, then \(\pi_c(\mpcstatename) = (\_, \rts)\).
+%\definition A system enjoys {\em well-bracketed control flow} if for all
+%reachable states \(\mpcstatename\) and \(\mpcstatename'\) such that
+%\(\mpcstatename \stepstocon \mpcstatename'\), if
+%\(\pi_c(\mpcstatename) = (\_, \_::\rts)\) and \(\pi_m(\mpcstatename)\)
+%is annotated as a return, then \(\pi_c(\mpcstatename) = (\_, \rts)\).
 
-Extending this idea to coroutines, we use the same notion that there are
-no ``false'' yields.
+%Extending this idea to coroutines, we use the same notion that there are
+%no ``false'' yields.
 
-\definition A system enjoys {\em well-structured control flow} if for all
-reachable states \(\mpcstatename\) and \(\mpcstatename'\) such that
-\(\mpcstatename \stepstocon \mpcstatename'\), if
-\(\pi_c(\mpcstatename) = (\_,\_,\_,\stackid)\) and \(\pi_m(\mpcstatename)\)
-is annotated as a return, then \(\pi_c(\mpcstatename) = (\_,\_,\_,\stackid')\)
-where \(\stackid \not = \stackid'\).
+%\definition A system enjoys {\em well-structured control flow} if for all
+%reachable states \(\mpcstatename\) and \(\mpcstatename'\) such that
+%\(\mpcstatename \stepstocon \mpcstatename'\), if
+%\(\pi_c(\mpcstatename) = (\_,\_,\_,\stackid)\) and \(\pi_m(\mpcstatename)\)
+%is annotated as a return, then \(\pi_c(\mpcstatename) = (\_,\_,\_,\stackid')\)
+%where \(\stackid \not = \stackid'\).
 
 \section{Enforcement}
 \label{sec:enforcement}
@@ -2642,10 +2631,7 @@ How does a harmful violation that must be caught later differ from a
 harmless one? The properties in this section rely on our notion of
 observations to draw this distinction.
 
-\subsection{Observable Integrity}
-
-We will describe observable integrity in our most detailed setting. In the
-presence
+\subsection{Lazy Stepwise Integrity}
 
 \definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
 \(f_\depth ~ \mach ~ (\_, \rtm, \_, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
