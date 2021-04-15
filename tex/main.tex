@@ -2073,70 +2073,97 @@ void f(int a) {
 
 \begin{figure}
   \centering
-  \begin{subfigure}{.45\textwidth}
+  \begin{subfigure}{.2\textwidth}
+{\small
 \begin{verbatim}
 int *stash = 0;
 
 int main() {
-0:         int x, y;
-1[C(x)]:  f(x);
-2:         x = 0;
-3[C(y)]:  f(y);
-4[R]:      return x;
+  int x, y;
+  f(x);
+  x = 0;
+  f(y);
+  return x;
 }
 
 void f(int &a) {
-10:    if(!stash)
-11:      stash = a;
-12:    *stash = 5;
-13[R]: return;
+  if(!stash)
+    stash = &a; 
+  *stash = 5;
+  return;
 }
 \end{verbatim}
+}
   \end{subfigure}
-  \begin{subfigure}{.5\textwidth}
+  \begin{subfigure}{.49\textwidth}
+{\small
+\begin{verbatim}
+   stash: .word 0
+1  main:  add $2,%sp      ; allocate frame
+2         mov %sp,%ra
+3         add -2,%ra      ; ra = &x
+4         call f          ; SHARE: %sp-2
+5         mov $0,-2(%sp)  ; x = 0
+6         mov %sp,%ra
+7         add -1,%ra      ; ra = &y
+8         call f          ; SHARE: %sp-1
+9         mov -2(%sp),%ra ; set return value
+10        ret 
+
+20 f:     cmp stash, $0   ; compare
+21        breq #13        ; branch if equal
+22        mov %ra,stash   ; stash = &a
+23        jmp #15
+24        mov $5, (stash) ; *stash = 5
+25        ret 
+}
+\end{verbatim}
+}
+  \end{subfigure}
+  \begin{subfigure}{.29\textwidth}
     \begin{tabular}{l l}
-      {\tt 10} &
-      \memoryaddrs[(0)]{17em}
+      {\tt 20} &
+      \memoryaddrs[(1)]{17em}
       \memory{1}{\mainpassc}[{\makebox[0pt]{P(0,1)}}]%
       \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
       \memory{1}{\retptrc}
-      \memory{1}{\unsealc}
+%      \memory{1}{\unsealc}
       ~$\cdots$ \\
-      {\tt 13} &
+      {\tt 25} &
       \memoryaddrs[(1)]{17em}
       \memory{1}{\mainpassc}
       \memory{1}{\mainsealc}
       \memory{1}{\retptrc}
-      \memory{1}{\unsealc}
+%      \memory{1}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-18em}{0.75em}{5}
       \\
-      {\tt 3} &
+      {\tt 8} &
       \memoryaddrs[(0)]{12em}
-      \memory{4}{\unsealc}
+      \memory{3}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-18em}{0.75em}{0}
       \\
-      {\tt 10} &
-      \memoryaddrs[(0)]{17em}
+      {\tt 20} &
+      \memoryaddrs[(1)]{17em}
       \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
       \memory{1}{\mainpassc}[{\makebox[0pt]{P(0-1)}}]%
       \memory{1}{\retptrc}
-      \memory{1}{\unsealc}
+%      \memory{1}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-18em}{0.75em}{0}
       \\
-      {\tt 13} &
-      \memoryaddrs[(0)]{17em}
+      {\tt 25} &
+      \memoryaddrs[(1)]{17em}
       \memory{1}{\mainsealc}
       \memory{1}{\mainpassc}
       \memory{1}{\retptrc}
-      \memory{1}{\unsealc}
+%      \memory{1}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-18em}{0.75em}{\bf 5}
 \end{tabular}
 \end{subfigure}
-\caption{A violation with pass-by-reference}
+\caption{A violation with pass-by-reference\apt{SP(n) depths looked wrong; SNA double-check that I fixed them right.}}
 \label{fig:passing}
 \end{figure}
 
@@ -2159,15 +2186,20 @@ modified, and naturally this is permitted as well.
 
 The same annotation mechanism can be used to pass
 variables by reference, and here there are important stack safety concerns,
-as seen in Figure~\ref{fig:passing}. In this example, where we revert to assuming
-that arguments are passed in registers,
-{\tt main} calls {\tt f} with a reference to {\tt x}, but then clears {\tt x} and instead
-passes a reference to {\tt y}. We would expect that the first call to {\tt f} might modify
+as seen in Figure~\ref{fig:passing}. In this example, written in C++ notation,
+{\tt f} takes a single argument by reference.
+{\tt main} calls {\tt f} passing a reference to {\tt x}, then clears {\tt x} and calls
+{\tt f} again passing a reference to {\tt y}.
+We would expect that the first call to {\tt f} might modify
 {\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
-{\tt x} in the second call.
+{\tt x} in the second call. (Incidentally, this is perfectly compilable C++!)
 
-So at the initial call, {\tt x} is passed, and {\tt f} is free to write to it. Then upon
-return, {\tt main}'s frame is unsealed. At the second call it is {\tt y} that is passed,
+To avoid cluttering the picture at the assembly level, we revert to assuming that the
+argument {\tt a} is passed in a register, namely {\tt \%ra}.
+The question is how the local variables {\tt x} and {\tt y} themselves
+should be labelled in order for the policy to detect an integrity violation.
+At the initial call, the address of {\tt x} is marked as passed, and {\tt f} is free to write to it. Then upon
+return, {\tt main}'s frame is unsealed. At the second call it is the address of {\tt y} that is marked as passed,
 and when {\tt f} instead tries to write to {\tt x}, it violates integrity. For that matter
 a future call with no arguments passed by reference would also violate integrity if it wrote
 to either variable.
@@ -2175,8 +2207,8 @@ to either variable.
 When passing by reference, it is possible to repeatedly pass the same reference further
 and further down the stack. Note, however, that this sharing of the reference must be over
 an unbroken chain of calls. So it suffices to track two depths for each passed
-cell: the original owner, and the highest depth it has been passed to. It is considered
-accessible anywhere between the two.
+cell: the original owner, and the highest depth it has been passed to. The policy considers
+it to be accessible anywhere between the two.
 
 Our model provides only limited support for handling fully first-class pointers into
 stack frames, e.g., pointers obtained by taking the address of a local variable.
