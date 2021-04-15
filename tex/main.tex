@@ -400,15 +400,17 @@ proving that an ordinary machine with enforcement can simulate the idealized mac
 
 In the present work, we also distinguish between protecting stack data (like
 LSE) and
-control flow (with WBCF).  But rather than defining stack safety as ``what
-a certain idealized machine does,'' we formalize explicit criteria
+control flow (like WBCF).  But our formulations of both properties are
+somewhat different from those of Skorstengaard et al.  Rather than
+defining stack safety implicitly,
+as ``what a certain idealized machine does,'' we formalize explicit criteria
 based on the technical framework of language-based
 security\ifaftersubmission~\citep{??}\bcp{Maybe the Sabelfeld and Myers
   survey?}\fi.
 Our core properties are \emph{stepwise stack integrity} and
-\emph{stepwise stack confidentiality}. WBCF is a desireable property, but
+\emph{stepwise stack confidentiality}.  WBCF is a desireable property, but
 we can express safety in an information-flow sense without reference to it,
-even safety from attacks that hijack control flow.  \bcp{On consideration
+even safety from attacks that hijack control flow.  \BCP{On consideration
   (especially in light of the weird ``C confuses A by returning directly to
   A instead of returning to B so that B can finish up some stuff before
   returning to A'' example\footnote{Actually, this example is not so weird.
@@ -420,10 +422,11 @@ information flow property.  But our treatment of it is interestingly
 different from StkTokens, because of our call annotations, and we should
 discuss that.}
 
-In applying these security concepts, we treat each caller as needing protection
-from its callee, even as that callee may need protection from its callee in turn.
+In formalizing these security concepts, we treat {\em each} caller as needing
+protection from its callee (which, in turn, needs protection from its
+callee, etc.).
 This is novel in that the
-confidentiality property applies to many nested subtraces within a single execution,
+confidentiality property applies to many nested sub-traces within a single execution,
 as opposed to traces of entire executions.
 {\em Integrity} says that a caller's local data is protected from modification by its callee,
 motivated by the reasoning principle that local data persists across a call. Its
@@ -434,7 +437,7 @@ As a reasoning principle, confidentiality guarantees that the callee's
 behavior is determined only by a predictable interface that does not include the caller's
 local state or the uninitialized portion of the stack. This is formalized as a
 {\em noninterference}-style property that, rather than comparing pairs of whole program traces,
-compares a pair of subtraces for each call, nested within other calls. Once again
+compares a pair of sub-traces for each call, nested within other calls. Once again
 {\em stepwise} describes the granularity of enforcement: at every step of a call,
 changes in the state are independent of the caller's data.
 
@@ -1694,12 +1697,12 @@ running \(\mpcstatename\) up to \(f\)'') and similarly\apt{??} for traces with p
 
 \paragraph*{Context Segments}
 
-In particular, we wish to formulate properties about consecutive subtraces
+In particular, we wish to formulate properties about consecutive sub-traces
 in which the context obeys a given predicate. This will commonly be used to extract
-individual calls from a trace by taking subtraces in which the stack is
+individual calls from a trace by taking sub-traces in which the stack is
 at or below a given depth\bcp{needed??}. If \(f \subseteq \MACHS \times \CONTEXTS\), then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
-``\(\mpcstatename\) segmented by \(f\) yields a subtrace \(\MPCT\).''
+``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
 
 \begin{center}
   \judgmenttwo[Now]
@@ -1725,7 +1728,7 @@ we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 We often want to quantify over all traces from any initial state so that our
 properties apply to the system as a whole. We say that a state \(\mpcstatename'\)
 is {\em reachable} if for some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT\)
-and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
+and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a sub-trace
 such that from some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
 \apt{Unclear how there can be multiple initial states.}
 
@@ -2109,7 +2112,7 @@ of sharing: passing by value on the stack, and passing by reference. First we wi
 some examples at the same level of detail as our earlier ones, and then move on to
 extending our formalization.
 
-Example \ref{fig:passingsimple} shows a sample trace of
+Example~\ref{fig:passingsimple} shows a sample trace of
 a program that passes a value on the stack, without an attack.
 We extend our call annotation with an additional parameter identifying a memory location to be
 passed, and our diagram displays it in magenta. Our notion of domains is extended as well,
@@ -2535,17 +2538,19 @@ the frame, which can be quite expensive, especially for programs that
 allocate large but sparsely populated frames; we return to this point
 in \cref{sec:lazy}.
 %
-The running example in \cref{fig:running-trace-a} manages the stack in this way.
-For example, {\tt f}'s ``blessed'' sequences allocate space to save its return
-address (and private variables) in instructions 20--21, and later restores that
-return address and deallocates its private frame space before returning in
-34--36. Additionally, unlike in the simplified presentation of the policy, the
-caller passes information to the callee through the stack, and for this creates
-and initializes (22 and 24--25) and destructs (29) the argument part of the
-callee's stack frame.\rb{The policy would also need to control this, I think it
-  is clear}
-\rb{TODO: References to the running example are no longer valid! We could use
-figures 5 or 6, referencing the figures, not the invisible assembly code.}
+For example, the program in \cref{fig:passingsimple} manages the stack
+in this way. Here, the call pseudo-instruction to {\tt f} in line 5
+hides a blessed sequence of instructions that allocate space to save
+its return address to {\tt main} and seal the protected part of the
+stack before {\tt f}'s body starts executing at 10. Conversely, the
+return instruction in line 15 restores and jumps to the return address
+and deallocates its frame space, and unseals the corresponding parts
+of the stack. The function itself allocates and deallocates its own
+private frame space in instructions 10 and 14. Additionally, unlike in
+the simplified presentation of the policy, the caller shares the
+arguments passed to the callee through the stack, and for this creates
+and initializes (3--4) and destructs (6) the argument part of the
+callee's stack frame.
 %
 %\rb{Note that we have also considered and implemented more flexible schemes
 %  based on allowing operations above the current activation depth. How do we put
