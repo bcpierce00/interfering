@@ -983,14 +983,15 @@ Unless otherwise noted, colored boxes indicate an assignment of the address to a
 {\em domain} -- a label reflecting a particular set of access rights. Domains
 are \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), and \(\outside\)
-(outside the stack entirely.)
+(outside the stack entirely.) For our purposes, \(\outside\) will apply to global
+variables. Domains are part of the {\em context} of a state.
+We will introduce the remaining context as needed.
 
 Figure~\ref{fig:int1} shows a simple integrity violation. It consists of a {\tt main}
 function that performs a call to a function {\tt f}, which overwrites {\tt main}'s
 variable {\tt x}. In the initial memory layout the entire stack is {\em unsealed},
 meaning that it is eligible to be written to. At the call from {\tt main} to
-{\tt f}, {\tt main}'s locals are {\em sealed} and labeled with the depth of
-their owner\bcp{are we still using depths?},
+{\tt f}, {\tt main}'s locals are {\em sealed} with {\tt main}'s depth,
 in this case 0. Sealing is the fundamental integrity contract between the caller and callee:
 {\tt main} expects that {\tt x} will be unchanged when it gets control back.
 This gives us our simple, intuitive statement of {\em stepwise integrity}:
@@ -1129,9 +1130,9 @@ int f() {
 
 Meanwhile confidentiality intuitively states that a callee is unaware
 of the context of its call (except for its arguments and any global
-variables\bcp{We haven't talked about global variables.  We should.}).
-We state this in a style similar\bcp{??} to {\em noninterference}~\citep{??}.
-Noninterference describes knowledge: it states that for some system components
+variables).
+We state this as a kind of {\em noninterference} property~\citep{??}.
+Noninterference describes knowledge: it states that for system components
 containing secret values, we can substitute any values whatsoever without changing the results
 of our computation. If there exists some value for which we see different results, then
 in fact we can learn something about the initial state by observing those results, violating
@@ -1157,12 +1158,12 @@ in one step has a matching value at the end of the other step. And when we
 extend the model with a notion of external output, values that are outputted will need
 to match as well.
 
-\bcp{Remove this para?}We alternatively could imagine a version of stepwise confidentiality in which we explicitly
-track which addresses may be read (i.e., which have been initialized), and at each step
-guarantee that the step alters state identically to a step from a variant state. Then we
-wouldn't need to divide up the execution by calls. But the approach we take is more
-consistent with a typical noninterference approach, in that it varies the memory once
-at the beginning and trace changes through the execution.
+%\bcp{Remove this para?}We alternatively could imagine a version of stepwise confidentiality in which we explicitly
+%track which addresses may be read (i.e., which have been initialized), and at each step
+%guarantee that the step alters state identically to a step from a variant state. Then we
+%wouldn't need to divide up the execution by calls. But the approach we take is more
+%consistent with a typical noninterference approach, in that it varies the memory once
+%at the beginning and trace changes through the execution.
 
 \begin{figure}
 
@@ -1373,7 +1374,7 @@ void f() {
       {\tt 15} &
       \memoryaddrs{12em}
       \memory{1}{\mainsealc}[Seal(0)]%
-      \memory{1}{\goodc}[RetPtr]%
+      \memory{1}{\unsealc}[RetPtr]%
       \memory{2}{\unsealc}%
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{1}
@@ -1390,8 +1391,7 @@ void f() {
       {\tt 10} &
       \memoryaddrs{12em}
       \memory{1}{\mainsealc}
-      \memory{1}{\goodc}
-      \memory{2}{\unsealc}%
+      \memory{3}{\unsealc}%
       ~$\cdots$
       \MemoryLabel{-19em}{0.75em}{-1}
       \MemoryLabel{-15em}{0.75em}{\#5} &
@@ -1434,12 +1434,11 @@ void f() {
 
 %From the classic stack smashing attack to return oriented programming,
 One of the most pernicious ways to attack the stack is by hijacking control flow.
-Our stack safety properties do not assume that control flow is
-well-bracketed\bcp{undefined term}; rather,
-they express what it means to protect data even in the presence of control-flow attacks.
-Consider example \ref{fig:controlflow}, a relative of the classic ``awkward example,''\bcp{??}~\citep{??}.
-(Here we show return addresses explicitly as line numbers, in the form $\#n$.)
-\apt{what do the colors mean in this example?}
+Our stack safety properties do not assume that control flow follows a typical structure
+of matching sets calls and returns nested within on another.
+Rather, they express what it means to protect data even in the presence of control-flow attacks.
+Consider example \ref{fig:controlflow}.
+Here we show return addresses explicitly as line numbers, in the form $\#n$.
 Function {\tt f} is called twice, at lines 2 and 4; it should therefore return to lines
 3 and 5, respectively. But the first time, before returning, it stashes its
 return pointer away, and the second time it returns to line 3 instead of 5; then it ends
@@ -1450,18 +1449,20 @@ Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that we r
 This has the appearance of an integrity violation.  How do we capture this in our
 integrity property?
 
-The key intuition is that to be considered as having returned to {\tt main}, {\tt f} needs to do more than just
-execute a return-labeled instruction: it must actually reach the appropriate
-{\em return target} in {\tt main}. In our context\apt{what's that?}, we keep
-a stack of return targets\bcp{do we still},
-which correspond to the depths at which stack frames have been sealed. A callee is
-only considered to have returned when it executes a return-annotated instruction
-and then reaches a valid return target\bcp{what's that?}. Only then do the sealed frames become unsealed.
+The key intuition is that to be considered as having returned to {\tt main}, {\tt f} needs
+to do more than just execute a return-labeled instruction: it must actually reach the
+appropriate {\em return target} in {\tt main}. A return target is a predicate on states,
+in this case one that holds on any state whose program counter points to the correct line.
+We introduce a new piece of context: we keep a stack of return targets, and a callee is
+only considered to have returned when it reaches a state that matches the caller's target.
+A return target is associated with a set of sealed locations that will become unsealed
+when it is reached, here represented by sharing a color with the sealed data.
 
 In the example, on its first return, {\tt f} reaches its return target, because the
 \(\PCname\) is 3 after its return. But on the second, {\tt f} does not properly return,
-but rather changes its stack pointer and jumps into {\tt main}'s code. Then {\tt f}
-attempts to overwrite the sealed value of {\tt x}, violating integrity.
+but rather changes its stack pointer (shown in light red) and jumps into
+{\tt main}'s code. Then {\tt f}
+attempts to overwrite the (still sealed) value of {\tt x}, violating integrity.
 
 \paragraph*{Pass by Reference and Stack Arguments}
 \bcp{I wonder if this could be postponed so that we get to the formal
