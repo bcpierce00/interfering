@@ -869,6 +869,8 @@ Definition calcTraceDiff cm (m m' : MachineState) (p p' : PolicyState) (c c' : c
       concatStr (List.map (fun k => printComponent k m' p' cm c' i ++ nl) compsToTrace) ++ nl)%string).
                             
 
+(* Integrity *)
+
 Definition prop_SimpleStackIntegrityStep fuel i m p cm ctx
   : Checker.Checker :=
   let fix aux fuel m p ctx traceOut : Checker.Checker :=
@@ -897,6 +899,83 @@ Definition prop_integrity :=
                     (prop_SimpleStackIntegrityStep defFuel defLayoutInfo m p cm (initC sm m))).
 
 Extract Constant defNumTests => "500".
-QuickCheck prop_integrity. 
+(* QuickCheck prop_integrity.  *)
+
+(* Confidentiality *)
 
 
+
+(* variantOf (fun k => fst c k = Sealed d) m n -> *)
+Definition genVariantOf (d : nat)
+           (c : context) (m : MachineState)
+  : G MachineState :=
+  foldGen (fun macc k =>
+             match fst c k with
+             | Sealed d' =>
+               if Nat.leb d d' then
+                 bindGen (genImm 40) (fun z =>
+                 returnGen (jorp m k z))
+               else returnGen macc
+             | _ => returnGen macc
+             end
+          )
+          (getComponents m) m .
+
+Definition sameDifferenceP (m m' n n' : MachineState) k :=
+  if (orb (negb (Z.eqb (proj m k) (proj m' k)))
+          (negb (Z.eqb (proj n k) (proj n' k)))) then
+    Z.eqb (proj m' k) (proj n' k)
+  else true.
+
+Fixpoint prop_lockstepConfidentiality
+           fuel m n p cm ctx (endP : MPCState -> bool)
+  : bool :=
+  match fuel with
+  | O => true
+  | S fuel' => 
+    match endP (m,p,ctx), endP (n,p,ctx) with
+    | true, true => (* collect "Both done" *) true
+    | true, _    => (* collect "Main done" *) true
+    | _   , true => (* collect "Vary done" *) true
+    | _, _ =>
+      match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx),
+            mpcstep (updateC (CodeMap_fromImpl cm)) (n,p,ctx) with
+      | Some (m',p1,c1,o1), Some (n', p2,c2, o2) =>
+        andb (List.forallb (sameDifferenceP m m' n n') (getComponents m'))
+             (prop_lockstepConfidentiality fuel' m' n' p1 cm c1 endP)
+      | _, _ => true
+      end
+    end
+  end.
+
+Definition prop_stackConfidentiality
+           fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx 
+  : Checker.Checker :=
+  match fuel with
+  | O => checker true
+  | S fuel' =>
+    match AnnotationOf (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
+    | Some call =>
+      match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
+      | Some (m', p', c', o) =>
+        let depth := List.length (snd c') in
+        let endP  := fun '(_,_,c) =>
+                       (Nat.ltb (List.length (snd c)) depth) in
+        forAllShrinkShow (genVariantOf depth c' m')
+                         (fun _ => nil)
+                         (fun n' => "")
+                         (fun n' =>
+                            prop_lockstepConfidentiality defFuel m' n' p' cm c' endP)
+      | _ => checker true
+      end
+    | _ => checker true
+    end
+  end.
+
+Definition prop_confidentiality :=
+  let sm := defstackmap defLayoutInfo in
+  forAll genMach (fun '(m,p,cm) =>
+                    (prop_stackConfidentiality defFuel defLayoutInfo m p cm (initC sm m))).
+
+Extract Constant defNumTests => "500".
+QuickCheck prop_confidentiality. 

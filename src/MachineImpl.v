@@ -146,7 +146,20 @@ Extract Constant exception =>
       end
     end.
 
-  Definition getComponents (m : MachineState) : list Component :=
+  (* Maybe name this pullback instead *)
+Definition jorp (m : MachineState) (k : Component) (v : Value) : MachineState :=
+  match k with
+  | Mem a =>
+    withMem
+    (unchecked_store_byte_list (word.of_Z a)
+                               (Z32s_to_bytes [v]) (getMem m)) m
+  | Reg r => 
+    withRegs (map.put (getRegs m) r (word.of_Z v)) m
+  | PC =>
+    withPc (word.of_Z v) m
+  end.
+  
+Definition getComponents (m : MachineState) : list Component :=
     (* PC *)
     let pc := [PC] in
     (* Non-zero registers. *)
