@@ -140,18 +140,19 @@
 %\apt{maybe: ``Stack safety is a testable security property''?}\bcp{That
 %  would sacrifice a lot of oomph for a little bit of precision, IMO.  Prefer
 %  to leave it out of the title but hit it strongly in the abstract.}%
-What does ``stack safety'' mean, exactly? The phrase is associated with a
+What does ``stack safety'' mean? The phrase is associated with a
 variety of compiler,
 run-time, and hardware mechanisms for guarding against corruption of stack
 memory.  But these mechanisms typically lack precise specifications,
-relying instead on informal descriptions and specific examples of bad
+relying instead on informal descriptions and examples of bad
 behaviors that they prevent.
 
-We propose formal criteria for stack safety, using the concepts of
-language-based security: a combination of an integrity property (``the private
+We propose a formal characterization
+of stack safety, phrased using concepts from language-based security: a
+combination of an integrity property (``the private
 state in each caller's stack frame is held invariant by the callee'')
 and a confidentiality property (``the callee's behavior is insensitive to the
-caller's private state'').
+caller's private state'')\bcp{and something about WBCF...}.
 % These properties are sensible even in the presence of
 % abnormal control flow.\apt{Is this important enough to mention here?}
 % BCP: I think not in the abstract, but maybe in the intro.
@@ -160,31 +161,26 @@ caller's private state'').
 % ``well-bracketed control flow'' that restricts control flow to the
 % typical pattern of matched calls and returns.
 %
-We argue that these criteria match common intuitions by (1) showing that
-they are violated by a variety of intuitively unsafe examples and (2)
-using property-based random testing to check that appropriate variants of
-the criteria are actually enforced by the stack-safety ``micro-policies''
-proposed by~\citet{DBLP:conf/sp/RoesslerD18} (and {\em not} enforced by
-broken variants).  Specifically, Roessler
+We use our characterization to validate the stack-safety ``micro-policies''
+proposed by~\citet{DBLP:conf/sp/RoesslerD18}.
+Specifically, we use property-based random testing to check that Roessler
 and Dehon's ``eager'' micro-policy, which catches violations as early as
-possible, enforces a basic ``stepwise'' versions of our confidentiality
-and integrity properties. Their more performant ``lazy'' micro-policy
-does not, but it does (almost) correspond to weaker, more extensional
-variants of the properties.
+possible, enforces a simple ``stepwise'' variant of our properties (and
+detects several broken variants), and that a slightly repaired version of
+their more performant ``lazy'' micro-policy corresponds to weaker and more
+extensional variants of the properties.
 %
-\BCP{I still don't think the next sentence really nails it.  And (sigh) I am
-  still not really clear yet on whether our definition applies / might apply
-  to other enforcement mechanisms or not.  Saying that our attacker model is
-  stronger does not help---that should make it easier for us to describe
-  their protections, not harder.  So I don't understand what we're saying
-  here.}%
-%
-While we do not rule out other enforcement mechanisms, our
-definitions are strongly informed by micropolicy systems, especially
-our attacker model, which is stronger than other enforcement mechanisms
-can enable.
-
-\bcp{We should decide between ``criteria'' and ``properties''...}
+% \BCP{I still don't think the next sentence really nails it.  And (sigh) I am
+%   still not really clear yet on whether our definition applies / might apply
+%   to other enforcement mechanisms or not.  Saying that our attacker model is
+%   stronger does not help---that should make it easier for us to describe
+%   their protections, not harder.  So I don't understand what we're saying
+%   here.}%
+% %
+% While we do not rule out other enforcement mechanisms, our
+% definitions are strongly informed by micropolicy systems, especially
+% our attacker model, which is stronger than other enforcement mechanisms
+% can enable.
 
 % For the sake of concreteness, most of our presentation assumes a standard RISC
 % machine architecture with a basic subroutine calling convention (parameters
@@ -403,7 +399,7 @@ LSE) and
 control flow (like WBCF).  But our formulations of both properties are
 somewhat different from those of Skorstengaard et al.  Rather than
 defining stack safety implicitly,
-as ``what a certain idealized machine does,'' we formalize explicit criteria
+as ``what a certain idealized machine does,'' we formalize explicit properties
 based on the technical framework of language-based
 security\ifaftersubmission~\citep{??}\bcp{Maybe the Sabelfeld and Myers
   survey?}\fi.
@@ -451,7 +447,7 @@ they are somewhat stronger.
 First, we model returns as returns to a valid return target\bcp{that will
   make no sense to the reader at this point}; an invalid return
 is treated as a mere jump within the callee, and does not grant access to the caller's
-data. So, even without WBCF, our stack safety properties rule out many control flow attacks.
+data. So, even without WBCF, our stack safety properties rule out many control-flow attacks.
 The attacker in such an instance is permitted to ``return'' so long as it avoids
 violating the integrity and confidentiality of the caller.\bcp{ditto} Second, confidentiality
 contains\bcp{?} temporal protections that LSE does not necessarily address\bcp{?}. The intuition
@@ -687,7 +683,8 @@ In summary, we offer the following contributions:
   enhanced with unique tags on each activation~(\cref{sec:lazy}).
 \end{itemize}
 
-We begin with a description of our assumptions and threat model (\cref{sec:threat}),
+We begin with a description of our setting (\cref{sec:setup}) and threat
+model (\cref{sec:threat}),
 then show how our properties apply to examples of stack unsafety
 (\cref{sec:running-example}). Then, after some technical preliminaries
 (\cref{sec:prelim}), we formalize the properties (\cref{sec:eager}\bcp{??}, \cref{sec:lazy})
@@ -695,7 +692,7 @@ and describe testing (\cref{sec:testing})\bcp{The sections are out of order?}.
 \Cref{sec:relwork} discusses related work, and
 \cref{sec:future} sketches directions for future work.  \bcp{Where is 7?}
 
-\section{Set Up}
+\section{Setting}
 \label{sec:setup}
 
 Our properties are defined in terms of an abstract machine model that makes very few
@@ -708,7 +705,7 @@ that is neither code nor stack to store global variables, as a heap, etc., but o
 properties do not protect it or assume any particular behavior. We also do not
 model run-time code generation.
 
-Our stack-safety criteria depend
+Our stack-safety properties depend
 critically on the notions of ``call'' and ``return,'' which are not fully explicit
 in machine code---the same instruction opcode may be used in some places as part of
 a call or return sequence and in other places for other purposes.
@@ -760,7 +757,7 @@ techniques.
 \section{Threat Model}
 \label{sec:threat}
 
-Intuitively, stack safety means that the stack frame of each caller (and 
+Intuitively, stack safety means that the stack frame of each caller (and
 those of its ancestor callers) is protected
 from attempts by a confused or malicious callee (including all its
 descendant callees)
@@ -788,7 +785,7 @@ been no call, only an instruction sequence resembling one, and
 therefore no associated change in permissions. Then the caller is guaranteed no
 protections.
 
-\bcp{Confusing:}Alternatively, an annotated instruction might not obey the calling convention.
+\bcp{Confusing, and maybe out of date?}Alternatively, an annotated instruction might not obey the calling convention.
 In the context of \citeauthor{DBLP:conf/sp/RoesslerD18}'s micro-policies, well-behaved calls
 and returns are implemented by fixed sequences of instructions which the tag policy
 will force to be executed from start to finish, termed {\em blessed sequences}.
@@ -996,7 +993,7 @@ int f() {
 
 \vspace{\abovedisplayskip}
 \end{subfigure}
-\caption{An Integrity Violation\bcp{Can we align the C-like snippets with
+\caption{An integrity violation\bcp{Can we align the C-like snippets with
     the corresponding assembly?}  \ifaftersubmission\bcp{I wonder if we
     could make the figures easier to read by putting very light, differently
   colored backgrounds under the different parts}\fi}
@@ -1005,7 +1002,8 @@ int f() {
 
 This section introduces the intuition behind the properties through a series
 of examples. Existing stack safety enforcement work mostly refers directly to examples
-of bad behavior that it prevents; we will argue that:
+of bad behavior that it prevents; we will argue that: \bcp{Not sure this
+  enumeration is useful.}
 
 \begin{itemize}
 \item examples that appear to violate stack safety violate at least one of our properties;
@@ -1019,18 +1017,19 @@ We show our examples both in C syntax and in corresponding assembly code for a
 simple two-address machine. The address of each instruction is shown to its left.
 The assembly code reflects a simple compilation model in which
 local variables are stored in the stack frame.
-Unless otherwise stated, arguments and return values are passed in registers.
+For the moment, arguments and return values are passed in registers.
 The machine is word-addressed. The stack grows upward in
 memory and {\tt \$SP} points to the first unused word above the top of the stack.
 The {\tt call} and {\tt ret} instructions push and pop the return address from the stack,
 implicitly adjusting the stack pointer.
 At the right of each example, we show the layout of stack memory just before
-the specified instruction is executed; each box represents a memory word and
+the specified instruction is executed; each box represents a memory word, and
 addresses increase to the right.
 
-Unless otherwise noted, colored boxes indicate an assignment of the address to a
+Unless otherwise noted\bcp{where is it ``otherwise noted''??}, colored boxes
+indicate an assignment of the address to a
 {\em domain} -- a label reflecting a particular set of access rights. Domains
-are \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
+are \(\unsealed\)\bcp{``unsealed'' would read better} (in the stack and accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), and \(\outside\)
 (outside the stack entirely.) For our purposes, \(\outside\) will apply to global
 variables. Domains are part of the {\em context} of a state.
@@ -1173,11 +1172,11 @@ int f() {
 \vspace{\abovedisplayskip}
 
 \end{subfigure}
-\caption{A Confidentiality Violation\apt{Could save space by not repeating C or assemly code for {\tt main}.}}
+\caption{A confidentiality violation\apt{Could save space by not repeating C or assemly code for {\tt main}.}}
 \label{fig:conf1}
 \end{figure}
 
-Meanwhile confidentiality intuitively states that a callee is unaware
+Meanwhile, confidentiality intuitively states that a callee is unaware\bcp{??}
 of the context of its call (except for its arguments and any global
 variables).
 We state this as a kind of {\em noninterference} property~\citep{??}.
@@ -1190,7 +1189,8 @@ confidentiality.
 In Figure~\ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
 by reading {\tt main}'s variable {\tt x}. The trace
 shows how noninterference applies to this scenario. At instruction 10, we create a {\em variant}
-state with arbitrary values \(v_0\), etc., in place of the values that should
+state with arbitrary values\ifaftersubmission\bcp{IMO, it would be easier to
+understand if we chose concrete values for the examples}\fi \(v_0\), etc., in place of the values that should
 be hidden from {\tt f}. At instruction 12, we note that the callee's first variable, {\tt y}, has
 changed to 5 in both the primary trace and the variant. The primary and variant agree on
 the value in the changed location, so confidentiality was not violated. But at instruction 13,
@@ -1367,7 +1367,8 @@ int g() {
 
 \end{subfigure}
 
-\caption{Another Confidentiality Violation}
+\caption{Another confidentiality violation \bcp{Again, let's align the C
+    code with the assembly, etc.}}
 \label{fig:conf2}
 \end{figure}
 
@@ -1382,10 +1383,10 @@ violating lockstep confidentiality. Technically, this violation
 occurs because the program counter is also a component of the state that must change
 identically between the primary and variant traces. In a case where \(v_4 \not = 5\),
 the program counters will differ, breaking the lockstep.\apt{Is there any reason
-to complicate things like this by bringing in the PC?}
+to complicate things like this by bringing in the PC?}\bcp{+1}
 
 
-\paragraph*{Control Flow Attacks}
+\paragraph*{Control-Flow Attacks}
 \begin{figure}
   \centering
   \begin{subfigure}{.3\textwidth}
@@ -1503,7 +1504,11 @@ void f() {
       \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6} \\
     \end{tabular}
   \end{subfigure}
-  \caption{A Control Flow Attack.}
+  \caption{A control-flow attack \bcp{wonder if we can cram the bottom part
+      onto the same row as the rest.  Might need to make things smaller,
+      spill into the margin, etc., but we really need the space.  (Another
+      option is to make it a separate figure and flow text around it, but
+      this will save less space.)}}
   \label{fig:controlflow}
 \end{figure}
 
@@ -1511,7 +1516,7 @@ void f() {
 One of the most pernicious ways to attack the stack is by hijacking control flow.
 Our stack safety properties do not assume that control flow follows a typical structure
 of matching sets calls and returns nested within on another.
-Rather, they express what it means to protect data even in the presence of control-flow attacks.
+Rather, they aim to capture what it means to protect data even in the presence of control-flow attacks.
 Consider example \ref{fig:controlflow}.
 Here we show return addresses explicitly as line numbers, in the form $\#n$.
 Function {\tt f} is called twice, at instructions 2 and 4; it should therefore return to instructions
@@ -1542,7 +1547,7 @@ violates the integrity property.
 \section{Machines and Traces}
 \label{sec:prelim}
 
-We next define our machine model precisely. To make our definition of stack safety
+We now define our machine model precisely. To make our definition of stack safety
 as generic as possible, this section proposes an abstract interface to a
 machine model plus some kind of (software- or hardware-enforced) policy monitor.
 In~\cref{sec:enforcement}, we instantiate this model with a concrete dynamic
@@ -1808,19 +1813,21 @@ that matches the topmost return target. If neither is true, the context remains 
               {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
                 {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
+\vspace*{-1ex}
 \judgmentthree[ReturnFound]
               {\(\mach \stepsto \mach' \in \target\)}
               {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
               {\(\domMap' = \domMap[\components \mapsto \unsealed]\)}
               {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
 
+\vspace*{-3.5ex}
 \judgment[Default]
          {}
          {\(\_,\context \stepsto_C \context\)}
 
 When we build machine traces with this step function, we always know how deep in the
 call stack we are and which components are sealed. We now proceed to state our properties.
-The first is {\em stepwise stack integrity}, where ``stepwise'' means that the property is 
+The first is {\em stepwise stack integrity}, where ``stepwise'' means that the property is
 quantified over each step of execution from any initial state. The criterion for integrity
 is simple: sealed components do not change.
 
@@ -1863,15 +1870,15 @@ We define it as a coinductive relation:
             {\(\mach \machT \doteq \nach \nachT\)}
 \end{minipage}
 
-\definition For any depth \(\depth\), define \(f_\depth ~ \mach ~ (\_, \rts)\) to be 
-\(|\rts| \geq \depth\). Then each reachable segment \(\MPCT \langle f_\depth \rangle\) 
+\definition For any depth \(\depth\), define \(f_\depth ~ \mach ~ (\_, \rts)\) to be
+\(|\rts| \geq \depth\). Then each reachable segment \(\MPCT \langle f_\depth \rangle\)
 corresponds to a trace of a function from its call to its return.
-Given such a segment \(S\), let \(\mach,\_,(\domMap,\_)\)  = \(\head(S)\) and let 
+Given such a segment \(S\), let \(\mach,\_,(\domMap,\_)\)  = \(\head(S)\) and let
 \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \outside\).
 A system enjoys \emph{stepwise stack confidentiality} if, for all \(\MPCT\langle f_\depth\rangle\)
-with associated \(m\) and \(\components\) as above, and 
+with associated \(m\) and \(\components\) as above, and
 for all \(\nach\) such that \(\mach \approx_\components \nach\) and
- \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\), 
+ \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\),
  \(\MPCT\langle f_\depth\rangle \doteq \NPCT\langle f_\depth\rangle \).\apt{I found the previous
    version hopelessly confusing, but I'm not at all sure that this one is right! SNA please check.}
 %% \definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
@@ -2025,7 +2032,8 @@ void f(int a) {
 
 \end{subfigure}
 
-\caption{Sharing on the Stack}
+\caption{Sharing on the stack \ifaftersubmission\bcp{Not enough space above the bottom part of
+    the figure (at least in the latex build that I'm looking at...)}\fi}
 \label{fig:passingsimple}
 \end{figure}
 
