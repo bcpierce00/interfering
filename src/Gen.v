@@ -178,11 +178,11 @@ Definition printComponent (k : Component)
     then
       match decode RV32I val with
       | IInstruction inst =>
-        (show inst ++ " @ " ++ show tag ++ " < " ++ show (CodeMap_fromImpl cm a) ++ " > - " ++ show (fst c (Mem a)))%string
+        ("[" ++ show a ++ "] : " ++ show inst ++ " @ " ++ show tag ++ " < " ++ show (CodeMap_fromImpl cm a) ++ " > - " ++ show (fst c (Mem a)))%string
       | _ => (show val ++ " <not-inst>")%string
       end
     else
-      (show val ++ " @" ++ show tag ++ " < " ++ show (CodeMap_fromImpl cm a) ++ " > - " ++ show (fst c (Mem a)))%string
+      ("[" ++ show a ++ "]" ++ show val ++ " @" ++ show tag ++ " < " ++ show (CodeMap_fromImpl cm a) ++ " > - " ++ show (fst c (Mem a)))%string
   | Reg r => 
     ("r" ++ show r ++ " : " ++ show val ++ " @ " ++ show tag) %string
   | PC => ("PC: " ++ printPC m p ++ " - " ++
@@ -482,10 +482,10 @@ Definition headerHead offset f :
 Definition headerSeq offset f nextF :
   list (InstructionI * TagSet * FunID * CodeAnnotation) :=
   headerHead offset f ++
-  [ (Sw sp ra 0    , [Tinstr; Th1]  , nextF, normal)
-  ; (Addi sp sp 12 , [Tinstr; Th2]  , nextF, normal)
-  ; (Sw sp r0 (-8) , [Tinstr; Th3]  , nextF, normal)
-  ; (Sw sp r0 (-4) , [Tinstr; Th4]  , nextF, normal)        
+  [ (Addi sp sp 12 , [Tinstr; Th1]  , nextF, normal)
+  ; (Sw sp ra 0    , [Tinstr; Th2]  , nextF, normal)
+  ; (Sw sp 8 (-8) , [Tinstr; Th3]  , nextF, normal)
+  ; (Sw sp 9 (-4) , [Tinstr; Th4]  , nextF, normal)        
   ].
 (* Based on Rob's 
   (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
@@ -541,7 +541,7 @@ genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
   end.
 
 Definition returnSeq (f rf : FunID) :=
-  [ (Lw   ra sp (-12) , [Tinstr; Tr1], f, normal)
+  [ (Lw   ra sp 0     , [Tinstr; Tr1], f, normal)
   ; (Addi sp sp (-12) , [Tinstr; Tr2], f, normal)
   ; (Jalr ra ra 0     , [Tinstr; Tr3], rf, MachineImpl.ret)
   ].
@@ -550,7 +550,7 @@ Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f
   match map.get (getRegs m) sp with
   | Some spv =>
     (* See if spv - 12 is indeed a pc_depth *)
-    match map.get (memtags p) (word.unsigned spv - 12) with
+    match map.get (memtags p) (word.unsigned spv) with
     | Some (cons (Tpc depth) nil) =>
       Some (returnGen (returnSeq f depth))
     | _ => None
@@ -754,6 +754,8 @@ genGPRTs pplus p genGPRTag = do
 -- TODO:  move sptag stuff from genMachine to here
  *)
 
+Definition defFuel := 42%nat.
+
 Definition genMachine
            (i : LayoutInfo) (t : TagInfo)
            (m0 : MachineState) (p0 : PolicyState)
@@ -778,7 +780,7 @@ genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag sp
   let ps'' = ps' & pgpr . at sp ?~ spTag
   *)
 
-  (gen_exec_aux 40 i t ms' ps' ms' ps' cm0 O (S O) nil dataP codeP callP genInstrTag))).
+  (gen_exec_aux defFuel i t ms' ps' ms' ps' cm0 O (S O) nil dataP codeP callP genInstrTag))).
 
 Definition zeroedPolicyState : PolicyState :=
   {| nextid := 0
@@ -791,8 +793,11 @@ Definition zeroedPolicyState : PolicyState :=
                      ; (2, [Tsp]) (* sp *)
                     ])
    ; memtags :=
-       snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
-                       (repeat nil 125))
+       (map.put 
+          (snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
+                                (repeat nil 125)))
+          500
+          ([Tstack 0]))
    (*map.empty (* map.put map.empty 500 (cons Tsp nil) *)*)
   |}. 
 
@@ -841,15 +846,27 @@ Fixpoint walk (ks : list Component) cm m p (c : context) m' (p' : PolicyState) (
 
 Derive Show for Observation.
 
+Definition SD_eqb s1 s2 :=
+  match s1, s2 with
+  | Sealed n1, Sealed n2 => Nat.eqb n1 n2
+  | Unsealed, Unsealed   => true
+  | Outside,  Outside    => true
+  | _, _ => false
+  end.
 
 Definition calcTraceDiff cm (m m' : MachineState) (p p' : PolicyState) (c c' : context) (i : LayoutInfo) (o : Observation) : unit -> string :=
   let compsToTrace :=
       List.filter (fun k =>
                  negb (andb (Z.eqb (proj m k) (proj m' k))
-                            (TagSet_eqb (pproj p k) (pproj p k)))) (getComponents m')  in
+                            (andb (TagSet_eqb (pproj p k) (pproj p k))
+                                  (SD_eqb (fst c k) (fst c' k)))))
+                      (getComponents m') in
   (fun tt => 
-    ("Observation: " ++ show o ++ nl ++
-    concatStr (List.map (fun k => printComponent k m' p' cm c' i ++ nl) compsToTrace) ++ nl)%string).
+     ("Observation: " ++ show o ++ nl ++
+      "from: " ++ nl ++
+      concatStr (List.map (fun k => printComponent k m p cm c i ++ nl) compsToTrace) ++ 
+      "to: " ++ nl ++
+      concatStr (List.map (fun k => printComponent k m' p' cm c' i ++ nl) compsToTrace) ++ nl)%string).
                             
 
 Definition prop_SimpleStackIntegrityStep fuel i m p cm ctx
@@ -861,6 +878,10 @@ Definition prop_SimpleStackIntegrityStep fuel i m p cm ctx
         match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
         | None => collect ("Failstop", fuel) true
         | Some (m', p', c', o) =>
+(*          match AnnotationOf (CodeMap_fromImpl cm) (proj m PC) with
+          | Some MachineImpl.ret => 
+            exception (show ("Trying to ret", List.length (snd ctx), List.length (snd c'), List.map (fun p => p m') (snd ctx), List.map (fun p => p m') (snd c'), List.length (snd c'), List.map (fun p => p m) (snd ctx), List.map (fun p => p m) (snd c')))
+          | _ => *)
           let traceDiff :=
               calcTraceDiff cm m m' p p' ctx c' i o in
           walk (getComponents m') cm m p ctx m' p' c'
@@ -873,9 +894,9 @@ Definition prop_SimpleStackIntegrityStep fuel i m p cm ctx
 Definition prop_integrity :=
   let sm := defstackmap defLayoutInfo in
   forAll genMach (fun '(m,p,cm) =>
-                    (prop_SimpleStackIntegrityStep 42 defLayoutInfo m p cm (initC sm m))).
+                    (prop_SimpleStackIntegrityStep defFuel defLayoutInfo m p cm (initC sm m))).
 
-Extract Constant defNumTests => "1000".
+Extract Constant defNumTests => "500".
 QuickCheck prop_integrity. 
 
 

@@ -1,9 +1,9 @@
+Require Import String.
 Require Import List.
 Import ListNotations.
 Require Import Bool.
 Require Import ZArith.
 Require Import Nat.
-
 
 From StackSafety Require Import Trace MachineImpl ObsTrace.
 
@@ -97,7 +97,8 @@ Section WITH_MAPS.
   Definition ReturnConvention : Type := MachineState -> MachineState -> bool.
   Definition rc : ReturnConvention :=
     fun m1 m2 => weq (proj m1 (Reg SP)) (proj m2 (Reg SP)) &&
-                 weq (proj m1 PC) (wplus (proj m2 PC) 4).
+                 weq (wplus (proj m1 PC) 4)
+                     (wplus (proj m2 PC) 0).
 
   Definition ReturnTargets : Type := list (MachineState -> bool).
   Fixpoint popTo (m:MachineState) (rts : ReturnTargets) : option ReturnTargets :=
@@ -132,7 +133,7 @@ Section WITH_MAPS.
      Annotations are defined in Machine.v, and the ones that matter here are call and return.
      The annotations are carried by a Code Map, which also tells us which addresses are code. *)
   Variable cdm : CodeMap.
-  
+
   Definition updateC (m:MachineState) (prev:context) : context :=
     let '(dm, rts) := prev in
     match AnnotationOf cdm (proj m PC) with
@@ -158,7 +159,8 @@ Section WITH_MAPS.
                      always be one less than the current depth. Everything else remains. *)
       match popTo (fst (step m)) rts with
       | Some rts' =>
-        let d := length rts' in
+(*        exception "BUT NOT HERE" *)
+       (let d := length rts' in
         let dm' := fun k =>
                      match dm k with
                      | Sealed d' =>
@@ -167,7 +169,7 @@ Section WITH_MAPS.
                        else Sealed d'
                      | _ => dm k
                      end in
-        (dm', rts')
+        (dm', rts'))
       | _ => (dm, rts)
       end
     | _ => (dm, rts)
