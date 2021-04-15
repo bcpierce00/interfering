@@ -29,6 +29,7 @@ Import ListNotations.
 Import RiscvMachine.
 
 From StackSafety Require Import MachineImpl.
+From StackSafety Require Import SubroutineSimple.
 
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
@@ -140,25 +141,8 @@ Definition listify2 {A B} `{Show A} `{Show B}
 Instance ShowWord : Show word :=
   {| show x := show (word.signed x) |}.
 
-Definition printGPRs (m : MachineState) (p : PolicyState) :=
-  List.fold_right (fun '(rID, rVal, rTag) acc =>
-                     show rID ++ " : " ++ show rVal ++ " @ " ++ show rTag ++ nl ++ acc)%string ""
-                  (listify2 (getRegs m) (regtags p)). 
-
-Definition listify1_word mem := 
-  List.rev
-    (map.fold
-       (fun acc k v =>
-          (* Keep mod 4 *)
-          if Z.eqb (snd (Z.div_eucl (word.unsigned k) 4)) 0
-          then
-            let val := 
-                match loadWord mem k with
-                | Some w32 => LittleEndian.combine _ w32
-                | _ => 42424242
-                end in
-            (word.unsigned k,val) :: acc
-          else acc) nil mem).
+Definition printPC (m : MachineState) (p : PolicyState) :=
+  (show (word.unsigned (getPc m)) ++ " @ " ++ show (pctags p))%string.
 
 Definition CodeMap_Impl := Zkeyed_map CodeStatus.
 Definition CodeMap_fromImpl (cm : CodeMap_Impl) : CodeMap :=
@@ -176,46 +160,102 @@ Instance ShowCodeAnnotation : Show CodeAnnotation :=
        | normal => "normal"
        | _  => "ret"
        end |}.
-Derive Show for CodeStatus.
 
-Definition printMem (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (i : LayoutInfo) :=
+Derive Show for CodeStatus.
+Derive Show for StackDomain.
+
+
+Definition printComponent (k : Component)
+           (m : MachineState) (p : PolicyState)
+           (cm : CodeMap_Impl) (c : context)
+           (i : LayoutInfo) :=
+  let val := proj m k in
+  let tag := pproj p k in
+  match k with
+  | Mem a =>
+    (* Check if in instruction memory *)
+    if andb (Z.leb (instLo i) a) (Z.leb a (instHi i))
+    then
+      match decode RV32I val with
+      | IInstruction inst =>
+        ("[" ++ show a ++ "] : " ++ show inst ++ " @ " ++ show tag ++ " < " ++ show (CodeMap_fromImpl cm a) ++ " > - " ++ show (fst c (Mem a)))%string
+      | _ => (show val ++ " <not-inst>")%string
+      end
+    else
+      ("[" ++ show a ++ "]" ++ show val ++ " @" ++ show tag ++ " < " ++ show (CodeMap_fromImpl cm a) ++ " > - " ++ show (fst c (Mem a)))%string
+  | Reg r => 
+    ("r" ++ show r ++ " : " ++ show val ++ " @ " ++ show tag) %string
+  | PC => ("PC: " ++ printPC m p ++ " - " ++
+      match decode RV32I (proj m (Mem val)) with
+      | IInstruction inst =>
+        (show inst)
+      | _ => (show val ++ " <not-inst>")%string
+      end)%string
+  end.
+
+
+Definition printGPRs (m : MachineState) (p : PolicyState) :=
+  List.fold_left (fun acc '(rID, rVal, rTag) =>
+                     show rID ++ " : " ++ show rVal ++ " @ " ++ show rTag ++ nl ++ acc)%string 
+                  (listify2 (getRegs m) (regtags p)) "". 
+
+Definition listify1_word mem := 
+  List.rev
+    (map.fold
+       (fun acc k v =>
+          (* Keep mod 4 *)
+          if Z.eqb (snd (Z.div_eucl (word.unsigned k) 4)) 0
+          then
+            let val := 
+                match loadWord mem k with
+                | Some w32 => LittleEndian.combine _ w32
+                | _ => 42424242
+                end in
+            (word.unsigned k,val) :: acc
+          else acc) nil mem).
+
+Definition printMem (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c : context) (i : LayoutInfo) :=
   let mem := getMem m in
   let tags := memtags p in
   let mts := combine_match (listify1_word mem) (listify1 tags) in
-  List.fold_right
-    (fun '(k,val,t) s =>
+  List.fold_left
+    (fun s '(k,val,t) =>
        let printed :=
            if andb (Z.leb (instLo i) k)
                    (Z.leb k (instHi i))
            then
              match decode RV32I val with
              | IInstruction inst =>
-               (show inst ++ " @ " ++ show t ++ " < " ++ show (CodeMap_fromImpl cm k) ++ " >")%string
+               (show inst ++ " @ " ++ show t ++ " < " ++ show (CodeMap_fromImpl cm k) ++ " > - " ++ show (fst c (Mem k)))%string
              | _ => (show val ++ " <not-inst>")%string
              end
            else
-             (show val ++ " @" ++ show t ++ " < " ++ show (CodeMap_fromImpl cm k) ++ " >")%string in
+             (show val ++ " @" ++ show t ++ " < " ++ show (CodeMap_fromImpl cm k) ++ " > - " ++ show (fst c (Mem k)))%string in
        if andb (Z.eqb val 0) (seq.nilp t) then
          s
-       else
+       else 
        (show k ++ " : " ++ printed ++ nl ++ s)%string
-    ) "" mts.
-
-Definition printPC (m : MachineState) (p : PolicyState) :=
-  (show (word.unsigned (getPc m)) ++ " @ " ++ show (pctags p))%string.
+    ) mts "".
 
 Definition printMachine
-           (m : MachineState) (p : PolicyState) cm := (
+           (m : MachineState) (p : PolicyState) cm c := (
   "PC:" ++  
   printPC m p ++ nl ++
   "Registers:" ++ nl ++
   printGPRs m p ++ nl ++
   "Memory: " ++ nl ++
-  printMem m p cm defLayoutInfo ++ nl
+  printMem m p cm c defLayoutInfo ++ nl
   )%string.
 
+Definition defstackmap (i : LayoutInfo) (a : Addr) :=
+  if (andb (Z.leb (stackLo i) a)
+           (Z.leb a (stackHi i)))
+  then
+    true
+  else false.
+
 Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl):=
-  {| show := fun '(m,p,cm) => printMachine m p cm |}.
+  {| show := fun '(m,p,cm) => "" (*printMachine m p cm (initC (defstackmap defLayoutInfo) m) *) |}.
 
 (*
 , initGPR :: TagSet 
@@ -363,9 +403,9 @@ genInstr :: PolicyPlus -> Machine_State -> PIPE_State ->
 *)
 Definition genInstr (i : LayoutInfo) (t : TagInfo)
            (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
-           (dataP codeP : TagSet -> bool)
+           (dataP codeP : TagSet -> bool) (f : FunID)
            (genInstrTag : InstructionI -> G TagSet)
-  : G (InstructionI * TagSet) :=
+  : G (InstructionI * TagSet * FunID * CodeAnnotation) :=
   let groups := groupRegisters i t m p dataP codeP in
   let a := arith groups in
   let d := dataPtr groups in
@@ -392,7 +432,7 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           bindGen (genImm (dataHi i)) (fun imm =>
           let instr := Addi rd (aID ai) imm in
           bindGen (genInstrTag instr) (fun tag =>
-          ret (instr, tag))))))
+          ret (instr, tag, f, normal))))))
          ; (onNonEmpty l 3%nat,
           bindGen (elems_ l ([l; badPtr groups])) (fun l' =>
           bindGen (elems_ def_dp l') (fun pi =>
@@ -401,7 +441,7 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
 (*          trace ("Generating... " ++ show (imm, pMaxImm pi))%string *)
           (let instr := Lw rd (pID pi) imm in
           bindGen (genInstrTag instr) (fun tag =>
-          ret (instr, tag)))))))
+          ret (instr, tag, f, normal)))))))
        ; ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
           bindGen (elems_ def_dp d) (fun pi =>
           bindGen (genSourceReg m) (fun rs =>
@@ -409,14 +449,14 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           let imm := pMinImm pi + imm' in
           let instr := Sw (pID pi) rs imm in
           bindGen (genInstrTag instr) (fun tag => 
-          ret (instr, tag)))))) 
+          ret (instr, tag, f, normal)))))) 
        ; (onNonEmpty a 1%nat,
           bindGen (elems_ def_a a) (fun ai1 =>
           bindGen (elems_ def_a a) (fun ai2 =>
           bindGen (genTargetReg m) (fun rd =>
           let instr := Add rd (aID ai1) (aID ai2) in
           bindGen (genInstrTag instr) (fun tag => 
-          ret (instr, tag))))))
+          ret (instr, tag, f, normal))))))
        ])).
 (*
 -- TODO: Uncomment this and add stack.dpl rule
@@ -434,10 +474,18 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
  *)
 
 
-Definition headerSeq offset :=
-  [ (Jal ra offset, [Tinstr; Tcall])
-  ; (Sw sp ra 0  , [Tinstr; Th1])
-  ; (Addi sp sp 12, [Tinstr; Th2])
+
+
+Definition headerHead offset f :
+  list (InstructionI * TagSet * FunID * CodeAnnotation) := [(Jal ra offset , [Tinstr; Tcall], f    , call)].
+
+Definition headerSeq offset f nextF :
+  list (InstructionI * TagSet * FunID * CodeAnnotation) :=
+  headerHead offset f ++
+  [ (Addi sp sp 12 , [Tinstr; Th1]  , nextF, normal)
+  ; (Sw sp ra 0    , [Tinstr; Th2]  , nextF, normal)
+  ; (Sw sp 8 (-8) , [Tinstr; Th3]  , nextF, normal)
+  ; (Sw sp 9 (-4) , [Tinstr; Th4]  , nextF, normal)        
   ].
 (* Based on Rob's 
   (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
@@ -445,9 +493,9 @@ Definition headerSeq offset :=
 *)
 Definition genCall (l : LayoutInfo) (t : TagInfo)
            (m : MachineState) (p : PolicyState)
-           (cm : CodeMap_Impl) (nextF : FunID)
+           (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
            (callP :  TagSet -> bool) :
-  option (nat * G (list (InstructionI * TagSet) * FunID))
+  option (G (list (InstructionI * TagSet * FunID * CodeAnnotation)))
   :=
 (*  
 genCall :: PolicyPlus -> Machine_State -> PIPE_State ->
@@ -477,33 +525,34 @@ genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
       not_used in
   let exOpts :=
         (* Existing callsites, lookup fun id *)
-      List.map (fun i =>
-                  match map.get cm i with
-                  | Some (inFun f _) =>
-                    (headerSeq i, f) 
-                  | _ => exception "genCall - nofid"
+      List.map (fun i => 
+                  match map.get cm (word.unsigned (getPc m) + i) with
+                  | Some (inFun _ _) =>
+                    (headerHead i f) 
+                  | _ => exception ("genCall - nofid: " ++ show (word.unsigned (getPc m) + i) ++ nl ++ printMachine m p cm (initC (defstackmap l) m))%string
                   end) existingSites  in
   let newOpts :=
-      List.map (fun i => (headerSeq i, nextF)) newCallSites in
-  match exOpts ++ newOpts with
+      List.map (fun i => headerSeq i f nextF) newCallSites in
+  (* TODO: re-call *)
+  match (* exOpts ++ *) newOpts with
   | [] => None
   | x :: xs =>
-    Some (S (List.length xs), elems_ x (x :: xs))
+    Some (elems_ x (x :: xs))
   end.
 
-Definition returnSeq :=
-  [ (Lw   ra sp (-12) , [Tinstr; Tr1])
-  ; (Addi sp sp (-12) , [Tinstr; Tr2])
-  ; (Jalr ra ra 0     , [Tinstr; Tr3])
+Definition returnSeq (f rf : FunID) :=
+  [ (Lw   ra sp 0     , [Tinstr; Tr1], f, normal)
+  ; (Addi sp sp (-12) , [Tinstr; Tr2], f, normal)
+  ; (Jalr ra ra 0     , [Tinstr; Tr3], rf, MachineImpl.ret)
   ].
 
-Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) :=
+Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
   match map.get (getRegs m) sp with
   | Some spv =>
     (* See if spv - 12 is indeed a pc_depth *)
-    match map.get (memtags p) (word.unsigned spv - 12) with
+    match map.get (memtags p) (word.unsigned spv) with
     | Some (cons (Tpc depth) nil) =>
-      Some (returnGen (returnSeq, depth))
+      Some (returnGen (returnSeq f depth))
     | _ => None
     end
   | _ => None
@@ -516,18 +565,18 @@ Definition genInstrSeq
            (cm : CodeMap_Impl) (f nextF : FunID)
            (genInstrTag : InstructionI -> G TagSet) :=
   let fromInstr :=
-      bindGen (genInstr l t m p cm dataP codeP genInstrTag)
-              (fun it => returnGen ([it], f)) in
-  match genCall l t m p cm nextF callP,
-        genRetSeq m p cm with
+      bindGen (genInstr l t m p cm dataP codeP f genInstrTag)
+              (fun itf => returnGen ([itf])) in
+  match genCall l t m p cm f nextF callP,
+        genRetSeq m p cm f with
   | None, None => fromInstr
   | None, Some g2 =>
     freq_ g2 ([ (5, fromInstr)
               ; (2, g2) ])%nat
-  | Some (_, g1), None =>
+  | Some g1, None =>
     freq_ g1 ([ (5, fromInstr)
               ; (2, g1) ])%nat
-  | Some (_, g1), Some g2 =>
+  | Some g1, Some g2 =>
     freq_ g1 ([ (5, fromInstr)
               ; (2, g1)
               ; (1, g2)
@@ -591,7 +640,7 @@ Fixpoint gen_exec_aux (steps : nat)
          (m0 : MachineState) (p0 : PolicyState)
          (m  : MachineState) (p  : PolicyState)
          (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
-         (its : list (InstructionI * TagSet))
+         (its : list (InstructionI * TagSet * FunID * CodeAnnotation))
          (dataP codeP callP : TagSet -> bool)
          (genInstrTag : InstructionI -> G TagSet)
          (* num calls? *)
@@ -604,19 +653,25 @@ Fixpoint gen_exec_aux (steps : nat)
   | S steps' =>
     match map.get (getMem m) (getPc m) with
     | Some _ =>
+      match its with
+      | nil =>
 (*      trace ("Existing instruction found: " ++ nl)%string *)
-      (            
-      (* Instruction already exists, step... *)
-      match mpstep (m,p) with
-      | Some ((m',p'),o) =>
-        (* ...and recurse. *)
-        gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP genInstrTag
+        (            
+          (* Instruction already exists, step... *)
+          match mpstep (m,p) with
+          | Some ((m',p'),o) =>
+            (* ...and recurse. *)
+            gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP genInstrTag
+          | _ =>
+            (* ... something went wrong. Trace something? *)
+            ret (m0, p0, cm)
+          end
+        )
       | _ =>
-        (* ... something went wrong. Trace something? *)
-        ret (m0, p0, cm)
+        (*trace ("Existing instruction mid-sequence" ++ nl)%string*)
+              (ret (m0, p0, cm))
       end
-      )
-    | _ =>
+   | _ =>
 (*      trace ("No instruction found " ++ nl)%string *)
       (* Check if there is anything left to put *)
       (bindGen (match its with
@@ -624,24 +679,24 @@ Fixpoint gen_exec_aux (steps : nat)
                  (* Generate an instruction sequence. *)
                  (* TODO: Sequences, calls. *)
                  bindGen (genInstrSeq i t m p dataP codeP callP cm f nextF genInstrTag)
-                         (fun '(ists, f') =>
-                            match ists with
-                            | ist :: ists' =>
+                         (fun itfas =>
+                            match itfas with
+                            | (i,t,f',a) :: itfs' =>
 (*                              trace (show (f',ist, ists') ++ nl)%string*)
-                                    (returnGen (f', ist, ists'))
+                                    (returnGen (a, f', (i,t), itfs'))
                             | _ => exception "EmptyInstrSeq"
                             end)
-               | ist::its' =>
-                 returnGen (f, ist, its')
+               | ((i,t,f',a)::itfs') =>
+                 returnGen (a, f', (i,t), itfs')
                end)
-      (fun '(f', (is,it), its) =>
+      (fun '(a, f', (is,it), its) =>
          let nextF' := if Nat.eqb f' nextF then
                          S nextF else nextF in
          let m0' := setInstrI (getPc m) m0 is in
          let m'  := setInstrI (getPc m) m  is in
          let p0' := setInstrTagI (word.unsigned (getPc m)) p0 it in
          let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
-         let cm' := map.put cm (word.unsigned (getPc m)) (inFun f' normal) in
+         let cm' := map.put cm (word.unsigned (getPc m)) (inFun f' a) in
          match mpstep (m', p') with
          | Some ((m'', p''), o) =>
 (*            trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string  *)
@@ -699,6 +754,8 @@ genGPRTs pplus p genGPRTag = do
 -- TODO:  move sptag stuff from genMachine to here
  *)
 
+Definition defFuel := 42%nat.
+
 Definition genMachine
            (i : LayoutInfo) (t : TagInfo)
            (m0 : MachineState) (p0 : PolicyState)
@@ -723,7 +780,7 @@ genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag sp
   let ps'' = ps' & pgpr . at sp ?~ spTag
   *)
 
-  (gen_exec_aux 40 i t ms' ps' ms' ps' cm0 O (S O) nil dataP codeP callP genInstrTag))).
+  (gen_exec_aux defFuel i t ms' ps' ms' ps' cm0 O (S O) nil dataP codeP callP genInstrTag))).
 
 Definition zeroedPolicyState : PolicyState :=
   {| nextid := 0
@@ -736,8 +793,11 @@ Definition zeroedPolicyState : PolicyState :=
                      ; (2, [Tsp]) (* sp *)
                     ])
    ; memtags :=
-       snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
-                       (repeat nil 125))
+       (map.put 
+          (snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
+                                (repeat nil 125)))
+          500
+          ([Tstack 0]))
    (*map.empty (* map.put map.empty 500 (cons Tsp nil) *)*)
   |}. 
 
@@ -746,22 +806,97 @@ Definition genMach :=
   let codeP := fun tt => true in
   let dataP := fun tt => true in
   (* Fix this *)
-  let callP := fun tt => false in  
+  let callP := fun tt =>
+                 existsb (fun t => match t with
+                                   | Th1 => true
+                                   | _ => false
+                                   end) tt in  
   let genInstrTag : InstructionI -> G TagSet :=
       fun i => returnGen (cons Tinstr nil) in
   genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState map.empty
              dataP codeP callP genInstrTag.
 
-From StackSafety Require Import SubroutineSimple.
+(* Sample1 (genMach).  *)
 
-(* Sample1 (genMach). *)
+(* Property with printing. *)
+
+Derive Show for Component.
+
+Instance ShowValue : Show Value :=
+  {| show v := show v |}.
+
+Fixpoint walk (ks : list Component) cm m p (c : context) m' (p' : PolicyState) (c' : context) (traceOut : list (unit -> string))
+         (cont : unit -> Checker) : Checker :=
+  match ks with
+  | [] => cont tt
+  | k :: ks' =>
+    match fst c k with
+    | Sealed _ =>
+      if Z.eqb (proj m k) (proj m' k)
+      then walk ks' cm m p c m' p' c' traceOut cont
+      else whenFail ("Initial Machine:" ++ nl ++
+                     concatStr (List.rev (List.map (fun f => f tt) traceOut)) ++
+                     "Integrity failure at component: " ++ show k ++ nl ++
+                                                        "Component values: " ++ show (proj m k) ++ " vs " ++ show (proj m' k) ++ nl ++
+                    "Final state: " ++ nl ++
+                    printMachine m p cm c)%string false
+    | _ => walk ks' cm m p c m' p' c' traceOut cont
+    end
+  end.
+
+Derive Show for Observation.
+
+Definition SD_eqb s1 s2 :=
+  match s1, s2 with
+  | Sealed n1, Sealed n2 => Nat.eqb n1 n2
+  | Unsealed, Unsealed   => true
+  | Outside,  Outside    => true
+  | _, _ => false
+  end.
+
+Definition calcTraceDiff cm (m m' : MachineState) (p p' : PolicyState) (c c' : context) (i : LayoutInfo) (o : Observation) : unit -> string :=
+  let compsToTrace :=
+      List.filter (fun k =>
+                 negb (andb (Z.eqb (proj m k) (proj m' k))
+                            (andb (TagSet_eqb (pproj p k) (pproj p k))
+                                  (SD_eqb (fst c k) (fst c' k)))))
+                      (getComponents m') in
+  (fun tt => 
+     ("Observation: " ++ show o ++ nl ++
+      "from: " ++ nl ++
+      concatStr (List.map (fun k => printComponent k m p cm c i ++ nl) compsToTrace) ++ 
+      "to: " ++ nl ++
+      concatStr (List.map (fun k => printComponent k m' p' cm c' i ++ nl) compsToTrace) ++ nl)%string).
+                            
+
+Definition prop_SimpleStackIntegrityStep fuel i m p cm ctx
+  : Checker.Checker :=
+  let fix aux fuel m p ctx traceOut : Checker.Checker :=
+      match fuel with
+      | O => collect "Out-of-Fuel" true
+      | S fuel' => 
+        match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
+        | None => collect ("Failstop", fuel) true
+        | Some (m', p', c', o) =>
+(*          match AnnotationOf (CodeMap_fromImpl cm) (proj m PC) with
+          | Some MachineImpl.ret => 
+            exception (show ("Trying to ret", List.length (snd ctx), List.length (snd c'), List.map (fun p => p m') (snd ctx), List.map (fun p => p m') (snd c'), List.length (snd c'), List.map (fun p => p m) (snd ctx), List.map (fun p => p m) (snd c')))
+          | _ => *)
+          let traceDiff :=
+              calcTraceDiff cm m m' p p' ctx c' i o in
+          walk (getComponents m') cm m p ctx m' p' c'
+               (traceDiff :: traceOut)
+               (fun tt => aux fuel' m' p' c' (traceDiff :: traceOut))
+        end
+      end in
+  aux fuel m p ctx ([fun tt => printMachine m p cm ctx]).
 
 Definition prop_integrity :=
-  let sm := fun _ => false in
+  let sm := defstackmap defLayoutInfo in
   forAll genMach (fun '(m,p,cm) =>
-(*  trace ("Next Run Starting..." ++ nl)%string *)
-  (SimpleStackIntegrityStepP (CodeMap_fromImpl cm) 42 m p (initC sm m))).
+                    (prop_SimpleStackIntegrityStep defFuel defLayoutInfo m p cm (initC sm m))).
 
-Extract Constant defNumTests => "1000".
+Extract Constant defNumTests => "500".
 QuickCheck prop_integrity. 
+
 
