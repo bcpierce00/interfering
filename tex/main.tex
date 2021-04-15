@@ -1533,29 +1533,29 @@ The basic building blocks of the machine are {\em values} and {\em addresses}.
 Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\).
 %
 Our machine states are composed of {\em components} \(\component\),
-which are either words (memory addresses) or by register names (\(\reg\)) drawn from some set
-\(\REGS\).
+which are either memory addresses (words) or register names (\(\reg\)) drawn from some set
+\(\REGS\), which is assumed to include two special purpose registers: the
+program counter {\PCname} and the stack pointer \(\SP\).
 %
     \[\component \in \COMPONENTS ::= \WORDS + \REGS \]
 %
-The register names are assumed to include two special purpose registers: the
-program counter {\PCname} and the stack pointer \(\SP\).
-
 A {\em machine state} is a map from components to values:
 %
 \[\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
-
-We have a total step function between machine states \(\mach \stepsto \mach'\).
+%
+We have a total step function between machine states, written \(\mach \stepsto \mach'\).
+\apt{But just below we write $\mach \stepstoobs \mach'$. Which is it?}
+\apt{Say something about initial machine state?}
 
 \subsection{Policies}
 
-We now present our model of enforcement, which we introduced informally in \Cref{sec:threat}.
+We now formalize the model of enforcement that we introduced in \Cref{sec:threat}.
 A {\em policy} consists of a set of policy
 states \(\pol \in \POLS\) and a policy step function \((\mach, \pol) \polstep \pol' \in
 \MACHS \times \POLS \rightharpoonup \POLS\). This step function is partial;
 it is undefined on input configurations that correspond to a policy fault. The policy
 can see the machine state, but cannot modify it. We assume that the
-compiler\bcp{why?} provides an initial policy state \(\pol_0\) to accompany the initial machine state.
+compiler\bcp{why?} provides an initial policy state \(\pol_0\) to accompany the initial machine state.\apt{see comment above}
 %
 A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
 \Cref{sec:enforcement}.
@@ -1600,29 +1600,30 @@ a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
 \subsection{Traces}
 \label{sec:traces}
 
-A trace over a type \(\TRACEELEMS\)\bcp{``over a type A'' is a Coq-ism} is a nonempty, finite or infinite sequence of
-\(\TRACEELEMS\)s; we write \(\TRACE{\TRACEELEMS}\) for the set of traces over
-\(\TRACEELEMS\). We will mostly be concerned with sequences of MPC-states,
+A trace \(T \in \TRACE{\TRACEELEMS}\) is a nonempty, finite or infinite sequence of elements
+of some type \(\TRACEELEMS\).  We will mostly be concerned with sequences of MPC-states,
 called \emph{machine traces} and denoted \(\MPCT \in \TRACE{\MPCS}\). %, and of observations.
 
 \paragraph*{Trace-Of}
 
 The ``trace-of'' operator, written \(\mpcstatename \hookrightarrow \MPCT\),
 coinductively relates an initial state with the trace of states
-produced by repeated application of step, and potentially cut short by
-the policy component. The {\sc Default} rule applies only if the other does not.
+produced by repeated application of \(\stepstocon\), and potentially cut short by
+the policy component. % The {\sc Default} rule applies only if the other does not.
 (We use juxtaposition of an element and a trace to represent ``cons.''\bcp{Ugh})
 
+\begin{center}
 \begin{minipage}{.4\textwidth}
 \judgmenttwo{\(\mpcstatename \stepstocon \mpcstatename'\)}
             {\(\mpcstatename' \hookrightarrow \MPCT\)}
             {\(\mpcstatename \hookrightarrow \mpcstatename' \MPCT\)}%
 \end{minipage}
 \begin{minipage}{.4\textwidth}
-\judgment[Default]
-         {}
+\judgment%[Default]
+         {\(\not\exists \mpcstatename'. \mpcstatename \stepstocon \mpcstatename'\)}
          {\(\mpcstatename \hookrightarrow \mpcstatename\)}
 \end{minipage}
+\end{center}
 %
 
 \paragraph*{Projections}
@@ -1640,7 +1641,8 @@ function since traces are non-empty, and the final element (if one exists) with
 
 \paragraph*{Until}
 The operation \(\PUT ~ f ~ \Trace\) takes a trace
-\(\Trace \in \TRACE{\TRACEELEMS \times \OBSS}\) and a predicate
+\(\Trace \in \TRACE{\TRACEELEMS %\times \OBSS
+}  \) and a predicate
 on elements \(f \subset \TRACEELEMS\) and gives the prefix of
 \(\Trace\) ending with the first element on which \(f\) holds.
 
@@ -1661,6 +1663,8 @@ on elements \(f \subset \TRACEELEMS\) and gives the prefix of
   \end{minipage}
 \end{center}
 %
+\apt{If we are writing \(f \subset \TRACEELEMS\), perhaps we should also
+  be writing \(a \in f\), etc.  rather than \(f a\), etc.?}
 If the resulting trace is a strict prefix of the parameter, then the
 predicate must hold on its final element. If the predicate always holds, then
 \(\PUT\) is the identity function.
@@ -1725,6 +1729,7 @@ properties apply to the system as a whole. We say that a state \(\mpcstatename'\
 is {\em reachable} if for some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT\)
 and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
 such that from some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
+\apt{Unclear how there can be multiple initial states.}
 
 \section{Stack Safety, Formally}
 \label{sec:lse}
@@ -2093,7 +2098,7 @@ of sharing: passing by value on the stack, and passing by reference. First we wi
 some examples at the same level of detail as our earlier ones, and then move on to
 extending our formalization.
 
-Example \ref{fig:passingsimple} shows a sample trace of
+Example~\ref{fig:passingsimple} shows a sample trace of
 a program that passes a value on the stack, without an attack.
 We extend our call annotation with an additional parameter identifying a memory location to be
 passed, and our diagram displays it in magenta. Our notion of domains is extended as well,
@@ -2519,17 +2524,19 @@ the frame, which can be quite expensive, especially for programs that
 allocate large but sparsely populated frames; we return to this point
 in \cref{sec:lazy}.
 %
-The running example in \cref{fig:running-trace-a} manages the stack in this way.
-For example, {\tt f}'s ``blessed'' sequences allocate space to save its return
-address (and private variables) in instructions 20--21, and later restores that
-return address and deallocates its private frame space before returning in
-34--36. Additionally, unlike in the simplified presentation of the policy, the
-caller passes information to the callee through the stack, and for this creates
-and initializes (22 and 24--25) and destructs (29) the argument part of the
-callee's stack frame.\rb{The policy would also need to control this, I think it
-  is clear}
-\rb{TODO: References to the running example are no longer valid! We could use
-figures 5 or 6, referencing the figures, not the invisible assembly code.}
+For example, the program in \cref{fig:passingsimple} manages the stack
+in this way. Here, the call pseudo-instruction to {\tt f} in line 5
+hides a blessed sequence of instructions that allocate space to save
+its return address to {\tt main} and seal the protected part of the
+stack before {\tt f}'s body starts executing at 10. Conversely, the
+return instruction in line 15 restores and jumps to the return address
+and deallocates its frame space, and unseals the corresponding parts
+of the stack. The function itself allocates and deallocates its own
+private frame space in instructions 10 and 14. Additionally, unlike in
+the simplified presentation of the policy, the caller shares the
+arguments passed to the callee through the stack, and for this creates
+and initializes (3--4) and destructs (6) the argument part of the
+callee's stack frame.
 %
 %\rb{Note that we have also considered and implemented more flexible schemes
 %  based on allowing operations above the current activation depth. How do we put
@@ -2820,7 +2827,8 @@ in capability machines like CHERI, this technique incurs significant
 costs, because it requires the entire unused part of the stack to be
 cleared whenever a security boundary is crossed. Their logical
 relation captures capability safety without ``externally observable
-side-effects (like console output or memory access traces).'' \bcp{Not very clear:}In the
+side-effects (like console output or memory access traces)''
+and can be used to reason about individual programs. \bcp{Not very clear:}In the
 discussion, ``while [the authors] claim that [their] calling
 convention enforces control-flow correctness, [they] do not prove a
 general theorem that shows this, because it is not clear what such a
@@ -2849,16 +2857,25 @@ observations is limited to cotermination.
 We conjecture that the linear capability machines introduced by
 \citep{Skorstengaard+19}, in combination with the StkTokens calling convention,
 can be modeled in our framework and satisfy our definition of stack safety in
-\cref{sec:lse-and-wbcf}. Further, we expect them to satisfy the even stronger
-property developed in \cref{sec:enforcement}. Proving\bcp{or testing!} these conjectures would
-involve materializing\bcp{?} their definitions of local state encapsulation and
-well-bracketed control flow, which exist only in enmeshed\bcp{?} form as part of the
-semantics of the capability machines. The main practical limitation of StkTokens
+\cref{sec:lse}. Further, we expect them to satisfy the even stronger
+property developed in \cref{sec:enforcement}. Proving (or testing) these conjectures would
+involve exposing their formal definitions of local state encapsulation and
+well-bracketed control flow, which are built-in as part of the
+semantics of the capability machines and not given explicitly.
+The main practical limitation of StkTokens
 is its reliance on linear capabilities, as it is unclear now they could be added
 to practical capability machines, especially in terms of efficiency (previous
 work on micro-policies \citep{yannis-report} has shown how to use that framework
 to implement linear return capabilities.\bcp{But IIUC the Dover realization
-  of micro-policies can't do this...?})
+  of micro-policies can't do this...?})\rb{Correct}
+%
+In recent work, \citet{Georges+21} address these efficiency concerns
+with the introduction of a new type of uninitialized capability that
+avoids the need to clear the stack while being more amenable to
+practical hardware implementation, although like
+\citet{Skorstengaard+19b} it lacks a general stack safety theorem,
+instead using a similar logical relation to reason about the safety of
+individual programs.
 
 \paragraph{Protecting the Stack with Micro-Policies}
 %
