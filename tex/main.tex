@@ -684,8 +684,8 @@ strict stack
 safety~(\cref{sec:prelim,sec:lse}).
 \item We use property-based randomized testing to check that this stepwise
 property is actually enforced by the {\em Depth Isolation} policy
-of~\citet{DBLP:conf/sp/RoesslerD18} (\cref{sec:enforcement,sec:testing}).
-\bcp{mention that we extend the ICFP gen-by-exec with nested stuff...}
+of~\citet{DBLP:conf/sp/RoesslerD18} (\cref{sec:enforcement}).
+\bcp{mention that we extend the ICFP 13 gen-by-exec idea with nested stuff...}
 \item We formalize a
 weaker but more extensional \emph{observational} variant of the stack safety
 property that characterizes a refinement of Roessler and DeHon's more
@@ -701,6 +701,7 @@ examples (\cref{sec:running-example}). \Cref{sec:relwork,sec:future} discuss rel
 \section{Setting}
 \label{sec:setup}
 
+\paragraph*{Machine model}
 Our properties are defined in terms of an abstract machine model that makes very few
 assumptions about the concrete machine that instantiates it.  We assume a register
 machine with a program counter (\(\PCname\)); other
@@ -711,28 +712,47 @@ that is neither code nor stack to store global variables, as a heap, etc., but o
 properties do not protect it or assume any particular behavior. We also do not
 model run-time code generation.
 
-Our stack-safety properties depend
-critically on the notions of ``call'' and ``return,'' which are not fully explicit
-in machine code%
+\bcp{What is a ``call''?}  One significant challenge in formulating our
+properties arises from the fact that we want to define stack safety at the
+machine-code level for a variety of ISAs, including RISCy ones.  In
+particular, there may be no single ``call'' instruction that does all the
+required manipulation of the \(\PCname\) and stack pointer. Instead, there
+might be just a simple branch instruction that stores the old \(\PCname\) in
+a register, with the rest of the call sequence performed by other
+instructions either before or after the jump.  Similarly, there may be no
+``return'' macro-instruction, but rather a ``return sequence'' involving an
+indirect branch at some point.  Thus, the same instruction opcode may be
+used in some places as part of a call or return sequence and in other places
+for other purposes.
+
+Since our stack-safety properties depend
+critically on being able to recognize when the machine is ``performing a
+call'' or a ``returning from a call'', we need some other way of
+
 %
-\footnote{\bcp{Some possibly useful text: A major challenge in
-    characterizing stack safety formally is that, in a low-level machine
-    without built-in stacks, we are at the mercy\bcp{?} of
-    architectural\bcp{?}  choices that do not relate to the abstract notion
-    of stack safety. Some implementations may have only a stack pointer
-    while others add a frame pointer, in some systems return addresses and
-    data live in separate stacks, and so on. We abstract over these choices
-    as much as possible.  }}%
+% \footnote{\bcp{Some possibly useful text: A major challenge in
+%     characterizing stack safety formally is that, in a low-level machine
+%     without built-in stacks, we are at the mercy\bcp{?} of
+%     architectural\bcp{?}  choices that do not relate to the abstract notion
+%     of stack safety. Some implementations may have only a stack pointer
+%     while others add a frame pointer, in some systems return addresses and
+%     data live in separate stacks, and so on. We abstract over these choices
+%     as much as possible.  }}%
 %
----the same instruction opcode may be used in some places as part of
-a call or return sequence and in other places for other purposes.
 %
-So we assume we are given a machine language program {\em annotated} with the locations of
-instructions representing calls, and we determine when a return has occurred by tracking
-control flow and observing when we reach a {\em return target}. For a given state annotated
-as a call, another state fulfils its return target under a standard calling convention if
-it has the same stack pointer and the program counter is at the instruction following
-the call, but we abstract over different conventions.
+
+We assume we are given a machine language program {\em annotated} with the
+locations of instructions representing calls.  We declare that a call has
+occurred when the machine has just executed an instruction marked as a
+call. Conversely, we declare that a return
+has occurred when we see the state of the machine reach a {\em return
+  target}.
+\bcp{Still working from here:}
+For a given
+state annotated as a call, another state fulfils its return target under a
+standard calling convention if it has the same stack pointer and the program
+counter is at the instruction following the call, but we abstract over
+different conventions.
 %, returns, and function entry points\BCP{I
 %  still want to talk about whether returns and entry points need to be
 %  annotated.  To me, these annotations do not make intuitive sense: it is
@@ -747,6 +767,7 @@ the call, but we abstract over different conventions.
 Although call annotations would typically come from a compiler together with
 the machine code, we do not assume anything about their provenance.
 
+\paragraph*{Enforcement mechanisms}
 We model the base machine as a step function over machine states, and a machine
 enhanced with an enforcement mechanism (in the language of tag-based enforcement,
 a {\em policy}) as a partial step function over machine states extended with some
