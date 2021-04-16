@@ -1746,7 +1746,8 @@ such that from some similarly well-formed initial state \(\mpcstatename\),
 
 We are finally ready for our definition of stack safety. We begin
 by describing how we model knowledge about the program structure,
-then dive into the formal definitions of local state encapsulation and
+then dive into the formal definitions of local state encapsulation\apt{we don't want
+  to call it that here, do we?} and
 well-bracketed control flow, which together constitute stack safety\BCP{need
   to put back WBCF!}.
 
@@ -1975,11 +1976,10 @@ much the same as in StkTokens, just formalized a little differently.}
 %   section.}\bcp{Agreed!}
 
 In this section we explore how an existing enforcement mechanism, {\em
-  Depth Isolation}, from \citet{DBLP:conf/sp/RoesslerD18} implements
+  Depth Isolation}~\citep{DBLP:conf/sp/RoesslerD18}, implements
 the formal stack-safety property described in the previous
 section. (In fact, it enforces a slightly stronger, inductive version
-of that property which strengthens the local state encapsulation
-component by checking for integrity and confidentiality violations at
+of that property which checks for integrity and confidentiality violations at
 every step of the callee's execution trace.) We validate this claim
 with a property-based testing framework that can quickly uncover
 inconsistencies between the enforcement mechanism and the stack-safety
@@ -2024,8 +2024,8 @@ set of distinct tags.
 %\paragraph{A Conservative Tag Policy}
 %\label{sec:conservative}
 
-The micro-policy we present here to enforce the definition of stack
-safety developed in \cref{sec:lse} is a small variation
+The micro-policy we present here to illustrate enforcement of stack
+safety as defined in \cref{sec:lse} is a small variation
 on the {\em Depth Isolation} policy presented by
 \citet{DBLP:conf/sp/RoesslerD18}. In their policy,  the stack memory is tagged
 with ownership information associated to each stack frame (and to each
@@ -2034,9 +2034,9 @@ control that we do not need to consider here), and tags registers containing
 stack pointers with access permission information. The policy also
 uses tags on instructions to identify the code
 sequences that have permission to manage the stack, say during calls and returns.
-\leo{If we have the simple exposition so far, no need to mention the following sentence:}
-In the following, for ease of exposition, we will assume that no
-arguments are passed on the stack.
+%\leo{If we have the simple exposition so far, no need to mention the following sentence:}
+%In the following, for ease of exposition, we will assume that no
+%arguments are passed on the stack.
 %% \rb{Conceivably on alloc
 %%   operations, etc., which we have not yet mentioned.}
 
@@ -2094,7 +2094,8 @@ using a combination of tags on the instructions
 and an additional tag on the $\PCname$.
 
 There remains the question of how to ensure that the sequences are
-invoked at the right places. For a program to enjoy the stack-safety property
+invoked at the right places from the perspective of the stack-safety
+property. For a program to enjoy stack safety
 (with respect to a particular call map), all we need require is that
 the entry sequence be initiated at any instruction marked as a call
 in the call map. This is achieved by giving these instructions (another) special tag,
@@ -2201,12 +2202,13 @@ rights than the caller, this is harmless.
 \subsection{Validation through Random Testing}
 \label{sec:testing}
 
-We validated the micro-policy of the previous section by
+We validated\apt{could we stay in present tense throughout?}  the micro-policy of the previous section by
 systematically testing that it satisfies eager stack integrity and
 confidentiality. We used a Coq specification of the RISC-V
 architecture
 \footnote{Available at \url{https://github.com/mit-plv/riscv-coq}.}
-\leo{translated from Haskell via hs-2-coq?}  and extended it with a
+\leo{translated from Haskell via hs-2-coq?\apt{not worth saying since
+  the MIT people did it}}  and extended it with a
 runtime monitor implementing the stack-safety
 micro-policy.\footnote{This code will be made public. \leo{More?}} We
   chose the Coq proof assistant as the setting for our implementation
@@ -2239,7 +2241,7 @@ by the compiler.
 \paragraph*{Generators}
 
 To write such generators we build on the work of
-\citep{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, where they
+\citep{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
 introduced {\em generation by execution} to produce progams leading
 abstract machines towards interesting behaviors. Generation by
 execution receives as an input a partially instantiated machine state
@@ -2248,7 +2250,7 @@ such as a blessed sequence) that makes sense locally (e.g., jumps go
 to a potentially valid code location and loads read from from a
 potentially valid stack location). Then we step the machine and repeat
 the process until we generate or execute some target number of
-instructions, or if we reach a point where the machine can't step
+instructions, or we reach a point where the machine can't step
 anymore.
 
 We extended this technique to keep track of the control flow behavior of
@@ -2256,14 +2258,14 @@ the program being generated: each time a call or return sequence is
 generated, we ensure that the appropriate policy tags and code
 annotations are set for the entry or return points. At the same time,
 we sometimes allow the generation to relax those constraints,
-introducing potentially ill-formed flows: that causes our programs
+introducing potentially ill-formed flows: this causes our programs
 to failstop when executed in conjunction with the policy monitor,
 but also allows for revealing errors in our setup.
 
 In addition, we needed to extend this technique to handle the nested
-nature of our confidentiality property: rather than generating two
-initial machines that are variant of one another and letting them
-execute to test for noninterference, we need to generate a new variant
+nature of our confidentiality property: rather than just generating two
+initial machines that are variants of one another and letting them
+execute to test for noninterference, we generate a new variant
 {\em every time a call is made} and check confidentiality for the
 subtrace produced from that variant state until its corresponding
 return. As a result, a ``single'' confidentiality test compactly
@@ -2324,18 +2326,18 @@ and targeted ARM machine code
 ; we re-implemented it in Coq targeting RISC-V).  These errors ranged
 from trivial typos to ones that required an intriguingly complex setup
 to appear.  The most interesting bug (included in the table as row
-{\em HEADER\_NO\_INIT}), in our first try the blessed call
-sequence/policy combination did not initialize all locations for the
+{\em HEADER\_NO\_INIT}) was that, on our first try, the blessed call
+sequence %/policy combination\apt{??}
+did not initialize all locations for the
 newly allocated stack frame correctly, but left some of them as
 $\tagNoDepth$. This allowed for a potential integrity violation, but
-only if a rather complicated sequence of events occured: in
-particular, the smallest counterexample requires calling a function,
-writing in the uninitialized location (which is always fine), calling
-another function (to seal what was written for integrity purposes),
-and then attempt to write in the same location again from the new
-callee, which is only allowed because the enforcement still thinks
-the location is unused, but violates the integrity of the caller's data.
-
+only if a rather complicated sequence of events occured. 
+The smallest counterexample requires calling a function {\tt f},
+which writes into an uninitialized location $l$ (which is always fine), and then
+calls a further function {\tt g} (which should have the effect of sealing $l$
+for integrity purposes). Then {\tt g} attempts to write to $l$; 
+this is allowed because the enforcement mechanism still has 
+$l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s data.
 \section{Stack Safety for Lazy Enforcement}
 \label{sec:lazy}
 
@@ -3112,38 +3114,46 @@ convention that uses local capabilities to preserve local state
 encapsulation and well-bracketed control flow, using a logical
 relation to reason about the stack safety of concrete
 programs. Although the required hardware support is readily available
-in capability machines like Cheri, this technique incurs significant
-costs, because it requires the entire unused part of the stack to be
+in capability machines like Cheri,
+%% this technique incurs significant
+%% costs, because
+it requires the entire unused part of the stack to be
 cleared whenever a security boundary is crossed. Their logical
 relation captures capability safety without ``externally observable
 side-effects (like console output or memory access traces)''
-and can be used to reason about individual programs. \bcp{Not very clear:}In the
-discussion, ``while [the authors] claim that [their] calling
+and can be used to reason about individual programs.
+\citeauthor{Skorstengaard+19b} acknowledge the difficulty of defining
+these concepts precisely:
+``while [they] claim that [their] calling
 convention enforces control-flow correctness, [they] do not prove a
 general theorem that shows this, because it is not clear what such a
 theorem should look like,'' noting that the correctness property
 enjoyed by their technique ``is not made very explicit.''
 
-StkTokens \citep{Skorstengaard+19} continues this line of work. Like
-the earlier paper, it aims to protect the stack by enforcing local state
-encapsulation and well-bracketed control flow. It does so by defining a new
+StkTokens \citep{Skorstengaard+19} continues this work by defining a more efficient
 calling convention that makes use of linear capabilities for stack and return
-pointers. The convention operates on a single shared stack and requires that
-protected components avoid compromising their own security by following certain
-simple rules---like not leaking their private capability seals. More
-precisely but still informally, local state encapsulation is defined as
+pointers.
+%% The convention operates on a single shared stack and requires that
+%% protected components avoid compromising their own security by following certain
+%% simple rules---like not leaking their private capability seals. More
+%% precisely but
+Still informally, local state encapsulation is defined as
 restricting accesses to the range of memory allocated to the current stack
 frame, and well-bracketed control flow as only allowing returns from the topmost
 frame to the immediately adjacent frame below. Formally, it improves on
 \citet{Skorstengaard+19b} by building those properties into the semantics of a
 capability machine with a built-in call stack and call and return instructions,
 which is proven fully abstract with respect to a more concrete capability
-machine that replaces those pseudo-instructions with their calling convention.
+machine.
+%% that replaces those pseudo-instructions with their calling convention.
 Their proof of full abstraction uses a standard notion of components, which
-import and export functions through their interfaces; their model of
-observations is limited to cotermination.
+import and export functions through their interfaces.
+%% ; their model of
+%% observations is limited to cotermination.
 \sna{Some of this seems like more detail than we need, and we need to
   compare ourselves to their list of criteria.}
+\rb{Trimmed this a bit. Are you referring to their list of attack
+  examples, or to something else?}
 
 \paragraph{Protecting the Stack with Micro-Policies}
 %
