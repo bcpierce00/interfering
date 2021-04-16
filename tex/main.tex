@@ -2981,7 +2981,7 @@ presented. \bcp{Too much space between the second and third.}
          {}
          {\(\_,\context \stepsto_C \context\)}
 
-\definition Let the protected set of a context, \(\mathit{protected}(\domMap,\rts)\),
+\definition Let the protected set of a context, \(\mathit{protected}_P(\domMap,\rts)\),
 be the set of components \(\component\) such that either \(\domMap ~ \component = \sealed{\_}\)
 or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
 \(|\rts| > \depth'\).
@@ -2990,7 +2990,7 @@ or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
 For each of the stepwise, deferred, and observational versions of
 stack integrity in the simple model, the equivalent property in the
 passing model substitutes the above definitions of \(\context\), initial contexts and update
-function, and \(\mathit{protected}\), and is otherwise identical.
+function, and \(\mathit{protected}_P\) for their simple equivalents, and is otherwise identical.
 
 \definition
 For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\),
@@ -3011,7 +3011,7 @@ Stack identifiers are drawn from a set \(\STACKS\), and there is a static partia
 pointer, using the \(\stackof\) of the stack pointer to determine the target of a yield.
 We add a second annotation indicating yields.
 
-\[\ann \in \ANNS ::= \callmap(P \subseteq \MACHS \times \COMPONENTS) + \yieldmap\]
+\[\ann \in \ANNS ::= \callmap(P \subseteq \MACHS \times \COMPONENTS)\]
 \[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \ann \in \ANNS\]
 
 The first major difference in this model is the domains. Stack domains are now nested inside
@@ -3020,8 +3020,11 @@ Our context now consists of a domain map, a map from stack identifiers to return
 an additional map of targets for yields, and a stack identifier of the active stack.
 Our yield target map \(\yts\) is a map from stack identifiers to targets.
 In a standard system an initial yield target map will map each stack identifier to the
-set of all states with their stack pointer at the stack base. When yielding from state \(\mach\),
-\(\ycon ~ \mach \subseteq \MACHS\) tells us what yielding back looks like.
+set of all states with their stack pointer at the stack base, and include any restrictions
+on entry points. Just as a return target tells us that we have really returned, a yield
+target tells us that we have really yielded. When yielding from state \(\mach\),
+\(\ycon ~ \mach \in \MACHS\) gives us the yield target for coming back to the yielding
+coroutine.
 
 \[\stackDom \in \STKDOMS ::= \unsealed + \sealed{\depth} + \passed{\depth-\depth'}\]
 \[\topDom \in \TOPDOMS ::= \outside + \instack{\stackid}{\stackDom}\]
@@ -3033,14 +3036,12 @@ In our context update rules, calls and returns work the same as in the sharing m
 with domain updates restricted to the top-level domain corresponding to the active stack,
 and likewise using the return target stacks. We will omit these rules and focus on the new yield rule.
 
-\judgmentthreebr[ Yield]
-                {\(\codemap ~ (\mach ~ \PCname) = \yieldmap\)}
-                {\(\mach \stepsto \mach'\)}
-                {\(\stackid' = \stackof ~ (\mach'~ \rsp)\)}
-                {\(\stackid \not = \stackid'\)}
-                {\(\yts ~ \stackid'\)}
-                {\(\yts' = \yts[\stackid \mapsto \ycon ~ \mach]\)}
-                {\(\mach,(\domMap,\rts,\yts,\stackid) \stepsto_C \domMap,\rts,\yts',\stackid'\)}
+\judgmentfour[ Yield]
+             {\(\mach \stepsto \mach'\) ~ ~}
+             {~ ~ \(\stackid' = \stackof ~ (\mach'~ \rsp) \not = \stackid\) ~ ~}
+             {~ ~ \(\yts ~ \stackid'\) ~ ~}
+             {~ ~ \(\yts' = \yts[\stackid \mapsto \ycon ~ \mach]\)}
+             {\(\mach,(\domMap,\rts,\yts,\stackid) \stepsto_C \domMap,\rts,\yts',\stackid'\)}
 
 This calls for some explanation. First, we determine which coroutine we are yielding to by
 checking which stack the stack pointer of the next state is pointing to. Then we can only yield
@@ -3050,21 +3051,30 @@ to continue from where it left off. So, it is possible for a coroutine to claim 
 but not actually change the active stack, with similar effects to when a callee fails
 to return properly. Now we can define both stack safety and coroutine safety under this model.
 
-\definition Let \(\mpcstatename\) and \(\mpcstatename'\) be reachable states such that
-\(\mpcstatename \stepstocon \mpcstatename'\), and \(\pi_\context(\mpcstatename) = \domMap,\rtm,\yts,\stackid\).
-Let \(\components\) be the set of components \(\component\) where
-\(\domMap ~ \component = \instack{\stackid}{\sealed{\_}}\) or
-\(\instack{\stackid}{\passed{\depth,\depth'}}\)
-where \(|\rtm ~ \stackid| < \depth\) or \(|\rtm ~ \stackid| > \depth'\). A system enjoys
-{\em stepwise stack integrity} in the coroutine setting if for all
-such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename') ~ \component\).
+\definition Let the call-protected set of a context,
+\(\mathit{protected}_C(\domMap,\rtm,\yts,\stackid)\),
+be the set of components \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid}{\sealed{\_}}\)
+or \(\domMap ~ \component = \instack{\stackid}{\passed{\depth,\depth'}}\) and \(|\rtm ~ \stackid| < \depth\) or
+\(|\rtm ~ \stackid| > \depth'\).
 
-\definition Let \(\mpcstatename\) and \(\mpcstatename'\) be reachable states such that
-\(\mpcstatename \stepstocon \mpcstatename'\), and \(\pi_\context(\mpcstatename) = \domMap,\rtm,\yts,\stackid\).
-Let \(\components\) be the set of components \(\component\) where
-\(\domMap ~ \component = \instack{\stackid'}{\_}\) where \(\stackid \not = \stackid'\).
-A system enjoys {\em stepwise coroutine integrity} in the coroutine setting if for all
-such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename') ~ \component\).
+\definition
+For each of the stepwise, deferred, and observational versions of
+stack integrity in the simple model, the equivalent property in the
+passing model substitutes the above definitions of \(\context\), initial contexts and update
+function, and \(\mathit{protected}_C\) for their simple equivalents, and is otherwise identical.
+
+\definition Let the yield-protected set of a context,
+\(\mathit{protected}_Y(\domMap,\rtm,\yts,\stackid)\),
+be the set of components \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid'}{\_}\) where \(\stackid \not = \stackid`\).
+
+\definition
+We define {\em stepwise coroutine integrity} in the same way as stepwise stack integrity,
+substituting the above definitions of \(\context\), initial contexts and update
+function, and \(\mathit{protected}_Y\) for their equivalents. Likewise
+{\em deferred coroutine integrity} and {\em observational coroutine integrity} are defined
+in terms of their simple equivalents.
 
 \definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
 \(f_\depth ~ \mach ~ (\_, \rtm, \_, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
