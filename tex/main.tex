@@ -485,7 +485,8 @@ the function activation that owns the frame and access to those locations is
 then controlled by the activation that is currently executing, validates our
 stepwise properties.  On the other hand, their more efficient \emph{Lazy
   Tagging and Clearing} policy enforces observational integrity, but testing
-reveals that it does not enforce confidentiality (either stepwise or
+reveals\bcp{right, Leo?} that it does not enforce confidentiality (either
+stepwise or
 observational): it violates of the temporal aspect of confidentiality in
 corner cases where data can leak across calls to the same callee.  We
 propose a variant of Lazy Tagging and Clearing that \emph{does} enforce
@@ -1754,7 +1755,7 @@ in registers.
 
 To accommodate different machine architectures and different calling
 conventions, we parameterize over the structure of the stack, particularly
-the means by 
+the means by
 which a caller identifies the data that should be protected during a call. We term
 this the {\em sealing convention}, \(\sealcon \subseteq \MACHS \times \COMPONENTS\), which
 maps a machine state to a set of addresses. \apt{Is it a relation or a function (seems to
@@ -2372,9 +2373,18 @@ such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
 \section{Enforcement}
 \label{sec:enforcement}
 
-\leo{I am not sure we've hit the correct level of detail in this section.}
+\bcp{``Enforcement'' seems like too broad a title.  What about calling it
+  ``Evaluating Micro-Policies'' or ``Do Micro-Policies Enforce Stack
+  Safety?''? And what about folding the testing section into this one?  That
+would keep related things together, would avoid appearing to make overly
+grand claims in either section, and would give us an excuse to write less
+about the mechanism here---we only need to write enough about the mechanism
+itself that readers can understand our validation case study.}
 
-In this section we detail an existing enforcement mechanism,
+\leo{I am not sure we've hit the correct level of detail in this
+  section.}\bcp{Agreed!}
+
+In this section we sketch an existing enforcement mechanism,
 Depth Isolation from \citet{DBLP:conf/sp/RoesslerD18}, that implements
 the formal stack-safety property described in the previous section; in
 fact, it enforces a stronger, inductive version of that property which strengthens the
@@ -2545,7 +2555,9 @@ rights than the caller, this is harmless.
 %% the {\PCname} register, the micro-policy ensures that the entry
 %% sequences of calls declared in the call map are executed correctly.
 
-\leo{I'm not a fan of the next paragraph.}
+\leo{I'm not a fan of the next paragraph.}\bcp{Yes, it's pretty far down in
+  the weeds.  I don't think this level of detail is needed, in the context
+  of a paper that is mostly about our definitions, not theirs.}
 Note that in this policy both the entry and exit sequences
 must write to each element of
 the frame, which can be quite expensive, especially for programs that
@@ -2588,19 +2600,20 @@ callee's stack frame.
 \section{Randomized Testing}
 \label{sec:testing}
 
-We validate the micro-policy of the previous section by systematically
+We validated the micro-policy of the previous section by systematically
 testing that it satisfies eager stack integrity and
 confidentiality. We used a Coq specification of the RISC-V
 architecture \leo{cite: https://github.com/mit-plv/riscv-coq} and
 extended it with a runtime monitor implementing the stack-safety
-micro-policy. \leo{Footnote: code will be made public} We chose the
+micro-policy.\leo{Footnote: code will be made public}\bcp{For the reviewers?
+ Or later?} We chose the
 Coq proof assistant as the setting for our implementation for two
 reasons: first, to ensure that our coinductive trace definitions are
 well-formed, and reason about them\leo{Do we prove anything
   interesting anymore?}, and to leverage the power of the QuickChick
-property-based testing framework.\leo{cite}
+property-based testing framework~\citep{Pierce:SF4}.
 
-To use QuickChick, we built generators that produce:
+To use QuickChick, we built random test-case generators that produce:
 \begin{enumerate}
 \item An initial RISC-V machine state, including most notably
   the program to be executed.
@@ -2612,24 +2625,25 @@ To use QuickChick, we built generators that produce:
 \end{enumerate}
 %
 That is, our generators need to produce not only a low-level program
-that exhibits interesting control-flow patterns, but also policy
+that exhibits interesting control-flow patterns, but also the policy
 meta-information and code annotations that would normally be produced
 by the compiler.
 
-\paragraph*{Generator Overview}
+\paragraph*{Generators}
 
 To write such generators we build on the work of \leo{ICFP 2013},
 where they introduced {\em generation by execution} to produce
 interesting programs. Generation by execution receives as an input a
-partially instantiated machine state, and attempts to generate an
+partially instantiated machine state and attempts to generate an
 instruction (or a sequence of instructions such as a ``blessed''
-sequence) that makes sense locally (e.g., jumps to a potentially valid
-code location or loads from a potentially valid stack location). Then,
+sequence) that makes sense locally (e.g., jumps go to a potentially valid
+code location and loads read from from a potentially valid stack
+location). Then
 we step the machine and repeat the process until we generate or
-execute some target number of instructions (or if we reached a point
-where the machine can't step anymore).
+execute some target number of instructions, or if we reach a point
+where the machine can't step anymore.
 
-We extend this technique to keep track of the control flow behavior of
+We extended this technique to keep track of the control flow behavior of
 the program being generated: each time a call or return sequence is
 generated, we ensure that the appropriate policy tags and code
 annotations are set for the entry or return points. At the same time,
@@ -2640,23 +2654,23 @@ but also allows for revealing errors in our setup.
 
 \paragraph*{Findings}
 
-To evaluate the effectiveness of our testing, we turn to {\em mutation
-  testing}\leo{cite}. In mutation testing, we inject errors
-(mutations) in a program that should cause the property of interest
-(here, stack safety) to fail, and ensure that the testing framework
-can find them. The bugs we used for our evaluation were both
-artificially generated (by deliberately weakening the micro-policy in
-ways that should break enforcement), or actual bugs that we discovered
-through testing in our implementation. We elaborate on some such bugs
-below.
+To evaluate the effectiveness of testing against our formal properties, we
+used {\em mutation testing}\leo{cite}. In mutation testing, we inject errors
+(mutations) in a program that should cause the property of interest (here,
+stack safety) to fail, and ensure that the testing framework can find
+them. The bugs we used for our evaluation were either artificially generated
+by us (deliberately weakening the micro-policy in ways that we expected
+should break its guarantees), or actual bugs that we discovered through
+testing our implementation. We elaborate on some such bugs below.
 
-The mean-time-to-failure (MTTF) for various bugs can be found in
-\leo{Table with numbers?}. All experiments were run in a \leo{Machine
-  spec}. \leo{Something like: There is really no baseline to compare
-  this against, but include it here for the future/reasons?}
+The mean-time-to-failure (MTTF) for various bugs can be found in \leo{Table
+  with numbers?}\bcp{Sure.}. All experiments were run in a \leo{Machine
+  spec}. \leo{Something like: There is really no baseline to compare this
+  against, but include it here for the future/reasons?}
 
 The artificially injected bugs focus on weakening the tag propagation
-and checking mechanism. \leo{Mention them all?}
+and checking mechanism. \leo{Mention them all?}\bcp{Nah, especially if they
+  are all listed in the table.}
 %
 For example, when loading from a stack location, the correct
 micro-policy needs to enforce that the tag on the location being read
@@ -2671,12 +2685,15 @@ $\tagNoDepth$ or has again the same depth as the current $\PCname$
 tag. Relaxing these constraints also causes violations to the
 property.
 
-Using our testing framework, we also found various errors in our
-implementation, ranging from trivial typos to ones that required an
-intriguingly complex setup to appear. Most notably, the initial
+Naturally, testing also revealed a number of errors in our
+implementation of the enforcement mechanism (the original was written in C++
+and targeted ARM machine code\bcp{right?}; we re-implemented it in Coq targeting
+RISC-V).  These errors ranged from trivial typos to
+ones that required an 
+intriguingly complex setup to appear.  Notably, our first try at the 
 ``blessed'' call sequence/policy combination did not initialize all
 locations for the newly allocated stack frame correctly, but left some
-of them as $\tagNoDepth$. This allows for a potential integrity
+of them as $\tagNoDepth$. This allowed for a potential integrity
 violation, but only if a rather complicated sequence of events
 occured: \leo{call - write - call (seal) - return - call - write?}
 
