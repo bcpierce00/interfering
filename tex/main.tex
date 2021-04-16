@@ -1244,7 +1244,6 @@ to match as well.
 %at the beginning and trace changes through the execution.
 
 \begin{figure}
-
 \begin{subfigure}[t]{.2\textwidth}
   {\small
 \begin{verbatim}
@@ -1298,7 +1297,7 @@ int g() {
   {\tt 2} &
   \multicolumn{2}{c}{
     \memoryaddrs{8em}
-    \memory{4}{\unsealc}
+    \memory{3}{\unsealc}
     ~$\cdots$
 %    \MemoryLabel{-18em}{0.75em}{0}
 %    \MemoryLabel{-14em}{0.75em}{0}
@@ -1310,7 +1309,7 @@ int g() {
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
  % \MemoryLabel{-19em}{0.75em}{0}
 %  \MemoryLabel{-10em}{0.75em}{0}
@@ -1319,27 +1318,28 @@ int g() {
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{62}
-  \MemoryLabel{-10em}{0.75em}{105}
+  \MemoryLabel{-15em}{0.75em}{\(v_1\)}
+  \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
   {\tt 12} &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
  % \MemoryLabel{-19em}{0.75em}{0}
-  \MemoryLabel{-10em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{5}
 %  \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-10em}{0.75em}{\(5\)}
+  \MemoryLabel{-15em}{0.75em}{\(v_1\)}
+  \MemoryLabel{-6em}{0.75em}{\(5\)}
   \\
   {\tt 4} &
   \multicolumn{2}{c}{
@@ -1347,11 +1347,11 @@ int g() {
 %    \memory{4}{\unsealc}
     \memory{1}{\unsealc}
     \memory{1}{\retptrc}
-    \memory{2}{\unsealc}
+    \memory{1}{\unsealc}
     ~$\cdots$
-    \MemoryLabel{-18em}{0.75em}{5}
-    \MemoryLabel{-14em}{0.75em}{2}
-    \MemoryLabel{-10em}{0.75em}{5}
+    \MemoryLabel{-14em}{0.75em}{5}
+%    \MemoryLabel{-10em}{0.75em}{\(v_1\)}
+    \MemoryLabel{-6em}{0.75em}{5}
 %    \MemoryLabel{-7em}{0.75em}{0}
     \vspace{.5em}
   }
@@ -1360,20 +1360,20 @@ int g() {
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{5}
-  \MemoryLabel{-10em}{0.75em}{\bf 5}
+  \MemoryLabel{-15em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{\bf 5}
  % \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{36}
-  \MemoryLabel{-10em}{0.75em}{\bf 8}
-  \MemoryLabel{-6em}{0.75em}{90}
+  \MemoryLabel{-15em}{0.75em}{\(v_3\)}
+  \MemoryLabel{-6em}{0.75em}{\(v_4\)}
+%  \MemoryLabel{-2em}{0.75em}{90}
   \\
 \end{tabular}
 \end{center}
@@ -1381,7 +1381,6 @@ int g() {
 \vspace{\abovedisplayskip}
 
 \end{subfigure}
-
 \caption{Another confidentiality violation}
 \label{fig:conf2}
 \end{figure}
@@ -1390,8 +1389,11 @@ It may be unclear in figure \ref{fig:conf1} why we vary the initial values of {\
 and {\tt z} as well as that of {\tt x}. This is to detect violations of so-called
 temporal stack safety.
 In Figure~\ref{fig:conf2}, we watch as {\tt f} leaves behind a value in {\tt y}
-that corresponds to {\tt main}'s variable, {\tt x}. Then {\tt g} is able to access
+that later becomes the value of {\tt main}'s variable {\tt x}. Then {\tt g} is able to access
 {\tt y} and hence {\tt x} without even directly reading the stack pointer.
+In the primary trace, {\tt z} will have the value 5, but in the variant it can have
+an arbitrary value $v_4$; since the variant can behave different from the primary,
+the policy again signals a confidentiality violation.
 
 \paragraph*{Control-Flow Attacks}
 \begin{figure}
@@ -2108,8 +2110,8 @@ void f(int &a) {
 10        sub $2,%sp      ; deallocate frame
 11        ret
 
-20 f:     cmp stash, $0   ; compare
-21        breq #13        ; branch if equal
+20 f:     cmp stash, $0   ; stash = 0? 
+21        breq #13        ; branch if so
 22        mov %ra,stash   ; stash = &a
 23        jmp #15
 24        mov $5, (stash) ; *stash = 5
