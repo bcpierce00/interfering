@@ -1844,6 +1844,12 @@ that the original, {\em primary} traces move in {\em lockstep} with the variant.
 \text{where } f_\depth ~ (\mach,\pol,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
 \end{aligned}\]
 
+\definition
+For each trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \_,\_,(\_,\rts)\), the
+{\em break condition} of \(\MPCT\) is a predicate on
+states \(\mathit{brk}(\MPCT) = \neg f_{|\rts|}\). It follows from our definitions
+that this holds on \(\MPCT\)'s final state, {\em unless it terminated prematurely due to a failstop}.
+
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
 written \(\mach \approx_\components \nach\), if, for
 all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\).
@@ -1872,21 +1878,22 @@ if their adjacent pairs of states change together.  We define this as a coinduct
 \end{minipage}
 
 \definition
-For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\),
-let \(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \outside\).
-%That is, at the start of some call, we take every component in the stack.
+Let the secret set of a context, \(\mathit{secret}(\domMap,\rts)\), be the
+set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
+
+\definition
+For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,\context\),
+let \(\components = \mathit{secret}(\context)\) and \(\nach\) be any variant
+\(\mach \approx_\components \nach\).
 A system enjoys \emph{stepwise stack confidentiality} if,
-for all \(\nach\) and \(\NPCT\) such that \(\mach \approx_\components \nach\)
-and \(\nach,\pol,\domMap \hookrightarrow \NPCT | \neg f_{|\rts|}\),
+for \(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \mathit{brk}(\MPCT)\),
 \(\MPCT \doteq \NPCT\) holds.
 
 %\medskip
 
 In other words, stepwise stack confidentiality states that if we vary every component of the stack,
 the resulting trace (starting in the same policy state) steps in lockstep with the
-original trace until both have reached a point whose depth is below the starting
-depth (this is a return).
+original trace until both have reached the break condition.
 
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the components in \(\components\), and in addition their subtraces are also in
@@ -2507,11 +2514,11 @@ prevent them from being leaked.
 
 \definition
 For any call trace \(\MPCT \in \MPCT^*\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\).
+let \(\head(\MPCT) = \mach,\pol,\context\).
 %
 Then, supposing that \(\last(\MPCT) = \mach',\pol',\context'\),
 let \(\components\) be the set of protected components that changed during
-the call, \(\components = \mathit{protected}(\domMap,\rts) \cap \Delta(\mach, \mach')\),
+the call, \(\components = \mathit{protected}(\context) \cap \Delta(\mach, \mach')\),
 and let \((\mach,\pol',\context') \hookrightarrow \MPCT'\).
 A system enjoys {\em observational integrity} if for any \(\nach\) such that
 \(\mach' \approx_{\components'} \nach\), and its induced trace
@@ -2521,34 +2528,33 @@ A system enjoys {\em observational integrity} if for any \(\nach\) such that
 
 Confidentiality is more sophisticated. We must capture the intuition that
 secrets do not escape during a call {\em and} are not leaked during a return.
-This require us to be able to quantify over components that preserve our \(\diamond\)
-relation from earlier.
+This require us to be able to quantify over components that fail to preserve
+our \(\diamond\) relation.
 
-\definition Let \(\components\) be a set of components and \(\mach,\mach'\) and \(\nach,\nach'\)
-be pairs of states. The {\em unsafe set} of \(\components\), written
-\(\bar{\Diamond}(\components,\mach,\mach',\nach,\nach')\), is the set of all components
+\definition Let \(\mach,\mach'\) and \(\nach,\nach'\)
+be pairs of states. Their {\em unsafe set}, written
+\(\bar{\Diamond}(\mach,\mach',\nach,\nach')\), is the set of all components
 \(\component \in \Delta(\mach,\mach') \cup \Delta(\nach,\nach')\) where
 \(\mach' ~ \component \not = \nach' ~ \component\).
 
 \definition
 For any call trace \(\MPCT \in \MPCT^*\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
-\(\components\) be the set of components \(\component\)
-such that \(\domMap ~ \component \not = \outside\).
+let \(\head(\MPCT) = \mach,\pol,\context\) and
+\(\components = \mathit{secret}(\context)\).
 %
 A system enjoys {\em observational confidentiality} if for all
 \(\nach\) such that \(\mach \approx_\components \nach\) and
-\(\nach \hookrightarrow \NPCT | \neg f_\depth \),
+\(\nach \hookrightarrow \NPCT | \mathit{brk}(\MPCT)\),
 \(\MPCT\) and \(\NPCT\), the following conditions all hold:
 
 \begin{itemize}
 \item They are observationally equivalent, \(\obsof(\MPCT) = \obsof(\NPCT)\),
   meaning that no secrets leak during the call
-\item \(f_\depth ~ \last(\MPCT) \leftrightarrow f_\depth ~
+\item \(\mathit{brk}(\MPCT) ~ \last(\MPCT) \leftrightarrow \mathit{brk}(\MPCT) ~
 \last(\NPCT)\)---if one call returns, so does the other
 \item Assuming both calls return, let \(\last(\MPCT) = \mach',\pol',\context'\)
   and \(\pi_\mach(\last(\NPCT)) = \nach'\).
-  Let \(\components' = \bar{\Diamond}(\components,\mach,\mach',\nach,\nach'\).
+  Let \(\components' = \components \cap \bar{\Diamond}(\mach,\mach',\nach,\nach')\).
   And let \(\nach''\) be a state such that \(\mach' \approx_\components \nach''\).
   Then if \(\mach',\pol',\context' \hookrightarrow \MPCT'\) and
   \(\nach',\pol',\context' \hookrightarrow \NPCT'\), it must be
