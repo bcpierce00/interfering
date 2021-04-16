@@ -549,13 +549,13 @@ Our first presentation of these properties assumes a single simple stack
 with no sharing between callers and callees: all parameters and return
 values are passed in registers.  Later, we show how to refine it to allow
 passing of scalar stack data, granting a callee access to the caller's
-data. We do not model more sophisticated sharing, such as taking the address
-of a variable and treating it like a pointer.
+data. (We do not consider more sophisticated forms of sharing, such as
+taking the address of a variable and treating it like a pointer.)
 %
 Finally, we define integrity and confidentiality properties for a coroutine
-system featuring a static layout, in which each coroutine's stack is
-constrained to a fixed region of memory.  Though simplistic, this extension
-is a step toward concurrency and demonstrates that our approach is flexible
+system with a static layout, in which each coroutine's stack is constrained
+to a fixed region of memory.  Though simplistic, this extension is a step
+toward full-blown concurrency and demonstrates that our approach is flexible
 enough to handle more sophisticated styles of control flow.
 
 %% \paragraph*{The Use of Stack Safety}
@@ -674,14 +674,15 @@ In summary, we offer the following contributions:
   captures the intuitive concepts of stack safety~(\cref{sec:lse}). Our model extends to
   argument passing on the stack and to a simple coroutine system.
 \item
-  We use a property-based randomized testing framework to support the claim
-  that this stepwise property is actually enforced by the Depth Isolation policy
+  We use a property-based randomized testing framework to validate the claim
+  that this stepwise property is actually enforced by the {\em Depth Isolation} policy
   of~\citet{DBLP:conf/sp/RoesslerD18}~(\cref{sec:testing}).
 \item
   We formalize a weaker but more extensional \emph{observational} variant of the
-  stack safety property and argue that it accurately characterizes
-  the Lazy Tagging and Clearing policy of~\citet{DBLP:conf/sp/RoesslerD18}
-  enhanced with unique tags on each activation~(\cref{sec:lazy}).
+  stack safety property and argue that it accurately characterizes a small
+  refinement of
+  the {\em Lazy Tagging and Clearing} policy
+  of~\citet{DBLP:conf/sp/RoesslerD18}~(\cref{sec:lazy}).
 \end{itemize}
 
 We begin with a description of our setting (\cref{sec:setup}) and threat
@@ -1742,16 +1743,18 @@ such that from some similarly well-formed initial state \(\mpcstatename\),
 We are finally ready for our definition of stack safety. We begin
 by describing how we model knowledge about the program structure,
 then dive into the formal definitions of local state encapsulation and
-well-bracketed control flow, which together constitute stack safety\bcp{not
-  any more?}.
-Initially we will focus on a simple stack model, with a single stack
-that doesn't share between caller and callee. All arguments are passed
-in registers. Recall that we keep track of which addresses are
-annotated as calls, with a ``code map'':
-\[\codemap \in \CODEMAPS \subseteq \WORDS\]
-\apt{Doesn't match previous definition any more.}
+well-bracketed control flow, which together constitute stack safety\BCP{need
+  to put back WBCF!}.
 
-We parameterize over the structure of the stack, particularly the means by
+\subsection{Parameters in Registers}
+
+To begin, we will focus on a simple stack model, with a single stack
+that doesn't share between caller and callee: arguments and results are passed
+in registers.
+
+To accommodate different machine architectures and different calling
+conventions, we parameterize over the structure of the stack, particularly
+the means by 
 which a caller identifies the data that should be protected during a call. We term
 this the {\em sealing convention}, \(\sealcon \subseteq \MACHS \times \COMPONENTS\), which
 maps a machine state to a set of addresses. \apt{Is it a relation or a function (seems to
@@ -1785,6 +1788,11 @@ A call annotation tells us to push the return target onto the return stack and
 seal all components with the depth of the previous return stack. If we aren't making a call,
 we identify a return by looking ahead and checking if we're about to step to a state
 that matches the topmost return target. If neither is true, the context remains unchanged.
+%
+\bcp{(Moved this here, BTW.)}Recall that we keep track of which addresses are
+annotated as calls, with a ``code map'' $\codemap \in \CODEMAPS \subseteq
+\WORDS$.
+\apt{Doesn't match previous definition any more.}
 
 \judgmentthree[Call]
               {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
@@ -1862,7 +1870,7 @@ for all \(\nach\) such that \(\mach \approx_\components \nach\) and
    version hopelessly confusing, but I'm not at all sure that this one is right! SNA please check.}
  \sna{It's right, but I need to rethink how the M<f> notation works...}
 
-\subsection{Stack Safety with Passing}
+\subsection{Parameters Passed on the Stack}
 
 \newcommand{\mainpassc}{magenta}
 
@@ -2241,7 +2249,7 @@ Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
 {\em stepwise stack confidentiality with passing} if for all such \(\MPCT\) and \(\NPCT\),
 \(\MPCT \doteq \NPCT\).
 
-\subsection{Coroutine Safety}
+\subsection{Coroutines}
 
 Our final extension to the model is to add coroutines. We assume a very simple model with
 a fixed number of coroutines, each with its own stack.
