@@ -1749,13 +1749,9 @@ then dive into the formal definitions of local state encapsulation and
 well-bracketed control flow, which together constitute stack safety\BCP{need
   to put back WBCF!}.
 
-\subsection{Parameters in Registers}
-
-To begin, we will focus on a simple stack model, with a single stack
+We will focus on a simple stack model, with a single stack
 that doesn't share between caller and callee: arguments and results are passed
-in registers.
-
-To accommodate different machine architectures and different calling
+in registers. To accommodate different machine architectures and different calling
 conventions, we parameterize over the structure of the stack, particularly
 the means by
 which a caller identifies the data that should be protected during a call. We term
@@ -1822,11 +1818,15 @@ quantified over each step of execution from any initial state. The criterion for
 is simple: sealed components do not change.
 
 \definition
+Let the protected set of a context, \(\mathit{protected}(\domMap,\rts)\), be the
+set of components \(\component\) such that \(\domMap ~ \component = \sealed{\depth}\)
+for any depth \(\depth\).
+
+\definition
 A system enjoys {\em stepwise stack integrity} if, for any reachable state
 \(\mpcstatename\) such that \(\mpcstatename \stepstocon \mpcstatename'\),
-and any component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) and
-\(\domMap ~ \component = \sealed{\_}\), then \(\pi_\mach(\mpcstatename') ~ \component =
-\pi_\mach(\mpcstatename) ~ \component\).
+and any component \(\component \in \mathit{protected}(\domMap,\rts)\),
+\(\pi_\mach(\mpcstatename') ~ \component = \pi_\mach(\mpcstatename) ~ \component\).
 
 Next we consider {\em stepwise stack confidentiality}. Recall that our properties are
 nested: we will quantify over subtraces that represent whole calls. For each such
@@ -2389,19 +2389,16 @@ but all properties in this section can be extended to more complex settings
 very naturally.
 
 \definition
-For any \(\MPCT \in \MPCT^*\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
-\(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \sealed{\_}\).
-Then if \(\last(\MPCT) = \mach',\pol',\context'\), let \(\components' = \Delta(\mach,\mach')\).
- A system enjoys {\em deferred stepwise integrity} if for any \(\nach\) such that
-\(\mach' \approx_{\components'} \nach\), \(\mach \hookrightarrow \MPCT\), and
-\(\nach \hookrightarrow \NPCT\), \(\MPCT \doteq \NPCT\).
-
-% \vspace{\belowdisplayskip}
+For any \(\MPCT \in \MPCT^*\), let \(\head(\MPCT) = \mach,\pol,\context\) and
+suppose that \(\last(\MPCT) = \mach',\pol',\context'\) and
+\((\mach',\pol',\context') \hookrightarrow \MPCT'\). Find the set of components
+that changed during the call, \(\components = \mathit{protected}(\context) \cap \Delta(\mach,\mach')\).
+A system enjoys {\em deferred stepwise integrity} if for any \(\nach\) such that
+\(\mach' \approx_{\components'} \nach\) and its induced trace
+\((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\MPCT' \doteq \NPCT\).
 
 In short, if sealed components are modified during the call, the caller may not
-access their values. ``No reads after dangerous writes.''
+access their values. 
 %
 For example, consider again the integrity violation in
 Figure~\ref{fig:int1}. Under a deferred discipline, the write to {\tt
@@ -2410,9 +2407,8 @@ constitute a violation, which happens only when the tainted value is
 read in instruction 4. However, if this instruction added the constant
 that was originally stored in {\tt x} without reading the variable,
 i.e., {\tt add \$42,\%ra}, deferred integrity would not be violated.
-\rb{Tried to give a quick example without being too disruptive.
-  However, having it follow the slogan seems to rob it of part of its
-  punch.}
+Instead of forbidding such dangerous writes, we say,
+``No reads after dangerous writes.''
 
 \subsection{Observability}
 
@@ -2437,7 +2433,7 @@ $\mach \stepsto[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS $.
 \paragraph*{Observations-Of}
 
 The ``observations-of'' operator, written \(\obsof\), takes a machine trace and
-creates a trace of observations corresponding to the observations of each step in
+gives the trace of observations of each step in
 the trace. It uses a coinductive helper \(\mathit{obsfor}\) that relates an
 initial observation, a machine-trace, and an observation trace:
 
@@ -2452,10 +2448,13 @@ initial observation, a machine-trace, and an observation trace:
            {\(\mathit{obsfor} ~ \obs ~ \mpcstatename = \obs\)}
 \end{minipage}
 
-Then to take the observations from any particular trace, we start with a \(\tau\) observation:
-
+\begin{minipage}{.35\textwidth}
+  Then we start with a \(\tau\) observation:
+\end{minipage}
+\begin{minipage}{.6\textwidth}
 \judgment{\(\mathit{obsfor} ~ \tau ~ \MPCT = \obsT\)}
          {\(\obsof(\MPCT) = \obsT\)}
+\end{minipage}
 
 \paragraph*{Observational Similarity}
 
@@ -2503,16 +2502,15 @@ prevent them from being leaked.
 
 \definition
 For any call trace \(\MPCT \in \MPCT^*\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
-\(\components\) be the set of components \(\component\)
-such that \(\domMap ~ \component = \sealed{\_}\).
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\).
 %
 Then, supposing that \(\last(\MPCT) = \mach',\pol',\context'\),
-let \(\components'\) be the set of components that differ
-between \(\mach\) and \(\mach'\). A system enjoys
-{\em observational integrity} if for any \(\nach\) such that
-\(\mach' \approx_{\components'} \nach\), \((\mach,\pol',\context') \hookrightarrow \MPCT\), and
-\((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\obsof(\MPCT) \simeq \obsof(\NPCT)\).
+let \(\components\) be the set of protected components that changed during
+the call, \(\components = \mathit{protected}(\domMap,\rts) \cap \Delta(\mach, \mach')\),
+and let \((\mach,\pol',\context') \hookrightarrow \MPCT'\).
+A system enjoys {\em observational integrity} if for any \(\nach\) such that
+\(\mach' \approx_{\components'} \nach\), and its induced trace
+\((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\obsof(\MPCT') \simeq \obsof(\NPCT)\).
 
 \medskip
 
