@@ -712,7 +712,17 @@ that is neither code nor stack to store global variables, as a heap, etc., but o
 properties do not protect it or assume any particular behavior. We also do not
 model run-time code generation.
 
-\bcp{What is a ``call''?}  One significant challenge in formulating our
+% \footnote{\bcp{Some possibly useful text: A major challenge in
+%     characterizing stack safety formally is that, in a low-level machine
+%     without built-in stacks, we are at the mercy\bcp{?} of
+%     architectural\bcp{?}  choices that do not relate to the abstract notion
+%     of stack safety. Some implementations may have only a stack pointer
+%     while others add a frame pointer, in some systems return addresses and
+%     data live in separate stacks, and so on. We abstract over these choices
+%     as much as possible.  }}%
+
+
+\paragraph*{What is a ``call''?}  One significant challenge in formulating our
 properties arises from the fact that we want to define stack safety at the
 machine-code level for a variety of ISAs, including RISCy ones.  In
 particular, there may be no single ``call'' instruction that does all the
@@ -725,34 +735,26 @@ indirect branch at some point.  Thus, the same instruction opcode may be
 used in some places as part of a call or return sequence and in other places
 for other purposes.
 
-Since our stack-safety properties depend
-critically on being able to recognize when the machine is ``performing a
-call'' or a ``returning from a call'', we need some other way of
+Since our stack-safety properties are all about protecting ``callers'' from
+their ``callees,'' we need some clear-cut way to recognize when the program
+makes or returns from a call.  Accordingly, we assume we are given a machine
+language program {\em annotated} with the locations of instructions
+representing calls.  We declare that a call has occurred when the machine
+has just executed an instruction marked as a call.
+%
+These call annotations would typically come from a compiler together with
+the machine code, but we do to assume anything about their provenance.
 
-%
-% \footnote{\bcp{Some possibly useful text: A major challenge in
-%     characterizing stack safety formally is that, in a low-level machine
-%     without built-in stacks, we are at the mercy\bcp{?} of
-%     architectural\bcp{?}  choices that do not relate to the abstract notion
-%     of stack safety. Some implementations may have only a stack pointer
-%     while others add a frame pointer, in some systems return addresses and
-%     data live in separate stacks, and so on. We abstract over these choices
-%     as much as possible.  }}%
-%
-%
+Returns, on the other hand, need not be annotated: we can tell when a callee
+has returned control to the caller when... we see control return to the
+caller!  For example, under a standard calling convention, we can see that a
+return has occurred occurred when state of the machine reaches a state where
+the stack pointer has the same value as it did at the point of some earlier
+call and the $\PCname$ points to the instruction following that call.  We
+abstract away from the details of specific calling conventions by assuming
+that we are given some way of telling when a given machine state is a
+{\em return target}\bcp{with respect to some set of pending calls?}.
 
-We assume we are given a machine language program {\em annotated} with the
-locations of instructions representing calls.  We declare that a call has
-occurred when the machine has just executed an instruction marked as a
-call. Conversely, we declare that a return
-has occurred when we see the state of the machine reach a {\em return
-  target}.
-\bcp{Still working from here:}
-For a given
-state annotated as a call, another state fulfils its return target under a
-standard calling convention if it has the same stack pointer and the program
-counter is at the instruction following the call, but we abstract over
-different conventions.
 %, returns, and function entry points\BCP{I
 %  still want to talk about whether returns and entry points need to be
 %  annotated.  To me, these annotations do not make intuitive sense: it is
@@ -764,22 +766,22 @@ different conventions.
 %instruction following the call with the SP reset to where it was at the
 %point of the call. (This is the point where it wants to be able to access
 %its own local state again and expected to find it unmolested.)}.
-Although call annotations would typically come from a compiler together with
-the machine code, we do not assume anything about their provenance.
 
-\paragraph*{Enforcement mechanisms}
-We model the base machine as a step function over machine states, and a machine
-enhanced with an enforcement mechanism (in the language of tag-based enforcement,
-a {\em policy}) as a partial step function over machine states extended with some
-auxiliary state, refining the base machine. When the policy-enhanced machine fails
-to step, this is a {\em failstop}, halting the program before it can perform an
+\paragraph*{Policies}
+We model the base machine's behavior as a step function over machine states,
+and a machine
+enhanced with an enforcement mechanism, or {\em policy} for short, as a
+partial step function over machine states extended with some
+auxiliary state, refining the base machine. When the policy-enhanced machine
+does not step from a given state, this is a {\em failstop}, halting the program before it can perform an
 action that would violate the security property;
 our properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
-\apt{Suddenly we are talking about alternative enforcement mechanisms for the first time.
-  This surely needs \emph{some} foreshadowing in the abstract and
-  intro?}\bcp{Yes!}
+\apt{Suddenly we are talking about alternative enforcement mechanisms for
+  the first time.  This surely needs \emph{some} foreshadowing in the
+  abstract and intro?}\bcp{Yes!}
+%
 Dividing policy state from machine state helps us reason about
 enforcement mechanisms that keep a significant amount of data separate from the
 primary execution data to inform security. Obviously tag-based systems do this,
