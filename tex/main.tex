@@ -395,27 +395,27 @@ machine.
 %% other reasonable enforcement mechanisms can enforce it.
 
 In the present work, we also aim to protect both stack data (like
-LSE) and
-control flow (like WBCF).  But our formulations of these properties are
-rather different from those of Skorstengaard et al.  Instead of
-defining stack safety implicitly,
-as ``what a certain idealized machine does,'' we define it
-\emph{explicitly} using the technical framework of language-based
+LSE) and 
+control flow (like WBCF).  Our technical formulation of WBCF is similar to
+that of Skorstengaard et al.{}, but our treatment of stack data protection 
+is rather different.  Instead of defining it implicitly,
+as ``what a certain idealized machine does,'' we give an
+\emph{explicit} definition using the technical framework of language-based
 security\ifaftersubmission~\citep{??}\bcp{Maybe the Sabelfeld and Myers
-  survey?}\fi.
-Our core properties are \emph{stepwise stack integrity},
-\emph{stepwise stack confidentiality}, and \emph{return to caller}.
+  survey?}\fi, phrased as the conjunction of
+\emph{stack integrity} and \emph{stack confidentiality}.
 %
-A key technical novelty in the definitions of confidentiality and integrity,
-compared to standard formulations from the security literature, is that they
+A key technical novelty in these definitions,
+compared to standard formulations of confidentiality and integrity from the
+security literature, is that they
 are ``nested'': {\em each} caller is guaranteed protection from its
 immediate callees (which, in turn, need protection from their immediate
 callees, etc.). They are also stronger than LSE; even in the absence of the
 control flow guarantees of {\em return to caller}, they guarantee callers'
 data safety in the face of control-flow attacks (see \cref{sec:control}).
 \rb{\cref{sec:RTC}?}
-This reflects a cleaner division between data protection and control-flow protection
-than offered by LSE and WBCF.
+This reflects an arguably cleaner division between data protection and
+control-flow protection than LSE / WBCF.
 
 For the confidentiality and integrity properties, we consider both {\em
   stepwise} and {\em observational} variants.  The simpler {stepwise}
@@ -1023,8 +1023,7 @@ int f() {
 \vspace{.5em}
 \end{tabular}
 \end{center}
-
-\vspace{\abovedisplayskip}
+\vspace{-4ex}
 \end{subfigure}
 \caption{An integrity violation
 \ifaftersubmission\bcp{I wonder if we
@@ -1569,7 +1568,7 @@ Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\)
 %
 Our machine states are composed of {\em components} \(\component\),
 which are either addresses or register names (\(\reg\)) drawn from some set
-\(\REGS\), which is assumed to include two special purpose registers: the
+\(\REGS\), which is assumed to include two special-purpose registers: the
 program counter {\PCname} and the stack pointer \(\SP\).
 A {\em machine state} is a map from components to values.
 %
@@ -1631,6 +1630,7 @@ a triple state \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
 A {\em machine trace} is a nonempty, finite or infinite sequence of elements
 of MPC-states, ranged over by \(\MPCT\) and \(\NPCT\).
 We use juxtaposition of an element and a trace to represent ``cons.'' (\bcp{Ugh})
+\rb{Could we use $\cdot$?}
 
 The ``trace-of'' operator, written \(\mpcstatename \hookrightarrow \MPCT\),
 coinductively relates an initial state with the trace of states
@@ -1658,7 +1658,7 @@ function since traces are non-empty, and the final element (if one exists) with
 
 \paragraph*{Until}
 The operation \(\PUT ~ f ~ \MPCT\) takes a trace \(\MPCT\)
-and a predicate on states \(f ~ \mpcstate \in \MPCS\) and gives the prefix of
+and a predicate on states \(f \subseteq \MPCS\) and gives the prefix of
 \(\MPCT\) ending with the first element on which \(f\) holds.
 
 \begin{center}
@@ -1699,7 +1699,8 @@ running \(\mpcstatename\) up to \(f\)''):
 
 \paragraph*{Context Segments}
 
-\apt{Some words have been lost here.}
+In particular, we wish to formulate properties around consecutive subtraces
+in which the context obeys a given predicate. This will commonly be used to extract
 individual calls from a trace by taking subtraces in which the stack is
 at or below a given depth. If \(f\) is still a predicate on states, then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
@@ -1750,13 +1751,9 @@ then dive into the formal definitions of local state encapsulation\apt{we don't 
 well-bracketed control flow, which together constitute stack safety\BCP{need
   to put back WBCF!}.
 
-\subsection{Parameters in Registers}
-
-To begin, we will focus on a simple stack model, with a single stack
+We will focus on a simple stack model, with a single stack
 that doesn't share between caller and callee: arguments and results are passed
-in registers.
-
-To accommodate different machine architectures and different calling
+in registers. To accommodate different machine architectures and different calling
 conventions, we parameterize over the structure of the stack, particularly
 the means by
 which a caller identifies the data that should be protected during a call. We term
@@ -1823,11 +1820,15 @@ quantified over each step of execution from any initial state. The criterion for
 is simple: sealed components do not change.
 
 \definition
+Let the protected set of a context, \(\mathit{protected}(\domMap,\rts)\), be the
+set of components \(\component\) such that \(\domMap ~ \component = \sealed{\depth}\)
+for any depth \(\depth\).
+
+\definition
 A system enjoys {\em stepwise stack integrity} if, for any reachable state
 \(\mpcstatename\) such that \(\mpcstatename \stepstocon \mpcstatename'\),
-and any component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) and
-\(\domMap ~ \component = \sealed{\_}\), then \(\pi_\mach(\mpcstatename') ~ \component =
-\pi_\mach(\mpcstatename) ~ \component\).
+and any component \(\component \in \mathit{protected}(\domMap,\rts)\),
+\(\pi_\mach(\mpcstatename') ~ \component = \pi_\mach(\mpcstatename) ~ \component\).
 
 Next we consider {\em stepwise stack confidentiality}. Recall that our properties are
 nested: we will quantify over subtraces that represent whole calls. For each such
@@ -1914,7 +1915,7 @@ odd result directly to $A$.
 %
 Thus, a formal definition of safe use of the stack should include the
 condition that calls and returns are {\em well bracketed}, e.g., $C$ should
-only return to $A$.  
+only return to $A$.
 
 \definition
 A system enjoys {\em return-to-caller} when, for every pair of reachable states
@@ -2326,7 +2327,8 @@ and targeted ARM machine code
 from trivial typos to ones that required an intriguingly complex setup
 to appear.  The most interesting bug (included in the table as row
 {\em HEADER\_NO\_INIT}) was that, on our first try, the blessed call
-sequence/policy combination\apt{??} did not initialize all locations for the
+sequence %/policy combination\apt{??}
+did not initialize all locations for the
 newly allocated stack frame correctly, but left some of them as
 $\tagNoDepth$. This allowed for a potential integrity violation, but
 only if a rather complicated sequence of events occured. 
@@ -2390,19 +2392,16 @@ but all properties in this section can be extended to more complex settings
 very naturally.
 
 \definition
-For any \(\MPCT \in \MPCT^*\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
-\(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \sealed{\_}\).
-Then if \(\last(\MPCT) = \mach',\pol',\context'\), let \(\components' = \Delta(\mach,\mach')\).
- A system enjoys {\em deferred stepwise integrity} if for any \(\nach\) such that
-\(\mach' \approx_{\components'} \nach\), \(\mach \hookrightarrow \MPCT\), and
-\(\nach \hookrightarrow \NPCT\), \(\MPCT \doteq \NPCT\).
-
-% \vspace{\belowdisplayskip}
+For any \(\MPCT \in \MPCT^*\), let \(\head(\MPCT) = \mach,\pol,\context\) and
+suppose that \(\last(\MPCT) = \mach',\pol',\context'\) and
+\((\mach',\pol',\context') \hookrightarrow \MPCT'\). Find the set of components
+that changed during the call, \(\components = \mathit{protected}(\context) \cap \Delta(\mach,\mach')\).
+A system enjoys {\em deferred stepwise integrity} if for any \(\nach\) such that
+\(\mach' \approx_{\components'} \nach\) and its induced trace
+\((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\MPCT' \doteq \NPCT\).
 
 In short, if sealed components are modified during the call, the caller may not
-access their values. ``No reads after dangerous writes.''
+access their values. 
 %
 For example, consider again the integrity violation in
 Figure~\ref{fig:int1}. Under a deferred discipline, the write to {\tt
@@ -2411,9 +2410,8 @@ constitute a violation, which happens only when the tainted value is
 read in instruction 4. However, if this instruction added the constant
 that was originally stored in {\tt x} without reading the variable,
 i.e., {\tt add \$42,\%ra}, deferred integrity would not be violated.
-\rb{Tried to give a quick example without being too disruptive.
-  However, having it follow the slogan seems to rob it of part of its
-  punch.}
+Instead of forbidding such dangerous writes, we say,
+``No reads after dangerous writes.''
 
 \subsection{Observability}
 
@@ -2438,7 +2436,7 @@ $\mach \stepsto[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS $.
 \paragraph*{Observations-Of}
 
 The ``observations-of'' operator, written \(\obsof\), takes a machine trace and
-creates a trace of observations corresponding to the observations of each step in
+gives the trace of observations of each step in
 the trace. It uses a coinductive helper \(\mathit{obsfor}\) that relates an
 initial observation, a machine-trace, and an observation trace:
 
@@ -2453,10 +2451,13 @@ initial observation, a machine-trace, and an observation trace:
            {\(\mathit{obsfor} ~ \obs ~ \mpcstatename = \obs\)}
 \end{minipage}
 
-Then to take the observations from any particular trace, we start with a \(\tau\) observation:
-
+\begin{minipage}{.35\textwidth}
+  Then we start with a \(\tau\) observation:
+\end{minipage}
+\begin{minipage}{.6\textwidth}
 \judgment{\(\mathit{obsfor} ~ \tau ~ \MPCT = \obsT\)}
          {\(\obsof(\MPCT) = \obsT\)}
+\end{minipage}
 
 \paragraph*{Observational Similarity}
 
@@ -2504,16 +2505,15 @@ prevent them from being leaked.
 
 \definition
 For any call trace \(\MPCT \in \MPCT^*\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
-\(\components\) be the set of components \(\component\)
-such that \(\domMap ~ \component = \sealed{\_}\).
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\).
 %
 Then, supposing that \(\last(\MPCT) = \mach',\pol',\context'\),
-let \(\components'\) be the set of components that differ
-between \(\mach\) and \(\mach'\). A system enjoys
-{\em observational integrity} if for any \(\nach\) such that
-\(\mach' \approx_{\components'} \nach\), \((\mach,\pol',\context') \hookrightarrow \MPCT\), and
-\((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\obsof(\MPCT) \simeq \obsof(\NPCT)\).
+let \(\components\) be the set of protected components that changed during
+the call, \(\components = \mathit{protected}(\domMap,\rts) \cap \Delta(\mach, \mach')\),
+and let \((\mach,\pol',\context') \hookrightarrow \MPCT'\).
+A system enjoys {\em observational integrity} if for any \(\nach\) such that
+\(\mach' \approx_{\components'} \nach\), and its induced trace
+\((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\obsof(\MPCT') \simeq \obsof(\NPCT)\).
 
 \medskip
 
@@ -2802,7 +2802,7 @@ void f(int &a) {
 10        sub $2,%sp      ; deallocate frame
 11        ret
 
-20 f:     cmp stash, $0   ; stash = 0? 
+20 f:     cmp stash, $0   ; stash = 0?
 21        breq #13        ; branch if so
 22        mov %ra,stash   ; stash = &a
 23        jmp #15
@@ -2989,11 +2989,10 @@ or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
 \(|\rts| > \depth'\).
 
 \definition
-Let \(\mpcstatename\) and \(\mpcstatename'\) be reachable states such that
-\(\mpcstatename \stepstocon \mpcstatename'\), and \(\pi_\context(\mpcstatename) = \domMap,\rts\).
-A system enjoys {\em stepwise stack integrity with passing} if for all
-such states, \(\pi_\mach(\mpcstatename) ~ \component = \pi_\mach(\mpcstatename') ~ \component\)
-for each component in \(\mathit{protected}(\pi_\context(\mpcstatename))\)
+For each of the stepwise, deferred, and observational versions of
+stack integrity in the simple model, the equivalent property in the
+passing model substitutes the above definitions of \(\context\), initial contexts and update
+function, and \(\mathit{protected}\), and is otherwise identical.
 
 \definition
 For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\),
@@ -3096,8 +3095,6 @@ such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
 \section{Related Work}
 \label{sec:relwork}
 
-%% CHERI \rb{cite}
-
 \paragraph{Formal Stack Safety on Capability Machines}
 %
 To our knowledge, the only line of work to date that has attempted
@@ -3107,38 +3104,46 @@ convention that uses local capabilities to preserve local state
 encapsulation and well-bracketed control flow, using a logical
 relation to reason about the stack safety of concrete
 programs. Although the required hardware support is readily available
-in capability machines like CHERI, this technique incurs significant
-costs, because it requires the entire unused part of the stack to be
+in capability machines like Cheri,
+%% this technique incurs significant
+%% costs, because
+it requires the entire unused part of the stack to be
 cleared whenever a security boundary is crossed. Their logical
 relation captures capability safety without ``externally observable
 side-effects (like console output or memory access traces)''
-and can be used to reason about individual programs. \bcp{Not very clear:}In the
-discussion, ``while [the authors] claim that [their] calling
+and can be used to reason about individual programs.
+\citeauthor{Skorstengaard+19b} acknowledge the difficulty of defining
+these concepts precisely:
+``while [they] claim that [their] calling
 convention enforces control-flow correctness, [they] do not prove a
 general theorem that shows this, because it is not clear what such a
 theorem should look like,'' noting that the correctness property
 enjoyed by their technique ``is not made very explicit.''
 
-StkTokens \citep{Skorstengaard+19} continues this line of work. Like
-the earlier paper, it aims to protect the stack by enforcing local state
-encapsulation and well-bracketed control flow. It does so by defining a new
+StkTokens \citep{Skorstengaard+19} continues this work by defining a more efficient
 calling convention that makes use of linear capabilities for stack and return
-pointers. The convention operates on a single shared stack and requires that
-protected components avoid compromising their own security by following certain
-simple rules---like not leaking their private capability seals. More
-precisely but still informally, local state encapsulation is defined as
+pointers.
+%% The convention operates on a single shared stack and requires that
+%% protected components avoid compromising their own security by following certain
+%% simple rules---like not leaking their private capability seals. More
+%% precisely but
+Still informally, local state encapsulation is defined as
 restricting accesses to the range of memory allocated to the current stack
 frame, and well-bracketed control flow as only allowing returns from the topmost
 frame to the immediately adjacent frame below. Formally, it improves on
 \citet{Skorstengaard+19b} by building those properties into the semantics of a
 capability machine with a built-in call stack and call and return instructions,
 which is proven fully abstract with respect to a more concrete capability
-machine that replaces those pseudo-instructions with their calling convention.
+machine.
+%% that replaces those pseudo-instructions with their calling convention.
 Their proof of full abstraction uses a standard notion of components, which
-import and export functions through their interfaces; their model of
-observations is limited to cotermination.
+import and export functions through their interfaces.
+%% ; their model of
+%% observations is limited to cotermination.
 \sna{Some of this seems like more detail than we need, and we need to
   compare ourselves to their list of criteria.}
+\rb{Trimmed this a bit. Are you referring to their list of attack
+  examples, or to something else?}
 
 \paragraph{Protecting the Stack with Micro-Policies}
 %
