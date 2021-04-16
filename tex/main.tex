@@ -1830,51 +1830,62 @@ and any component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\
 \(\domMap ~ \component = \sealed{\_}\), then \(\pi_\mach(\mpcstatename') ~ \component =
 \pi_\mach(\mpcstatename) ~ \component\).
 
-Next we consider {\em stepwise stack confidentiality}. There are a number of preliminary
-concepts we must discuss here -- confidentiality quantifies over {\em variants} of the
-initial state of a call, and requires that the traces from them move in {\em lockstep}.
+Next we consider {\em stepwise stack confidentiality}. Recall that our properties are
+nested: we will quantify over subtraces that represent whole calls. For each such
+subtrace, we will quantify over {\em variants} of its initial state. Then we require
+that the original, {\em primary} traces move in {\em lockstep} with the variant.
+
+\definition \(\MPCT^*\) is the set of all traces of calls, defined as
+\[\begin{align*}
+\bigcup_{\depth \in \mathbb{Z}} \{\MPCT | \MPCT\langle f_\depth \rangle
+\text{ is a reachable segment}\} \hspace{1em} &
+\text{where } f_\depth ~ (\mach,\pol,(\domMap,\rts)) \triangleq |\rts| \geq \depth
+\end{align*}\]
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
 written \(\mach \approx_\components \nach\), if, for
 all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\).
 
-\definition Machine state pairs \(\mach,\mach'\) and \(\nach,\nach'\) are said to
-\emph{change together}, written \(\mach,\mach' \diamond \nach,\nach'\), if,
-for all components \(\component\) such that
-\(\mach ~ \component \not = \mach' ~ \component\) or
-\(\nach ~ \component \not = \nach' ~ \component\),
-\(\mach' ~ \component = \nach' ~ \component\).
+\definition Let \(\Delta(\mach,\mach')\) be the set of set of components \(\component\)
+such that \(\mach ~ \component \not = \mach' ~ \component\).
+
+\definition Between two pairs of states \((\mach,\mach')\) and \((\nach,\nach')\), we
+say that they {\em lock} if for all components \(\components\) in
+\(\Delta(\mach,\mach') \cup \Delta(\nach,\nach')\),
+\(\mach' ~ \component = \nach' ~ \component\). We write this \((\mach,\mach') \diamond
+(\nach,\nach')\).
 
 \definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep}
 if their adjacent pairs of states change together. We will represent this relation with
-\(\machT \doteq \nachT\). \bcp{People may not be familiar with the notation}
-\sna{It's a new notation, we use this enough that it seems worth picking an
-  evocative symbol.}\bcp{Sorry -- I meant the notational convention of representing a
-coinductive relation with inference rules in this way, not the symbol...}
-We define it as a coinductive relation:
+\(\machT \doteq \nachT\). We define it as a coinductive relation:
 
 \begin{minipage}{.3\textwidth}
 \judgment{}
-         {\(\mach \doteq \nach\)}
+         {\(\mpcstatename \doteq \npcstatename\)}
 \end{minipage}
 \begin{minipage}{.6\textwidth}
-\judgmenttwo{\(\mach, \head(\machT) \diamond \nach, \head(\nachT)\)}
+\judgmenttwo{\(\mach, \pi_\mach(\head(\machT)) \diamond \nach, \pi_\mach(\head(\nachT))\)}
             {\(\machT \doteq \nachT\)}
-            {\(\mach \machT \doteq \nach \nachT\)}
+            {\(\notfinished{(\mach,\_,\_)}{\machT} \doteq \notfinished{(\nach,\_,\_)}{\nachT}\)}
 \end{minipage}
 
-\definition For any depth \(\depth\), define \(f_\depth ~ \mach ~ (\_, \rts)\) to be
-\(|\rts| \geq \depth\). Then each reachable segment \(\MPCT \langle f_\depth \rangle\)
-corresponds to a trace of a function from its call to its return.
-Given such a segment \(S\), let \(\mach,\_,(\domMap,\_)\)  = \(\head(S)\) and let
-\(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \outside\).
-A system enjoys \emph{stepwise stack confidentiality} if, for all \(\MPCT\langle f_\depth\rangle\)
-with associated \(\mach\) and \(\components\) as above, and
+\definition {\bf Stepwise Stack Confidentiality}
+
+For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\),
+let \(\components\) be the set of components \(\component\) such that
+\(\domMap ~ \component = \outside\).
+A system enjoys \emph{stepwise stack confidentiality} if,
 for all \(\nach\) such that \(\mach \approx_\components \nach\) and
- \(\nach \hookrightarrow \NPCT\),
- \(\MPCT\langle f_\depth\rangle \doteq \NPCT | \neg f_\depth \).\apt{I found the previous
-   version hopelessly confusing, but I'm not at all sure that this one is right! SNA please check.}
- \sna{It's right, but I need to rethink how the M<f> notation works...}
+\(\nach \hookrightarrow \NPCT | \neg f_{|\rts|}\),
+\(\MPCT \doteq \NPCT\).
+
+\vspace{\afterdisplayskip}
+
+Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
+of the components in \(\components\), and in addition their subtraces are also in
+\(\MPCT^*\), and therefore confidentiality must hold on them separately. \(\NPCT\)
+will contain these calls and returns as well, so its return stack pushes and pops
+in lockstep until it breaks at the final return.
 
 \subsection{Parameters Passed on the Stack}
 
