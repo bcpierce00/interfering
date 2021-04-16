@@ -3084,18 +3084,36 @@ to continue from where it left off. So, it is possible for a coroutine to claim 
 but not actually change the active stack, with similar effects to when a callee fails
 to return properly. Now we can define both stack safety and coroutine safety under this model.
 
-\definition
-Let the call-protected set of a context, \(\prot_C(\domMap,\rtm,\yts,\stackid)\),
-be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid}{\sealed{\underscore}}\)
-or \(\domMap ~ \component = \instack{\stackid}{\passed{\depth,\depth'}}\) and \(|\rtm ~ \stackid| < \depth\) or
-\(|\rtm ~ \stackid| > \depth'\).
+Stack integrity and confidentiality apply in the coroutine model, based on straightforward
+projections of each stack's domains, etc. and the machinery of the passing model. We will give
+the coroutine-specific properties.
 
-\definition
-For each of the stepwise, deferred, and observational versions of
-stack integrity in the simple model, the equivalent property in the
-passing model substitutes the above definitions of \(\context\), initial contexts and update
-function, and \(\prot_C\) for their simple equivalents, and is otherwise identical.
+%\definition
+%The protected and secret sets of a context as used for calls,
+%\(\prot_C(\domMap,\rtm,\yts,\stackid)\) and \(\secret_C(\domMap,\rtm,\yts,\stackid)\),
+%are equivalent to their counterparts \(\prot_P\) and \(\secret_P\) applied to a domain map
+%that projects out the stack domains of components in stack \(\stackid\) and a
+%return target stack \(\rts = \rtm ~ \stackid\). Intuitively, within the active stack we protect
+%the same components we would have in the passing model.
+
+%\definition
+%For each of the stepwise, deferred, and observational versions of
+%stack integrity in the simple model, the equivalent property in the
+%passing model substitutes the above definitions of \(\context\), initial contexts and update
+%function, and \(\prot_C\) for their simple equivalents, and is otherwise identical.
+
+%\definition \(\MPCT^*\) is now defined as
+%\[\begin{aligned}
+%\bigcup_{\stackid \in \STACKS,\depth \in \mathbb{Z}} \hspace{-1em} \{\MPCT | \MPCT\langle f_\depth \rangle
+%\text{ is a reachable segment}\} \hspace{1em} &
+%\text{where } f_\depth ~ (\mach,\pol,(\domMap,\rtm,\yts,\stackid')) \triangleq |\rtm ~ \stackid| \geq \depth \\
+%\end{aligned}\]
+%and \(\brk{\MPCT}\) similarly projects the depth of the active stack.
+
+%\definition
+%For either of the stepwise and observational versions of
+%stack confidentiality in the passing model, the equivalent property in the
+%coroutine model substitutes the above definitions.
 
 \definition
 Let the yield-protected set of a context, \(\prot_Y(\domMap,\rtm,\yts,\stackid)\),
@@ -3108,6 +3126,30 @@ substituting the above definitions of \(\context\), initial contexts and update
 function, and \(\prot_Y\) for their equivalents. Likewise
 {\em deferred coroutine integrity} and {\em observational coroutine integrity} are defined
 in terms of their simple equivalents.
+
+\definition
+Let the call-secret set of a context, 
+be the set of components \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid}{\sealed{\underscore}}\)
+or \(\domMap ~ \component = \instack{\stackid}{\passed{\depth,\depth'}}\) and
+\(|\rtm ~ \stackid| < \depth\) or \(|\rtm ~ \stackid| > \depth'\).
+
+
+
+\definition \(\MPCT^*\) is the set of all \emph{call traces}, defined as
+\[\begin{aligned}
+\bigcup_{\depth \in \mathbb{Z}} \{\MPCT | \MPCT\langle f_\depth \rangle
+\text{ is a reachable segment}\} \hspace{1em} &
+\text{where } f_\depth ~ (\mach,\pol,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
+\end{aligned}\]
+
+\definition
+Let the yield-secret set of a context, \(\secret_Y(\domMap,\rtm,\yts,\stackid)\),
+be the set of components \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\).
+
+
+
 
 \definition
 Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
@@ -3257,15 +3299,6 @@ write-before-read behavior, and therefore will enable confidentiality without th
 to clear large swaths of the stack. We propose to implement a model of the stack safety
 system described in (\citep{Georges+21}) and test it against our properties using
 QuickChick.
-
-Notably, we conjecture that while these systems may implement integrity and confidentiality,
-they fall just short of return-to-caller. This is because the standard way to protect returns
-in Cheri is to construct {\em return capability}, an object capability that must be invoked
-to simultaneously transfer control back to the caller and unseal a capability on an activation
-record. An ill-behaved intermediate caller could always pass its caller's return capability on
-to its callee instead of its own, ensuring that the callee will return past it. Instead,
-we believe that Cheri supports a slightly weaker control-flow property in which only callers
-that obey a dynamic reasonableness property are guaranteed not to be skipped.
 
 \paragraph*{Program Logic for Stacks}
 
