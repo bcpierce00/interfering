@@ -1891,17 +1891,27 @@ in lockstep until it breaks at the final return.
 \subsection{Control Flow and Return-to-Caller}
 \label{sec:RTC}
 
-Together, integrity and confidentiality protect a caller's data until its callee returns
-to it. However, it is possible that an intermediate caller is not returned
-{\em to}, but rather returned {\em past}, to some ancestor caller! For
-example, function $A$ calls function B, which in turn calls $C$, which
+\BCP{We agreed that most or all of this belongs in Section 4...}Together,
+integrity and confidentiality protect a caller's data until its callee
+returns to it. However, it is possible that an intermediate caller is not
+returned {\em to}, but rather returned {\em past}, to some ancestor caller!
+For example, function $A$ calls function $B$, which in turn calls $C$, which
 returns directly to $A$ by resetting the stack pointer to $A$'s stack frame
-and branching to the address after the call from $A$ to $B$.
-Strictly speaking, this is not an information-flow problem: the caller's XXXXXX.
-\BCP{Still working on this bit.}
-But a lower level caller might have been relying on the intermediate
-caller to finish its computation, so it is worth protecting control flow even from
-attacks that do not violate data protections. We formalize this as {\em return-to-caller}.
+and branching to the address after the call from $A$ to $B$.  Strictly
+speaking, this is not an information-flow violation, since neither $A$'s nor
+$B$'s stack frames are improperly read or written by $C$.  But it is still
+arguably unsafe in general.  For example, suppose that $B$'s continuation
+after the call to $C$ takes $C$'s result, doubles it, and returns this to
+$A$.  If $A$'s correct behavior after the call to $B$ returns depends on the
+result it receives being a even number---i.e., $A$ is trusting that $B$'s
+continuation will execute after $C$ returns, perhaps because $A$ and $B$ are
+written by the same person while $C$ is an untrusted library---then $C$ can
+cause it to behave incorrectly, possibly even insecurely, by returning an
+odd result directly to $A$.
+%
+Thus, a formal definition of safe use of the stack should include the
+condition that calls and returns are {\em well bracketed}, e.g., $C$ should
+only return to $A$.  
 
 \definition
 A system enjoys {\em return-to-caller} when, for every pair of reachable states
@@ -1909,6 +1919,9 @@ A system enjoys {\em return-to-caller} when, for every pair of reachable states
 \(\mpcstatename' = (\_,\_,(\_,\rts'))\) such that
 \(\mpcstatename \stepsto \mpcstatename'\), if \(|\rts'| < |\rts|\), then
 \(|\rts'| = |\rts|\)
+
+\bcp{we probably want to remark that this notion is pretty
+much the same as in StkTokens, just formalized a little differently.}
 
 \subsection{Parameters Passed on the Stack}
 
