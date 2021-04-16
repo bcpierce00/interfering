@@ -183,6 +183,30 @@ Definition getComponents (m : MachineState) : list Component :=
   | Out (w:Value) 
   | Tau. 
 
+  Definition w32_eqb (w1 w2 : w32) : bool :=
+    let l1 := HList.tuple.to_list w1 in
+    let l2 := HList.tuple.to_list w2 in
+    let l12 := List.combine l1 l2 in
+    forallb (fun '(b1, b2) => Byte.eqb b1 b2) l12.
+
+  Definition memAddr_eqb (mem mem' : DefaultMemImpl32.Mem) (addr : word32) : bool :=
+    match loadWord mem addr, loadWord mem' addr with
+    | Some w, Some w' => w32_eqb w w'
+    | _, _ => false
+    end.
+
+  Definition findDiff mOld mNew : option Z :=
+    match find (fun addr => negb (memAddr_eqb mOld mNew addr)) (map.keys mNew) with
+    | Some addr =>
+      match loadWord mNew addr with
+      | Some w =>
+        Some (combine 4 w)
+      | None =>
+        None
+      end
+    | None => None
+    end.
+
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
     (* returns option unit * state *)

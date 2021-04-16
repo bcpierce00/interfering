@@ -1071,6 +1071,13 @@ Definition prop_stackConfidentiality
     end
   end.
 
+Definition obs_eqb (o1 o2 : Observation) : bool :=
+  match o1, o2 with
+  | Out n1, Out n2 => Z.eqb n1 n2
+  | Tau, Tau => true
+  | _, _ => false
+  end.
+
 Definition prop_confidentiality :=
   let sm := defstackmap defLayoutInfo in
   forAll genMach (fun '(m,p,cm) =>
@@ -1078,3 +1085,56 @@ Definition prop_confidentiality :=
 
 Extract Constant defNumTests => "500".
 QuickCheck prop_confidentiality. 
+
+Fixpoint prop_laziestLockstepIntegrity
+           fuel m n p cm ctx (endP : MPCState -> bool)
+  : bool :=
+  match fuel with
+  | O => true
+  | S fuel' =>
+    match endP (m,p,ctx), endP (n,p,ctx) with
+    | true, true => (* collect "Both done" *) true
+    | true, _    => (* collect "Main done" *) true
+    | _   , true => (* collect "Vary done" *) true
+    | _, _ =>
+      match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx),
+            mpcstep (updateC (CodeMap_fromImpl cm)) (n,p,ctx) with
+      | Some (m',p1,c1,o1), Some (n', p2,c2, o2) =>
+        andb (obs_eqb o1 o2)
+             (prop_laziestLockstepIntegrity fuel' m' n' p1 cm c1 endP)
+      | _, _ => true
+      end
+    end
+  end.
+
+Definition prop_laziestStackIntegrity
+           fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx
+  : Checker.Checker :=
+  match fuel with
+  | O => checker true
+  | S fuel' =>
+    match AnnotationOf (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
+    | Some call =>
+      match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
+      | Some (m', p', c', o) =>
+        let depth := List.length (snd c') in
+        let endP  := fun '(_,_,c) =>
+                       (Nat.ltb (List.length (snd c)) depth) in
+        forAllShrinkShow (genVariantOf depth c' m')
+                         (fun _ => nil)
+                         (fun n' => "")
+                         (fun n' =>
+                            prop_laziestLockstepIntegrity defFuel m' n' p' cm c' endP)
+      | _ => checker true
+      end
+    | _ => checker true
+    end
+  end.
+
+Definition prop_laziestIntegrity :=
+  let sm := defstackmap defLayoutInfo in
+  forAll genMach (fun '(m,p,cm) =>
+                    (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initC sm m))).
+
+Extract Constant defNumTests => "500".
+(* QuickCheck prop_laziestIntegrity. *)
