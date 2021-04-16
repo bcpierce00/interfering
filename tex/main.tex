@@ -2515,11 +2515,13 @@ caller to a callee or vice-versa:
   the $\PCname$ tag is decremented. \leo{Not sure the actual policy
     does that now (retag unused). But I don't think it's a
     confidentiality or integrity violation.}
+  \rb{Correct, and it doesn't. Some versions of the policy do clear
+    the stack, retagging would be easily added.}
 
 \end{itemize}
 
 This discipline suffices to enforce local stack encapsulation.
-To implement it,  we define ``blessed'' instruction sequences
+To implement it,  we define blessed instruction sequences
 intended to appear at the entry and exit of each function,
 which manipulate tags as just described in addition to performing the
 usual calling convention tasks of saving/restoring the return address to/from
@@ -2659,7 +2661,7 @@ To use QuickChick, we built random test-case generators that produce
   % \item
 (2)
   an initial policy state, tagging instructions corresponding to
-  ``blessed'' call or return sequences appropriately, while marking
+  blessed call or return sequences appropriately, while marking
   all potential stack locations as $\tagNoDepth$, and
 % \item
 (3)
@@ -2678,7 +2680,7 @@ To write such generators we build on the work of \leo{ICFP 2013},
 where they introduced {\em generation by execution} to produce
 interesting programs. Generation by execution receives as an input a
 partially instantiated machine state and attempts to generate an
-instruction (or a sequence of instructions such as a ``blessed''
+instruction (or a sequence of instructions such as a blessed
 sequence) that makes sense locally (e.g., jumps go to a potentially valid
 code location and loads read from from a potentially valid stack
 location). Then
@@ -2736,7 +2738,7 @@ and targeted ARM machine code
 RISC-V).  These errors ranged from trivial typos to
 ones that required an
 intriguingly complex setup to appear.  Notably, our first try at the
-``blessed'' call sequence/policy combination did not initialize all
+blessed call sequence/policy combination did not initialize all
 locations for the newly allocated stack frame correctly, but left some
 of them as $\tagNoDepth$. This allowed for a potential integrity
 violation, but only if a rather complicated sequence of events
@@ -2755,7 +2757,10 @@ and reset them as it is destructed, as
 mitigate those costs, they propose a number of optimizations.
 
 First, they eliminate the initialization pass. In this {\em Lazy Tagging}
-system, the stack is initially tagged as ``clear.'' A function is permitted
+system, the stack is initially tagged as ``clear.''
+\rb{The previous section already presents ``unused'' as the default tag,
+though it doesn't say that it can be overwritten whenever}
+A function is permitted
 to overwrite clear memory, and when it does so its depth tag overwrites
 the clear tag, claiming the memory; the remainder of the policy functions
 as {\em Depth Isolation}. On return, the callee must clear its frame, which
@@ -2770,6 +2775,7 @@ to written memory. Then reads from the stack do still require $\PCname$
 tag and memory tag to match. Thus, even if a callee illicitly writes to
 a private location in its caller, the caller will eventually detect this
 if it ever tries to read from that location.
+\rb{This is in line with the level of detail in the last section.}
 %
 These \emph{lazy policies} admit more efficient implementations, but
 they deliberately allow violations of stack integrity temporarily,
