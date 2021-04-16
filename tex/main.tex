@@ -712,7 +712,17 @@ that is neither code nor stack to store global variables, as a heap, etc., but o
 properties do not protect it or assume any particular behavior. We also do not
 model run-time code generation.
 
-\bcp{What is a ``call''?}  One significant challenge in formulating our
+% \footnote{\bcp{Some possibly useful text: A major challenge in
+%     characterizing stack safety formally is that, in a low-level machine
+%     without built-in stacks, we are at the mercy\bcp{?} of
+%     architectural\bcp{?}  choices that do not relate to the abstract notion
+%     of stack safety. Some implementations may have only a stack pointer
+%     while others add a frame pointer, in some systems return addresses and
+%     data live in separate stacks, and so on. We abstract over these choices
+%     as much as possible.  }}%
+
+
+\paragraph*{What is a ``call''?}  One significant challenge in formulating our
 properties arises from the fact that we want to define stack safety at the
 machine-code level for a variety of ISAs, including RISCy ones.  In
 particular, there may be no single ``call'' instruction that does all the
@@ -725,34 +735,26 @@ indirect branch at some point.  Thus, the same instruction opcode may be
 used in some places as part of a call or return sequence and in other places
 for other purposes.
 
-Since our stack-safety properties depend
-critically on being able to recognize when the machine is ``performing a
-call'' or a ``returning from a call'', we need some other way of
+Since our stack-safety properties are all about protecting ``callers'' from
+their ``callees,'' we need some clear-cut way to recognize when the program
+makes or returns from a call.  Accordingly, we assume we are given a machine
+language program {\em annotated} with the locations of instructions
+representing calls.  We declare that a call has occurred when the machine
+has just executed an instruction marked as a call.
+%
+These call annotations would typically come from a compiler together with
+the machine code, but we do to assume anything about their provenance.
 
-%
-% \footnote{\bcp{Some possibly useful text: A major challenge in
-%     characterizing stack safety formally is that, in a low-level machine
-%     without built-in stacks, we are at the mercy\bcp{?} of
-%     architectural\bcp{?}  choices that do not relate to the abstract notion
-%     of stack safety. Some implementations may have only a stack pointer
-%     while others add a frame pointer, in some systems return addresses and
-%     data live in separate stacks, and so on. We abstract over these choices
-%     as much as possible.  }}%
-%
-%
+Returns, on the other hand, need not be annotated: we can tell when a callee
+has returned control to the caller when... we see control return to the
+caller!  For example, under a standard calling convention, we can see that a
+return has occurred occurred when state of the machine reaches a state where
+the stack pointer has the same value as it did at the point of some earlier
+call and the $\PCname$ points to the instruction following that call.  We
+abstract away from the details of specific calling conventions by assuming
+that we are given some way of telling when a given machine state is a
+{\em return target}\bcp{with respect to some set of pending calls?}.
 
-We assume we are given a machine language program {\em annotated} with the
-locations of instructions representing calls.  We declare that a call has
-occurred when the machine has just executed an instruction marked as a
-call. Conversely, we declare that a return
-has occurred when we see the state of the machine reach a {\em return
-  target}.
-\bcp{Still working from here:}
-For a given
-state annotated as a call, another state fulfils its return target under a
-standard calling convention if it has the same stack pointer and the program
-counter is at the instruction following the call, but we abstract over
-different conventions.
 %, returns, and function entry points\BCP{I
 %  still want to talk about whether returns and entry points need to be
 %  annotated.  To me, these annotations do not make intuitive sense: it is
@@ -764,22 +766,22 @@ different conventions.
 %instruction following the call with the SP reset to where it was at the
 %point of the call. (This is the point where it wants to be able to access
 %its own local state again and expected to find it unmolested.)}.
-Although call annotations would typically come from a compiler together with
-the machine code, we do not assume anything about their provenance.
 
-\paragraph*{Enforcement mechanisms}
-We model the base machine as a step function over machine states, and a machine
-enhanced with an enforcement mechanism (in the language of tag-based enforcement,
-a {\em policy}) as a partial step function over machine states extended with some
-auxiliary state, refining the base machine. When the policy-enhanced machine fails
-to step, this is a {\em failstop}, halting the program before it can perform an
+\paragraph*{Policies}
+We model the base machine's behavior as a step function over machine states,
+and a machine
+enhanced with an enforcement mechanism, or {\em policy} for short, as a
+partial step function over machine states extended with some
+auxiliary state, refining the base machine. When the policy-enhanced machine
+does not step from a given state, this is a {\em failstop}, halting the program before it can perform an
 action that would violate the security property;
 our properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
-\apt{Suddenly we are talking about alternative enforcement mechanisms for the first time.
-  This surely needs \emph{some} foreshadowing in the abstract and
-  intro?}\bcp{Yes!}
+\apt{Suddenly we are talking about alternative enforcement mechanisms for
+  the first time.  This surely needs \emph{some} foreshadowing in the
+  abstract and intro?}\bcp{Yes!}
+%
 Dividing policy state from machine state helps us reason about
 enforcement mechanisms that keep a significant amount of data separate from the
 primary execution data to inform security. Obviously tag-based systems do this,
@@ -1228,7 +1230,7 @@ Noninterference describes knowledge: it states that for system components
 containing secret values, we can substitute any values whatsoever without changing the results
 of our computation. If there exists some value for which we see different results, then
 in fact we can learn something about the initial state by observing those results, violating
-confidentiality.
+confidentiality. \apt{Add some motivation for why we chose to view confidentiality in this way.}
 
 In Figure~\ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
 by reading {\tt main}'s variable {\tt x}. The trace
@@ -1574,6 +1576,30 @@ In the example, on its first return, {\tt f} reaches its return target, because 
 Thus {\tt x} is still sealed and {\tt f}'s attempt to overwrite it at instruction 4
 violates the integrity property.
 
+
+\paragraph{Well-bracketed control flow.} Together,
+integrity and confidentiality protect a caller's data until its callee
+returns to it. However, it is possible that an intermediate caller is not
+returned {\em to}, but rather returned {\em past}, to some ancestor caller!
+For example, function $A$ calls function $B$, which in turn calls $C$, which
+returns directly to $A$ by resetting the stack pointer to $A$'s stack frame
+and branching to the address after the call from $A$ to $B$.  Strictly
+speaking, this is not an information-flow violation, since neither $A$'s nor
+$B$'s stack frames are improperly read or written by $C$.  But it is still
+arguably unsafe in general.  For example, suppose that $B$'s continuation
+after the call to $C$ takes $C$'s result, doubles it, and returns this to
+$A$.  If $A$'s correct behavior after the call to $B$ returns depends on the
+result it receives being a even number---i.e., $A$ is trusting that $B$'s
+continuation will execute after $C$ returns, perhaps because $A$ and $B$ are
+written by the same person while $C$ is an untrusted library---then $C$ can
+cause it to behave incorrectly, possibly even insecurely, by returning an
+odd result directly to $A$.
+%
+Thus, a formal definition of safe use of the stack should include the
+condition that calls and returns are {\em well bracketed}, e.g., $C$ should
+only return to $A$.  This is what \citet{Skorstengaard+19b} describe
+as \emph{well-bracketed control flow (WBCF)}. 
+
 \section{Machines and Traces}
 \label{sec:prelim}
 
@@ -1771,8 +1797,7 @@ We are finally ready for our definition of stack safety. We begin
 by describing how we model knowledge about the program structure,
 then dive into the formal definitions of local state encapsulation\apt{we don't want
   to call it that here, do we?} and
-well-bracketed control flow, which together constitute stack safety\BCP{need
-  to put back WBCF!}.
+well-bracketed control flow, which together constitute stack safety.
 
 We will focus on a simple stack model, with a single stack
 that doesn't share between caller and callee: arguments and results are passed
@@ -1845,13 +1870,14 @@ is simple: sealed components do not change.
 \definition
 Let the protected set of a context, \(\prot(\domMap,\rts)\), be the
 set of components \(\component\) such that \(\domMap ~ \component = \sealed{\depth}\)
-for any depth \(\depth\).
+for some depth \(\depth\).
 
 \definition
-A system enjoys {\em stepwise stack integrity} if, for any reachable state
+A system enjoys \textit{\textbf{stepwise stack integrity}} if, for any reachable state
 \(\mpcstatename\) such that \(\mpcstatename \stepstocon \mpcstatename'\),
 and any component \(\component \in \prot(\domMap,\rts)\),
 \(\pi_\mach(\mpcstatename') ~ \component = \pi_\mach(\mpcstatename) ~ \component\).
+\apt{but now $dm$ and $rts$ are unbound}.
 
 Next we consider {\em stepwise stack confidentiality}. Recall that our properties are
 nested: we will quantify over subtraces that represent whole calls. For each such
@@ -1868,7 +1894,7 @@ that the original, {\em primary} traces move in {\em lockstep} with the variant.
 \definition
 For each trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \underscore,\underscore,(\underscore,\rts)\), the
 {\em break condition} of \(\MPCT\) is a predicate on
-states \(\brk(\MPCT) = \neg f_{|\rts|}\). It follows from our definitions
+states defined as \(\brk(\MPCT) = \neg f_{|\rts|}(\MPCT)\). It follows from our definitions
 that this holds on \(\MPCT\)'s final state, {\em unless it terminated prematurely due to a failstop}.
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
@@ -1904,59 +1930,33 @@ set of components \(\component\) such that \(\domMap ~ \component \not = \outsid
 
 \definition
 For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,\context\),
-let \(\components = \secret(\context)\) and \(\nach\) be any variant
-\(\mach \approx_\components \nach\).
-A system enjoys \emph{stepwise stack confidentiality} if,
-for \(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk(\MPCT)\),
-\(\MPCT \doteq \NPCT\) holds.
+let \(\components = \mathit{secret}(\context)\) and \(\nach\) be any variant
+such that \(\mach \approx_\components \nach\).
+A system enjoys \textbf{\textit{stepwise stack confidentiality}} if,
+for all \(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk(\MPCT)\),
+\(\MPCT \doteq \NPCT\) holds.\apt{I'm worried about quantifier order here. Surely $n$ needs to be
+universally quantified, and probably also \(\MPCT\) (?) }
 
 %\medskip
 
 In other words, stepwise stack confidentiality states that if we vary every component of the stack,
 the resulting trace (starting in the same policy state) steps in lockstep with the
 original trace until both have reached the break condition.
-
+%
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the components in \(\components\), and in addition their subtraces are also in
 \(\MPCT^*\), and therefore confidentiality must hold on them separately. \(\NPCT\)
 will contain these calls and returns as well, so its return stack pushes and pops
 in lockstep until it breaks at the final return.
 
-\subsection{Control Flow and Return-to-Caller}
-\label{sec:RTC}
-
-\BCP{We agreed that most or all of this belongs in Section 4...}Together,
-integrity and confidentiality protect a caller's data until its callee
-returns to it. However, it is possible that an intermediate caller is not
-returned {\em to}, but rather returned {\em past}, to some ancestor caller!
-For example, function $A$ calls function $B$, which in turn calls $C$, which
-returns directly to $A$ by resetting the stack pointer to $A$'s stack frame
-and branching to the address after the call from $A$ to $B$.  Strictly
-speaking, this is not an information-flow violation, since neither $A$'s nor
-$B$'s stack frames are improperly read or written by $C$.  But it is still
-arguably unsafe in general.  For example, suppose that $B$'s continuation
-after the call to $C$ takes $C$'s result, doubles it, and returns this to
-$A$.  If $A$'s correct behavior after the call to $B$ returns depends on the
-result it receives being a even number---i.e., $A$ is trusting that $B$'s
-continuation will execute after $C$ returns, perhaps because $A$ and $B$ are
-written by the same person while $C$ is an untrusted library---then $C$ can
-cause it to behave incorrectly, possibly even insecurely, by returning an
-odd result directly to $A$.
-%
-Thus, a formal definition of safe use of the stack should include the
-condition that calls and returns are {\em well bracketed}, e.g., $C$ should
-only return to $A$.
-
+Finally, we formalize a version of WBCF, which capture the same informal idea
+as that of \citet{Skorstengaard+19b} using our notion of contexts.
 \definition
-A system enjoys {\em return-to-caller} when, for every pair of reachable states
+A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every pair of reachable states
 \(\mpcstatename = (\underscore,\underscore,(\underscore,\rts))\) and
 \(\mpcstatename' = (\underscore,\underscore,(\underscore,\rts'))\) such that
 \(\mpcstatename \stepsto \mpcstatename'\), if \(|\rts'| < |\rts|\), then
 \(|\rts'| = |\rts|\)
-
-\bcp{we probably want to remark that this notion is pretty
-much the same as in StkTokens, just formalized a little differently.}
-
 
 %\subsection{Well-bracketed Control Flow}
 %\label{sec:wbcf}
