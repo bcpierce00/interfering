@@ -2372,10 +2372,12 @@ such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
 \section{Enforcement}
 \label{sec:enforcement}
 
-In this section we examine how an existing enforcement mechanism,
-Depth Isolation from \citet{DBLP:conf/sp/RoesslerD18}, can implement
-the formal stack-safety property described in the previous section: it in
-fact enforces a stronger, inductive version of that property which strengthens the
+\leo{I am not sure we've hit the correct level of detail in this section.}
+
+In this section we detail an existing enforcement mechanism,
+Depth Isolation from \citet{DBLP:conf/sp/RoesslerD18}, that implements
+the formal stack-safety property described in the previous section; in
+fact, it enforces a stronger, inductive version of that property which strengthens the
 local state encapsulation component by checking for integrity and
 confidentiality violations at every step of the callee's execution trace. \bcp{Examples?}
 
@@ -2414,13 +2416,11 @@ distinct tags.
 %% \rb{Maybe go into more detail, examples later\ldots or try to segue into stack
 %% policies}
 
-\subsection{A Conservative Tag Policy}
-\label{sec:conservative}
+%\paragraph{A Conservative Tag Policy}
+%\label{sec:conservative}
 
-\bcp{Is this the only subsection in this section?}
-
-The first micro-policy we present to enforce the definition of stack
-safety developed in \cref{sec:lse-and-wbcf} is a small variation
+The micro-policy we present here to enforce the definition of stack
+safety developed in \cref{sec:lse} is a small variation
 on the Depth Isolation policy presented by
 \citet{DBLP:conf/sp/RoesslerD18}. Their policy tags the stack memory
 with ownership information associated to each stack frame (and to each
@@ -2429,23 +2429,29 @@ control that we do not need to consider here), and tags registers containing
 stack pointers with access permission information. The policy also
 uses tags on instructions to identify the code
 sequences that have permission to manage the stack, say during calls and returns.
+In the following, for ease of exposition, we will assume that no
+arguments are passed on the stack.
 %% \rb{Conceivably on alloc
 %%   operations, etc., which we have not yet mentioned.}
 
-Our micro-policy works as follows. (We assume for ease of exposition that no
-arguments are passed on the stack.)
-%% \rb{Come back to this later?}.
-The micro-policy maintains tags on values in memory of the form $\tagStackDepth{n}$,
-indicating locations that belong to the stack frame at activation depth $n$,
-or $\tagNoDepth$; it tags the $\PCname$ with tags of the form $\tagPCDepth{n}$.
-During normal execution, the micro-policy rules only permit load and store operations
-when the target memory is tagged with the same depth as the current {\PCname} tag.
-Initially, the entire stack is tagged $\tagNoDepth$,
-%\rb{actually, the ``initial frame'' should be tagged with its proper depth}
-and the {\PCname} has tag $\tagPCDepth{0}$, where $n$ is the current activation depth.
-These tags are altered
-at exactly those points in
-the program where the contour of the stack-safety property changes:
+The micro-policy maintains tags of the form $\tagStackDepth{n}$ for
+each stack location belonging to the stack frame at activation depth
+$n$, or the tag $\tagNoDepth$ for stack locations that are currently
+unused (but could potentially be used in the future).
+%
+The $\PCname$ is tagged similarly as $\tagPCDepth{n}$.
+%
+Initially, the entire stack is considered unused (and therefore tagged
+$\tagNoDepth$), and the {\PCname} has tag $\tagPCDepth{0}$.
+%
+During normal execution, the micro-policy rules only permit load and
+store operations when the target memory is tagged {\em with the same
+  depth} as the current {\PCname} tag.
+
+
+More interesting (from a stack safety perspective) changes to the tags
+happen at exactly the points in the program where we switch from a
+caller to a callee or vice-versa:
 
 \begin{itemize}
 
@@ -2456,12 +2462,12 @@ the program where the contour of the stack-safety property changes:
   entry sequence initializes  all locations of the new function frame with
   tag $\tagStackDepth{(n + 1)}$.
 
-\item From callee back to caller, when execution is about to reach the return point
-  $\ret{c}$
-  corresponding to the call at $c$.  The exit sequence retags all locations in the function
-  frame with $\tagNoDepth$. At the actual return instruction, the
-  $\PCname$ tag is decremented.
-  \rb{Problem: this is currently the first mention of $\ret{\cdot}$}
+\item From callee back to caller, when execution is about to reach a
+  return point.  The exit sequence retags all locations in the
+  function frame with $\tagNoDepth$. At the actual return instruction,
+  the $\PCname$ tag is decremented. \leo{Not sure the actual policy
+    does that now (retag unused). But I don't think it's a
+    confidentiality or integrity violation.}
 
 \end{itemize}
 
@@ -2539,6 +2545,7 @@ rights than the caller, this is harmless.
 %% the {\PCname} register, the micro-policy ensures that the entry
 %% sequences of calls declared in the call map are executed correctly.
 
+\leo{I'm not a fan of the next paragraph.}
 Note that in this policy both the entry and exit sequences
 must write to each element of
 the frame, which can be quite expensive, especially for programs that
@@ -2580,6 +2587,98 @@ callee's stack frame.
 
 \section{Randomized Testing}
 \label{sec:testing}
+
+We validate the micro-policy of the previous section by systematically
+testing that it satisfies eager stack integrity and
+confidentiality. We used a Coq specification of the RISC-V
+architecture \leo{cite: https://github.com/mit-plv/riscv-coq} and
+extended it with a runtime monitor implementing the stack-safety
+micro-policy. \leo{Footnote: code will be made public} We chose the
+Coq proof assistant as the setting for our implementation for two
+reasons: first, to ensure that our coinductive trace definitions are
+well-formed, and reason about them\leo{Do we prove anything
+  interesting anymore?}, and to leverage the power of the QuickChick
+property-based testing framework.\leo{cite}
+
+To use QuickChick, we built generators that produce:
+\begin{enumerate}
+\item An initial RISC-V machine state, including most notably
+  the program to be executed.
+\item An initial policy state, tagging instructions corresponding to
+  ``blessed'' call or return sequences appropriately, while marking
+  all potential stack locations as $\tagNoDepth$.
+\item A code map and a stack map, accurately characterizing the behavior
+  of callers and callees.
+\end{enumerate}
+%
+That is, our generators need to produce not only a low-level program
+that exhibits interesting control-flow patterns, but also policy
+meta-information and code annotations that would normally be produced
+by the compiler.
+
+\paragraph*{Generator Overview}
+
+To write such generators we build on the work of \leo{ICFP 2013},
+where they introduced {\em generation by execution} to produce
+interesting programs. Generation by execution receives as an input a
+partially instantiated machine state, and attempts to generate an
+instruction (or a sequence of instructions such as a ``blessed''
+sequence) that makes sense locally (e.g., jumps to a potentially valid
+code location or loads from a potentially valid stack location). Then,
+we step the machine and repeat the process until we generate or
+execute some target number of instructions (or if we reached a point
+where the machine can't step anymore).
+
+We extend this technique to keep track of the control flow behavior of
+the program being generated: each time a call or return sequence is
+generated, we ensure that the appropriate policy tags and code
+annotations are set for the entry or return points. At the same time,
+we sometimes allow the generation to relax those constraints,
+introducing potentially ill-formed flows: that causes our programs
+to failstop when executed in conjunction with the policy monitor,
+but also allows for revealing errors in our setup.
+
+\paragraph*{Findings}
+
+To evaluate the effectiveness of our testing, we turn to {\em mutation
+  testing}\leo{cite}. In mutation testing, we inject errors
+(mutations) in a program that should cause the property of interest
+(here, stack safety) to fail, and ensure that the testing framework
+can find them. The bugs we used for our evaluation were both
+artificially generated (by deliberately weakening the micro-policy in
+ways that should break enforcement), or actual bugs that we discovered
+through testing in our implementation. We elaborate on some such bugs
+below.
+
+The mean-time-to-failure (MTTF) for various bugs can be found in
+\leo{Table with numbers?}. All experiments were run in a \leo{Machine
+  spec}. \leo{Something like: There is really no baseline to compare
+  this against, but include it here for the future/reasons?}
+
+The artificially injected bugs focus on weakening the tag propagation
+and checking mechanism. \leo{Mention them all?}
+%
+For example, when loading from a stack location, the correct
+micro-policy needs to enforce that the tag on the location being read
+is $\tagStackDepth{n}$ for some number $n$ and that the one of the
+current $\PCname$ is $\tagPCDepth{n}$ for the same depth. We can relax
+that restriction by not checking the depth equality, or not checking
+the tags at all, causing bugs of different difficulty.
+%
+Similarly, when storing to a stack location, the correct micro-policy
+needs to ensure that the tag on the memory location is either
+$\tagNoDepth$ or has again the same depth as the current $\PCname$
+tag. Relaxing these constraints also causes violations to the
+property.
+
+Using our testing framework, we also found various errors in our
+implementation, ranging from trivial typos to ones that required an
+intriguingly complex setup to appear. Most notably, the initial
+``blessed'' call sequence/policy combination did not initialize all
+locations for the newly allocated stack frame correctly, but left some
+of them as $\tagNoDepth$. This allows for a potential integrity
+violation, but only if a rather complicated sequence of events
+occured: \leo{call - write - call (seal) - return - call - write?}
 
 \section{Stack Safety for Lazy Enforcement}
 \label{sec:lazy}

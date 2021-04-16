@@ -144,6 +144,14 @@ Instance ShowWord : Show word :=
 Definition printPC (m : MachineState) (p : PolicyState) :=
   (show (word.unsigned (getPc m)) ++ " @ " ++ show (pctags p))%string.
 
+Definition printPCs (m n : MachineState) (p : PolicyState) :=
+  let val1 := word.unsigned (getPc m) in
+  let val2 := word.unsigned (getPc n) in
+  ((if Z.eqb val1 val2 then
+     show val1
+   else (show val1 ++ "/" ++ show val2))
+     ++ " @ " ++ show (pctags p))%string.
+
 Definition CodeMap_Impl := Zkeyed_map CodeStatus.
 Definition CodeMap_fromImpl (cm : CodeMap_Impl) : CodeMap :=
   fun addr => match map.get cm addr with
@@ -199,6 +207,21 @@ Definition printGPRs (m : MachineState) (p : PolicyState) :=
                      show rID ++ " : " ++ show rVal ++ " @ " ++ show rTag ++ nl ++ acc)%string 
                   (listify2 (getRegs m) (regtags p)) "". 
 
+Definition printGPRss (m n : MachineState) (p : PolicyState) :=
+  let regs1 := listify2 (getRegs m) (regtags p) in
+  let regs2 := listify2 (getRegs n) (regtags p) in
+  List.fold_left
+    (fun acc '((rID1, rVal1, rTag1),(rID2, rVal2, rTag2)) =>
+       if andb (Z.eqb rID1 rID2) (TagSet_eqb rTag1 rTag2)
+       then
+         ("r" ++ show rID1 ++ " : " ++ 
+         (if Z.eqb (word.unsigned rVal1) (word.unsigned rVal2) then show rVal1
+           else (show rVal1 ++ "/" ++ show rVal2))
+            ++ " @ " ++ show rTag1 ++ nl ++ acc)%string
+       else
+         exception "printGPRss - unequal rID/rTag"
+    ) (List.combine regs1 regs2) "".
+
 Definition listify1_word mem := 
   List.rev
     (map.fold
@@ -237,6 +260,40 @@ Definition printMem (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c 
        (show k ++ " : " ++ printed ++ nl ++ s)%string
     ) mts "".
 
+Definition printMems (m n : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c : context) (i : LayoutInfo) :=
+  let tags := memtags p in
+  let mem1 := getMem m in
+  let mts1 := combine_match (listify1_word mem1) (listify1 tags) in
+  let mem2  := getMem n in
+  let mts2  := combine_match (listify1_word mem2) (listify1 tags) in
+
+  List.fold_left
+    (fun s '((k1,val1,t1),(k2,val2,t2)) =>
+       if andb (Z.eqb k1 k2) (TagSet_eqb t1 t2) then
+       let printed :=
+           if andb (Z.leb (instLo i) k1)
+                   (Z.leb k1 (instHi i))
+           then
+             if Z.eqb val1 val2 then
+             match decode RV32I val1 with
+             | IInstruction inst =>
+               (show inst ++ " @ " ++ show t1 ++ " < " ++ show (CodeMap_fromImpl cm k1) ++ " > - " ++ show (fst c (Mem k1)))%string
+             | _ => (show val1 ++ " <not-inst>")%string
+             end
+             else exception "Instructions not equal"
+           else
+             let printVar := 
+                 (if Z.eqb val1 val2 then
+                    show val1
+                  else (show val1 ++ "/" ++ show val2))%string in
+             (printVar ++ " @" ++ show t1 ++ " < " ++ show (CodeMap_fromImpl cm k1) ++ " > - " ++ show (fst c (Mem k1)))%string in
+       if andb (andb (Z.eqb val1 0) (Z.eqb val2 0)) (seq.nilp t1) then
+         s
+       else 
+         ("[" ++ show k1 ++ "]: " ++ printed ++ nl ++ s)%string
+       else exception "printMems - not equal k/t"
+    ) (List.combine mts1 mts2) "".
+
 Definition printMachine
            (m : MachineState) (p : PolicyState) cm c := (
   "PC:" ++  
@@ -245,6 +302,16 @@ Definition printMachine
   printGPRs m p ++ nl ++
   "Memory: " ++ nl ++
   printMem m p cm c defLayoutInfo ++ nl
+  )%string.
+
+Definition printMachines
+           (m n : MachineState) (p : PolicyState) cm c := (
+  "PC:" ++  
+  printPCs m n p ++ nl ++
+  "Registers:" ++ nl ++
+  printGPRss m n p ++ nl ++
+  "Memory: " ++ nl ++
+  printMems m n p cm c defLayoutInfo ++ nl
   )%string.
 
 Definition defstackmap (i : LayoutInfo) (a : Addr) :=
@@ -433,15 +500,31 @@ Definition genInstr (i : LayoutInfo) (t : TagInfo)
           let instr := Addi rd (aID ai) imm in
           bindGen (genInstrTag instr) (fun tag =>
           ret (instr, tag, f, normal))))))
-         ; (onNonEmpty l 3%nat,
-          bindGen (elems_ l ([l; badPtr groups])) (fun l' =>
+;         (3%nat, match map.get (getRegs m) sp with
+              | Some spVal' =>
+               let spVal := word.unsigned spVal' in
+               let minImm := spVal - stackLo i in
+               let maxImm := stackHi i - spVal in
+               bindGen (genImm (maxImm - minImm)) (fun imm' =>
+               let imm := minImm + imm' in
+               bindGen (genTargetReg m) (fun rd =>
+               let instr := Lw rd sp imm in
+               bindGen (genInstrTag instr) (fun tag =>
+               ret (instr, tag, f, normal))))
+
+             | _ => exception "No sp?"
+              end)
+  (*         ; (onNonEmpty l 3%nat,
+            trace (show (l, badPtr groups))
+         (bindGen (elems_ l ([l; badPtr groups])) (fun l' =>
           bindGen (elems_ def_dp l') (fun pi =>
           bindGen (genTargetReg m) (fun rd =>
           let imm := pMaxImm pi in 
-(*          trace ("Generating... " ++ show (imm, pMaxImm pi))%string *)
+          (*trace ("Generating... " ++ show (imm, pMaxImm pi))%string *)
           (let instr := Lw rd (pID pi) imm in
           bindGen (genInstrTag instr) (fun tag =>
-          ret (instr, tag, f, normal)))))))
+          ret (instr, tag, f, normal))))))))
+*)
        ; ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
           bindGen (elems_ def_dp d) (fun pi =>
           bindGen (genSourceReg m) (fun rs =>
@@ -905,32 +988,48 @@ Extract Constant defNumTests => "500".
 
 
 
+Definition kplus k :=
+  match k with
+  | Mem a => Mem (a + 4)
+  | _ => k
+  end.
+Definition ksub k :=          
+  match k with
+  | Mem a => Mem (a - 4)
+  | _ => k
+  end.
+
 (* variantOf (fun k => fst c k = Sealed d) m n -> *)
 Definition genVariantOf (d : nat)
            (c : context) (m : MachineState)
   : G MachineState :=
   foldGen (fun macc k =>
-             match fst c k with
-             | Sealed d' =>
-               if Nat.leb d d' then
-                 bindGen (genImm 40) (fun z =>
-                 returnGen (jorp m k z))
-               else returnGen macc
-             | _ => returnGen macc
-             end
+             (*trace (show ("Varying:", k, fst c k)) *)
+            (match fst c k with
+             | Outside =>
+               returnGen macc
+             | _ =>
+               bindGen (genImm 40) (fun z =>
+(*               trace ("Trying to set: " ++ show k ++ " to " ++ show z ++ " which was " ++ show (fst c k) ++ nl ++ "Previous value was: " ++ show (proj macc k) ++ nl ++ " Next value will be: " ++ show (proj (jorp macc k z) k) ++ nl ++ "Nearby values are: " ++ show (kplus k) ++ " : " ++ show (proj macc (kplus k)) ++ " and " ++ show (ksub k) ++ " : " ++ show (proj macc (ksub k)) ++ nl)%string *)
+                     (returnGen (jorp macc k z)))
+             end)
           )
           (getComponents m) m .
 
 Definition sameDifferenceP (m m' n n' : MachineState) k :=
   if (orb (negb (Z.eqb (proj m k) (proj m' k)))
           (negb (Z.eqb (proj n k) (proj n' k)))) then
-    Z.eqb (proj m' k) (proj n' k)
+    Z.eqb (proj m' k) (proj n' k) 
   else true.
 
 Fixpoint prop_lockstepConfidentiality
-           fuel m n p cm ctx (endP : MPCState -> bool)
+         (fuel :nat)
+         (m n : MachineState) (p : PolicyState)
+         (cm : CodeMap_Impl) (ctx : context)
+         (endP : @MPCState context-> bool)
   : bool :=
-  match fuel with
+(* trace (printMachines m n p cm ctx ++ nl)   *)
+ (match fuel with
   | O => true
   | S fuel' => 
     match endP (m,p,ctx), endP (n,p,ctx) with
@@ -946,7 +1045,7 @@ Fixpoint prop_lockstepConfidentiality
       | _, _ => true
       end
     end
-  end.
+  end).
 
 Definition prop_stackConfidentiality
            fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx 
