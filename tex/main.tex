@@ -1829,12 +1829,12 @@ Recall that a ``code map'' \(\codemap\) is a predicate on addresses.
               {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
               {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
               {\(\domMap'' = \domMap'[\components \mapsto \unsealed]\)}
-              {\(\mach,(\domMap,\_::\rts) \stepsto_C \domMap'',\rts'\)}
+              {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'',\rts'\)}
 
 \vspace*{-3.5ex}
 \judgment[ Default]
          {}
-         {\(\_,\context \stepsto_C \context\)}
+         {\(\underscore,\context \stepsto_C \context\)}
 
 When we build machine traces with this step function, we always know how deep in the
 call stack we are and which components are sealed. We now proceed to state our properties.
@@ -1843,14 +1843,14 @@ quantified over each step of execution from any initial state. The criterion for
 is simple: sealed components do not change.
 
 \definition
-Let the protected set of a context, \(\mathit{protected}(\domMap,\rts)\), be the
+Let the protected set of a context, \(\prot(\domMap,\rts)\), be the
 set of components \(\component\) such that \(\domMap ~ \component = \sealed{\depth}\)
 for any depth \(\depth\).
 
 \definition
 A system enjoys {\em stepwise stack integrity} if, for any reachable state
 \(\mpcstatename\) such that \(\mpcstatename \stepstocon \mpcstatename'\),
-and any component \(\component \in \mathit{protected}(\domMap,\rts)\),
+and any component \(\component \in \prot(\domMap,\rts)\),
 \(\pi_\mach(\mpcstatename') ~ \component = \pi_\mach(\mpcstatename) ~ \component\).
 
 Next we consider {\em stepwise stack confidentiality}. Recall that our properties are
@@ -1866,9 +1866,9 @@ that the original, {\em primary} traces move in {\em lockstep} with the variant.
 \end{aligned}\]
 
 \definition
-For each trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \_,\_,(\_,\rts)\), the
+For each trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \underscore,\underscore,(\underscore,\rts)\), the
 {\em break condition} of \(\MPCT\) is a predicate on
-states \(\mathit{brk}(\MPCT) = \neg f_{|\rts|}\). It follows from our definitions
+states \(\brk(\MPCT) = \neg f_{|\rts|}\). It follows from our definitions
 that this holds on \(\MPCT\)'s final state, {\em unless it terminated prematurely due to a failstop}.
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
@@ -1895,19 +1895,19 @@ if their adjacent pairs of states change together.  We define this as a coinduct
 \begin{minipage}{.6\textwidth}
 \judgmenttwo{\(\mach, \pi_\mach(\head(\machT)) \diamond \nach, \pi_\mach(\head(\nachT))\)}
             {\(\machT \doteq \nachT\)}
-            {\(\notfinished{(\mach,\_,\_)}{\machT} \doteq \notfinished{(\nach,\_,\_)}{\nachT}\)}
+            {\(\notfinished{(\mach,\underscore,\underscore)}{\machT} \doteq \notfinished{(\nach,\underscore,\underscore)}{\nachT}\)}
 \end{minipage}
 
 \definition
-Let the secret set of a context, \(\mathit{secret}(\domMap,\rts)\), be the
+Let the secret set of a context, \(\secret(\domMap,\rts)\), be the
 set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
 
 \definition
 For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,\context\),
-let \(\components = \mathit{secret}(\context)\) and \(\nach\) be any variant
+let \(\components = \secret(\context)\) and \(\nach\) be any variant
 \(\mach \approx_\components \nach\).
 A system enjoys \emph{stepwise stack confidentiality} if,
-for \(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \mathit{brk}(\MPCT)\),
+for \(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk(\MPCT)\),
 \(\MPCT \doteq \NPCT\) holds.
 
 %\medskip
@@ -1949,8 +1949,8 @@ only return to $A$.
 
 \definition
 A system enjoys {\em return-to-caller} when, for every pair of reachable states
-\(\mpcstatename = (\_,\_,(\_,\rts))\) and
-\(\mpcstatename' = (\_,\_,(\_,\rts'))\) such that
+\(\mpcstatename = (\underscore,\underscore,(\underscore,\rts))\) and
+\(\mpcstatename' = (\underscore,\underscore,(\underscore,\rts'))\) such that
 \(\mpcstatename \stepsto \mpcstatename'\), if \(|\rts'| < |\rts|\), then
 \(|\rts'| = |\rts|\)
 
@@ -1977,8 +1977,8 @@ much the same as in StkTokens, just formalized a little differently.}
 %\definition A system enjoys {\em well-bracketed control flow} if for all
 %reachable states \(\mpcstatename\) and \(\mpcstatename'\) such that
 %\(\mpcstatename \stepstocon \mpcstatename'\), if
-%\(\pi_c(\mpcstatename) = (\_, \_::\rts)\) and \(\pi_m(\mpcstatename)\)
-%is annotated as a return, then \(\pi_c(\mpcstatename) = (\_, \rts)\).
+%\(\pi_c(\mpcstatename) = (\underscore, \underscore::\rts)\) and \(\pi_m(\mpcstatename)\)
+%is annotated as a return, then \(\pi_c(\mpcstatename) = (\underscore, \rts)\).
 
 %Extending this idea to coroutines, we use the same notion that there are
 %no ``false'' yields.
@@ -1986,8 +1986,8 @@ much the same as in StkTokens, just formalized a little differently.}
 %\definition A system enjoys {\em well-structured control flow} if for all
 %reachable states \(\mpcstatename\) and \(\mpcstatename'\) such that
 %\(\mpcstatename \stepstocon \mpcstatename'\), if
-%\(\pi_c(\mpcstatename) = (\_,\_,\_,\stackid)\) and \(\pi_m(\mpcstatename)\)
-%is annotated as a return, then \(\pi_c(\mpcstatename) = (\_,\_,\_,\stackid')\)
+%\(\pi_c(\mpcstatename) = (\underscore,\underscore,\underscore,\stackid)\) and \(\pi_m(\mpcstatename)\)
+%is annotated as a return, then \(\pi_c(\mpcstatename) = (\underscore,\underscore,\underscore,\stackid')\)
 %where \(\stackid \not = \stackid'\).
 
 \section{Case Study: Do Micro-Policies Enforce Stack Safety?}
@@ -2425,7 +2425,7 @@ very naturally.
 For any \(\MPCT \in \MPCT^*\), let \(\head(\MPCT) = \mach,\pol,\context\) and
 suppose that \(\last(\MPCT) = \mach',\pol',\context'\) and
 \((\mach',\pol',\context') \hookrightarrow \MPCT'\). Find the set of components
-that changed during the call, \(\components = \mathit{protected}(\context) \cap \Delta(\mach,\mach')\).
+that changed during the call, \(\components = \prot(\context) \cap \Delta(\mach,\mach')\).
 A system enjoys {\em deferred stepwise integrity} if for any \(\nach\) such that
 \(\mach' \approx_{\components'} \nach\) and its induced trace
 \((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\MPCT' \doteq \NPCT\).
@@ -2539,7 +2539,7 @@ let \(\head(\MPCT) = \mach,\pol,\context\).
 %
 Then, supposing that \(\last(\MPCT) = \mach',\pol',\context'\),
 let \(\components\) be the set of protected components that changed during
-the call, \(\components = \mathit{protected}(\context) \cap \Delta(\mach, \mach')\),
+the call, \(\components = \prot(\context) \cap \Delta(\mach, \mach')\),
 and let \((\mach,\pol',\context') \hookrightarrow \MPCT'\).
 A system enjoys {\em observational integrity} if for any \(\nach\) such that
 \(\mach' \approx_{\components'} \nach\), and its induced trace
@@ -2561,17 +2561,17 @@ be pairs of states. Their {\em unsafe set}, written
 \definition
 For any call trace \(\MPCT \in \MPCT^*\),
 let \(\head(\MPCT) = \mach,\pol,\context\) and
-\(\components = \mathit{secret}(\context)\).
+\(\components = \secret(\context)\).
 %
 A system enjoys {\em observational confidentiality} if for all
 \(\nach\) such that \(\mach \approx_\components \nach\) and
-\(\nach \hookrightarrow \NPCT | \mathit{brk}(\MPCT)\),
+\(\nach \hookrightarrow \NPCT | \brk(\MPCT)\),
 \(\MPCT\) and \(\NPCT\), the following conditions all hold:
 
 \begin{itemize}
 \item They are observationally equivalent, \(\obsof(\MPCT) = \obsof(\NPCT)\),
   meaning that no secrets leak during the call
-\item \(\mathit{brk}(\MPCT) ~ \last(\MPCT) \leftrightarrow \mathit{brk}(\MPCT) ~
+\item \(\brk(\MPCT) ~ \last(\MPCT) \leftrightarrow \brk(\MPCT) ~
 \last(\NPCT)\)---if one call returns, so does the other
 \item Assuming both calls return, let \(\last(\MPCT) = \mach',\pol',\context'\)
   and \(\pi_\mach(\last(\NPCT)) = \nach'\).
@@ -3005,15 +3005,15 @@ presented. \bcp{Too much space between the second and third.}
 \judgmentthree[ReturnRec]
               {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
               {\(\domMap'' = \mathit{pop} ~ \domMap' ~ |\rts|\)}
-              {\(\mach,(\domMap,\_::\rts) \stepsto_C \domMap'',\rts'\)}
+              {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'',\rts'\)}
 
 \vspace*{-3.5ex}
 \judgment[ Default]
          {}
-         {\(\_,\context \stepsto_C \context\)}
+         {\(\underscore,\context \stepsto_C \context\)}
 
-\definition Let the protected set of a context, \(\mathit{protected}_P(\domMap,\rts)\),
-be the set of components \(\component\) such that either \(\domMap ~ \component = \sealed{\_}\)
+\definition Let the protected set of a context, \(\prot_P(\domMap,\rts)\),
+be the set of components \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
 or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
 \(|\rts| > \depth'\).
 
@@ -3021,17 +3021,19 @@ or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
 For each of the stepwise, deferred, and observational versions of
 stack integrity in the simple model, the equivalent property in the
 passing model substitutes the above definitions of \(\context\), initial contexts and update
-function, and \(\mathit{protected}_P\) for their simple equivalents, and is otherwise identical.
+function, and \(\prot_P\) for their simple equivalents, and is otherwise identical.
+
+\definition Let the secret set of a context, \(\secret_P(\domMap,\rts)\),
+be the set of components \(\component\) such that
+\(\domMap ~ \component = \sealed{\underscore}\) or
+\(\domMap ~ \component = \passed{\depth,\depth'}\)
+where \(\depth \leq |\rts| \leq \depth'\).
 
 \definition
-For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\),
-let \(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \outside\) or \(\domMap ~ \component = \passed{\depth,\depth'}\)
-and \(\depth \leq |\rts| \leq \depth'\). A system enjoys
-\emph{stepwise stack confidentiality} if,
-for all \(\nach\) such that \(\mach \approx_\components \nach\) and
-\(\nach \hookrightarrow \NPCT | \neg f_{|\rts|}\),
-\(\MPCT \doteq \NPCT\).
+For both the stepwise and observational versions of stack confidentiality in
+the original model, the equivalent property in the passing model is the same after
+substituting the above definitions of \(\context\), initial contexts and update
+function, and \(\prot_P\) for their simple equivalents.
 
 \subsection{Coroutines}
 
@@ -3082,10 +3084,10 @@ to continue from where it left off. So, it is possible for a coroutine to claim 
 but not actually change the active stack, with similar effects to when a callee fails
 to return properly. Now we can define both stack safety and coroutine safety under this model.
 
-\definition Let the call-protected set of a context,
-\(\mathit{protected}_C(\domMap,\rtm,\yts,\stackid)\),
+\definition
+Let the call-protected set of a context, \(\prot_C(\domMap,\rtm,\yts,\stackid)\),
 be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid}{\sealed{\_}}\)
+\(\domMap ~ \component = \instack{\stackid}{\sealed{\underscore}}\)
 or \(\domMap ~ \component = \instack{\stackid}{\passed{\depth,\depth'}}\) and \(|\rtm ~ \stackid| < \depth\) or
 \(|\rtm ~ \stackid| > \depth'\).
 
@@ -3093,22 +3095,23 @@ or \(\domMap ~ \component = \instack{\stackid}{\passed{\depth,\depth'}}\) and \(
 For each of the stepwise, deferred, and observational versions of
 stack integrity in the simple model, the equivalent property in the
 passing model substitutes the above definitions of \(\context\), initial contexts and update
-function, and \(\mathit{protected}_C\) for their simple equivalents, and is otherwise identical.
+function, and \(\prot_C\) for their simple equivalents, and is otherwise identical.
 
-\definition Let the yield-protected set of a context,
-\(\mathit{protected}_Y(\domMap,\rtm,\yts,\stackid)\),
+\definition
+Let the yield-protected set of a context, \(\prot_Y(\domMap,\rtm,\yts,\stackid)\),
 be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid'}{\_}\) where \(\stackid \not = \stackid`\).
+\(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\).
 
 \definition
 We define {\em stepwise coroutine integrity} in the same way as stepwise stack integrity,
 substituting the above definitions of \(\context\), initial contexts and update
-function, and \(\mathit{protected}_Y\) for their equivalents. Likewise
+function, and \(\prot_Y\) for their equivalents. Likewise
 {\em deferred coroutine integrity} and {\em observational coroutine integrity} are defined
 in terms of their simple equivalents.
 
-\definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
-\(f_\depth ~ \mach ~ (\_, \rtm, \_, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
+\definition
+Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
+\(f_\depth ~ \mach ~ (\underscore, \rtm, \underscore, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
 For any reachable segment \(\MPCT \langle f_\depth \rangle\),
 let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
 \(\components\) be the set of components \(\component\) such that
@@ -3121,11 +3124,11 @@ Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
 such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
 
 \definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
-\(f_\depth ~ \mach ~ (\_, \rtm, \_, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
+\(f_\depth ~ \mach ~ (\underscore, \rtm, \underscore, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
 For any reachable segment \(\MPCT \langle f_\depth \rangle\),
 let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
 \(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid}{\_}\).
+\(\domMap ~ \component = \instack{\stackid}{\underscore}\).
 Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
 \(\nach \hookrightarrow \NPCT | \neg f_\depth\). A system enjoys
 {\em stepwise coroutine confidentiality} in the coroutine setting if for all
