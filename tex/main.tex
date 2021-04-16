@@ -360,9 +360,9 @@ recent work by \citet{Skorstengaard+19b,Skorstengaard+19}, which defines stack s
 properties:
 {\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
 Informally, LSE says that the contents of
-a caller's stack frame are not read and written while its callees (and their callees, etc.) are
+a caller's stack frame are not read or written while its callees (and their callees, etc.) are
 executing, and WBCF says that callees always
-return to the point just after their call (if they return at all).
+return to the instruction following their call (if they return at all).
 Skorstengaard et al.{} formalize these properties by defining an idealized
 machine in which they hold {\em by construction};
 they then show that an enforcement
@@ -399,75 +399,86 @@ machine.
 In the present work, we also aim to protect both stack data (like
 LSE) and
 control flow (like WBCF).  But our formulations of these properties are
-somewhat different from those of Skorstengaard et al.  Rather than
+rather different from those of Skorstengaard et al.  Instead of
 defining stack safety implicitly,
-as ``what a certain idealized machine does,'' our properties are
-based on the technical framework of language-based
+as ``what a certain idealized machine does,'' we define it
+\emph{explicitly} using the technical framework of language-based
 security\ifaftersubmission~\citep{??}\bcp{Maybe the Sabelfeld and Myers
   survey?}\fi.
 Our core properties are \emph{stepwise stack integrity},
 \emph{stepwise stack confidentiality}, and \emph{return to caller}.
-% \BCP{On consideration
-%   (especially in light of the weird ``C confuses A by returning directly to
-%   A instead of returning to B so that B can finish up some stuff before
-%   returning to A'' example\footnote{Actually, this example is not so weird.
-%   If C, the attacker, can return a {\em result} directly to A, who is
-%   expecting a result from B, then that is clearly bad!}), I
-% agree now that we should discuss WBCF.  It should be kept as distinct as
-% possible from the ``data safety'' part, since it is not really an
-% information flow property.  But our treatment of it is interestingly
-% different from StkTokens, because of our call annotations, and we should
-% discuss that.}
+%
+A key technical novelty in the definitions of confidentiality and integrity,
+compared to standard formulations from the security literature, is that they
+are ``nested'': {\em each} caller is guaranteed protection from its
+immediate callees (which, in turn, need protection from their immediate
+callees, etc.).
 
-\bcp{This para could be clearer.  (I can try to fix it later but I want to
-  keep reading now...)}In formalizing these security concepts, we treat {\em each} caller as needing
-protection from its immediate callees (which, in turn, need protection from
-their immediate callees, etc.).
-This approach is novel in that the
-confidentiality\bcp{only?} property applies to many nested sub-traces within a single execution,
-as opposed to traces of entire executions.
-{\em Integrity} says that each caller's local data is protected from
-modification by its callee(s),
-motivated by the reasoning principle that local data persists across a
-call.
+% This approach is novel in that the
+% confidentiality\bcp{only?} property applies to many nested sub-traces within a single execution,
+% as opposed to traces of entire executions.
+% {\em Integrity} says that each caller's local data is protected from
+% modification by callees,
+% motivated by the reasoning principle that local data persists across a
+% call.
 
-For the confidentiality and integrity properties, we consider two variants.
-The
-{\em stepwise} variants formalize the intuition that a caller's
-local data
-is never modified during a call. {\em Confidentiality} says that a caller's
-data is not leaked into its callee, and  that the callee cannot see uninitialized data.
-As a reasoning principle, confidentiality guarantees that the callee's
-behavior is determined only by a predictable interface (function arguments and
-register contents) that does not include the caller's
-local state or the uninitialized portion of the stack. This is formalized as a
-{\em noninterference}-style property that, rather than comparing pairs of whole program traces,
-compares a pair of sub-traces for each call, within other calls\bcp{?}. Once
-again
-{\em stepwise} describes the granularity of enforcement\bcp{?}: at every step of a call,
-changes in the state are independent of the caller's data.
+For the confidentiality and integrity properties, we consider both {\em
+  stepwise} and {\em extensional} variants.  The simpler {stepwise} variants
+formalize the intuition that a caller's local data is {\em never} read or
+modified during a call. The extensional variants allow a callee to read from
+from and write to their caller's stack frame, as long as nothing that they
+read affects their observable behavior and nothing they write affects the
+observable behavior of the caller after they return.  \bcp{Please check: is
+  that accurate?}
 
-Together, these properties capture roughly the same intuition as LSE, but
-they are somewhat stronger.
-First, we model returns as returns to a valid return target\bcp{that will
-  make no sense to the reader at this point}; an invalid return
-is treated as a mere jump within the callee, and does not grant access to the caller's
-data. So, even without WBCF, our stack safety properties rule out many control-flow attacks.
-The attacker in such an instance is permitted to ``return'' so long as it avoids
-violating the integrity and confidentiality of the caller.\bcp{ditto} Second, confidentiality
-contains\bcp{?} temporal protections that LSE does not necessarily address\bcp{?}. The intuition
-for LSE is that it protects the caller's stack frame, not necessarily memory that was
-previously allocated but now outside of the caller's frame. (Cheri-capability-based
-implementations of LSE {\em do} protect previously allocated data, typically by clearing
-it, but because it is a potential vector for leaking capabilities into the caller's frame,
-not as a goal of the property.\bcp{Oof.  We need to do better than that!})
+% {\em Confidentiality} says that a caller's
+% data is not leaked into its callee, and  that the callee cannot see uninitialized data.
+% As a reasoning principle, confidentiality guarantees that the callee's
+% behavior is determined only by a predictable interface (function arguments and
+% register contents) that does not include the caller's
+% local state or the uninitialized portion of the stack. This is formalized as a
+% {\em noninterference}-style property that, rather than comparing pairs of whole program traces,
+% compares a pair of sub-traces for each call, within other calls\bcp{?}. Once
+% again
+% {\em stepwise} describes the granularity of enforcement\bcp{?}: at every step of a call,
+% changes in the state are independent of the caller's data.
 
-To illustrate\bcp{IMO, this is not just an illustration; validating and
-  debugging a published enforcement mechanism is a top-level contribution.}
-the applicability of these properties, we perform randomized testing to
-validate that an existing enforcement mechanism does enforce them.
-\citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
-using tag-based \emph{micro-policies}~\citep{pump_oakland2015}, but offer no formal properties.
+% Together, these properties capture roughly the same intuition as LSE, but
+% they are somewhat stronger.
+% First, we model returns as returns to a valid return target\bcp{that will
+%   make no sense to the reader at this point}; an invalid return
+% is treated as a mere jump within the callee, and does not grant access to the caller's
+% data. So, even without WBCF, our stack safety properties rule out many control-flow attacks.
+% The attacker in such an instance is permitted to ``return'' so long as it avoids
+% violating the integrity and confidentiality of the caller.\bcp{ditto} Second, confidentiality
+% contains\bcp{?} temporal protections that LSE does not necessarily address\bcp{?}. The intuition
+% for LSE is that it protects the caller's stack frame, not necessarily memory that was
+% previously allocated but now outside of the caller's frame. (Cheri-capability-based
+% implementations of LSE {\em do} protect previously allocated data, typically by clearing
+% it, but because it is a potential vector for leaking capabilities into the caller's frame,
+% not as a goal of the property.\bcp{Oof.  We need to do better than that!})
+
+\bcp{I trimmed away a ton of text here that I thought was getting too much
+  into the weeds for the introduction.  However, in the process I lost the
+  explanation of how our properties are a bit stronger than LSE.  One way to
+put it back would be simply to add to the contributions a claim that we are
+a bit stronger than them, with a pointer to where we discuss this in detail.}
+
+To demonstrate the utility of our formal characterization, we use these
+properties to validate and improve an existing enforcement mechanism, the
+{\em stack-safety micro-policies} of~\citet{DBLP:conf/sp/RoesslerD18}.  We
+use QuickChick~\citep{Denes:VSL2014,Pierce:SF4}, a property-based testing
+tool for the Coq proof assistant, to generate many random programs and check
+that Roessler and Dehon's micro-policies correctly abort the ones that
+attempt to violate one of our properties; furthermore, we introduce several
+intentionally broken micro-policies and check that the testing framework is
+able to generate counterexamples that violate our properties but are not
+halted by the incorrect enforcement variants.  (Showing that the testing
+framework detects intentional bugs in enforcement mechanisms increases our
+confidence that it can also catch unknown ones, strengthening our confidence
+in the enforcement mechanism itself.\ifaftersubmission\bcp{Maybe that
+  sentence belongs in the testing section?}\fi)
+
 We test against their {\em Depth Isolation} micro-policy, in which memory cells within each stack
 frame are tagged with the identity of the function activation
 that owns the frame, and access to those locations is then gated
@@ -476,19 +487,11 @@ to intuitive notions of stack safety, and we argue that by describing its behavi
 we approach a reasonable stack-safety property that other micro-policies can be
 validated against.
 
-Randomized testing is a relatively low-cost way to validate a potential enforcement
-mechanism; it finds flaws in the enforcement fast enough to be integrated into the workflow
-of enforcement development \citep{TestingNI:ICFP}. To demonstrate that the testing adequately
-covers potentially erroneous programs, we test intentionally buggy policies alongside
-the real one. If we can catch known bugs, we gain confidence that we can catch unknown ones,
-strengthening the validation of the enforcement mechanism.
-
-One challenge in characterizing stack safety formally is that, in a low-level machine
-without built-in stacks, we are at the mercy\bcp{?} of architectural\bcp{?}
-choices that do not relate to the abstract notion of stack safety. Some implementations
-may have only a stack pointer while others add a frame pointer, in some systems return
-addresses and data live in separate stacks, and so on. We abstract over these choices
-as much as possible.
+% Randomized testing is a relatively low-cost way to validate a potential enforcement
+% mechanism; it finds flaws in the enforcement fast enough to be integrated into the workflow
+% of enforcement development \citep{TestingNI:ICFP}. To demonstrate that the testing adequately
+% covers potentially erroneous programs, we test intentionally buggy policies alongside
+% the real one.
 
 A second challenge is that enforcement mechanisms may weaken their
 protections\bcp{``weaken their protections'' doesn't convey what we mean
@@ -712,7 +715,17 @@ model run-time code generation.
 
 Our stack-safety properties depend
 critically on the notions of ``call'' and ``return,'' which are not fully explicit
-in machine code---the same instruction opcode may be used in some places as part of
+in machine code%
+%
+\footnote{\bcp{Some useful text: A major challenge in characterizing stack
+    safety formally is that, in a low-level machine without built-in stacks,
+    we are at the mercy\bcp{?} of architectural\bcp{?}  choices that do not
+    relate to the abstract notion of stack safety. Some implementations may
+    have only a stack pointer while others add a frame pointer, in some
+    systems return addresses and data live in separate stacks, and so on. We
+    abstract over these choices as much as possible.  }}%
+%
+---the same instruction opcode may be used in some places as part of
 a call or return sequence and in other places for other purposes.
 %
 So we assume we are given a machine language program {\em annotated} with the locations of
