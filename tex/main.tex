@@ -1371,14 +1371,7 @@ and {\tt z} as well as that of {\tt x}. This is to detect violations of so-calle
 temporal stack safety.
 In Figure~\ref{fig:conf2}, we watch as {\tt f} leaves behind a value in {\tt y}
 that corresponds to {\tt main}'s variable, {\tt x}. Then {\tt g} is able to access
-{\tt y} and hence {\tt x} without directly reading the stack pointer. In
-this case, {\tt g} branches on that value, which is a different way of
-violating lockstep confidentiality. Technically, this violation
-occurs because the program counter is also a component of the state that must change
-identically between the primary and variant traces. In a case where \(v_4 \not = 5\),
-the program counters will differ, breaking the lockstep.\apt{Is there any reason
-to complicate things like this by bringing in the PC?}\bcp{+1}
-
+{\tt y} and hence {\tt x} without even directly reading the stack pointer.
 
 \paragraph*{Control-Flow Attacks}
 \begin{figure}
@@ -2835,57 +2828,49 @@ which is carried over into the policy and context step functions.
 
 The ``observations-of'' operator, written \(\obsof\), takes a machine trace and
 creates a trace of observations corresponding to the observations of each step in
-the trace. It uses a coinductive helper \(\mathit{obsforward}\) that relates an
+the trace. It uses a coinductive helper \(\mathit{obsfor}\) that relates an
 initial observation, a machine-trace, and an observation trace:
 
-\judgmentthree{\(\mpcstatename \stepstocon[\obs'] \mpcstatename'\)}
-              {\(\mpcstatename' \hookrightarrow \MPCT\)}
-              {\(\mathit{obsforward} ~ \obs' ~ \MPCT = \obsT\)}
-              {\(\mathit{obsforward} ~ \obs ~ \mpcstatename \MPCT = \obs\obsT\)}%
-\judgment{}
-         {\(\mathit{obsforward} ~ \obs ~ \mpcstatename = \obs\)}
+\begin{minipage}[b]{.6\textwidth}
+  \judgmentthree{\(\mpcstatename \stepstocon[\obs'] \mpcstatename'\)}
+                {\(\mpcstatename' \hookrightarrow \MPCT\)}
+                {\(\mathit{obsfor} ~ \obs' ~ \MPCT = \obsT\)}
+                {\(\mathit{obsfor} ~ \obs ~ \mpcstatename \MPCT = \obs\obsT\)}%
+\end{minipage}
+\begin{minipage}[b]{.35\textwidth}
+  \judgment{}
+           {\(\mathit{obsfor} ~ \obs ~ \mpcstatename = \obs\)}
+\end{minipage}
 
 Then to take the observations from any particular trace, we start with a \(\tau\) observation:
 
-\judgment{\(\mathit{obsforward} ~ \tau ~ \MPCT = \obsT\)}
+\judgment{\(\mathit{obsfor} ~ \tau ~ \MPCT = \obsT\)}
          {\(\obsof(\MPCT) = \obsT\)}
 
 \paragraph*{Observational Similarity}
 
-We say that a trace of observations $\obsT_1$ is a prefix of $\obsT_2$
-as far as an external observer is concerned, written \(\obsT_1 \lesssim
-\obsT_2\), if the sequence of
-non-silent observations of $\obsT_1$ is a prefix of those of
-$\obsT_2$; that is, we operate up to deletion of \(\tau\) observations,
-coinductively:
+We say that a pair of observation traces $\obsT_1$ and $\obsT_2$ are {\em similar}
+as far as an external observer is concerned, written \(\obsT_1 \eqsim
+\obsT_2\), if the sequence of non-silent observations is the same. That is, we
+compare up to deletion of \(\tau\) observations, coinductively:
 
-\begin{minipage}{.3\textwidth}
-  \judgment{}{\(\obsT \lesssim \obsT\)}
+\begin{minipage}{.2\textwidth}
+  \judgment{}{\(\obsT \eqsim \obsT\)}
 \end{minipage}
-\begin{minipage}{.3\textwidth}
-  \judgment{}{\(\tau \lesssim \obsT\)}
+\begin{minipage}{.2\textwidth}
+  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
+           {\(\tau \obsT_1 \eqsim \obsT_2\)}
 \end{minipage}
-\begin{minipage}{.3\textwidth}
-  \judgment{}{\(w \lesssim w\obsT\)}
+\begin{minipage}{.2\textwidth}
+  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
+           {\(\obsT_1 \eqsim \tau \obsT_2\)}
 \end{minipage}
-
-\begin{minipage}{.3\textwidth}
-  \judgment{\(\obsT_1 \lesssim \obsT_2\)}
-           {\(\tau \obsT_1 \lesssim \obsT_2\)}
-\end{minipage}
-\begin{minipage}{.3\textwidth}
-  \judgment{\(\obsT_1 \lesssim \obsT_2\)}
-           {\(\obsT_1 \lesssim \tau \obsT_2\)}
-\end{minipage}
-\begin{minipage}{.3\textwidth}
-  \judgment{\(\obsT_1 \lesssim \obsT_2\)}
-           {\(w\obsT_1 \lesssim w\obsT_2\)}
+\begin{minipage}{.2\textwidth}
+  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
+           {\(\obs\obsT_1 \eqsim \obs\obsT_2\)}
 \end{minipage}
 
-\smallskip
-We then define similarity of observation traces as traces prefixing each other:
-\[\obsT_1 \simeq \obsT_2 \triangleq \obsT_1 \lesssim \obsT_2 \land \obsT_2 \lesssim \obsT_1\]
-%
+
 %\leo{I still don't know how to do this transition. Maybe contrast
 %with the ``perhaps surprisingly'' later?} Note that
 %similarity of observation traces could alternatively be defined coinductively,
@@ -2967,7 +2952,7 @@ must be protected from leaking for the remainder of the program.
 Together with return-after-call, these two properties give us
 {\em Observable Stack Safety}. This is a weaker property
 than the stepwise one, and also much more extensional.
-We can think of stepwise, deferred stepwise, and observational as
+We can think of stepwise, deferred, and observational as
 three points along a spectrum from eager to lazy. The first two
 are useful for understanding particular enforcement mechanisms,
 but if we had to choose a single property to represent stack safety,
