@@ -14,7 +14,7 @@
 %% use defaults for review submission.
 \acmJournal{PACMPL}
 \acmVolume{1}
-\acmNumber{SPLASH} % CONF = POPL or ICFP or OOPSLA
+\acmNumber{OOPSLA} % CONF = POPL or ICFP or OOPSLA
 \acmArticle{1}
 \acmYear{2021}
 \acmMonth{1}
@@ -478,7 +478,10 @@ observational): it violates the temporal aspect of confidentiality in
 corner cases where data can leak across repeated calls to the same callee.  We
 propose a variant of {\em Lazy Tagging and Clearing} that \emph{does} enforce
 confidentiality (as far as our testing can tell), albeit at some performance
-cost.  \bcp{Did Nick and Andre know about this deficiency?  Did they mention
+cost.
+%
+\ifaftersubmission
+\bcp{Did Nick and Andre know about this deficiency?  Did they mention
   it in their paper?  (If neither, we should make a bigger deal out of the
   fact that we discovered it.)\apt{Their paper is a little vague on this subject.
     They refer to ``temporal security properties'' as something to do with dangling
@@ -492,6 +495,7 @@ cost.  \bcp{Did Nick and Andre know about this deficiency?  Did they mention
   leave this issue to deal with later (in consultation with them, which we
   don't have time to do a good job of today).  At any rate, by my reading we
 are not saying anything incorrect at the moment.}
+\fi
 
 % A second challenge is that enforcement mechanisms may weaken their
 % protections\bcp{``weaken their protections'' doesn't convey what we mean
@@ -667,17 +671,22 @@ In summary, we offer the following contributions:
 
 \begin{itemize}
 \item We adapt concepts of integrity and confidentiality from language-based
-security to formalize a {\em stepwise stack-safety}
-property and argue that it captures the intuitive concept of strict stack
-safety~(\cref{sec:prelim,sec:lse}). We show that the definition can be
-extended to argument passing on the stack and to a simple coroutine system.
+security, combine these with an existing notion of well-bracketed
+control flow\bcp{need to mention this above} to formalize a {\em stepwise stack-safety}
+property, and argue that this property captures the intuitive concept of
+strict stack
+safety~(\cref{sec:prelim,sec:lse}).
 \item We use property-based randomized testing to check that this stepwise
 property is actually enforced by the {\em Depth Isolation} policy
 of~\citet{DBLP:conf/sp/RoesslerD18} (\cref{sec:enforcement,sec:testing}).
+\bcp{mention that we extend the ICFP gen-by-exec with nested stuff...}
 \item We formalize a
 weaker but more extensional \emph{observational} variant of the stack safety
 property that characterizes a refinement of Roessler and DeHon's more
 performant {\em Lazy Tagging and  Clearing} policy (\cref{sec:lazy}).
+\item We show that the definition can be
+extended to argument passing on the stack and to a simple coroutine system.
+\bcp{fill in pointer to new section}
 \end{itemize}
 
 We begin with a description of our setting (\cref{sec:setup}) and threat
@@ -937,13 +946,15 @@ execute the blessed sequence out of order.
 
 \begin{figure}
 
-\begin{subfigure}{.2\textwidth}
+\begin{subfigure}[t]{.2\textwidth}
 {\small
 \begin{verbatim}
 int main() {
   int x = 42;
   return f()+x;
 }
+
+
 
 int f() {
   int y;
@@ -953,7 +964,7 @@ int f() {
 \end{verbatim}
 }
 \end{subfigure}
-\begin{subfigure}{.5\textwidth}
+\begin{subfigure}[t]{.5\textwidth}
 {\small
 \begin{verbatim}
 1 main: add $1,%sp      ; allocate frame
@@ -971,7 +982,7 @@ int f() {
 \end{verbatim}
 }
 \end{subfigure}
-\begin{subfigure}{.25\textwidth}
+\begin{subfigure}[t]{.25\textwidth}
 \begin{center}
 \begin{tabular}{l l}
 {\tt 2} &
@@ -1009,11 +1020,7 @@ int f() {
 
 \vspace{\abovedisplayskip}
 \end{subfigure}
-\caption{An integrity violation\bcp{Can we align the C-like snippets with
-    the corresponding assembly?\apt{Maybe, but it would require adding blank lines
-      at places in both the C and asssembly, making them harder to read
-  and eating more space.}\bcp{I'm just talking about removing the space
-  above "main" in the left column and moving f down a bit.}}
+\caption{An integrity violation
 \ifaftersubmission\bcp{I wonder if we
     could make the figures easier to read by putting very light, differently
   colored backgrounds under the different parts}\fi}
@@ -1023,7 +1030,7 @@ int f() {
 This section introduces the intuition behind the properties through a series
 of examples. Existing stack safety enforcement work mostly refers directly to examples
 of bad behavior that it prevents; we will argue that: \bcp{Not sure this
-  enumeration is useful.}
+  enumeration is useful.}\apt{+1}
 
 \begin{itemize}
 \item examples that appear to violate stack safety violate at least one of our properties;
@@ -1073,13 +1080,15 @@ so the final return value produced by {\tt main} is wrong.
 instruction itself, so it is not sealed.)
 
 \begin{figure}
-\begin{subfigure}{.2\textwidth}
+\begin{subfigure}[t]{.2\textwidth}
 {\small
 \begin{verbatim}
 int main() {
   int x = 42;
   return f()+x;
 }
+
+
 
 int f() {
   int y,z;
@@ -1090,7 +1099,7 @@ int f() {
 \end{verbatim}
 }
 \end{subfigure}
-\begin{subfigure}{.5\textwidth}
+\begin{subfigure}[t]{.5\textwidth}
 {\small
 \begin{verbatim}
 1 main: add $1,%sp      ; allocate frame
@@ -1386,11 +1395,10 @@ that corresponds to {\tt main}'s variable, {\tt x}. Then {\tt g} is able to acce
 \paragraph*{Control-Flow Attacks}
 \begin{figure}
   \centering
-  \begin{subfigure}{.2\textwidth}
+  \begin{subfigure}[t]{.2\textwidth}
 {\footnotesize
 \begin{verbatim}
 int *stash = 0;
-
 int main() {
   int x = 1;
   f();
@@ -1398,6 +1406,7 @@ int main() {
   f();
   return x;
 }
+
 
 void f() {
   int y;
@@ -1412,7 +1421,7 @@ void f() {
 \end{verbatim}
 }
 \end{subfigure}
-  \begin{subfigure}{.4\textwidth}
+  \begin{subfigure}[t]{.4\textwidth}
 {\footnotesize
 \begin{verbatim}
    stash: .word 0
@@ -1437,7 +1446,7 @@ void f() {
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}{.25\textwidth}
+  \begin{subfigure}[t]{.25\textwidth}
     \begin{tabular}{l l l}
       {\tt 3} &
       \memoryaddrs{8em}
@@ -1906,7 +1915,7 @@ A system enjoys {\em return-to-caller} when, for every pair of reachable states
 
 \begin{figure}
   \centering
-  \begin{subfigure}{.2\textwidth}
+  \begin{subfigure}[t]{.2\textwidth}
 {\small
 \begin{verbatim}
 void main() {
@@ -1914,6 +1923,10 @@ void main() {
   x = f(x);
   return;
 }
+
+
+
+
 
 void f(int a) {
   int y = 2*a;
@@ -1923,7 +1936,7 @@ void f(int a) {
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}{.6\textwidth}
+  \begin{subfigure}[t]{.6\textwidth}
 {\small
 \begin{verbatim}
 1  main: add $1,%sp          ; allocate frame
@@ -1946,6 +1959,7 @@ void f(int a) {
 }
   \end{subfigure}
 \begin{subfigure}{.65\textwidth}
+\vspace*{0.2in}
 \begin{center}
 \begin{tabular}{l r | l}
   {\tt 3} &
