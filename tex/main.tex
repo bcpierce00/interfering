@@ -14,7 +14,7 @@
 %% use defaults for review submission.
 \acmJournal{PACMPL}
 \acmVolume{1}
-\acmNumber{SPLASH} % CONF = POPL or ICFP or OOPSLA
+\acmNumber{OOPSLA} % CONF = POPL or ICFP or OOPSLA
 \acmArticle{1}
 \acmYear{2021}
 \acmMonth{1}
@@ -353,7 +353,7 @@ are met by particular implementations.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
-The most abstract characterization stack safety that we are aware of is
+The most abstract characterization of stack safety that we are aware of is
 recent work by \citet{Skorstengaard+19b,Skorstengaard+19}, which defines stack safety as the conjunction of two
 properties:
 {\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
@@ -413,6 +413,7 @@ immediate callees (which, in turn, need protection from their immediate
 callees, etc.). They are also stronger than LSE; even in the absence of the
 control flow guarantees of {\em return to caller}, they guarantee callers'
 data safety in the face of control-flow attacks (see \cref{sec:control}).
+\rb{\cref{sec:RTC}?}
 This reflects a cleaner division between data protection and control-flow protection
 than offered by LSE and WBCF.
 
@@ -478,7 +479,10 @@ observational): it violates the temporal aspect of confidentiality in
 corner cases where data can leak across repeated calls to the same callee.  We
 propose a variant of {\em Lazy Tagging and Clearing} that \emph{does} enforce
 confidentiality (as far as our testing can tell), albeit at some performance
-cost.  \bcp{Did Nick and Andre know about this deficiency?  Did they mention
+cost.
+%
+\ifaftersubmission
+\bcp{Did Nick and Andre know about this deficiency?  Did they mention
   it in their paper?  (If neither, we should make a bigger deal out of the
   fact that we discovered it.)\apt{Their paper is a little vague on this subject.
     They refer to ``temporal security properties'' as something to do with dangling
@@ -492,6 +496,7 @@ cost.  \bcp{Did Nick and Andre know about this deficiency?  Did they mention
   leave this issue to deal with later (in consultation with them, which we
   don't have time to do a good job of today).  At any rate, by my reading we
 are not saying anything incorrect at the moment.}
+\fi
 
 % A second challenge is that enforcement mechanisms may weaken their
 % protections\bcp{``weaken their protections'' doesn't convey what we mean
@@ -549,6 +554,9 @@ values are passed in registers.  Later, we show how to refine the properties to 
 passing of scalar stack data, granting a callee access to the caller's
 data. (We do not consider more sophisticated forms of sharing, such as
 taking the address of a variable and treating it like a pointer.)
+\rb{But actually, this is discussed at some length is
+  \cref{sec:passing}, and it is the topic of \cref{fig:passing}.
+  Reaching that point after reading this disclaimer is confusing.}
 %
 Finally, we define integrity and confidentiality properties for a coroutine
 system with a static layout, in which each coroutine's stack is constrained
@@ -667,19 +675,21 @@ In summary, we offer the following contributions:
 
 \begin{itemize}
 \item We adapt concepts of integrity and confidentiality from language-based
-security to formalize a {\em stepwise stack-safety}
-property and argue that it captures the intuitive concept of strict stack
+security, combine these with an existing notion of well-bracketed
+control flow\bcp{need to mention this above} to formalize a {\em stepwise stack-safety}
+property, and argue that this property captures the intuitive concept of
+strict stack
 safety~(\cref{sec:prelim,sec:lse}).
 \item We use property-based randomized testing to check that this stepwise
 property is actually enforced by the {\em Depth Isolation} policy
 of~\citet{DBLP:conf/sp/RoesslerD18} (\cref{sec:enforcement,sec:testing}).
+\bcp{mention that we extend the ICFP gen-by-exec with nested stuff...}
 \item We formalize a
 weaker but more extensional \emph{observational} variant of the stack safety
 property that characterizes a refinement of Roessler and DeHon's more
 performant {\em Lazy Tagging and  Clearing} policy (\cref{sec:lazy}).
-\item We show that these definitions can be
-  extended to argument passing on the stack and to a simple coroutine system
-  (\cref{sec:ext}).
+\item We show that the definition can be
+extended to argument passing on the stack and to a simple coroutine system (\cref{sec:ext}).
 \end{itemize}
 
 We begin with a description of our setting (\cref{sec:setup}) and threat
@@ -939,13 +949,15 @@ execute the blessed sequence out of order.
 
 \begin{figure}
 
-\begin{subfigure}{.2\textwidth}
+\begin{subfigure}[t]{.2\textwidth}
 {\small
 \begin{verbatim}
 int main() {
   int x = 42;
   return f()+x;
 }
+
+
 
 int f() {
   int y;
@@ -955,7 +967,7 @@ int f() {
 \end{verbatim}
 }
 \end{subfigure}
-\begin{subfigure}{.5\textwidth}
+\begin{subfigure}[t]{.5\textwidth}
 {\small
 \begin{verbatim}
 1 main: add $1,%sp      ; allocate frame
@@ -973,7 +985,7 @@ int f() {
 \end{verbatim}
 }
 \end{subfigure}
-\begin{subfigure}{.25\textwidth}
+\begin{subfigure}[t]{.25\textwidth}
 \begin{center}
 \begin{tabular}{l l}
 {\tt 2} &
@@ -1011,11 +1023,7 @@ int f() {
 
 \vspace{\abovedisplayskip}
 \end{subfigure}
-\caption{An integrity violation\bcp{Can we align the C-like snippets with
-    the corresponding assembly?\apt{Maybe, but it would require adding blank lines
-      at places in both the C and asssembly, making them harder to read
-  and eating more space.}\bcp{I'm just talking about removing the space
-  above "main" in the left column and moving f down a bit.}}
+\caption{An integrity violation
 \ifaftersubmission\bcp{I wonder if we
     could make the figures easier to read by putting very light, differently
   colored backgrounds under the different parts}\fi}
@@ -1025,7 +1033,7 @@ int f() {
 This section introduces the intuition behind the properties through a series
 of examples. Existing stack safety enforcement work mostly refers directly to examples
 of bad behavior that it prevents; we will argue that: \bcp{Not sure this
-  enumeration is useful.}
+  enumeration is useful.}\apt{+1}
 
 \begin{itemize}
 \item examples that appear to violate stack safety violate at least one of our properties;
@@ -1075,13 +1083,15 @@ so the final return value produced by {\tt main} is wrong.
 instruction itself, so it is not sealed.)
 
 \begin{figure}
-\begin{subfigure}{.2\textwidth}
+\begin{subfigure}[t]{.2\textwidth}
 {\small
 \begin{verbatim}
 int main() {
   int x = 42;
   return f()+x;
 }
+
+
 
 int f() {
   int y,z;
@@ -1092,7 +1102,7 @@ int f() {
 \end{verbatim}
 }
 \end{subfigure}
-\begin{subfigure}{.5\textwidth}
+\begin{subfigure}[t]{.5\textwidth}
 {\small
 \begin{verbatim}
 1 main: add $1,%sp      ; allocate frame
@@ -1236,7 +1246,6 @@ to match as well.
 %at the beginning and trace changes through the execution.
 
 \begin{figure}
-
 \begin{subfigure}[t]{.2\textwidth}
   {\small
 \begin{verbatim}
@@ -1290,7 +1299,7 @@ int g() {
   {\tt 2} &
   \multicolumn{2}{c}{
     \memoryaddrs{8em}
-    \memory{4}{\unsealc}
+    \memory{3}{\unsealc}
     ~$\cdots$
 %    \MemoryLabel{-18em}{0.75em}{0}
 %    \MemoryLabel{-14em}{0.75em}{0}
@@ -1302,7 +1311,7 @@ int g() {
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
  % \MemoryLabel{-19em}{0.75em}{0}
 %  \MemoryLabel{-10em}{0.75em}{0}
@@ -1311,27 +1320,28 @@ int g() {
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{62}
-  \MemoryLabel{-10em}{0.75em}{105}
+  \MemoryLabel{-15em}{0.75em}{\(v_1\)}
+  \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
   {\tt 12} &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
  % \MemoryLabel{-19em}{0.75em}{0}
-  \MemoryLabel{-10em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{5}
 %  \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-10em}{0.75em}{\(5\)}
+  \MemoryLabel{-15em}{0.75em}{\(v_1\)}
+  \MemoryLabel{-6em}{0.75em}{\(5\)}
   \\
   {\tt 4} &
   \multicolumn{2}{c}{
@@ -1339,11 +1349,11 @@ int g() {
 %    \memory{4}{\unsealc}
     \memory{1}{\unsealc}
     \memory{1}{\retptrc}
-    \memory{2}{\unsealc}
+    \memory{1}{\unsealc}
     ~$\cdots$
-    \MemoryLabel{-18em}{0.75em}{5}
-    \MemoryLabel{-14em}{0.75em}{2}
-    \MemoryLabel{-10em}{0.75em}{5}
+    \MemoryLabel{-14em}{0.75em}{5}
+%    \MemoryLabel{-10em}{0.75em}{\(v_1\)}
+    \MemoryLabel{-6em}{0.75em}{5}
 %    \MemoryLabel{-7em}{0.75em}{0}
     \vspace{.5em}
   }
@@ -1352,20 +1362,20 @@ int g() {
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{5}
-  \MemoryLabel{-10em}{0.75em}{\bf 5}
+  \MemoryLabel{-15em}{0.75em}{5}
+  \MemoryLabel{-6em}{0.75em}{\bf 5}
  % \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{16em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
+  \memory{1}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{36}
-  \MemoryLabel{-10em}{0.75em}{\bf 8}
-  \MemoryLabel{-6em}{0.75em}{90}
+  \MemoryLabel{-15em}{0.75em}{\(v_3\)}
+  \MemoryLabel{-6em}{0.75em}{\(v_4\)}
+%  \MemoryLabel{-2em}{0.75em}{90}
   \\
 \end{tabular}
 \end{center}
@@ -1373,7 +1383,6 @@ int g() {
 \vspace{\abovedisplayskip}
 
 \end{subfigure}
-
 \caption{Another confidentiality violation}
 \label{fig:conf2}
 \end{figure}
@@ -1382,17 +1391,19 @@ It may be unclear in figure \ref{fig:conf1} why we vary the initial values of {\
 and {\tt z} as well as that of {\tt x}. This is to detect violations of so-called
 temporal stack safety.
 In Figure~\ref{fig:conf2}, we watch as {\tt f} leaves behind a value in {\tt y}
-that corresponds to {\tt main}'s variable, {\tt x}. Then {\tt g} is able to access
+that later becomes the value of {\tt main}'s variable {\tt x}. Then {\tt g} is able to access
 {\tt y} and hence {\tt x} without even directly reading the stack pointer.
+In the primary trace, {\tt z} will have the value 5, but in the variant it can have
+an arbitrary value $v_4$; since the variant can behave different from the primary,
+the policy again signals a confidentiality violation.
 
 \paragraph*{Control-Flow Attacks}
 \begin{figure}
   \centering
-  \begin{subfigure}{.2\textwidth}
+  \begin{subfigure}[t]{.2\textwidth}
 {\footnotesize
 \begin{verbatim}
 int *stash = 0;
-
 int main() {
   int x = 1;
   f();
@@ -1400,6 +1411,7 @@ int main() {
   f();
   return x;
 }
+
 
 void f() {
   int y;
@@ -1414,7 +1426,7 @@ void f() {
 \end{verbatim}
 }
 \end{subfigure}
-  \begin{subfigure}{.4\textwidth}
+  \begin{subfigure}[t]{.4\textwidth}
 {\footnotesize
 \begin{verbatim}
    stash: .word 0
@@ -1439,7 +1451,9 @@ void f() {
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}{.25\textwidth}
+%
+  \begin{subfigure}[t]{.2\textwidth}
+    \begin{center}
     \begin{tabular}{l l l}
       {\tt 3} &
       \memoryaddrs{8em}
@@ -1507,12 +1521,14 @@ void f() {
       \memory[1.2em]{1}{\mainsealc}
       \MemoryLabel{-1.2em}{0.75em}{\#6} \\
     \end{tabular}
+    \end{center}
+    \vspace{\abovedisplayskip}
   \end{subfigure}
-  \caption{A control-flow attack}
+  \caption{A control-flow attack.}
   \label{fig:controlflow}
 \end{figure}
 
-\label{sec:controlflow}
+\label{sec:controlflow} % RB: ???
 
 %From the classic stack smashing attack to return oriented programming,
 One of the most pernicious ways to attack the stack is by hijacking control flow.
@@ -1883,13 +1899,27 @@ in lockstep until it breaks at the final return.
 \subsection{Control Flow and Return-to-Caller}
 \label{sec:RTC}
 
-Together, integrity and confidentiality protect a caller's data until its callee returns
-to it. But it is possible that an intermediate caller is never returned to, but returned
-{\em past}, to a deeper caller. Fundamentally, this is a control-flow problem, not a
-data-protection problem. From that caller's perspective, it is no different from the
-callee diverging. But a lower level caller might have been relying on the intermediate
-caller to finish its computation, so it is worth protecting control flow even from
-attacks that do not violate data protections. We formalize this as {\em return-to-caller}.
+\BCP{We agreed that most or all of this belongs in Section 4...}Together,
+integrity and confidentiality protect a caller's data until its callee
+returns to it. However, it is possible that an intermediate caller is not
+returned {\em to}, but rather returned {\em past}, to some ancestor caller!
+For example, function $A$ calls function $B$, which in turn calls $C$, which
+returns directly to $A$ by resetting the stack pointer to $A$'s stack frame
+and branching to the address after the call from $A$ to $B$.  Strictly
+speaking, this is not an information-flow violation, since neither $A$'s nor
+$B$'s stack frames are improperly read or written by $C$.  But it is still
+arguably unsafe in general.  For example, suppose that $B$'s continuation
+after the call to $C$ takes $C$'s result, doubles it, and returns this to
+$A$.  If $A$'s correct behavior after the call to $B$ returns depends on the
+result it receives being a even number---i.e., $A$ is trusting that $B$'s
+continuation will execute after $C$ returns, perhaps because $A$ and $B$ are
+written by the same person while $C$ is an untrusted library---then $C$ can
+cause it to behave incorrectly, possibly even insecurely, by returning an
+odd result directly to $A$.
+%
+Thus, a formal definition of safe use of the stack should include the
+condition that calls and returns are {\em well bracketed}, e.g., $C$ should
+only return to $A$.  
 
 \definition
 A system enjoys {\em return-to-caller} when, for every pair of reachable states
@@ -1897,6 +1927,10 @@ A system enjoys {\em return-to-caller} when, for every pair of reachable states
 \(\mpcstatename' = (\_,\_,(\_,\rts'))\) such that
 \(\mpcstatename \stepsto \mpcstatename'\), if \(|\rts'| < |\rts|\), then
 \(|\rts'| = |\rts|\)
+
+\bcp{we probably want to remark that this notion is pretty
+much the same as in StkTokens, just formalized a little differently.}
+
 
 %\subsection{Well-bracketed Control Flow}
 %\label{sec:wbcf}
@@ -1945,17 +1979,18 @@ A system enjoys {\em return-to-caller} when, for every pair of reachable states
 % \leo{I am not sure we've hit the correct level of detail in this
 %   section.}\bcp{Agreed!}
 
-In this section we sketch an existing enforcement mechanism, {\em Depth
-Isolation}, from \citet{DBLP:conf/sp/RoesslerD18}, that implements the
-formal stack-safety property described in the previous section. (In
-fact, it enforces a slightly stronger, inductive version of that property which
-strengthens the local state encapsulation component by checking for
-integrity and confidentiality violations at every step of the callee's
-execution trace.) We validate this claim with a property-based
-testing framework that can quickly uncover inconsistencies between the
-enforcement mechanism and the stack-safety property.
+In this section we explore how an existing enforcement mechanism, {\em
+  Depth Isolation}, from \citet{DBLP:conf/sp/RoesslerD18} implements
+the formal stack-safety property described in the previous
+section. (In fact, it enforces a slightly stronger, inductive version
+of that property which strengthens the local state encapsulation
+component by checking for integrity and confidentiality violations at
+every step of the callee's execution trace.) We validate this claim
+with a property-based testing framework that can quickly uncover
+inconsistencies between the enforcement mechanism and the stack-safety
+property.
 
-\subsection*{A Conservative Stack-Safety Enforcement Mechanism}
+\subsection{A Conservative Stack-Safety Enforcement Mechanism}
 %
 The enforcement policy of \citeauthor{DBLP:conf/sp/RoesslerD18} relies
 on a programmable, tag-based reference monitor that runs alongside the
@@ -2004,6 +2039,7 @@ control that we do not need to consider here), and tags registers containing
 stack pointers with access permission information. The policy also
 uses tags on instructions to identify the code
 sequences that have permission to manage the stack, say during calls and returns.
+\leo{If we have the simple exposition so far, no need to mention the following sentence:}
 In the following, for ease of exposition, we will assume that no
 arguments are passed on the stack.
 %% \rb{Conceivably on alloc
@@ -2038,13 +2074,15 @@ caller to a callee or vice-versa:
   tag $\tagStackDepth{(n + 1)}$.
 
 \item From callee back to caller, when execution is about to reach a
-  return point.  The exit sequence retags all locations in the
-  function frame with $\tagNoDepth$. At the actual return instruction,
-  the $\PCname$ tag is decremented. \leo{Not sure the actual policy
-    does that now (retag unused). But I don't think it's a
-    confidentiality or integrity violation.}
-  \rb{Correct, and it doesn't. Some versions of the policy do clear
-    the stack, retagging would be easily added.}
+  return point.
+  %The exit sequence retags all locations in the function frame with $\tagNoDepth$.
+  At the actual return instruction,
+  the $\PCname$ tag is decremented.
+%  \leo{Not sure the actual policy
+%    does that now (retag unused). But I don't think it's a
+%    confidentiality or integrity violation.}
+%  \rb{Correct, and it doesn't. Some versions of the policy do clear
+%    the stack, retagging would be easily added.}
 
 \end{itemize}
 
@@ -2165,21 +2203,22 @@ rights than the caller, this is harmless.
 %% might also be so tagged, but as long as the jump has the effect of a legal
 %% return, it is OK.
 
-\subsection*{Validation through Random Testing}
+\subsection{Validation through Random Testing}
 \label{sec:testing}
 
-We validated the micro-policy of the previous section by systematically
-testing that it satisfies eager stack integrity and
+We validated the micro-policy of the previous section by
+systematically testing that it satisfies eager stack integrity and
 confidentiality. We used a Coq specification of the RISC-V
-architecture \leo{cite: https://github.com/mit-plv/riscv-coq} and
-extended it with a runtime monitor implementing the stack-safety
-micro-policy.\leo{Footnote: code will be made public}\bcp{For the reviewers?
- Or later?} We chose the
-Coq proof assistant as the setting for our implementation for two
-reasons: first, to ensure that our coinductive trace definitions are
-well-formed, and reason about them\leo{Do we prove anything
-  interesting anymore?}, and to leverage the power of the QuickChick
-property-based testing framework~\citep{Pierce:SF4}.
+architecture
+\footnote{Available at \url{https://github.com/mit-plv/riscv-coq}.}
+\leo{translated from Haskell via hs-2-coq?}  and extended it with a
+runtime monitor implementing the stack-safety
+micro-policy.\footnote{This code will be made public. \leo{More?}} We
+  chose the Coq proof assistant as the setting for our implementation
+  for two reasons: first, to ensure that our coinductive trace
+  definitions are well-formed, and reason about them\leo{Do we prove
+    anything interesting anymore?}, and to leverage the power of the
+  QuickChick property-based testing framework~\citep{Pierce:SF4}.
 
 To use QuickChick, we built random test-case generators that produce
 % \begin{enumerate}
@@ -2204,17 +2243,18 @@ by the compiler.
 
 \paragraph*{Generators}
 
-To write such generators we build on the work of \leo{ICFP 2013},
-where they introduced {\em generation by execution} to produce
-interesting programs. Generation by execution receives as an input a
-partially instantiated machine state and attempts to generate an
-instruction (or a sequence of instructions such as a blessed
-sequence) that makes sense locally (e.g., jumps go to a potentially valid
-code location and loads read from from a potentially valid stack
-location). Then
-we step the machine and repeat the process until we generate or
-execute some target number of instructions, or if we reach a point
-where the machine can't step anymore.
+To write such generators we build on the work of
+\citep{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, where they
+introduced {\em generation by execution} to produce progams leading
+abstract machines towards interesting behaviors. Generation by
+execution receives as an input a partially instantiated machine state
+and attempts to generate an instruction (or a sequence of instructions
+such as a blessed sequence) that makes sense locally (e.g., jumps go
+to a potentially valid code location and loads read from from a
+potentially valid stack location). Then we step the machine and repeat
+the process until we generate or execute some target number of
+instructions, or if we reach a point where the machine can't step
+anymore.
 
 We extended this technique to keep track of the control flow behavior of
 the program being generated: each time a call or return sequence is
@@ -2225,10 +2265,19 @@ introducing potentially ill-formed flows: that causes our programs
 to failstop when executed in conjunction with the policy monitor,
 but also allows for revealing errors in our setup.
 
+In addition, we needed to extend this technique to handle the nested
+nature of our confidentiality property: rather than generating two
+initial machines that are variant of one another and letting them
+execute to test for noninterference, we need to generate a new variant
+{\em every time a call is made} and check confidentiality for the
+subtrace produced from that variant state until its corresponding
+return. As a result, a ``single'' confidentiality test compactly
+checks the confidentiality of multiple nested calls.
+
 \paragraph*{Findings}
 
-To evaluate the effectiveness of testing against our formal properties, we
-used {\em mutation testing}\leo{cite}. In mutation testing, we inject errors
+To ensure the effectiveness of testing against our formal properties, we
+used {\em mutation testing}~\citep{JiaH11}. In mutation testing, we inject errors
 (mutations) in a program that should cause the property of interest (here,
 stack safety) to fail, and ensure that the testing framework can find
 them. The bugs we used for our evaluation were either artificially generated
@@ -2236,41 +2285,61 @@ by us (deliberately weakening the micro-policy in ways that we expected
 should break its guarantees), or actual bugs that we discovered through
 testing our implementation. We elaborate on some such bugs below.
 
-The mean-time-to-failure (MTTF) for various bugs can be found in \leo{Table
-  with numbers?}\bcp{Sure.}. All experiments were run in a \leo{Machine
-  spec}. \leo{Something like: There is really no baseline to compare this
-  against, but include it here for the future/reasons?}
+\begin{table}[]
+\centering
+\begin{tabular}{c|c|c}
+  Bug & Property Violated & MTTF (ms) \\
+  \hline
+      {\em LOAD\_NO\_CHECK}  & Confidentiality & 1670 \\
+      {\em STORE\_NO\_CHECK} & Integrity & 638 \\
+      {\em HEADER\_NO\_INIT} & Integrity & 1488 \\
+\end{tabular}
+\vspace*{1em}
+\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
+\vspace*{-2em}
+\label{tab:bug-table}
+\end{table}  
 
+The mean-time-to-failure (MTTF) for various bugs can be found in
+Table~\ref{tab:bug-table}. All experiments were run in a desktop
+machine equipped with i7-8700 CPU @ 3.20GHz with 32GB
+RAM. \leo{Something like: There is really no baseline to compare this
+  against, but include it here for the future/reasons?}
+%
 The artificially injected bugs focus on weakening the tag propagation
-and checking mechanism. \leo{Mention them all?}\bcp{Nah, especially if they
-  are all listed in the table.}
+and checking mechanism. 
 %
 For example, when loading from a stack location, the correct
 micro-policy needs to enforce that the tag on the location being read
 is $\tagStackDepth{n}$ for some number $n$ and that the one of the
 current $\PCname$ is $\tagPCDepth{n}$ for the same depth. We can relax
-that restriction by not checking the depth equality, or not checking
-the tags at all, causing bugs of different difficulty.
+that restriction by not checking the depth equality (row {\em
+  LOAD\_NO\_CHECK}).
 %
 Similarly, when storing to a stack location, the correct micro-policy
 needs to ensure that the tag on the memory location is either
 $\tagNoDepth$ or has again the same depth as the current $\PCname$
-tag. Relaxing these constraints also causes violations to the
-property.
+tag. Relaxing that constraints causes violations to the integrity
+property (row {\em STORE\_NO\_CHECK}).
 
 Naturally, testing also revealed a number of errors in our
 implementation of the enforcement mechanism (the original was written in C++
 and targeted ARM machine code
 %\bcp{right?}\leo{yeah}
-; we re-implemented it in Coq targeting
-RISC-V).  These errors ranged from trivial typos to
-ones that required an
-intriguingly complex setup to appear.  Notably, our first try at the
-blessed call sequence/policy combination did not initialize all
-locations for the newly allocated stack frame correctly, but left some
-of them as $\tagNoDepth$. This allowed for a potential integrity
-violation, but only if a rather complicated sequence of events
-occured: \leo{call - write - call (seal) - return - call - write?}
+; we re-implemented it in Coq targeting RISC-V).  These errors ranged
+from trivial typos to ones that required an intriguingly complex setup
+to appear.  The most interesting bug (included in the table as row
+{\em HEADER\_NO\_INIT}), in our first try the blessed call
+sequence/policy combination did not initialize all locations for the
+newly allocated stack frame correctly, but left some of them as
+$\tagNoDepth$. This allowed for a potential integrity violation, but
+only if a rather complicated sequence of events occured: in
+particular, the smallest counterexample requires calling a function,
+writing in the uninitialized location (which is always fine), calling
+another function (to seal what was written for integrity purposes),
+and then attempt to write in the same location again from the new
+callee, which is only allowed because the enforcement still thinks
+the location is unused, but violates the integrity of the caller's data.
 
 \section{Stack Safety for Lazy Enforcement}
 \label{sec:lazy}
@@ -2534,21 +2603,23 @@ Our properties have allowed us to reject an enforcement mechanism as
 not really stack safe, and describe a fix.
 
 \section{Extensions}
+\label{sec:ext}
 
-The model above elucidates the meaning of our properties, but it does not
-correspond well to realistic machine. And our properties are designed to
-support a wide range of architectural choices. We will demonstrate the
-flexibility of the formalism by extending it to two interesting settings.
-First, a subrouting model in which arguments are passed on the stack,
-and second, a very simple coroutine model.
+We have shown how our properties apply to an extremely simply
+subroutine model and validated them through randomized testing.
+But what about more realistic systems? We now demonstrate the
+flexibility of these core concepts as we extend
+the core concepts of stack safety to a system that models the passing of
+parameters on the stack, and then to a very simple coroutine model.
 
 \subsection{Parameters Passed on the Stack}
+\label{sec:passing}
 
 \newcommand{\mainpassc}{magenta}
 
 \begin{figure}
   \centering
-  \begin{subfigure}{.2\textwidth}
+  \begin{subfigure}[t]{.2\textwidth}
 {\small
 \begin{verbatim}
 void main() {
@@ -2556,6 +2627,10 @@ void main() {
   x = f(x);
   return;
 }
+
+
+
+
 
 void f(int a) {
   int y = 2*a;
@@ -2565,7 +2640,7 @@ void f(int a) {
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}{.6\textwidth}
+  \begin{subfigure}[t]{.6\textwidth}
 {\small
 \begin{verbatim}
 1  main: add $1,%sp          ; allocate frame
@@ -2588,6 +2663,7 @@ void f(int a) {
 }
   \end{subfigure}
 \begin{subfigure}{.65\textwidth}
+\vspace*{0.2in}
 \begin{center}
 \begin{tabular}{l r | l}
   {\tt 3} &
@@ -2690,11 +2766,10 @@ void f(int a) {
 
 \begin{figure}
   \centering
-  \begin{subfigure}{.2\textwidth}
+  \begin{subfigure}[t]{.2\textwidth}
 {\small
 \begin{verbatim}
 int *stash = 0;
-
 int main() {
   int x, y;
   f(x);
@@ -2702,6 +2777,10 @@ int main() {
   f(y);
   return x;
 }
+
+
+
+
 
 void f(int &a) {
   if(!stash)
@@ -2712,7 +2791,7 @@ void f(int &a) {
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}{.49\textwidth}
+  \begin{subfigure}[t]{.49\textwidth}
 {\small
 \begin{verbatim}
    stash: .word 0
@@ -2728,8 +2807,8 @@ void f(int &a) {
 10        sub $2,%sp      ; deallocate frame
 11        ret
 
-20 f:     cmp stash, $0   ; compare
-21        breq #13        ; branch if equal
+20 f:     cmp stash, $0   ; stash = 0? 
+21        breq #13        ; branch if so
 22        mov %ra,stash   ; stash = &a
 23        jmp #15
 24        mov $5, (stash) ; *stash = 5
@@ -2738,7 +2817,8 @@ void f(int &a) {
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}{.29\textwidth}
+  \begin{subfigure}[t]{.29\textwidth}
+    \begin{center}
     \begin{tabular}{l l}
       {\tt 20} &
       \memoryaddrs[(1)]{17em}
@@ -2780,17 +2860,18 @@ void f(int &a) {
       ~$\cdots$
       \MemoryLabel{-18em}{0.75em}{\bf 5}
 \end{tabular}
+\end{center}
+\vspace{\abovedisplayskip}
 \end{subfigure}
 \caption{A violation with pass-by-reference}
 \label{fig:passing}
 \end{figure}
 
-\label{sec:ext}
-
-Our simple model placed function parameters in registers, which by definition need no protection.
-We add two kinds of protected sharing: passing by value on the stack, and passing by reference.
-First we will explore some examples at the same level of detail as our earlier ones,
-and then move on to extending our formalization.
+To this point we have ignored function arguments, since our simplest model places them in
+registers. We now implement two kinds of protected
+sharing: passing by value on the stack, and passing by reference. First we will explore
+some examples at the same level of detail as our earlier ones, and then move on to
+extending our formalization.
 
 Example~\ref{fig:passingsimple} shows a sample trace of
 a program that passes a value on the stack, without an attack.
@@ -3016,7 +3097,6 @@ Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
 \(\nach \hookrightarrow \NPCT | \neg f_\depth\). A system enjoys
 {\em stepwise coroutine confidentiality} in the coroutine setting if for all
 such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
-
 
 \section{Related Work}
 \label{sec:relwork}
