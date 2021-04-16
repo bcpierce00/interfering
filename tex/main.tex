@@ -1066,7 +1066,7 @@ if a component is sealed before a step, it will be unchanged afterward. Stepwise
 refers to the fact that the property must hold on every step. %Later we will
 %loosen this condition in the interest of extensionality -- the caller only
 %cares about changes it can see after the return, not changes during execution.
-In this case, after instruction 8, {\tt f} has violated integrity by writing to {\tt x},
+In this case, after instruction 11, {\tt f} has violated integrity by writing to {\tt x},
 so the final return value produced by {\tt main} is wrong.
 %
 (The black rectangle represents the return address, which is saved by the call
@@ -1525,7 +1525,7 @@ return pointer away, and the second time it returns to instruction 3 instead of 
 up being called a third time, at which point it finally returns to instruction 5.
 
 Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that {\tt main} returns
--1. But because of {\tt f}'s interference, {\tt x} is negated twice, and {\tt main} returns 1.
+$-1$. But because of {\tt f}'s interference, {\tt x} is negated twice, and {\tt main} returns 1.
 This has the appearance of an integrity violation.  How do we capture this in our
 integrity property?
 
@@ -2519,11 +2519,13 @@ caller to a callee or vice-versa:
   the $\PCname$ tag is decremented. \leo{Not sure the actual policy
     does that now (retag unused). But I don't think it's a
     confidentiality or integrity violation.}
+  \rb{Correct, and it doesn't. Some versions of the policy do clear
+    the stack, retagging would be easily added.}
 
 \end{itemize}
 
 This discipline suffices to enforce local stack encapsulation.
-To implement it,  we define ``blessed'' instruction sequences
+To implement it,  we define blessed instruction sequences
 intended to appear at the entry and exit of each function,
 which manipulate tags as just described in addition to performing the
 usual calling convention tasks of saving/restoring the return address to/from
@@ -2663,7 +2665,7 @@ To use QuickChick, we built random test-case generators that produce
   % \item
 (2)
   an initial policy state, tagging instructions corresponding to
-  ``blessed'' call or return sequences appropriately, while marking
+  blessed call or return sequences appropriately, while marking
   all potential stack locations as $\tagNoDepth$, and
 % \item
 (3)
@@ -2682,7 +2684,7 @@ To write such generators we build on the work of \leo{ICFP 2013},
 where they introduced {\em generation by execution} to produce
 interesting programs. Generation by execution receives as an input a
 partially instantiated machine state and attempts to generate an
-instruction (or a sequence of instructions such as a ``blessed''
+instruction (or a sequence of instructions such as a blessed
 sequence) that makes sense locally (e.g., jumps go to a potentially valid
 code location and loads read from from a potentially valid stack
 location). Then
@@ -2740,7 +2742,7 @@ and targeted ARM machine code
 RISC-V).  These errors ranged from trivial typos to
 ones that required an
 intriguingly complex setup to appear.  Notably, our first try at the
-``blessed'' call sequence/policy combination did not initialize all
+blessed call sequence/policy combination did not initialize all
 locations for the newly allocated stack frame correctly, but left some
 of them as $\tagNoDepth$. This allowed for a potential integrity
 violation, but only if a rather complicated sequence of events
@@ -2759,7 +2761,10 @@ and reset them as it is destructed, as
 mitigate those costs, they propose a number of optimizations.
 
 First, they eliminate the initialization pass. In this {\em Lazy Tagging}
-system, the stack is initially tagged as ``clear.'' A function is permitted
+system, the stack is initially tagged as ``clear.''
+\rb{The previous section already presents ``unused'' as the default tag,
+though it doesn't say that it can be overwritten whenever}
+A function is permitted
 to overwrite clear memory, and when it does so its depth tag overwrites
 the clear tag, claiming the memory; the remainder of the policy functions
 as {\em Depth Isolation}. On return, the callee must clear its frame, which
@@ -2774,6 +2779,7 @@ to written memory. Then reads from the stack do still require $\PCname$
 tag and memory tag to match. Thus, even if a callee illicitly writes to
 a private location in its caller, the caller will eventually detect this
 if it ever tries to read from that location.
+\rb{This is in line with the level of detail in the last section.}
 %
 These \emph{lazy policies} admit more efficient implementations, but
 they deliberately allow violations of stack integrity temporarily,
@@ -2809,6 +2815,17 @@ Then if \(\last(\MPCT) = \mach',\pol',\context'\), let \(\components' = \Delta(\
 
 In short, if sealed components are modified during the call, the caller may not
 access their values. ``No reads after dangerous writes.''
+%
+For example, consider again the integrity violation in
+Figure~\ref{fig:int1}. Under a deferred discipline, the write to {\tt
+  x} in instruction 11 taints the variable but does not in itself
+constitute a violation, which happens only when the tainted value is
+read in instruction 4. However, if this instruction added the constant
+that was originally stored in {\tt x} without reading the variable,
+i.e., {\tt add \$42,\%ra}, deferred integrity would not be violated.
+\rb{Tried to give a quick example without being too disruptive.
+  However, having it follow the slogan seems to rob it of part of its
+  punch.}
 
 \subsection{Observability}
 
