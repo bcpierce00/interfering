@@ -423,13 +423,13 @@ callees, etc.).
 % call.
 
 For the confidentiality and integrity properties, we consider both {\em
-  stepwise} and {\em extensional} variants.  The simpler {stepwise} variants
-formalize the intuition that a caller's local data is {\em never} read or
-modified during a call. The extensional variants allow a callee to read from
-from and write to their caller's stack frame, as long as nothing that they
-read affects their observable behavior and nothing they write affects the
-observable behavior of the caller after they return.  \bcp{Please check: is
-  that accurate?}
+  stepwise} and {\em observational} variants.  The simpler {stepwise}
+variants formalize the intuition that a caller's local data is {\em never}
+read or modified during a call. The more extensional observational variants
+allow a callee to read from from and write to their caller's stack frame, as
+long as nothing that they read affects their observable behavior and nothing
+they write affects the observable behavior of the caller after they return.
+\bcp{Please check: is that accurate?}
 
 % {\em Confidentiality} says that a caller's
 % data is not leaked into its callee, and  that the callee cannot see uninitialized data.
@@ -478,61 +478,63 @@ framework detects intentional bugs in enforcement mechanisms increases our
 confidence that it can also catch unknown ones, strengthening our confidence
 in the enforcement mechanism itself.\ifaftersubmission\bcp{Maybe that
   sentence belongs in the testing section?}\fi)
+%
+We find that Roessler and Dehon's {\em Depth Isolation} micro-policy, in
+which memory cells within each stack frame are tagged with the identity of
+the function activation that owns the frame and access to those locations is
+then controlled by the activation that is currently executing, validates our
+stepwise properties.  On the other hand, their more efficient \emph{Lazy
+  Tagging and Clearing} policy enforces observational integrity, but testing
+reveals that it does not enforce confidentiality (either stepwise or
+observational): it violates of the temporal aspect of confidentiality in
+corner cases where data can leak across calls to the same callee.  We
+propose a variant of Lazy Tagging and Clearing that \emph{does} enforce
+confidentiality (as far as our testing can tell), albeit at some performance
+cost.  \bcp{Did Nick and Andre know about this deficiency?  Did they mention
+  it in their paper?  (If neither, we should make a bigger deal out of the
+  fact that we discovered it.)}
 
-We test against their {\em Depth Isolation} micro-policy, in which memory cells within each stack
-frame are tagged with the identity of the function activation
-that owns the frame, and access to those locations is then gated
-according to the activation that is currently executing. This is simple and corresponds
-to intuitive notions of stack safety, and we argue that by describing its behavior
-we approach a reasonable stack-safety property that other micro-policies can be
-validated against.
 
-% Randomized testing is a relatively low-cost way to validate a potential enforcement
-% mechanism; it finds flaws in the enforcement fast enough to be integrated into the workflow
-% of enforcement development \citep{TestingNI:ICFP}. To demonstrate that the testing adequately
-% covers potentially erroneous programs, we test intentionally buggy policies alongside
-% the real one.
+% A second challenge is that enforcement mechanisms may weaken their
+% protections\bcp{``weaken their protections'' doesn't convey what we mean
+%   very well}
+% in the name of efficiency, while arguing that they still capture stack safety in a meaningful sense.
+% \citet{DBLP:conf/sp/RoesslerD18} explore alternative micro-policies, with different
+% ways of identifying functions and deciding exactly which accesses are allowed.
+% These vary in their efficiency and in the spatial and temporal precision of their
+% security guarantees.
+% The Depth Isolation policy prevents a callee from writing outside its frame
+% at all, which is simple and intuitively correct, but it must manually clear the tags
+% on the frame on each return, which is very expensive. Conversely, their
+% \emph{Lazy Tagging and Clearing} policy improves
+% performance by assigning locations to the active function when they are written, which
+% permits  ``illicit'' writes to inaccessible stack frames so long as the
+% written locations are not subsequently read by their ``real'' owners. This violates our
+% straightforward properties, but ntuitively,
+% this form of laziness is justified if any dangerous writes will
+% ultimately be detected before they can affect program behavior.
 
-A second challenge is that enforcement mechanisms may weaken their
-protections\bcp{``weaken their protections'' doesn't convey what we mean
-  very well}
-in the name of efficiency, while arguing that they still capture stack safety in a meaningful sense.
-\citet{DBLP:conf/sp/RoesslerD18} explore alternative micro-policies, with different
-ways of identifying functions and deciding exactly which accesses are allowed.
-These vary in their efficiency and in the spatial and temporal precision of their
-security guarantees.
-The Depth Isolation policy prevents a callee from writing outside its frame
-at all, which is simple and intuitively correct, but it must manually clear the tags
-on the frame on each return, which is very expensive. Conversely, their
-\emph{Lazy Tagging and Clearing} policy improves
-performance by assigning locations to the active function when they are written, which
-permits  ``illicit'' writes to inaccessible stack frames so long as the
-written locations are not subsequently read by their ``real'' owners. This violates our
-straightforward properties, but ntuitively,
-this form of laziness is justified if any dangerous writes will
-ultimately be detected before they can affect program behavior.
+% \bcp{This discussion is getting too long for the intro.  Could it be trimmed.}
+% What does ``affecting program behavior'' really mean? This micro-policy
+% calls for a second characterization of stack safety in terms of the externally
+% observable behavior of a stack-safe system. Such a characterization will have the
+% additional benefit of being more {\em extensional}, concerned primarily with the
+% external behavior of the system. In contract, our stepwise properties are {\em intensional},
+% focusing on internal details that may not actually matter to overall security.
 
-\bcp{This discussion is getting too long for the intro.  Could it be trimmed.}
-What does ``affecting program behavior'' really mean? This micro-policy
-calls for a second characterization of stack safety in terms of the externally
-observable behavior of a stack-safe system. Such a characterization will have the
-additional benefit of being more {\em extensional}, concerned primarily with the
-external behavior of the system. In contract, our stepwise properties are {\em intensional},
-focusing on internal details that may not actually matter to overall security.
+% \bcp{Ditto, even moreso.}
+% To formalize this intuition, we develop an \emph{observational integrity} property which
+% characterizes enforcement mechanisms that detect violations between the point when
+% they occur and the point when they make an observable impact. Intuitively this property
+% can be phrased as ``no visible reads after dangerous writes.''  We prove (in Coq) that stepwise
+% integrity implies observational integrity. \sna{TODO: check this.}
 
-\bcp{Ditto, even moreso.}
-To formalize this intuition, we develop an \emph{observational integrity} property which
-characterizes enforcement mechanisms that detect violations between the point when
-they occur and the point when they make an observable impact. Intuitively this property
-can be phrased as ``no visible reads after dangerous writes.''  We prove (in Coq) that stepwise
-integrity implies observational integrity. \sna{TODO: check this.}
-
-We additionally sketch an associated {\em observational confidentiality} property
-makes confidentiality extensional in the same way, in order to form an
-{\em observational stack safety} that is highly extensional.
-We argue that, despite its somewhat greater complexity,
-it may be a better specification for
-stack safety enforcement mechanisms in general.
+% We additionally sketch an associated {\em observational confidentiality} property
+% makes confidentiality extensional in the same way, in order to form an
+% {\em observational stack safety} that is highly extensional.
+% We argue that, despite its somewhat greater complexity,
+% it may be a better specification for
+% stack safety enforcement mechanisms in general.
 
 %\apt{more to say?}\bcp{Yes---partly to underscore our claim that this is a
 %  significant contribution, and partly to give the reader some context for
@@ -542,28 +544,19 @@ stack safety enforcement mechanisms in general.
 %  such an evaluation is to see whether property-based testing against this
 %  spec can distinguish correct implementations of the mechanism from buggy
 %  ones...''}
-As it turns out, \citeauthor{DBLP:conf/sp/RoesslerD18}'s Lazy Tagging and
-Clearing micro-policy enforces observational integrity, but not confidentiality,
-whether stepwise or observational.
-But formalizing the ideal property allows us to see how it falls short -- a specific
-violation of the temporal aspect of confidentiality occurs in corner cases where callees
-can leak data between one another.
-We propose  a variant of Lazy Tagging and Clearing that we believe \emph{does} enforce
-confidentiality, albeit at some performance cost.  \bcp{Did Nick and Andre
-  know about this deficiency?  Did they mention it in their paper?  (If
-  neither, we should make a bigger deal out of the fact that we discovered it.)}
 
-Our initial description of these properties assumes a single simple stack with no sharing
-between callers and callees: all parameters and return values are passed in registers.  Later,
-we show how to refine it to allow passing of scalar stack data, granting a
-callee access to the caller's data. We do not model more sophisticated sharing,
-such as taking the address of a variable and treating it like a pointer.
-
-Finally, we define integrity and confidentiality properties for a coroutine system featuring
-a static layout, in which each coroutine's stack is constrained to a fixed region of memory.
-Though simplistic, this extension is a step toward concurrency and demonstrates that
-our approach is flexible enough to handle more sophisticated styles of
-control flow.
+Our first presentation of these properties assumes a single simple stack
+with no sharing between callers and callees: all parameters and return
+values are passed in registers.  Later, we show how to refine it to allow
+passing of scalar stack data, granting a callee access to the caller's
+data. We do not model more sophisticated sharing, such as taking the address
+of a variable and treating it like a pointer.
+%
+Finally, we define integrity and confidentiality properties for a coroutine
+system featuring a static layout, in which each coroutine's stack is
+constrained to a fixed region of memory.  Though simplistic, this extension
+is a step toward concurrency and demonstrates that our approach is flexible
+enough to handle more sophisticated styles of control flow.
 
 %% \paragraph*{The Use of Stack Safety}
 
