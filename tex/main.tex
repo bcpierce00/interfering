@@ -140,9 +140,9 @@
 %\apt{maybe: ``Stack safety is a testable security property''?}\bcp{That
 %  would sacrifice a lot of oomph for a little bit of precision, IMO.  Prefer
 %  to leave it out of the title but hit it strongly in the abstract.}%
-What does ``stack safety'' mean? The phrase is associated with a
+What exactly does ``stack safety'' mean? The phrase is associated with a
 variety of compiler,
-run-time, and hardware mechanisms for guarding against corruption of stack
+run-time, and hardware mechanisms for protecting stack
 memory.  But these mechanisms typically lack precise specifications,
 relying instead on informal descriptions and examples of bad
 behaviors that they prevent.
@@ -406,7 +406,9 @@ as ``what a certain idealized machine does,'' we define it
 security\ifaftersubmission~\citep{??}\bcp{Maybe the Sabelfeld and Myers
   survey?}\fi.
 Our core properties are \emph{stepwise stack integrity},
-\emph{stepwise stack confidentiality}, and \emph{return to caller}.
+\emph{stepwise stack confidentiality}, and \emph{return to caller}\BCP{I
+  gave it a name different from WBCF, but I could be talked out of that.  In
+any case, it now needs to be discussed / defined in several places below.}.
 %
 A key technical novelty in the definitions of confidentiality and integrity,
 compared to standard formulations from the security literature, is that they
@@ -669,31 +671,23 @@ enough to handle more sophisticated styles of control flow.
 In summary, we offer the following contributions:
 
 \begin{itemize}
-\item
-  We adapt formulations of integrity and confidentiality from language-based security
-  to formalize a parameterized {\em stepwise stack-safety} property and argue that it
-  captures the intuitive concepts of stack safety~(\cref{sec:lse}). Our model extends to
-  argument passing on the stack and to a simple coroutine system.
-\item
-  We use a property-based randomized testing framework to validate the claim
-  that this stepwise property is actually enforced by the {\em Depth Isolation} policy
-  of~\citet{DBLP:conf/sp/RoesslerD18}~(\cref{sec:testing}).
-\item
-  We formalize a weaker but more extensional \emph{observational} variant of the
-  stack safety property and argue that it accurately characterizes a small
-  refinement of
-  the {\em Lazy Tagging and Clearing} policy
-  of~\citet{DBLP:conf/sp/RoesslerD18}~(\cref{sec:lazy}).
+\item We adapt concepts of integrity and confidentiality from language-based
+security to formalize a parameterized\bcp{is that qualifier important?  what
+  are readers supposed to understand from it?} {\em stepwise stack-safety}
+property and argue that it captures the intuitive concept of stack
+safety~(\cref{sec:prelim,sec:lse}). We show that the definition can be
+extended to argument passing on the stack and to a simple coroutine system.
+\item We use property-based randomized testing to check that this stepwise
+property is actually enforced by the {\em Depth Isolation} policy
+of~\citet{DBLP:conf/sp/RoesslerD18} (\cref{sec:enforcement,sec:testing}), and we formalize a
+weaker but more extensional \emph{observational} variant of the stack safety
+property that characterizes a refinement of their {\em Lazy Tagging and
+  Clearing} policy (\cref{sec:lazy}).
 \end{itemize}
 
 We begin with a description of our setting (\cref{sec:setup}) and threat
-model (\cref{sec:threat}),
-then show how our properties apply to examples of stack unsafety
-(\cref{sec:running-example}). Then, after some technical preliminaries
-(\cref{sec:prelim}), we formalize the properties (\cref{sec:eager}\bcp{??}, \cref{sec:lazy})
-and describe testing (\cref{sec:testing})\bcp{The sections are out of order?}.
-\Cref{sec:relwork} discusses related work, and
-\cref{sec:future} sketches directions for future work.  \bcp{Where is 7?}
+model (\cref{sec:threat}), and an informal overview of our key ideas via
+examples (\cref{sec:running-example}). \Cref{sec:relwork,sec:future} discuss related and future work.
 
 \section{Setting}
 \label{sec:setup}
@@ -712,13 +706,14 @@ Our stack-safety properties depend
 critically on the notions of ``call'' and ``return,'' which are not fully explicit
 in machine code%
 %
-\footnote{\bcp{Some useful text: A major challenge in characterizing stack
-    safety formally is that, in a low-level machine without built-in stacks,
-    we are at the mercy\bcp{?} of architectural\bcp{?}  choices that do not
-    relate to the abstract notion of stack safety. Some implementations may
-    have only a stack pointer while others add a frame pointer, in some
-    systems return addresses and data live in separate stacks, and so on. We
-    abstract over these choices as much as possible.  }}%
+\footnote{\bcp{Some possibly useful text: A major challenge in
+    characterizing stack safety formally is that, in a low-level machine
+    without built-in stacks, we are at the mercy\bcp{?} of
+    architectural\bcp{?}  choices that do not relate to the abstract notion
+    of stack safety. Some implementations may have only a stack pointer
+    while others add a frame pointer, in some systems return addresses and
+    data live in separate stacks, and so on. We abstract over these choices
+    as much as possible.  }}%
 %
 ---the same instruction opcode may be used in some places as part of
 a call or return sequence and in other places for other purposes.
@@ -770,6 +765,13 @@ techniques.
 \section{Threat Model}
 \label{sec:threat}
 
+\bcp{I think we are not explicit enough about the sorts of threat situations
+  we imagine we are addressing.  A canonical example (that we could spell
+  out) is a developer who wants to call out to potentially buggy or
+  malicious libraries.  The library code is going to be linked with the
+  developer's in the same address space, but the developer wants her private
+  data to be protected from both reading/exfiltrating and overwriting...}
+
 Intuitively, stack safety means that the stack frame of each caller (and
 those of its ancestor callers) is protected
 from attempts by a confused or malicious callee (including all its
@@ -782,14 +784,13 @@ may be viewed in both ways.
 We adopt a strong threat model in which both caller and callee may execute
 arbitrary machine code. Hardware and timing attacks are out of scope.
 
-\paragraph*{Well-formedness and Bad Annotations}
-\bcp{What is ``well-formedness''??}
+\bcp{We should say explicitly that we do not address attacks on the heap
+  (cite Arthur's paper and say we believe it can be combined smoothly with
+  this), direct attacks on code (we assume that code can't be over written),
+etc.}
 
-\BCP{I believe we could delete this section---and never mention WBCF at all
-  (except to say that we leave it out, compared to STkTokens)---if we
-  eliminated return (and entry point) annotations.}
-\sna{I'm not sure we can escape questions about annotations, even if we have
-  just calls, but I tried to abbreviate it.}
+% \paragraph*{Well-formedness and Bad Annotations}
+% \bcp{What is ``well-formedness''??}
 
 Since we rely on call annotations\bcp{to...}, we must ask: what if the annotations
 are wrong? First, suppose a call occurs that is not annotated.
@@ -1598,12 +1599,13 @@ A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
 
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
-%
+
 \judgmenttwo{\(\mach \stepsto \mach'\)}{\((\mach, \pol)
                \polstep \pol'\)}
             {\(\mpstate{\mach}{\pol} \stepstopol
                \mpstate{\mach'}{\pol'}\)}
-%
+
+\noindent
 Note that the base machine has a total step function, while the policy-enhanced machine
 refines it to a partial function. The extra policy state never changes behavior,
 but it can cause
@@ -1708,20 +1710,23 @@ individual calls from a trace by taking subtraces in which the stack is
 at or below a given depth. If \(f\) is still a predicate on states, then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 ``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
+\bcp{We could save space by putting two of these on a line.  And,
+  throughout, we could save space and improve beauty by removing some of the
+vertical space between inference rules.}
 
 \begin{center}
-  \judgmenttwo[Now]
+  \judgmenttwo[ Now]
               {\(f ~ \mpcstatename\)}
               {\(\mpcstatename \hookrightarrow \MPCT | \neg f\)}
               {\(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\)}
 %
-  \judgmentthree[Skip]
+  \judgmentthree[ Skip]
                 {\(f ~ \mpcstatename\)}
                 {\(\mpcstatename \hookrightarrow \MPCT | \neg f\)}
                 {\(\last(\MPCT) \hookrightarrow \MPCT' \langle f \rangle\)}
                 {\(\mpcstatename \hookrightarrow \MPCT' \langle f \rangle\)}
 %
-  \judgmentthree[Search]
+  \judgmentthree[ Search]
                 {\(\neg f ~ \mpcstatename\)}
                 {\(\mpcstatename \hookrightarrow \MPCT | f\)}
                 {\(\last(\MPCT) \hookrightarrow \MPCT' \langle f \rangle\)}
@@ -1795,21 +1800,21 @@ annotated as calls, with a ``code map'' $\codemap \in \CODEMAPS \subseteq
 \WORDS$.
 \apt{Doesn't match previous definition any more.}
 
-\judgmentthree[Call]
+\judgmentthree[ Call]
               {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
               {\(\components = \sealcon ~ \mach\)}
               {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
                 {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
 \vspace*{-1ex}
-\judgmentthree[ReturnFound]
+\judgmentthree[ ReturnFound]
               {\(\mach \stepsto \mach' \in \target\)}
               {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
               {\(\domMap' = \domMap[\components \mapsto \unsealed]\)}
               {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
 
 \vspace*{-3.5ex}
-\judgment[Default]
+\judgment[ Default]
          {}
          {\(\_,\context \stepsto_C \context\)}
 
@@ -2179,6 +2184,7 @@ A call annotation now includes a predicate relating machine states to the compon
 that should be passed -- when passing by value, this will typically give the memory cells
 at the appropriate offset from the stack pointer, while passing by reference gives the
 addresses of the appropriate variables wherever they happen to be.
+\bcp{Several math displays in this section have too much space above...}
 
 \[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \callmap(P \subseteq \MACHS \times \COMPONENTS)\]
 
@@ -2216,19 +2222,19 @@ And to pop we just unseal the components at depth \(\depth\):
 \end{cases}\]
 
 Now we can inductively define the context update function; these again apply in the order
-presented.
+presented. \bcp{Too much space between the second and third.}
 
-\judgmenttwo[Call]
+\judgmenttwo[ Call]
             {\(\codemap ~ (\mach ~ \PCname) = \callmap(P)\)}
             {\(\domMap' = \mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ |\rts|\)}
             {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
-\judgmenttwo[ReturnFound]
+\judgmenttwo[ ReturnFound]
             {\(\mach \stepsto \mach' \in \target\)}
             {\(\domMap' = \mathit{pop} ~ \domMap ~ |\rts|\)}
             {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
 
-\judgment[Default]
+\judgment[ Default]
          {}
          {\(\_,\context \stepsto_C \context\)}
 
@@ -2281,7 +2287,7 @@ In our context update rules, calls and returns work the same as in the sharing m
 with domain updates restricted to the top-level domain corresponding to the active stack,
 and likewise using the return target stacks. We will omit these rules and focus on the new yield rule.
 
-\judgmentthreebr[Yield]
+\judgmentthreebr[ Yield]
                 {\(\codemap ~ (\mach ~ \PCname) = \yieldmap\)}
                 {\(\mach \stepsto \mach'\)}
                 {\(\stackid' = \stackof ~ (\mach'~ \rsp)\)}
@@ -2613,16 +2619,21 @@ well-formed, and reason about them\leo{Do we prove anything
   interesting anymore?}, and to leverage the power of the QuickChick
 property-based testing framework~\citep{Pierce:SF4}.
 
-To use QuickChick, we built random test-case generators that produce:
-\begin{enumerate}
-\item An initial RISC-V machine state, including most notably
-  the program to be executed.
-\item An initial policy state, tagging instructions corresponding to
+To use QuickChick, we built random test-case generators that produce
+% \begin{enumerate}
+% \item
+(1) an initial RISC-V machine state, including most notably
+  the program to be executed;
+  % \item
+(2)
+  an initial policy state, tagging instructions corresponding to
   ``blessed'' call or return sequences appropriately, while marking
-  all potential stack locations as $\tagNoDepth$.
-\item A code map and a stack map, accurately characterizing the behavior
+  all potential stack locations as $\tagNoDepth$, and
+% \item
+(3)
+ a code map and a stack map, accurately characterizing the behavior
   of callers and callees.
-\end{enumerate}
+% \end{enumerate}
 %
 That is, our generators need to produce not only a low-level program
 that exhibits interesting control-flow patterns, but also the policy
@@ -2689,8 +2700,8 @@ Naturally, testing also revealed a number of errors in our
 implementation of the enforcement mechanism (the original was written in C++
 and targeted ARM machine code\bcp{right?}; we re-implemented it in Coq targeting
 RISC-V).  These errors ranged from trivial typos to
-ones that required an 
-intriguingly complex setup to appear.  Notably, our first try at the 
+ones that required an
+intriguingly complex setup to appear.  Notably, our first try at the
 ``blessed'' call sequence/policy combination did not initialize all
 locations for the newly allocated stack frame correctly, but left some
 of them as $\tagNoDepth$. This allowed for a potential integrity
