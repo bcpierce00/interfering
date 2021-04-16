@@ -728,7 +728,7 @@ a call or return sequence and in other places for other purposes.
 So we assume we are given a machine language program {\em annotated} with the locations of
 instructions representing calls, and we determine when a return has occurred by tracking
 control flow and observing when we reach a {\em return target}. For a given state annotated
-as a call, in a standard calling convention, another state fulfils its return target if
+as a call, another state fulfils its return target under a standard calling convention if
 it has the same stack pointer and the program counter is at the instruction following
 the call, but we abstract over different conventions.
 %, returns, and function entry points\BCP{I
@@ -754,6 +754,8 @@ action that would violate the security property;
 our properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
+\apt{Suddenly we are talking about alternative enforcement mechanisms for the first time.
+  This surely needs \emph{some} foreshadowing in the abstract and intro?}
 Dividing policy state from machine state helps us reason about
 enforcement mechanisms that keep a significant amount of data separate from the
 primary execution data to inform security. Obviously tag-based systems do this,
@@ -1015,7 +1017,9 @@ int f() {
 \vspace{\abovedisplayskip}
 \end{subfigure}
 \caption{An integrity violation\bcp{Can we align the C-like snippets with
-    the corresponding assembly?}  \ifaftersubmission\bcp{I wonder if we
+    the corresponding assembly?\apt{Maybe, but it would require adding blank lines
+      at places in both the C and asssembly, making them harder to read
+  and eating more space.}}  \ifaftersubmission\bcp{I wonder if we
     could make the figures easier to read by putting very light, differently
   colored backgrounds under the different parts}\fi}
 \label{fig:int1}
@@ -1040,7 +1044,7 @@ The assembly code reflects a simple compilation model in which
 local variables are stored in the stack frame.
 For the moment, arguments and return values are passed in registers.
 The machine is word-addressed. The stack grows upward in
-memory and {\tt \$SP} points to the first unused word above the top of the stack.
+memory and {\tt \%sp} points to the first unused word above the top of the stack.
 The {\tt call} and {\tt ret} instructions push and pop the return address from the stack,
 implicitly adjusting the stack pointer.
 At the right of each example, we show the layout of stack memory just before
@@ -1197,8 +1201,8 @@ int f() {
 \label{fig:conf1}
 \end{figure}
 
-Meanwhile, confidentiality intuitively states that a callee is unaware\bcp{??}
-of the context of its call (except for its arguments and any global
+Meanwhile, confidentiality intuitively states that a callee is insensitive to 
+the context of its call (except for its arguments and any global
 variables).
 We state this as a kind of {\em noninterference} property~\citep{??}.
 Noninterference describes knowledge: it states that for system components
@@ -1222,10 +1226,10 @@ has behaved differently than the primary, violating confidentiality.
 This form of confidentiality we will term {\em stepwise confidentiality}, defined informally
 as: for any state at the entry to a function, for any variant over the values in the stack,
 the primary state and its variant will step in lockstep until they return. To step in lockstep
-means that if both states step -- that is, neither the primary nor the variant failstops --
-any {\em system component} (such as memory cell, register, program counter) that changes
-in one step has a matching value at the end of the other step. And when we
-extend the model with a notion of external output, values that are outputted will need
+means that if both states step---that is, neither the primary nor the variant failstops---any
+{\em system component} (such as memory cell, register, program counter) that changes
+in one step has a matching value at the end of the other step. When we later
+extend the model with a notion of observable output, values that are emitted will need
 to match as well.
 
 %\bcp{Remove this para?}We alternatively could imagine a version of stepwise confidentiality in which we explicitly
@@ -1410,8 +1414,8 @@ to complicate things like this by bringing in the PC?}\bcp{+1}
 \paragraph*{Control-Flow Attacks}
 \begin{figure}
   \centering
-  \begin{subfigure}{.3\textwidth}
-{\small
+  \begin{subfigure}{.2\textwidth}
+{\footnotesize
 \begin{verbatim}
 int *stash = 0;
 
@@ -1436,32 +1440,32 @@ void f() {
 \end{verbatim}
 }
 \end{subfigure}
-  \begin{subfigure}{.65\textwidth}
-{\small
+  \begin{subfigure}{.4\textwidth}
+{\footnotesize
 \begin{verbatim}
    stash: .word 0
-1  main:  add $1,%sp        ; allocate frame
-2         mov $1,-1(%sp)    ; initialize x
+1  main:  add $1,%sp     ; alloc frame
+2         mov $1,-1(%sp) ; init x
 3         call f
-4         neg -1(%sp)       ; x = -x
+4         neg -1(%sp)    ; x = -x
 5         call f
-6         mov -1(%sp),%ra   ; set return value
-7         sub $1,%sp        ; deallocate frame
+6         mov -1(%sp),%ra ; set ret val
+7         sub $1,%sp     ; dealloc frame
 6         ret
 
-10 f:     add $1,%sp        ; allocate frame
-11        cmp stash, $0     ; compare
-12        breq #15          ; branch if equal
-13        mov -2(%sp),stash ; update stash
+10 f:     add $1,%sp     ; alloc frame
+11        cmp stash, $0  ; stash = 0? 
+12        breq #15       ; branch if so
+13        mov -2(%sp),stash ; set stash
 14        jmp #17
-15        mov stash,-2(%sp) ; retrieve stash
+15        mov stash,-2(%sp) ; get stash
 16        mov $0,stash
-17        sub $1,%sp        ; deallocate frame
+17        sub $1,%sp     ; dealloc frame
 18        ret
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}{.4\textwidth}
+  \begin{subfigure}{.25\textwidth}
     \begin{tabular}{l l l}
       {\tt 3} &
       \memoryaddrs{8em}
@@ -1477,8 +1481,9 @@ void f() {
       \MemoryLabel{-15em}{0.75em}{1}
       \MemoryLabel{-11em}{0.75em}{\#4}
       \vspace{.5em} &
-      \memory[3em]{1}{\mainsealc}[Target]%
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#4}
+      \hspace*{-1.5em}
+      \memory[1.2em]{1}{\mainsealc}[Target]%
+      \MemoryLabel{-2.2em}{0.75em}{\#4}
       \\
       {\tt 4} &
       \memoryaddrs{8em}
@@ -1492,8 +1497,9 @@ void f() {
       ~$\cdots$
       \MemoryLabel{-15em}{0.75em}{-1}
       \MemoryLabel{-11em}{0.75em}{\#6} &
-      \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6}
+      \hspace*{-1em}
+      \memory[1.2em]{1}{\mainsealc}
+      \MemoryLabel{-1.2em}{0.75em}{\#6}
       \\
       {\tt 18} &
       \memoryaddrs{12em}
@@ -1503,8 +1509,9 @@ void f() {
       ~$\cdots$
       \MemoryLabel{-15em}{0.75em}{-1}
       \MemoryLabel{-11em}{0.75em}{\#4} &
-      \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6}
+      \hspace*{-1em}
+      \memory[1.2em]{1}{\mainsealc}
+      \MemoryLabel{-1.2em}{0.75em}{\#6}
       \\
       {\tt 4} &
       \memoryaddrs{8em}
@@ -1512,8 +1519,9 @@ void f() {
       \memory{2}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-15em}{0.75em}{-1} &
-      \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6}
+      \hspace*{-1em}
+      \memory[1.2em]{1}{\mainsealc}
+      \MemoryLabel{-1.2em}{0.75em}{\#6}
       \\
       {\tt 5} &
       \memoryaddrs{8em}
@@ -1521,22 +1529,19 @@ void f() {
       \memory{2}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-15em}{0.75em}{\bf 1} &
-      \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6} \\
+      \hspace*{-1em}
+      \memory[1.2em]{1}{\mainsealc}
+      \MemoryLabel{-1.2em}{0.75em}{\#6} \\
     \end{tabular}
   \end{subfigure}
-  \caption{A control-flow attack \bcp{wonder if we can cram the bottom part
-      onto the same row as the rest.  Might need to make things smaller,
-      spill into the margin, etc., but we really need the space.  (Another
-      option is to make it a separate figure and flow text around it, but
-      this will save less space.)}}
+  \caption{A control-flow attack}
   \label{fig:controlflow}
 \end{figure}
 
 %From the classic stack smashing attack to return oriented programming,
 One of the most pernicious ways to attack the stack is by hijacking control flow.
 Our stack safety properties do not assume that control flow follows a typical structure
-of matching sets calls and returns nested within on another.
+of matching sets of calls and returns nested within on another.
 Rather, they aim to capture what it means to protect data even in the presence of control-flow attacks.
 Consider example \ref{fig:controlflow}.
 Here we show return addresses explicitly as line numbers, in the form $\#n$.
