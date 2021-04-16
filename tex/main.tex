@@ -713,7 +713,7 @@ a call or return sequence and in other places for other purposes.
 So we assume we are given a machine language program {\em annotated} with the locations of
 instructions representing calls, and we determine when a return has occurred by tracking
 control flow and observing when we reach a {\em return target}. For a given state annotated
-as a call, in a standard calling convention, another state fulfils its return target if
+as a call, another state fulfils its return target under a standard calling convention if
 it has the same stack pointer and the program counter is at the instruction following
 the call, but we abstract over different conventions.
 %, returns, and function entry points\BCP{I
@@ -739,6 +739,8 @@ action that would violate the security property;
 our properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
+\apt{Suddenly we are talking about alternative enforcement mechanisms for the first time.
+  This surely needs \emph{some} foreshadowing in the abstract and intro?}
 Dividing policy state from machine state helps us reason about
 enforcement mechanisms that keep a significant amount of data separate from the
 primary execution data to inform security. Obviously tag-based systems do this,
@@ -1000,7 +1002,9 @@ int f() {
 \vspace{\abovedisplayskip}
 \end{subfigure}
 \caption{An integrity violation\bcp{Can we align the C-like snippets with
-    the corresponding assembly?}  \ifaftersubmission\bcp{I wonder if we
+    the corresponding assembly?\apt{Maybe, but it would require adding blank lines
+      at places in both the C and asssembly, making them harder to read
+  and eating more space.}}  \ifaftersubmission\bcp{I wonder if we
     could make the figures easier to read by putting very light, differently
   colored backgrounds under the different parts}\fi}
 \label{fig:int1}
@@ -1025,7 +1029,7 @@ The assembly code reflects a simple compilation model in which
 local variables are stored in the stack frame.
 For the moment, arguments and return values are passed in registers.
 The machine is word-addressed. The stack grows upward in
-memory and {\tt \$SP} points to the first unused word above the top of the stack.
+memory and {\tt \%sp} points to the first unused word above the top of the stack.
 The {\tt call} and {\tt ret} instructions push and pop the return address from the stack,
 implicitly adjusting the stack pointer.
 At the right of each example, we show the layout of stack memory just before
@@ -1182,8 +1186,8 @@ int f() {
 \label{fig:conf1}
 \end{figure}
 
-Meanwhile, confidentiality intuitively states that a callee is unaware\bcp{??}
-of the context of its call (except for its arguments and any global
+Meanwhile, confidentiality intuitively states that a callee is insensitive to 
+the context of its call (except for its arguments and any global
 variables).
 We state this as a kind of {\em noninterference} property~\citep{??}.
 Noninterference describes knowledge: it states that for system components
@@ -1207,10 +1211,10 @@ has behaved differently than the primary, violating confidentiality.
 This form of confidentiality we will term {\em stepwise confidentiality}, defined informally
 as: for any state at the entry to a function, for any variant over the values in the stack,
 the primary state and its variant will step in lockstep until they return. To step in lockstep
-means that if both states step -- that is, neither the primary nor the variant failstops --
-any {\em system component} (such as memory cell, register, program counter) that changes
-in one step has a matching value at the end of the other step. And when we
-extend the model with a notion of external output, values that are outputted will need
+means that if both states step---that is, neither the primary nor the variant failstops---any
+{\em system component} (such as memory cell, register, program counter) that changes
+in one step has a matching value at the end of the other step. When we later
+extend the model with a notion of observable output, values that are emitted will need
 to match as well.
 
 %\bcp{Remove this para?}We alternatively could imagine a version of stepwise confidentiality in which we explicitly
@@ -1395,8 +1399,8 @@ to complicate things like this by bringing in the PC?}\bcp{+1}
 \paragraph*{Control-Flow Attacks}
 \begin{figure}
   \centering
-  \begin{subfigure}{.3\textwidth}
-{\small
+  \begin{subfigure}{.2\textwidth}
+{\footnotesize
 \begin{verbatim}
 int *stash = 0;
 
@@ -1421,32 +1425,32 @@ void f() {
 \end{verbatim}
 }
 \end{subfigure}
-  \begin{subfigure}{.65\textwidth}
-{\small
+  \begin{subfigure}{.4\textwidth}
+{\footnotesize
 \begin{verbatim}
    stash: .word 0
-1  main:  add $1,%sp        ; allocate frame
-2         mov $1,-1(%sp)    ; initialize x
+1  main:  add $1,%sp     ; alloc frame
+2         mov $1,-1(%sp) ; init x
 3         call f
-4         neg -1(%sp)       ; x = -x
+4         neg -1(%sp)    ; x = -x
 5         call f
-6         mov -1(%sp),%ra   ; set return value
-7         sub $1,%sp        ; deallocate frame
+6         mov -1(%sp),%ra ; set ret val
+7         sub $1,%sp     ; dealloc frame
 6         ret
 
-10 f:     add $1,%sp        ; allocate frame
-11        cmp stash, $0     ; compare
-12        breq #15          ; branch if equal
-13        mov -2(%sp),stash ; update stash
+10 f:     add $1,%sp     ; alloc frame
+11        cmp stash, $0  ; stash = 0? 
+12        breq #15       ; branch if so
+13        mov -2(%sp),stash ; set stash
 14        jmp #17
-15        mov stash,-2(%sp) ; retrieve stash
+15        mov stash,-2(%sp) ; get stash
 16        mov $0,stash
-17        sub $1,%sp        ; deallocate frame
+17        sub $1,%sp     ; dealloc frame
 18        ret
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}{.4\textwidth}
+  \begin{subfigure}{.25\textwidth}
     \begin{tabular}{l l l}
       {\tt 3} &
       \memoryaddrs{8em}
@@ -1462,8 +1466,9 @@ void f() {
       \MemoryLabel{-15em}{0.75em}{1}
       \MemoryLabel{-11em}{0.75em}{\#4}
       \vspace{.5em} &
-      \memory[3em]{1}{\mainsealc}[Target]%
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#4}
+      \hspace*{-1.5em}
+      \memory[1.2em]{1}{\mainsealc}[Target]%
+      \MemoryLabel{-2.2em}{0.75em}{\#4}
       \\
       {\tt 4} &
       \memoryaddrs{8em}
@@ -1477,8 +1482,9 @@ void f() {
       ~$\cdots$
       \MemoryLabel{-15em}{0.75em}{-1}
       \MemoryLabel{-11em}{0.75em}{\#6} &
-      \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6}
+      \hspace*{-1em}
+      \memory[1.2em]{1}{\mainsealc}
+      \MemoryLabel{-1.2em}{0.75em}{\#6}
       \\
       {\tt 18} &
       \memoryaddrs{12em}
@@ -1488,8 +1494,9 @@ void f() {
       ~$\cdots$
       \MemoryLabel{-15em}{0.75em}{-1}
       \MemoryLabel{-11em}{0.75em}{\#4} &
-      \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6}
+      \hspace*{-1em}
+      \memory[1.2em]{1}{\mainsealc}
+      \MemoryLabel{-1.2em}{0.75em}{\#6}
       \\
       {\tt 4} &
       \memoryaddrs{8em}
@@ -1497,8 +1504,9 @@ void f() {
       \memory{2}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-15em}{0.75em}{-1} &
-      \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6}
+      \hspace*{-1em}
+      \memory[1.2em]{1}{\mainsealc}
+      \MemoryLabel{-1.2em}{0.75em}{\#6}
       \\
       {\tt 5} &
       \memoryaddrs{8em}
@@ -1506,22 +1514,19 @@ void f() {
       \memory{2}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-15em}{0.75em}{\bf 1} &
-      \memory[3em]{1}{\mainsealc}
-      \MemoryLabel{-3em}{0.75em}{\(\PCname\) = \#6} \\
+      \hspace*{-1em}
+      \memory[1.2em]{1}{\mainsealc}
+      \MemoryLabel{-1.2em}{0.75em}{\#6} \\
     \end{tabular}
   \end{subfigure}
-  \caption{A control-flow attack \bcp{wonder if we can cram the bottom part
-      onto the same row as the rest.  Might need to make things smaller,
-      spill into the margin, etc., but we really need the space.  (Another
-      option is to make it a separate figure and flow text around it, but
-      this will save less space.)}}
+  \caption{A control-flow attack}
   \label{fig:controlflow}
 \end{figure}
 
 %From the classic stack smashing attack to return oriented programming,
 One of the most pernicious ways to attack the stack is by hijacking control flow.
 Our stack safety properties do not assume that control flow follows a typical structure
-of matching sets calls and returns nested within on another.
+of matching sets of calls and returns nested within on another.
 Rather, they aim to capture what it means to protect data even in the presence of control-flow attacks.
 Consider example \ref{fig:controlflow}.
 Here we show return addresses explicitly as line numbers, in the form $\#n$.
@@ -1571,9 +1576,8 @@ which are either addresses or register names (\(\reg\)) drawn from some set
 program counter {\PCname} and the stack pointer \(\SP\).
 A {\em machine state} is a map from components to values.
 %
-    \[\component \in \COMPONENTS ::= \WORDS + \REGS \]
-%
-    \[\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
+    \[\component \in \COMPONENTS ::= \WORDS + \REGS  \hspace{1in} 
+    \mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
 %
 We have a total step function between machine states, written \(\mach \stepsto \mach'\).
 
@@ -1583,7 +1587,7 @@ states \(\pol \in \POLS\) and a policy step function \((\mach, \pol) \polstep \p
 \MACHS \times \POLS \rightharpoonup \POLS\). This step function is partial;
 it is undefined on input configurations that correspond to a policy fault. The policy
 can see the machine state, but cannot modify it. The policy also provides a
-well-formedness condition, \(\WF (\mpstatename \in \MACHS \times \POLS)\), describing
+well-formedness predicate, \(\WF \subseteq \MACHS \times \POLS\), describing
 initial states that are properly configured.
 %
 A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
@@ -1605,14 +1609,14 @@ premature termination, representing failstop behavior.
 
 \subsection{Contexts}
 
-Separate from the machine state, we will keep track of additional context
+Separate from the machine state, we keep track of additional context
 information representing the history of the run. This has no influence on execution, it merely
 describes information relevant to the particular property. Different information is needed
 for different versions of the model, so the definitions are parameterized
 over an arbitrary set of context states, \(\CONTEXTS\), annotations \(\ANNS\),
 an initial context state \(\context_0 \in \CONTEXTS\), and a context step function
 \(\mach, \context \constep \context' \in \MACHS \times \CONTEXTS
-\times \rightarrow \CONTEXTS\). We also assume the existence of a \emph{code map},
+\rightarrow \CONTEXTS\). We also assume the existence of a \emph{code map},
 \(\codemap \in \WORDS \rightharpoonup \ANNS\)
 that relates each code address to its annotation, if any.
 We lift contexts into an MP trace in much the same way as we lifted policy states to get
@@ -1698,25 +1702,29 @@ running \(\mpcstatename\) up to \(f\)''):
 
 \paragraph*{Context Segments}
 
+\apt{Some words have been lost here.}
 individual calls from a trace by taking subtraces in which the stack is
 at or below a given depth. If \(f\) is still a predicate on states, then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 ``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
-\bcp{We could save space by putting two of these on a line.  And,
-  throughout, we could save space and improve beauty by removing some of the
+\bcp{Throughout, we could save space and improve beauty by removing some of the
 vertical space between inference rules.}
 
 \begin{center}
+\begin{minipage}{.38\textwidth}
   \judgmenttwo[ Now]
               {\(f ~ \mpcstatename\)}
               {\(\mpcstatename \hookrightarrow \MPCT | \neg f\)}
               {\(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\)}
+\end{minipage}
 %
+\begin{minipage}{.58\textwidth}
   \judgmentthree[ Skip]
                 {\(f ~ \mpcstatename\)}
                 {\(\mpcstatename \hookrightarrow \MPCT | \neg f\)}
                 {\(\last(\MPCT) \hookrightarrow \MPCT' \langle f \rangle\)}
                 {\(\mpcstatename \hookrightarrow \MPCT' \langle f \rangle\)}
+\end{minipage}
 %
   \judgmentthree[ Search]
                 {\(\neg f ~ \mpcstatename\)}
@@ -1730,7 +1738,7 @@ vertical space between inference rules.}
 We often want to quantify over all traces from any initial state so that our
 properties apply to the system as a whole. We say that a state \(\mpcstatename'\)
 is {\em reachable} if for some initial state \(\mpcstatename = \mach,\pol,\context_0\)
-where \(\WF ~ \mach,\pol\), \(\mpcstatename \hookrightarrow \MPCT\)
+where \((\mach,\pol) \in \WF\), \(\mpcstatename \hookrightarrow \MPCT\)
 and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
 such that from some similarly well-formed initial state \(\mpcstatename\),
 \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
@@ -1834,7 +1842,7 @@ nested: we will quantify over subtraces that represent whole calls. For each suc
 subtrace, we will quantify over {\em variants} of its initial state. Then we require
 that the original, {\em primary} traces move in {\em lockstep} with the variant.
 
-\definition \(\MPCT^*\) is the set of all traces of calls, defined as
+\definition \(\MPCT^*\) is the set of all \emph{call traces}, defined as
 \[\begin{aligned}
 \bigcup_{\depth \in \mathbb{Z}} \{\MPCT | \MPCT\langle f_\depth \rangle
 \text{ is a reachable segment}\} \hspace{1em} &
@@ -1845,18 +1853,18 @@ that the original, {\em primary} traces move in {\em lockstep} with the variant.
 written \(\mach \approx_\components \nach\), if, for
 all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\).
 
-\definition Let \(\Delta(\mach,\mach')\) be the set of set of components \(\component\)
+\definition The \emph{difference} of two machine states \(\mach\) and \(\mach'\), written \(\Delta(\mach,\mach')\),
+is the set of components \(\component\)
 such that \(\mach ~ \component \not = \mach' ~ \component\).
 
-\definition Between two pairs of states \((\mach,\mach')\) and \((\nach,\nach')\), we
-say that they {\em lock} if for all components \(\components\) in
+\definition Two pairs of states \((\mach,\mach')\) and \((\nach,\nach')\)
+ {\em change together}, written \((\mach,\mach') \diamond (\nach,\nach')\), if, for all components \(\component\) in
 \(\Delta(\mach,\mach') \cup \Delta(\nach,\nach')\),
-\(\mach' ~ \component = \nach' ~ \component\). We write this \((\mach,\mach') \diamond
-(\nach,\nach')\).
+\(\mach' ~ \component = \nach' ~ \component\). 
 
-\definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep}
-if their adjacent pairs of states change together. We will represent this relation with
-\(\machT \doteq \nachT\). We define it as a coinductive relation:
+\definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep},
+written \(\machT \doteq \nachT\), 
+if their adjacent pairs of states change together.  We define this as a coinductive relation:
 
 \begin{minipage}{.3\textwidth}
 \judgment{}
@@ -1880,6 +1888,7 @@ for all \(\nach\) such that \(\mach \approx_\components \nach\) and
 
 \vspace{\belowdisplayskip}
 
+\apt{This is way better up until the final definition, which still needs more unpacking in words.}
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the components in \(\components\), and in addition their subtraces are also in
 \(\MPCT^*\), and therefore confidentiality must hold on them separately. \(\NPCT\)
@@ -2160,7 +2169,7 @@ passed, and our diagram displays it in magenta. Our notion of domains is extende
 to include \(\passed{\depth,\depth'}\), recording two depths. We note the
 current depth of the active function next to the stack pointer in the diagram, for reference.
 The argument {\tt a} has
-its value copied from {\tt x}, and we note that {\tt f} can read it -- because it is marked
+its value copied from {\tt x}, and we note that {\tt f} can read it---because it is marked
 as passed between depths 0 and 1, it is not varied. Then at instruction 13 it is even
 modified, and naturally this is permitted as well.
 
@@ -2172,7 +2181,7 @@ as seen in Figure~\ref{fig:passing}. In this example, written in C++ notation,
 {\tt f} again passing a reference to {\tt y}.
 We would expect that the first call to {\tt f} might modify
 {\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
-{\tt x} in the second call. (Incidentally, this is perfectly compilable C++!)
+{\tt x} in the second call. (Incidentally, this is perfectly compilable C++, although its behavior is undefined.)
 
 To avoid cluttering the picture at the assembly level, we revert to assuming that the
 argument {\tt a} is passed in a register, namely {\tt \%ra}.
@@ -2211,21 +2220,16 @@ of those variables may be dynamic (as in the case of pass-by-reference).
 A call annotation now includes a predicate relating machine states to the components
 that should be passed -- when passing by value, this will typically give the memory cells
 at the appropriate offset from the stack pointer, while passing by reference gives the
-addresses of the appropriate variables wherever they happen to be.
-\bcp{Several math displays in this section have too much space above...}
-
+addresses of the appropriate variables wherever they happen to be.\apt{Why can't
+  these also be given as offsets from stack pointer (as in the example)?}
 \[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \callmap(P \subseteq \MACHS \times \COMPONENTS)\]
-
 And we extend the set of domains to include passed components,
 which are labeled with the range of depths of the caller that has passed them.
-
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \passed{\depth,\depth'}\]
 \[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
 \times (\rts \in \listT (\target \subseteq \MACHS)) \]
-
 We straightforwardly describe how the sealing convention and passing predicate combine to
 update a domain map when pushing it, where \(\depth\) is an integer depth.
-
 \[(\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) ~ \component =
 \begin{cases}
   \sealed{\depth}              & \text{if } \domMap ~ \component = \unsealed \text{ and }
