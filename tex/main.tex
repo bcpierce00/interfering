@@ -148,11 +148,12 @@ relying instead on informal descriptions and examples of bad
 behaviors that they prevent.
 
 We propose a formal characterization
-of stack safety, phrased using concepts from language-based security: a
+of stack safety, formulated with concepts from language-based security: a
 combination of an integrity property (``the private
 state in each caller's stack frame is held invariant by the callee'')
-and a confidentiality property (``the callee's behavior is insensitive to the
-caller's private state'')\bcp{and something about WBCF...}.
+a confidentiality property (``the callee's behavior is insensitive to the
+caller's private state''), and a well-bracketedness property (``each
+callee returns control to its immediate caller'').
 % These properties are sensible even in the presence of
 % abnormal control flow.\apt{Is this important enough to mention here?}
 % BCP: I think not in the abstract, but maybe in the intro.
@@ -161,14 +162,14 @@ caller's private state'')\bcp{and something about WBCF...}.
 % ``well-bracketed control flow'' that restricts control flow to the
 % typical pattern of matched calls and returns.
 %
-We use our characterization to validate the stack-safety ``micro-policies''
-proposed by~\citet{DBLP:conf/sp/RoesslerD18}.
-Specifically, we use property-based random testing to check that Roessler
-and Dehon's ``eager'' micro-policy, which catches violations as early as
-possible, enforces a simple ``stepwise'' variant of our properties (and
-detects several broken variants), and that a slightly repaired version of
-their more performant ``lazy'' micro-policy corresponds to weaker and more
-extensional variants of the properties.
+We use these properties to validate the stack-safety ``micro-policies''
+proposed by~\citet{DBLP:conf/sp/RoesslerD18}.  Specifically, we check (with
+property-based random testing) that Roessler and Dehon's ``eager''
+micro-policy, which catches violations as early as possible, enforces a
+simple ``stepwise'' variant of our properties and correctly detects several
+broken variants, and that (a repaired version of) their more performant
+``lazy'' micro-policy corresponds to a slightly weaker and more extensional
+variant of our properties.
 %
 % \BCP{I still don't think the next sentence really nails it.  And (sigh) I am
 %   still not really clear yet on whether our definition applies / might apply
@@ -354,19 +355,20 @@ are met by particular implementations.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
-The most abstract characterization stack safety that we are aware of is in
-recent work by \citet{Skorstengaard+19}, which defines stack safety as the conjunction of two
+The most abstract characterization stack safety that we are aware of is
+recent work by \citet{Skorstengaard+19b,Skorstengaard+19}, which defines stack safety as the conjunction of two
 properties:
 {\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
 Informally, LSE says that the contents of
-a caller's stack frame are not read and written while its callees (and their callees, etc.) are
+a caller's stack frame are not read or written while its callees (and their callees, etc.) are
 executing, and WBCF says that callees always
-return to the point just after their call (if they return at all).
+return to the instruction following their call (if they return at all).
 Skorstengaard et al.{} formalize these properties by defining an idealized
 machine in which they hold {\em by construction};
 they then show that an enforcement
 mechanism (in their case, hardware capabilities) guarantees stack safety, by
-proving that an ordinary machine with enforcement can simulate the idealized machine.
+proving that an ordinary machine with enforcement simulates the idealized
+machine.
 %an enforcement mechanism (in their case, hardware
 %capabilities)
 %can then be shown to guarantee stack safety by exhibiting a fully abstract
@@ -394,137 +396,145 @@ proving that an ordinary machine with enforcement can simulate the idealized mac
 %% the bad behaviors we associate with unsafe stack behavior, but weak enough that
 %% other reasonable enforcement mechanisms can enforce it.
 
-In the present work, we also distinguish between protecting stack data (like
+In the present work, we also aim to protect both stack data (like
 LSE) and
-control flow (like WBCF).  But our formulations of both properties are
-somewhat different from those of Skorstengaard et al.  Rather than
+control flow (like WBCF).  But our formulations of these properties are
+rather different from those of Skorstengaard et al.  Instead of
 defining stack safety implicitly,
-as ``what a certain idealized machine does,'' we formalize explicit properties
-based on the technical framework of language-based
+as ``what a certain idealized machine does,'' we define it
+\emph{explicitly} using the technical framework of language-based
 security\ifaftersubmission~\citep{??}\bcp{Maybe the Sabelfeld and Myers
   survey?}\fi.
-Our core properties are \emph{stepwise stack integrity} and
-\emph{stepwise stack confidentiality}.  WBCF is a desireable property, but
-we can express safety in an information-flow sense without reference to it,
-even safety from attacks that hijack control flow.  \BCP{On consideration
-  (especially in light of the weird ``C confuses A by returning directly to
-  A instead of returning to B so that B can finish up some stuff before
-  returning to A'' example\footnote{Actually, this example is not so weird.
-  If C, the attacker, can return a {\em result} directly to A, who is
-  expecting a result from B, then that is clearly bad!}), I
-agree now that we should discuss WBCF.  It should be kept as distinct as
-possible from the ``data safety'' part, since it is not really an
-information flow property.  But our treatment of it is interestingly
-different from StkTokens, because of our call annotations, and we should
-discuss that.}
+Our core properties are \emph{stepwise stack integrity},
+\emph{stepwise stack confidentiality}, and \emph{return to caller}.
+%
+A key technical novelty in the definitions of confidentiality and integrity,
+compared to standard formulations from the security literature, is that they
+are ``nested'': {\em each} caller is guaranteed protection from its
+immediate callees (which, in turn, need protection from their immediate
+callees, etc.).
 
-\bcp{This para could be clearer.  (I can try to fix it later but I want to
-  keep reading now...)}In formalizing these security concepts, we treat {\em each} caller as needing
-protection from its callee (which, in turn, needs protection from its
-callee, etc.).
-This is novel in that the
-confidentiality property applies to many nested sub-traces within a single execution,
-as opposed to traces of entire executions.
-{\em Integrity} says that each caller's local data is protected from
-modification by its callee(s),
-motivated by the reasoning principle that local data persists across a call. Its
-{\em stepwise} interpretation\bcp{We're introducing ``stepwise'' in a pretty
-abrupt way---potentially confusing.} formalizes this very naturally: a caller's local data
-is never modified during a call. {\em Confidentiality} says that a caller's
-data is not leaked into its callee, and  that the callee cannot see uninitialized data.
-As a reasoning principle, confidentiality guarantees that the callee's
-behavior is determined only by a predictable interface (function arguments and
-register contents) that does not include the caller's
-local state or the uninitialized portion of the stack. This is formalized as a
-{\em noninterference}-style property that, rather than comparing pairs of whole program traces,
-compares a pair of sub-traces for each call, within other calls\bcp{?}. Once
-again
-{\em stepwise} describes the granularity of enforcement\bcp{?}: at every step of a call,
-changes in the state are independent of the caller's data.
+% This approach is novel in that the
+% confidentiality\bcp{only?} property applies to many nested sub-traces within a single execution,
+% as opposed to traces of entire executions.
+% {\em Integrity} says that each caller's local data is protected from
+% modification by callees,
+% motivated by the reasoning principle that local data persists across a
+% call.
 
-Together, these properties capture roughly the same intuition as LSE, but
-they are somewhat stronger.
-First, we model returns as returns to a valid return target\bcp{that will
-  make no sense to the reader at this point}; an invalid return
-is treated as a mere jump within the callee, and does not grant access to the caller's
-data. So, even without WBCF, our stack safety properties rule out many control-flow attacks.
-The attacker in such an instance is permitted to ``return'' so long as it avoids
-violating the integrity and confidentiality of the caller.\bcp{ditto} Second, confidentiality
-contains\bcp{?} temporal protections that LSE does not necessarily address\bcp{?}. The intuition
-for LSE is that it protects the caller's stack frame, not necessarily memory that was
-previously allocated but now outside of the caller's frame. (Cheri-capability-based
-implementations of LSE {\em do} protect previously allocated data, typically by clearing
-it, but because it is a potential vector for leaking capabilities into the caller's frame,
-not as a goal of the property.\bcp{Oof.  We need to do better than that!})
+For the confidentiality and integrity properties, we consider both {\em
+  stepwise} and {\em observational} variants.  The simpler {stepwise}
+variants formalize the intuition that a caller's local data is {\em never}
+read or modified during a call. The more extensional observational variants
+allow a callee to read from from and write to their caller's stack frame, as
+long as nothing that they read affects their observable behavior and nothing
+they write affects the observable behavior of the caller after they return.
+\bcp{Please check: is that accurate?}
 
-To illustrate\bcp{IMO, this is not just an illustration; validating and
-  debugging a published enforcement mechanism is a top-level contribution.}
-the applicability of these properties, we perform randomized testing to
-validate that an existing enforcement mechanism does enforce them.
-\citet{DBLP:conf/sp/RoesslerD18} describe how to protect the stack
-using tag-based \emph{micro-policies}~\citep{pump_oakland2015}, but offer no formal properties.
-We test against their {\em Depth Isolation} micro-policy, in which memory cells within each stack
-frame are tagged with the identity of the function activation
-that owns the frame, and access to those locations is then gated
-according to the activation that is currently executing. This is simple and corresponds
-to intuitive notions of stack safety, and we argue that by describing its behavior
-we approach a reasonable stack-safety property that other micro-policies can be
-validated against.
+% {\em Confidentiality} says that a caller's
+% data is not leaked into its callee, and  that the callee cannot see uninitialized data.
+% As a reasoning principle, confidentiality guarantees that the callee's
+% behavior is determined only by a predictable interface (function arguments and
+% register contents) that does not include the caller's
+% local state or the uninitialized portion of the stack. This is formalized as a
+% {\em noninterference}-style property that, rather than comparing pairs of whole program traces,
+% compares a pair of sub-traces for each call, within other calls\bcp{?}. Once
+% again
+% {\em stepwise} describes the granularity of enforcement\bcp{?}: at every step of a call,
+% changes in the state are independent of the caller's data.
 
-Randomized testing is a relatively low-cost way to validate a potential enforcement
-mechanism; it finds flaws in the enforcement fast enough to be integrated into the workflow
-of enforcement development \citep{TestingNI:ICFP}. To demonstrate that the testing adequately
-covers potentially erroneous programs, we test intentionally buggy policies alongside
-the real one. If we can catch known bugs, we gain confidence that we can catch unknown ones,
-strengthening the validation of the enforcement mechanism.
+% Together, these properties capture roughly the same intuition as LSE, but
+% they are somewhat stronger.
+% First, we model returns as returns to a valid return target\bcp{that will
+%   make no sense to the reader at this point}; an invalid return
+% is treated as a mere jump within the callee, and does not grant access to the caller's
+% data. So, even without WBCF, our stack safety properties rule out many control-flow attacks.
+% The attacker in such an instance is permitted to ``return'' so long as it avoids
+% violating the integrity and confidentiality of the caller.\bcp{ditto} Second, confidentiality
+% contains\bcp{?} temporal protections that LSE does not necessarily address\bcp{?}. The intuition
+% for LSE is that it protects the caller's stack frame, not necessarily memory that was
+% previously allocated but now outside of the caller's frame. (Cheri-capability-based
+% implementations of LSE {\em do} protect previously allocated data, typically by clearing
+% it, but because it is a potential vector for leaking capabilities into the caller's frame,
+% not as a goal of the property.\bcp{Oof.  We need to do better than that!})
 
-One challenge in characterizing stack safety formally is that, in a low-level machine
-without built-in stacks, we are at the mercy\bcp{?} of architectural\bcp{?}
-choices that do not relate to the abstract notion of stack safety. Some implementations
-may have only a stack pointer while others add a frame pointer, in some systems return
-addresses and data live in separate stacks, and so on. We abstract over these choices
-as much as possible.
+\bcp{I trimmed away a ton of text here that I thought was getting too much
+  into the weeds for the introduction.  However, in the process I lost the
+  explanation of how our properties are a bit stronger than LSE.  One way to
+put it back would be simply to add to the contributions a claim that we are
+a bit stronger than them, with a pointer to where we discuss this in detail.}
 
-A second challenge is that enforcement mechanisms may weaken their
-protections\bcp{``weaken their protections'' doesn't convey what we mean
-  very well}
-in the name of efficiency, while arguing that they still capture stack safety in a meaningful sense.
-\citet{DBLP:conf/sp/RoesslerD18} explore alternative micro-policies, with different
-ways of identifying functions and deciding exactly which accesses are allowed.
-These vary in their efficiency and in the spatial and temporal precision of their
-security guarantees.
-The Depth Isolation policy prevents a callee from writing outside its frame
-at all, which is simple and intuitively correct, but it must manually clear the tags
-on the frame on each return, which is very expensive. Conversely, their
-\emph{Lazy Tagging and Clearing} policy improves
-performance by assigning locations to the active function when they are written, which
-permits  ``illicit'' writes to inaccessible stack frames so long as the
-written locations are not subsequently read by their ``real'' owners. This violates our
-straightforward properties, but ntuitively,
-this form of laziness is justified if any dangerous writes will
-ultimately be detected before they can affect program behavior.
+To demonstrate the utility of our formal characterization, we use these
+properties to validate and improve an existing enforcement mechanism, the
+{\em stack-safety micro-policies} of~\citet{DBLP:conf/sp/RoesslerD18}.  We
+use QuickChick~\citep{Denes:VSL2014,Pierce:SF4}, a property-based testing
+tool for the Coq proof assistant, to generate many random programs and check
+that Roessler and Dehon's micro-policies correctly abort the ones that
+attempt to violate one of our properties; furthermore, we introduce several
+intentionally broken micro-policies and check that the testing framework is
+able to generate counterexamples that violate our properties but are not
+halted by the incorrect enforcement variants.  (Showing that the testing
+framework detects intentional bugs in enforcement mechanisms increases our
+confidence that it can also catch unknown ones, strengthening our confidence
+in the enforcement mechanism itself.\ifaftersubmission\bcp{Maybe that
+  sentence belongs in the testing section?}\fi)
+%
+We find that Roessler and Dehon's {\em Depth Isolation} micro-policy, in
+which memory cells within each stack frame are tagged with the identity of
+the function activation that owns the frame and access to those locations is
+then controlled by the activation that is currently executing, validates our
+stepwise properties.  On the other hand, their more efficient \emph{Lazy
+  Tagging and Clearing} policy enforces observational integrity, but testing
+reveals that it does not enforce confidentiality (either stepwise or
+observational): it violates of the temporal aspect of confidentiality in
+corner cases where data can leak across calls to the same callee.  We
+propose a variant of Lazy Tagging and Clearing that \emph{does} enforce
+confidentiality (as far as our testing can tell), albeit at some performance
+cost.  \bcp{Did Nick and Andre know about this deficiency?  Did they mention
+  it in their paper?  (If neither, we should make a bigger deal out of the
+  fact that we discovered it.)}
 
-\bcp{This discussion is getting too long for the intro.  Could it be trimmed.}
-What does ``affecting program behavior'' really mean? This micro-policy
-calls for a second characterization of stack safety in terms of the externally
-observable behavior of a stack-safe system. Such a characterization will have the
-additional benefit of being more {\em extensional}, concerned primarily with the
-external behavior of the system. In contract, our stepwise properties are {\em intensional},
-focusing on internal details that may not actually matter to overall security.
 
-\bcp{Ditto, even moreso.}
-To formalize this intuition, we develop an \emph{observational integrity} property which
-characterizes enforcement mechanisms that detect violations between the point when
-they occur and the point when they make an observable impact. Intuitively this property
-can be phrased as ``no visible reads after dangerous writes.''  We prove (in Coq) that stepwise
-integrity implies observational integrity. \sna{TODO: check this.}
+% A second challenge is that enforcement mechanisms may weaken their
+% protections\bcp{``weaken their protections'' doesn't convey what we mean
+%   very well}
+% in the name of efficiency, while arguing that they still capture stack safety in a meaningful sense.
+% \citet{DBLP:conf/sp/RoesslerD18} explore alternative micro-policies, with different
+% ways of identifying functions and deciding exactly which accesses are allowed.
+% These vary in their efficiency and in the spatial and temporal precision of their
+% security guarantees.
+% The Depth Isolation policy prevents a callee from writing outside its frame
+% at all, which is simple and intuitively correct, but it must manually clear the tags
+% on the frame on each return, which is very expensive. Conversely, their
+% \emph{Lazy Tagging and Clearing} policy improves
+% performance by assigning locations to the active function when they are written, which
+% permits  ``illicit'' writes to inaccessible stack frames so long as the
+% written locations are not subsequently read by their ``real'' owners. This violates our
+% straightforward properties, but ntuitively,
+% this form of laziness is justified if any dangerous writes will
+% ultimately be detected before they can affect program behavior.
 
-We additionally sketch an associated {\em observational confidentiality} property
-makes confidentiality extensional in the same way, in order to form an
-{\em observational stack safety} that is highly extensional.
-We argue that, despite its somewhat greater complexity,
-it may be a better specification for
-stack safety enforcement mechanisms in general.
+% \bcp{This discussion is getting too long for the intro.  Could it be trimmed.}
+% What does ``affecting program behavior'' really mean? This micro-policy
+% calls for a second characterization of stack safety in terms of the externally
+% observable behavior of a stack-safe system. Such a characterization will have the
+% additional benefit of being more {\em extensional}, concerned primarily with the
+% external behavior of the system. In contract, our stepwise properties are {\em intensional},
+% focusing on internal details that may not actually matter to overall security.
+
+% \bcp{Ditto, even moreso.}
+% To formalize this intuition, we develop an \emph{observational integrity} property which
+% characterizes enforcement mechanisms that detect violations between the point when
+% they occur and the point when they make an observable impact. Intuitively this property
+% can be phrased as ``no visible reads after dangerous writes.''  We prove (in Coq) that stepwise
+% integrity implies observational integrity. \sna{TODO: check this.}
+
+% We additionally sketch an associated {\em observational confidentiality} property
+% makes confidentiality extensional in the same way, in order to form an
+% {\em observational stack safety} that is highly extensional.
+% We argue that, despite its somewhat greater complexity,
+% it may be a better specification for
+% stack safety enforcement mechanisms in general.
 
 %\apt{more to say?}\bcp{Yes---partly to underscore our claim that this is a
 %  significant contribution, and partly to give the reader some context for
@@ -534,28 +544,19 @@ stack safety enforcement mechanisms in general.
 %  such an evaluation is to see whether property-based testing against this
 %  spec can distinguish correct implementations of the mechanism from buggy
 %  ones...''}
-As it turns out, \citeauthor{DBLP:conf/sp/RoesslerD18}'s Lazy Tagging and
-Clearing micro-policy enforces observational integrity, but not confidentiality,
-whether stepwise or observational.
-But formalizing the ideal property allows us to see how it falls short -- a specific
-violation of the temporal aspect of confidentiality occurs in corner cases where callees
-can leak data between one another.
-We propose  a variant of Lazy Tagging and Clearing that we believe \emph{does} enforce
-confidentiality, albeit at some performance cost.  \bcp{Did Nick and Andre
-  know about this deficiency?  Did they mention it in their paper?  (If
-  neither, we should make a bigger deal out of the fact that we discovered it.)}
 
-Our initial description of these properties assumes a single simple stack with no sharing
-between callers and callees: all parameters and return values are passed in registers.  Later,
-we show how to refine it to allow passing of scalar stack data, granting a
-callee access to the caller's data. We do not model more sophisticated sharing,
-such as taking the address of a variable and treating it like a pointer.
-
-Finally, we define integrity and confidentiality properties for a coroutine system featuring
-a static layout, in which each coroutine's stack is constrained to a fixed region of memory.
-Though simplistic, this extension is a step toward concurrency and demonstrates that
-our approach is flexible enough to handle more sophisticated styles of
-control flow.
+Our first presentation of these properties assumes a single simple stack
+with no sharing between callers and callees: all parameters and return
+values are passed in registers.  Later, we show how to refine it to allow
+passing of scalar stack data, granting a callee access to the caller's
+data. We do not model more sophisticated sharing, such as taking the address
+of a variable and treating it like a pointer.
+%
+Finally, we define integrity and confidentiality properties for a coroutine
+system featuring a static layout, in which each coroutine's stack is
+constrained to a fixed region of memory.  Though simplistic, this extension
+is a step toward concurrency and demonstrates that our approach is flexible
+enough to handle more sophisticated styles of control flow.
 
 %% \paragraph*{The Use of Stack Safety}
 
@@ -707,7 +708,17 @@ model run-time code generation.
 
 Our stack-safety properties depend
 critically on the notions of ``call'' and ``return,'' which are not fully explicit
-in machine code---the same instruction opcode may be used in some places as part of
+in machine code%
+%
+\footnote{\bcp{Some useful text: A major challenge in characterizing stack
+    safety formally is that, in a low-level machine without built-in stacks,
+    we are at the mercy\bcp{?} of architectural\bcp{?}  choices that do not
+    relate to the abstract notion of stack safety. Some implementations may
+    have only a stack pointer while others add a frame pointer, in some
+    systems return addresses and data live in separate stacks, and so on. We
+    abstract over these choices as much as possible.  }}%
+%
+---the same instruction opcode may be used in some places as part of
 a call or return sequence and in other places for other purposes.
 %
 So we assume we are given a machine language program {\em annotated} with the locations of
@@ -1555,88 +1566,78 @@ policy enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
 
 \subsection{Values and States}
 
-The basic building blocks of the machine are {\em values} and {\em addresses}.
-Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\).
+The building blocks of the machine are {\em values} and {\em addresses}.
+Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\) and
+\(\addr\), respectively.
 %
 Our machine states are composed of {\em components} \(\component\),
-which are either memory addresses (words) or register names (\(\reg\)) drawn from some set
+which are either addresses or register names (\(\reg\)) drawn from some set
 \(\REGS\), which is assumed to include two special purpose registers: the
 program counter {\PCname} and the stack pointer \(\SP\).
+A {\em machine state} is a map from components to values.
 %
     \[\component \in \COMPONENTS ::= \WORDS + \REGS \]
 %
-A {\em machine state} is a map from components to values:
-%
-\[\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
+    \[\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
 %
 We have a total step function between machine states, written \(\mach \stepsto \mach'\).
-\apt{But just below we write $\mach \stepstoobs \mach'$. Which is it?}
-\apt{Say something about initial machine state?}
-
-\subsection{Policies}
 
 We now formalize the model of enforcement that we introduced in \Cref{sec:threat}.
 A {\em policy} consists of a set of policy
 states \(\pol \in \POLS\) and a policy step function \((\mach, \pol) \polstep \pol' \in
 \MACHS \times \POLS \rightharpoonup \POLS\). This step function is partial;
 it is undefined on input configurations that correspond to a policy fault. The policy
-can see the machine state, but cannot modify it. We assume that the
-compiler\bcp{why?} provides an initial policy state \(\pol_0\) to accompany the initial machine state.\apt{see comment above}
+can see the machine state, but cannot modify it. The policy also provides a
+well-formedness condition, \(\WF (\mpstatename \in \MACHS \times \POLS)\), describing
+initial states that are properly configured.
 %
 A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
 \Cref{sec:enforcement}.
 
-We write $\MPS$ for the set of all pairs of machine states and policy
-states.
-%
-\[\mpstatename \in \MPS = \MACHS \times \POLS\]
-%
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
-
-\judgmenttwo{\(\mach \stepstoobs \mach'\)}{\((\mach, \pol)
+%
+\judgmenttwo{\(\mach \stepsto \mach'\)}{\((\mach, \pol)
                \polstep \pol'\)}
             {\(\mpstate{\mach}{\pol} \stepstopol
                \mpstate{\mach'}{\pol'}\)}
-
-\noindent
-This combined step function is also partial, and traces of the machine-with-policy
-will be finite iff a policy fault occurs.
+%
+Note that the base machine has a total step function, while the policy-enhanced machine
+refines it to a partial function. The extra policy state never changes behavior,
+but it can cause
+premature termination, representing failstop behavior.
 
 \subsection{Contexts}
 
-Separate from the machine state, our formal properties will keep track of additional context
-information representing the history of the run. The following definitions are parameterized
-over an arbitrary\bcp{why?} set of context states, \(\CONTEXTS\), annotations \(\ANNS\),
+Separate from the machine state, we will keep track of additional context
+information representing the history of the run. This has no influence on execution, it merely
+describes information relevant to the particular property. Different information is needed
+for different versions of the model, so the definitions are parameterized
+over an arbitrary set of context states, \(\CONTEXTS\), annotations \(\ANNS\),
 an initial context state \(\context_0 \in \CONTEXTS\), and a context step function
-\(\mach, \context, \anns \constep \context' \in \MACHS \times \CONTEXTS
-\times \powerset(\ANNS) \rightarrow \CONTEXTS\). We also assume a set of function identifiers
-\(\FUNIDS\) and the existence of a \emph{code map} \(\codemap \in \WORDS \rightharpoonup \FUNIDS \times \powerset(\ANNS)\)
-that relates each code address to its owning function and set of annotations.
+\(\mach, \context \constep \context' \in \MACHS \times \CONTEXTS
+\times \rightarrow \CONTEXTS\). We also assume the existence of a \emph{code map},
+\(\codemap \in \WORDS \rightharpoonup \ANNS\)
+that relates each code address to its annotation, if any.
 We lift contexts into an MP trace in much the same way as we lifted policy states to get
-a state type \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
-\CONTEXTS\).  \bcp{I don't get the intuition for this whole para.}
+a triple state \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
+\CONTEXTS\).
 
-\judgmentthree{\(\mpstate{\mach}{\pol} \stepstopol \mpstate{\mach'}{\pol'}\)}
-              {\(\codemap ~ (\mach ~ \PCname) = \funid, \anns\)}
-              {\(\mach, \context, \anns \constep \context'\)}
+\judgmenttwo{\(\mpstate{\mach}{\pol} \stepstopol \mpstate{\mach'}{\pol'}\)}
+              {\(\mach, \context \constep \context'\)}
               {\(\mpcstate{\mach}{\pol}{\context} \stepstocon
                 \mpcstate{\mach'}{\pol'}{\context'}\)}
 
-\subsection{Traces}
+\subsection{Machine Traces}
 \label{sec:traces}
 
-A trace \(T \in \TRACE{\TRACEELEMS}\) is a nonempty, finite or infinite sequence of elements
-of some type \(\TRACEELEMS\).  We will mostly be concerned with sequences of MPC-states,
-called \emph{machine traces} and denoted \(\MPCT \in \TRACE{\MPCS}\). %, and of observations.
-
-\paragraph*{Trace-Of}
+A {\em machine trace} is a nonempty, finite or infinite sequence of elements
+of MPC-states, ranged over by \(\MPCT\) and \(\NPCT\).
+We use juxtaposition of an element and a trace to represent ``cons.'' (\bcp{Ugh})
 
 The ``trace-of'' operator, written \(\mpcstatename \hookrightarrow \MPCT\),
 coinductively relates an initial state with the trace of states
-produced by repeated application of \(\stepstocon\), and potentially cut short by
-the policy component. % The {\sc Default} rule applies only if the other does not.
-(We use juxtaposition of an element and a trace to represent ``cons.''\bcp{Ugh})
+produced by repeated application of \(\stepstocon\)
 
 \begin{center}
 \begin{minipage}{.4\textwidth}
@@ -1652,58 +1653,37 @@ the policy component. % The {\sc Default} rule applies only if the other does no
 \end{center}
 %
 
-\paragraph*{Projections}
-
 We project out the machine state of an MPC-state with \(\pi_\mach\), the
-policy state with \(\pi_\pol\), and the context with \(\pi_\context\). We overload
-these operators to project out of an machine-trace a trace of machine states,
-policy states, and contexts, respectively.
-
-\paragraph*{Head and Last}
-
-We take the first element of a trace with \(\head(\Trace)\), which is a total
+policy state with \(\pi_\pol\), and the context with \(\pi_\context\).
+We take the first element of a trace with \(\head(\MPCT)\), which is a total
 function since traces are non-empty, and the final element (if one exists) with
-\(\last(\Trace)\), which is partial.
+\(\last(\MPCT)\), which is partial.
 
 \paragraph*{Until}
-The operation \(\PUT ~ f ~ \Trace\) takes a trace
-\(\Trace \in \TRACE{\TRACEELEMS %\times \OBSS
-}  \) and a predicate
-on elements \(f \subset \TRACEELEMS\) and gives the prefix of
-\(\Trace\) ending with the first element on which \(f\) holds.
+The operation \(\PUT ~ f ~ \MPCT\) takes a trace \(\MPCT\)
+and a predicate on states \(f ~ \mpcstate \in \MPCS\) and gives the prefix of
+\(\MPCT\) ending with the first element on which \(f\) holds.
 
 \begin{center}
   \begin{minipage}{.3\textwidth}
-    \judgment{\(f ~ \traceelem\)}
-             {\(\PUT ~ f ~ \traceelem\Trace = \traceelem\)}
+    \judgment{\(f ~ \mpcstatename\)}
+             {\(\PUT ~ f ~ \mpcstatename\MPCT = \mpcstatename\)}
   \end{minipage}
 %
   \begin{minipage}{.3\textwidth}
     \judgment{}
-             {\(\PUT ~ f ~ \traceelem = \traceelem\)}
+             {\(\PUT ~ f ~ \mpcstatename = \mpcstatename\)}
 %
   \end{minipage}
   \begin{minipage}{.3\textwidth}
-    \judgmenttwo{\(\neg f ~ \traceelem\)}{\(\PUT ~ f ~ \Trace = \Trace'\)}
-                {\(\PUT ~ f ~ \traceelem\Trace = \traceelem\Trace'\)}
+    \judgmenttwo{\(\neg f ~ \mpcstatename\)}{\(\PUT ~ f ~ \MPCT = \MPCT'\)}
+                {\(\PUT ~ f ~ \mpcstatename\MPCT = \mpcstatename\MPCT'\)}
   \end{minipage}
 \end{center}
 %
-\apt{If we are writing \(f \subset \TRACEELEMS\), perhaps we should also
-  be writing \(a \in f\), etc.  rather than \(f a\), etc.?}
 If the resulting trace is a strict prefix of the parameter, then the
 predicate must hold on its final element. If the predicate always holds, then
 \(\PUT\) is the identity function.
-
-% The {\it join} operation, written \(T_1 \cdot T_2\) is the reverse of
-%$\mathit{split}$: it takes two traces and links them by replacing the
-%last element of the first (if it has one) with the first element of
-%the second
-
-%\judgment{} {\(t \cdot T = T\)}
-%\judgment{\(T_1 \cdot T_2 = T\)}{\(tT_1 \cdot T_2 = tT\)}
-%\leo{Lemma/theorem: split/join = id?}
-%\leo{TODO: FORMATTING: Remove force line break/par at end of judgments}
 
 We will frequently take a prefix of the trace from an initial state up
 through the first state where some condition holds on the machine state.
@@ -1712,8 +1692,8 @@ for convenience.
 %
 If \(f\) is a predicate on machine states, we define \(\mpcstatename
 \hookrightarrow \MPCT | f\) (read ``\(\MPCT\) is the prefix of
-running \(\mpcstatename\) up to \(f\)'') and similarly\apt{??} for traces with policies:
-
+running \(\mpcstatename\) up to \(f\)''):
+%
 \begin{center}
 \judgmenttwo{\(\mpcstatename \hookrightarrow \MPCT'\)}
             {\(\PUT ~ f ~ \mpcstatename ~ \MPCT' = \MPCT\)}
@@ -1722,40 +1702,39 @@ running \(\mpcstatename\) up to \(f\)'') and similarly\apt{??} for traces with p
 
 \paragraph*{Context Segments}
 
-In particular, we wish to formulate properties about consecutive sub-traces
-in which the context obeys a given predicate. This will commonly be used to extract
-individual calls from a trace by taking sub-traces in which the stack is
-at or below a given depth\bcp{needed??}. If \(f \subseteq \MACHS \times \CONTEXTS\), then
+individual calls from a trace by taking subtraces in which the stack is
+at or below a given depth. If \(f\) is still a predicate on states, then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 ``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
 
 \begin{center}
   \judgmenttwo[Now]
-              {\(f ~ \mach ~ \context\)}
-              {\(\mach,\pol,\context \hookrightarrow \MPCT | \neg f\)}
-              {\(\mach,\pol,\context \hookrightarrow \MPCT \langle f \rangle\)}
+              {\(f ~ \mpcstatename\)}
+              {\(\mpcstatename \hookrightarrow \MPCT | \neg f\)}
+              {\(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\)}
 %
   \judgmentthree[Skip]
-                {\(f ~ \mach ~ \context\)}
-                {\(\mach,\pol,\context \hookrightarrow \MPCT | \neg f\)}
+                {\(f ~ \mpcstatename\)}
+                {\(\mpcstatename \hookrightarrow \MPCT | \neg f\)}
                 {\(\last(\MPCT) \hookrightarrow \MPCT' \langle f \rangle\)}
-                {\(\mach,\pol,\context \hookrightarrow \MPCT' \langle f \rangle\)}
+                {\(\mpcstatename \hookrightarrow \MPCT' \langle f \rangle\)}
 %
   \judgmentthree[Search]
-                {\(\neg f ~ \mach ~ \context\)}
-                {\(\mach,\pol,\context \hookrightarrow \MPCT | f\)}
+                {\(\neg f ~ \mpcstatename\)}
+                {\(\mpcstatename \hookrightarrow \MPCT | f\)}
                 {\(\last(\MPCT) \hookrightarrow \MPCT' \langle f \rangle\)}
-                {\(\mach,\pol,\context \hookrightarrow \MPCT' \langle f \rangle\)}
+                {\(\mpcstatename \hookrightarrow \MPCT' \langle f \rangle\)}
 \end{center}
 
 \paragraph*{Reachability}
 
 We often want to quantify over all traces from any initial state so that our
 properties apply to the system as a whole. We say that a state \(\mpcstatename'\)
-is {\em reachable} if for some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT\)
-and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a sub-trace
-such that from some initial state \(\mpcstatename\), \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
-\apt{Unclear how there can be multiple initial states.}
+is {\em reachable} if for some initial state \(\mpcstatename = \mach,\pol,\context_0\)
+where \(\WF ~ \mach,\pol\), \(\mpcstatename \hookrightarrow \MPCT\)
+and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
+such that from some similarly well-formed initial state \(\mpcstatename\),
+\(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
 
 \section{Stack Safety, Formally}
 \label{sec:lse}
@@ -1876,20 +1855,12 @@ corresponds to a trace of a function from its call to its return.
 Given such a segment \(S\), let \(\mach,\_,(\domMap,\_)\)  = \(\head(S)\) and let
 \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \outside\).
 A system enjoys \emph{stepwise stack confidentiality} if, for all \(\MPCT\langle f_\depth\rangle\)
-with associated \(m\) and \(\components\) as above, and
+with associated \(\mach\) and \(\components\) as above, and
 for all \(\nach\) such that \(\mach \approx_\components \nach\) and
- \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\),
- \(\MPCT\langle f_\depth\rangle \doteq \NPCT\langle f_\depth\rangle \).\apt{I found the previous
+ \(\nach \hookrightarrow \NPCT\),
+ \(\MPCT\langle f_\depth\rangle \doteq \NPCT | \neg f_\depth \).\apt{I found the previous
    version hopelessly confusing, but I'm not at all sure that this one is right! SNA please check.}
-%% \definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
-%% \(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
-%% let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
-%%  \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \outside\).
-%% \(\MPCT\) corresponds to the trace of a function from its call to its return.
-%% Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
-%% \(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
-%% {\em stepwise stack confidentiality} if for all such \(\MPCT\) and \(\NPCT\),
-%% \(\MPCT \doteq \NPCT\).
+ \sna{It's right, but I need to rethink how the M<f> notation works...}
 
 \subsection{Stack Safety with Passing}
 
@@ -2266,7 +2237,7 @@ let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\). Let
 \(\domMap ~ \component = \unsealed\) or \(\passed{\depth,\depth'}\) where
 \(\depth \leq |\rts| \leq \depth'\) .
 Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
-\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
+\(\nach \hookrightarrow \NPCT | \neg f_\depth\). A system enjoys
 {\em stepwise stack confidentiality with passing} if for all such \(\MPCT\) and \(\NPCT\),
 \(\MPCT \doteq \NPCT\).
 
@@ -2354,7 +2325,7 @@ let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
 \(\components\) be the set of components \(\component\) such that
 \(\domMap ~ \component = \instack{\stackid}{\_}\).
 Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
-\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
+\(\nach \hookrightarrow \NPCT | \neg f_\depth\). A system enjoys
 {\em stepwise coroutine confidentiality} in the coroutine setting if for all
 such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
 
@@ -2783,7 +2754,7 @@ observation type \(\obs \in \OBSS\), containing at minimum the silent observatio
 \(\tau\). Our machine step function now takes a state and returns a state and an observation,
 which is carried over into the policy and context step functions.
 %
-\[\mach \stepstoobs[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS \]
+\[\mach \stepsto[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS \]
 %
 
 \paragraph*{Observations-Of}
@@ -2893,7 +2864,7 @@ be pairs of states. The {\em unsafe set} of \(\components\), written
 let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
 \(\components\) be the set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
 Let \(\nach\) be a variant such that \(\mach \approx_\components \nach\) and
-\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\).
+\(\nach \hookrightarrow \NPCT | \neg f_\depth \).
 
 A system enjoys {\em observational confidentiality} if for all such
 \(\MPCT\) and \(\NPCT\), the following conditions all hold:
