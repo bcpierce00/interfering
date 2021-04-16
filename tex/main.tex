@@ -1722,21 +1722,24 @@ individual calls from a trace by taking subtraces in which the stack is
 at or below a given depth. If \(f\) is still a predicate on states, then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 ``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
-\bcp{We could save space by putting two of these on a line.  And,
-  throughout, we could save space and improve beauty by removing some of the
+\bcp{Throughout, we could save space and improve beauty by removing some of the
 vertical space between inference rules.}
 
 \begin{center}
+\begin{minipage}{.38\textwidth}
   \judgmenttwo[ Now]
               {\(f ~ \mpcstatename\)}
               {\(\mpcstatename \hookrightarrow \MPCT | \neg f\)}
               {\(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\)}
+\end{minipage}
 %
+\begin{minipage}{.58\textwidth}
   \judgmentthree[ Skip]
                 {\(f ~ \mpcstatename\)}
                 {\(\mpcstatename \hookrightarrow \MPCT | \neg f\)}
                 {\(\last(\MPCT) \hookrightarrow \MPCT' \langle f \rangle\)}
                 {\(\mpcstatename \hookrightarrow \MPCT' \langle f \rangle\)}
+\end{minipage}
 %
   \judgmentthree[ Search]
                 {\(\neg f ~ \mpcstatename\)}
@@ -1847,7 +1850,7 @@ nested: we will quantify over subtraces that represent whole calls. For each suc
 subtrace, we will quantify over {\em variants} of its initial state. Then we require
 that the original, {\em primary} traces move in {\em lockstep} with the variant.
 
-\definition \(\MPCT^*\) is the set of all traces of calls, defined as
+\definition \(\MPCT^*\) is the set of all \emph{call traces}, defined as
 \[\begin{aligned}
 \bigcup_{\depth \in \mathbb{Z}} \{\MPCT | \MPCT\langle f_\depth \rangle
 \text{ is a reachable segment}\} \hspace{1em} &
@@ -1858,18 +1861,18 @@ that the original, {\em primary} traces move in {\em lockstep} with the variant.
 written \(\mach \approx_\components \nach\), if, for
 all \(\component \not \in \components\), \(\mach ~ \component = \nach ~ \component\).
 
-\definition Let \(\Delta(\mach,\mach')\) be the set of set of components \(\component\)
+\definition The \emph{difference} of two machine states \(\mach\) and \(\mach'\), written \(\Delta(\mach,\mach')\),
+is the set of components \(\component\)
 such that \(\mach ~ \component \not = \mach' ~ \component\).
 
-\definition Between two pairs of states \((\mach,\mach')\) and \((\nach,\nach')\), we
-say that they {\em lock} if for all components \(\components\) in
+\definition Two pairs of states \((\mach,\mach')\) and \((\nach,\nach')\)
+ {\em change together}, written \((\mach,\mach') \diamond (\nach,\nach')\), if, for all components \(\component\) in
 \(\Delta(\mach,\mach') \cup \Delta(\nach,\nach')\),
-\(\mach' ~ \component = \nach' ~ \component\). We write this \((\mach,\mach') \diamond
-(\nach,\nach')\).
+\(\mach' ~ \component = \nach' ~ \component\). 
 
-\definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep}
-if their adjacent pairs of states change together. We will represent this relation with
-\(\machT \doteq \nachT\). We define it as a coinductive relation:
+\definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep},
+written \(\machT \doteq \nachT\), 
+if their adjacent pairs of states change together.  We define this as a coinductive relation:
 
 \begin{minipage}{.3\textwidth}
 \judgment{}
@@ -1893,6 +1896,7 @@ for all \(\nach\) such that \(\mach \approx_\components \nach\) and
 
 \vspace{\belowdisplayskip}
 
+\apt{This is way better up until the final definition, which still needs more unpacking in words.}
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the components in \(\components\), and in addition their subtraces are also in
 \(\MPCT^*\), and therefore confidentiality must hold on them separately. \(\NPCT\)
@@ -2155,7 +2159,7 @@ passed, and our diagram displays it in magenta. Our notion of domains is extende
 to include \(\passed{\depth,\depth'}\), recording two depths. We note the
 current depth of the active function next to the stack pointer in the diagram, for reference.
 The argument {\tt a} has
-its value copied from {\tt x}, and we note that {\tt f} can read it -- because it is marked
+its value copied from {\tt x}, and we note that {\tt f} can read it---because it is marked
 as passed between depths 0 and 1, it is not varied. Then at instruction 13 it is even
 modified, and naturally this is permitted as well.
 
@@ -2167,7 +2171,7 @@ as seen in Figure~\ref{fig:passing}. In this example, written in C++ notation,
 {\tt f} again passing a reference to {\tt y}.
 We would expect that the first call to {\tt f} might modify
 {\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
-{\tt x} in the second call. (Incidentally, this is perfectly compilable C++!)
+{\tt x} in the second call. (Incidentally, this is perfectly compilable C++, although its behavior is undefined.)
 
 To avoid cluttering the picture at the assembly level, we revert to assuming that the
 argument {\tt a} is passed in a register, namely {\tt \%ra}.
@@ -2206,21 +2210,16 @@ of those variables may be dynamic (as in the case of pass-by-reference).
 A call annotation now includes a predicate relating machine states to the components
 that should be passed -- when passing by value, this will typically give the memory cells
 at the appropriate offset from the stack pointer, while passing by reference gives the
-addresses of the appropriate variables wherever they happen to be.
-\bcp{Several math displays in this section have too much space above...}
-
+addresses of the appropriate variables wherever they happen to be.\apt{Why can't
+  these also be given as offsets from stack pointer (as in the example)?}
 \[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \callmap(P \subseteq \MACHS \times \COMPONENTS)\]
-
 And we extend the set of domains to include passed components,
 which are labeled with the range of depths of the caller that has passed them.
-
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \passed{\depth,\depth'}\]
 \[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
 \times (\rts \in \listT (\target \subseteq \MACHS)) \]
-
 We straightforwardly describe how the sealing convention and passing predicate combine to
 update a domain map when pushing it, where \(\depth\) is an integer depth.
-
 \[(\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) ~ \component =
 \begin{cases}
   \sealed{\depth}              & \text{if } \domMap ~ \component = \unsealed \text{ and }
