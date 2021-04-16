@@ -1228,7 +1228,7 @@ Noninterference describes knowledge: it states that for system components
 containing secret values, we can substitute any values whatsoever without changing the results
 of our computation. If there exists some value for which we see different results, then
 in fact we can learn something about the initial state by observing those results, violating
-confidentiality.
+confidentiality. \apt{Add some motivation for why we chose to view confidentiality in this way.}
 
 In Figure~\ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
 by reading {\tt main}'s variable {\tt x}. The trace
@@ -1574,6 +1574,30 @@ In the example, on its first return, {\tt f} reaches its return target, because 
 Thus {\tt x} is still sealed and {\tt f}'s attempt to overwrite it at instruction 4
 violates the integrity property.
 
+
+\paragraph{Well-bracketed control flow.} Together,
+integrity and confidentiality protect a caller's data until its callee
+returns to it. However, it is possible that an intermediate caller is not
+returned {\em to}, but rather returned {\em past}, to some ancestor caller!
+For example, function $A$ calls function $B$, which in turn calls $C$, which
+returns directly to $A$ by resetting the stack pointer to $A$'s stack frame
+and branching to the address after the call from $A$ to $B$.  Strictly
+speaking, this is not an information-flow violation, since neither $A$'s nor
+$B$'s stack frames are improperly read or written by $C$.  But it is still
+arguably unsafe in general.  For example, suppose that $B$'s continuation
+after the call to $C$ takes $C$'s result, doubles it, and returns this to
+$A$.  If $A$'s correct behavior after the call to $B$ returns depends on the
+result it receives being a even number---i.e., $A$ is trusting that $B$'s
+continuation will execute after $C$ returns, perhaps because $A$ and $B$ are
+written by the same person while $C$ is an untrusted library---then $C$ can
+cause it to behave incorrectly, possibly even insecurely, by returning an
+odd result directly to $A$.
+%
+Thus, a formal definition of safe use of the stack should include the
+condition that calls and returns are {\em well bracketed}, e.g., $C$ should
+only return to $A$.  This is what \citet{Skorstengaard+19b} describe
+as \emph{well-bracketed control flow (WBCF)}. 
+
 \section{Machines and Traces}
 \label{sec:prelim}
 
@@ -1771,8 +1795,7 @@ We are finally ready for our definition of stack safety. We begin
 by describing how we model knowledge about the program structure,
 then dive into the formal definitions of local state encapsulation\apt{we don't want
   to call it that here, do we?} and
-well-bracketed control flow, which together constitute stack safety\BCP{need
-  to put back WBCF!}.
+well-bracketed control flow, which together constitute stack safety.
 
 We will focus on a simple stack model, with a single stack
 that doesn't share between caller and callee: arguments and results are passed
@@ -1845,13 +1868,14 @@ is simple: sealed components do not change.
 \definition
 Let the protected set of a context, \(\mathit{protected}(\domMap,\rts)\), be the
 set of components \(\component\) such that \(\domMap ~ \component = \sealed{\depth}\)
-for any depth \(\depth\).
+for some depth \(\depth\).
 
 \definition
-A system enjoys {\em stepwise stack integrity} if, for any reachable state
+A system enjoys \textit{\textbf{stepwise stack integrity}} if, for any reachable state
 \(\mpcstatename\) such that \(\mpcstatename \stepstocon \mpcstatename'\),
 and any component \(\component \in \mathit{protected}(\domMap,\rts)\),
 \(\pi_\mach(\mpcstatename') ~ \component = \pi_\mach(\mpcstatename) ~ \component\).
+\apt{but now $dm$ and $rts$ are unbound}.
 
 Next we consider {\em stepwise stack confidentiality}. Recall that our properties are
 nested: we will quantify over subtraces that represent whole calls. For each such
@@ -1868,7 +1892,7 @@ that the original, {\em primary} traces move in {\em lockstep} with the variant.
 \definition
 For each trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \_,\_,(\_,\rts)\), the
 {\em break condition} of \(\MPCT\) is a predicate on
-states \(\mathit{brk}(\MPCT) = \neg f_{|\rts|}\). It follows from our definitions
+states defined as \(\mathit{brk}(\MPCT) = \neg f_{|\rts|}(\MPCT)\). It follows from our definitions
 that this holds on \(\MPCT\)'s final state, {\em unless it terminated prematurely due to a failstop}.
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
@@ -1905,58 +1929,32 @@ set of components \(\component\) such that \(\domMap ~ \component \not = \outsid
 \definition
 For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,\context\),
 let \(\components = \mathit{secret}(\context)\) and \(\nach\) be any variant
-\(\mach \approx_\components \nach\).
-A system enjoys \emph{stepwise stack confidentiality} if,
-for \(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \mathit{brk}(\MPCT)\),
-\(\MPCT \doteq \NPCT\) holds.
+such that \(\mach \approx_\components \nach\).
+A system enjoys \textbf{\textit{stepwise stack confidentiality}} if,
+for all \(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \mathit{brk}(\MPCT)\),
+\(\MPCT \doteq \NPCT\) holds.\apt{I'm worried about quantifier order here. Surely $n$ needs to be
+universally quantified, and probably also \(\MPCT\) (?) }
 
 %\medskip
 
 In other words, stepwise stack confidentiality states that if we vary every component of the stack,
 the resulting trace (starting in the same policy state) steps in lockstep with the
 original trace until both have reached the break condition.
-
+%
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the components in \(\components\), and in addition their subtraces are also in
 \(\MPCT^*\), and therefore confidentiality must hold on them separately. \(\NPCT\)
 will contain these calls and returns as well, so its return stack pushes and pops
 in lockstep until it breaks at the final return.
 
-\subsection{Control Flow and Return-to-Caller}
-\label{sec:RTC}
-
-\BCP{We agreed that most or all of this belongs in Section 4...}Together,
-integrity and confidentiality protect a caller's data until its callee
-returns to it. However, it is possible that an intermediate caller is not
-returned {\em to}, but rather returned {\em past}, to some ancestor caller!
-For example, function $A$ calls function $B$, which in turn calls $C$, which
-returns directly to $A$ by resetting the stack pointer to $A$'s stack frame
-and branching to the address after the call from $A$ to $B$.  Strictly
-speaking, this is not an information-flow violation, since neither $A$'s nor
-$B$'s stack frames are improperly read or written by $C$.  But it is still
-arguably unsafe in general.  For example, suppose that $B$'s continuation
-after the call to $C$ takes $C$'s result, doubles it, and returns this to
-$A$.  If $A$'s correct behavior after the call to $B$ returns depends on the
-result it receives being a even number---i.e., $A$ is trusting that $B$'s
-continuation will execute after $C$ returns, perhaps because $A$ and $B$ are
-written by the same person while $C$ is an untrusted library---then $C$ can
-cause it to behave incorrectly, possibly even insecurely, by returning an
-odd result directly to $A$.
-%
-Thus, a formal definition of safe use of the stack should include the
-condition that calls and returns are {\em well bracketed}, e.g., $C$ should
-only return to $A$.
-
+Finally, we formalize a version of WBCF, which capture the same informal idea
+as that of \citet{Skorstengaard+19b} using our notion of contexts.
 \definition
-A system enjoys {\em return-to-caller} when, for every pair of reachable states
+A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every pair of reachable states
 \(\mpcstatename = (\_,\_,(\_,\rts))\) and
 \(\mpcstatename' = (\_,\_,(\_,\rts'))\) such that
 \(\mpcstatename \stepsto \mpcstatename'\), if \(|\rts'| < |\rts|\), then
 \(|\rts'| = |\rts|\)
-
-\bcp{we probably want to remark that this notion is pretty
-much the same as in StkTokens, just formalized a little differently.}
-
 
 %\subsection{Well-bracketed Control Flow}
 %\label{sec:wbcf}
