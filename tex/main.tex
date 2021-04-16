@@ -2376,7 +2376,7 @@ such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
 %is annotated as a return, then \(\pi_c(\mpcstatename) = (\_,\_,\_,\stackid')\)
 %where \(\stackid \not = \stackid'\).
 
-\section{Enforcement}
+\section{Do Micro-Policies Enforce Stack Safety?}
 \label{sec:enforcement}
 
 \bcp{``Enforcement'' seems like too broad a title.  What about calling it
@@ -2386,18 +2386,22 @@ would keep related things together, would avoid appearing to make overly
 grand claims in either section, and would give us an excuse to write less
 about the mechanism here---we only need to write enough about the mechanism
 itself that readers can understand our validation case study.}
+\leo{Agreed. Took a crack at it.}
 
 \leo{I am not sure we've hit the correct level of detail in this
   section.}\bcp{Agreed!}
 
-In this section we sketch an existing enforcement mechanism,
-Depth Isolation from \citet{DBLP:conf/sp/RoesslerD18}, that implements
-the formal stack-safety property described in the previous section; in
-fact, it enforces a stronger, inductive version of that property which strengthens the
-local state encapsulation component by checking for integrity and
-confidentiality violations at every step of the callee's execution trace. \bcp{Examples?}
+In this section we sketch an existing enforcement mechanism, Depth
+Isolation from \citet{DBLP:conf/sp/RoesslerD18}, that implements the
+formal stack-safety property described in the previous section; in
+fact, it enforces a stronger, inductive version of that property which
+strengthens the local state encapsulation component by checking for
+integrity and confidentiality violations at every step of the callee's
+execution trace. We validate that claim by developing a property-based
+testing framework that can quickly uncover inconsistencies between the
+enforcement mechanism and the stack-safety property.
 
-%\paragraph*{Micro-Policies}
+\subsection*{A Conservative Stack-Safety Enforcement Mechanism}
 %
 The enforcement policy of \citeauthor{DBLP:conf/sp/RoesslerD18} relies
 on a programmable, tag-based reference monitor that runs alongside the
@@ -2561,29 +2565,30 @@ rights than the caller, this is harmless.
 %% the {\PCname} register, the micro-policy ensures that the entry
 %% sequences of calls declared in the call map are executed correctly.
 
-\leo{I'm not a fan of the next paragraph.}\bcp{Yes, it's pretty far down in
-  the weeds.  I don't think this level of detail is needed, in the context
-  of a paper that is mostly about our definitions, not theirs.}
-Note that in this policy both the entry and exit sequences
-must write to each element of
-the frame, which can be quite expensive, especially for programs that
-allocate large but sparsely populated frames; we return to this point
-in \cref{sec:lazy}.
-%
-For example, the program in \cref{fig:passingsimple} manages the stack
-in this way. Here, the call pseudo-instruction to {\tt f} in line 5
-hides a blessed sequence of instructions that allocate space to save
-its return address to {\tt main} and seal the protected part of the
-stack before {\tt f}'s body starts executing at 10. Conversely, the
-return instruction in line 15 restores and jumps to the return address
-and deallocates its frame space, and unseals the corresponding parts
-of the stack. The function itself allocates and deallocates its own
-private frame space in instructions 10 and 14. Additionally, unlike in
-the simplified presentation of the policy, the caller shares the
-arguments passed to the callee through the stack, and for this creates
-and initializes (3--4) and destructs (6) the argument part of the
-callee's stack frame.
-%
+% \leo{I'm not a fan of the next paragraph.}\bcp{Yes, it's pretty far down in
+%   the weeds.  I don't think this level of detail is needed, in the context
+%   of a paper that is mostly about our definitions, not theirs.}
+% Note that in this policy both the entry and exit sequences
+% must write to each element of
+% the frame, which can be quite expensive, especially for programs that
+% allocate large but sparsely populated frames; we return to this point
+% in \cref{sec:lazy}.
+% %
+% For example, the program in \cref{fig:passingsimple} manages the stack
+% in this way. Here, the call pseudo-instruction to {\tt f} in line 5
+% hides a blessed sequence of instructions that allocate space to save
+% its return address to {\tt main} and seal the protected part of the
+% stack before {\tt f}'s body starts executing at 10. Conversely, the
+% return instruction in line 15 restores and jumps to the return address
+% and deallocates its frame space, and unseals the corresponding parts
+% of the stack. The function itself allocates and deallocates its own
+% private frame space in instructions 10 and 14. Additionally, unlike in
+% the simplified presentation of the policy, the caller shares the
+% arguments passed to the callee through the stack, and for this creates
+% and initializes (3--4) and destructs (6) the argument part of the
+% callee's stack frame.
+
+
 %\rb{Note that we have also considered and implemented more flexible schemes
 %  based on allowing operations above the current activation depth. How do we put
 %  these together?}
@@ -2603,7 +2608,7 @@ callee's stack frame.
 %% might also be so tagged, but as long as the jump has the effect of a legal
 %% return, it is OK.
 
-\section{Randomized Testing}
+\subsection*{Validation through Random Testing}
 \label{sec:testing}
 
 We validated the micro-policy of the previous section by systematically
@@ -2698,7 +2703,9 @@ property.
 
 Naturally, testing also revealed a number of errors in our
 implementation of the enforcement mechanism (the original was written in C++
-and targeted ARM machine code\bcp{right?}; we re-implemented it in Coq targeting
+and targeted ARM machine code
+%\bcp{right?}\leo{yeah}
+; we re-implemented it in Coq targeting
 RISC-V).  These errors ranged from trivial typos to
 ones that required an
 intriguingly complex setup to appear.  Notably, our first try at the
