@@ -412,7 +412,7 @@ are ``nested'': {\em each} caller is guaranteed protection from its
 immediate callees (which, in turn, need protection from their immediate
 callees, etc.). They are also stronger than LSE; even in the absence of the
 control flow guarantees of {\em return to caller}, they guarantee callers'
-data safety in the face of control-flow attacks (see \cref{fig:control} and discussion).
+data safety in the face of control-flow attacks (see \cref{sec:control}).
 This reflects a cleaner division between data protection and control-flow protection
 than offered by LSE and WBCF.
 
@@ -1036,8 +1036,7 @@ At the right of each example, we show the layout of stack memory just before
 the specified instruction is executed; each box represents a memory word, and
 addresses increase to the right.
 
-Unless otherwise noted\bcp{where is it ``otherwise noted''??}, colored boxes
-indicate an assignment of the address to a
+Colored boxes indicate an assignment of the address to a
 {\em domain} -- a label reflecting a particular set of access rights. Domains
 are \(\unsealed\)\bcp{``unsealed'' would read better} (in the stack and accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), and \(\outside\)
@@ -1226,7 +1225,7 @@ to match as well.
 
 \begin{figure}
 
-\begin{subfigure}{.2\textwidth}
+\begin{subfigure}[t]{.2\textwidth}
   {\small
 \begin{verbatim}
 int main() {
@@ -1235,22 +1234,21 @@ int main() {
   return g();
 }
 
+
 int f() {
   int y = 5;
   return y;
 }
 
+
 int g() {
   int z;
-  if (z == 5)
-    return 10;
-  else
-    return 20;
+  return z;
 }
 \end{verbatim}
 }
 \end{subfigure}
-\begin{subfigure}{.7\textwidth}
+\begin{subfigure}[t]{.7\textwidth}
   {\small
 \begin{verbatim}
 1 main:  add $1,%sp      ; allocate frame
@@ -1267,13 +1265,9 @@ int g() {
 14       ret
 
 20 g:    add $1,%sp      ; allocate frame
-21       cmp $5,-1(%sp)  ; compare
-22       brneq #25       ; branch if not equal
-23       mov $10,%ra     ; set return value
-24       jmp #26
-25       mov $20,%ra     ; set return value
-26       sub $1,%sp      ; deallocate frame
-27       ret
+21       mov -1(%sp),%ra ; violation!
+22       sub $1,%sp      ; deallocate frame
+23       ret
 }
 \end{verbatim}
 }
@@ -1307,9 +1301,8 @@ int g() {
   \memory{1}{\retptrc}
   \memory{2}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-10em}{0.75em}{\(v_1\)}
-  \MemoryLabel{-6em}{0.75em}{\(v_2\)}
+  \MemoryLabel{-19em}{0.75em}{62}
+  \MemoryLabel{-10em}{0.75em}{105}
   \\
   {\tt 12} &
   \memoryaddrs{16em}
@@ -1326,9 +1319,7 @@ int g() {
   \memory{1}{\retptrc}
   \memory{2}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
   \MemoryLabel{-10em}{0.75em}{\(5\)}
-  \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
   {\tt 4} &
   \multicolumn{2}{c}{
@@ -1352,7 +1343,7 @@ int g() {
   \memory{2}{\unsealc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{5}
-  \MemoryLabel{-10em}{0.75em}{5}
+  \MemoryLabel{-10em}{0.75em}{\bf 5}
  % \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{16em}
@@ -1360,15 +1351,9 @@ int g() {
   \memory{1}{\retptrc}
   \memory{2}{\unsealc}
   ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_3\)}
-  \MemoryLabel{-10em}{0.75em}{\(v_4\)}
-  \MemoryLabel{-6em}{0.75em}{\(v_5\)}
-  \\ &
-  {\bf 23}
-  ~$\cdots$
-  &
-  {\bf 25}
-  ~$\cdots$
+  \MemoryLabel{-19em}{0.75em}{36}
+  \MemoryLabel{-10em}{0.75em}{\bf 8}
+  \MemoryLabel{-6em}{0.75em}{90}
   \\
 \end{tabular}
 \end{center}
@@ -1377,8 +1362,7 @@ int g() {
 
 \end{subfigure}
 
-\caption{Another confidentiality violation \bcp{Again, let's align the C
-    code with the assembly, etc.}}
+\caption{Another confidentiality violation}
 \label{fig:conf2}
 \end{figure}
 
@@ -1523,6 +1507,8 @@ void f() {
   \label{fig:controlflow}
 \end{figure}
 
+\label{sec:controlflow}
+
 %From the classic stack smashing attack to return oriented programming,
 One of the most pernicious ways to attack the stack is by hijacking control flow.
 Our stack safety properties do not assume that control flow follows a typical structure
@@ -1542,9 +1528,8 @@ integrity property?
 
 The key intuition is that to be considered as having returned to {\tt main}, {\tt f} needs
 to do more than just execute a return-labeled instruction: it must actually reach the
-appropriate {\em return target} in {\tt main}. A return target is a predicate on states,
-in this case one that holds on any state whose program counter points to the correct instruction.
-We introduce a new piece of context: we keep a stack of return targets, and a callee is
+appropriate return target in {\tt main}.
+We add a new piece of context to our diagram: we keep a stack of return targets, and a callee is
 only considered to have returned when it reaches a state that matches the caller's target.
 A return target is associated with a set of sealed locations that will become unsealed
 when it is reached, here represented by sharing a color with the sealed data.
@@ -1794,14 +1779,10 @@ A call annotation tells us to push the return target onto the return stack and
 seal all components with the depth of the previous return stack. If we aren't making a call,
 we identify a return by looking ahead and checking if we're about to step to a state
 that matches the topmost return target. If neither is true, the context remains unchanged.
-%
-\bcp{(Moved this here, BTW.)}Recall that we keep track of which addresses are
-annotated as calls, with a ``code map'' $\codemap \in \CODEMAPS \subseteq
-\WORDS$.
-\apt{Doesn't match previous definition any more.}
+Recall that a ``code map'' \(\codemap\) is a predicate on addresses.
 
 \judgmentthree[ Call]
-              {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
+              {\(\codemap ~ (\mach ~ \PCname)\)}
               {\(\components = \sealcon ~ \mach\)}
               {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
                 {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
@@ -1831,7 +1812,9 @@ The first is {\em stepwise stack integrity}, where ``stepwise'' means that the p
 quantified over each step of execution from any initial state. The criterion for integrity
 is simple: sealed components do not change.
 
-\definition A system enjoys {\em stepwise stack integrity} if, for any reachable state
+\definition {\bf Stepwise Stack Integrity}
+
+A system enjoys {\em stepwise stack integrity} if, for any reachable state
 \(\mpcstatename\) such that \(\mpcstatename \stepstocon \mpcstatename'\),
 and any component \(\component\), if \(\pi_\context(\mpcstatename) = \domMap,\_\) and
 \(\domMap ~ \component = \sealed{\_}\), then \(\pi_\mach(\mpcstatename') ~ \component =
@@ -1880,15 +1863,17 @@ if their adjacent pairs of states change together.  We define this as a coinduct
 
 For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\),
 let \(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \outside\).
+\(\domMap ~ \component = \outside\). That is, at the start of some call, we take every
+component in the stack.
 A system enjoys \emph{stepwise stack confidentiality} if,
 for all \(\nach\) such that \(\mach \approx_\components \nach\) and
-\(\nach \hookrightarrow \NPCT | \neg f_{|\rts|}\),
-\(\MPCT \doteq \NPCT\).
+\(\nach,\pol,\domMap \hookrightarrow \NPCT | \neg f_{|\rts|}\),
+\(\MPCT \doteq \NPCT\) -- if every variant (with the same policy state)
+steps in lockstep until both traces have reached a point whose depth is
+below the starting one. This is a return.
 
 \vspace{\belowdisplayskip}
 
-\apt{This is way better up until the final definition, which still needs more unpacking in words.}
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the components in \(\components\), and in addition their subtraces are also in
 \(\MPCT^*\), and therefore confidentiality must hold on them separately. \(\NPCT\)
@@ -1911,7 +1896,8 @@ attacks that do not violate data protections. We formalize this as {\em return-t
 A system enjoys {\em return-to-caller} when, for every pair of reachable states
 \(\mpcstatename = (\_,\_,(\_,\rts))\) and
 \(\mpcstatename' = (\_,\_,(\_,\rts'))\) such that
-\(\mpcstatename \stepsto \mpcstatename'\), \(|\rts| - 1 \leq |\rts'| \leq |\rts| + 1\).
+\(\mpcstatename \stepsto \mpcstatename'\), if \(|\rts'| < |\rts|\), then
+\(|\rts'| = |\rts|\)
 
 \subsection{Parameters Passed on the Stack}
 
@@ -2218,10 +2204,9 @@ Next we introduce variable passing. We will need to add extra information to our
 annotations to reflect that they may now pass variables on the stack, and that the locations
 of those variables may be dynamic (as in the case of pass-by-reference).
 A call annotation now includes a predicate relating machine states to the components
-that should be passed -- when passing by value, this will typically give the memory cells
-at the appropriate offset from the stack pointer, while passing by reference gives the
-addresses of the appropriate variables wherever they happen to be.\apt{Why can't
-  these also be given as offsets from stack pointer (as in the example)?}
+that should be passed -- when passing by value, this will typically be freshly allocated
+cells at the top of the frame, while passing by reference just gives the
+addresses of the appropriate variables.
 \[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \callmap(P \subseteq \MACHS \times \COMPONENTS)\]
 And we extend the set of domains to include passed components,
 which are labeled with the range of depths of the caller that has passed them.
@@ -2798,7 +2783,7 @@ protections provided by these policies once stack safety is broken?
 How does a harmful violation that must be caught later differ from a
 harmless one?
 
-\paragraph*{Deferred Stepwise Integrity}
+\paragraph*{Deferring Integrity Checks}
 
 We first notice that, in principle, these properties appear to enforce
 confidentiality outright. So we wish in particular to find an integrity
@@ -2810,18 +2795,18 @@ For simplicity, our definitions return to the simple stack without sharing,
 but all properties in this section can be extended to more complex settings
 very naturally.
 
-\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
-\(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
-\(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \sealed{\_}\).
+\definition {\bf Deferred Stack Integrity}
 
-Then, supposing that \(\last(\MPCT) = \mach',\pol',\context'\) -- meaning that the
-call does return -- let \(\components'\) be the set of components that differ
-between \(\mach\) and \(\mach'\). Take any \(\nach\) such that
+For any \(\MPCT \in \MPCT^*\),
+let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
+\(\components\) be the set of components \(\component\) such that
+\(\domMap ~ \component = \sealed{\_}\).
+Then if \(\last(\MPCT) = \mach',\pol',\context'\), let \(\components' = \Delta(\mach,\mach')\).
+ A system enjoys {\em deferred stepwise integrity} if for any \(\nach\) such that
 \(\mach' \approx_{\components'} \nach\), \(\mach \hookrightarrow \MPCT\), and
-\(\nach \hookrightarrow \NPCT\). A system enjoys
-{\em deferred stepwise integrity} if for all such \(\MPCT\) and \(\NPCT\),
-\(\MPCT \doteq \NPCT\).
+\(\nach \hookrightarrow \NPCT\), \(\MPCT \doteq \NPCT\).
+
+\vspace{\belowdisplayskip}
 
 In short, if sealed components are modified during the call, the caller may not
 access their values. ``No reads after dangerous writes.''
@@ -2918,22 +2903,24 @@ steps for a long time before producing some output.
 
 We now can sketch observational versions of both integrity and confidentiality.
 Integrity is already straightforward, simply weakening the condition that must hold
-after the return.
+after the return -- instead of preventing dangerous writes from being read, we
+prevent them from being leaked.
 
-\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
-\(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+\definition {\bf Observational Stack Integrity}
+
+For any call trace \(\MPCT \in \MPCT^*\),
 let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
-\(\components\) be the set of components \(\component\) such that \(\domMap ~ \component = \sealed{\_}\).
+\(\components\) be the set of components \(\component\)
+such that \(\domMap ~ \component = \sealed{\_}\).
 
-Then, again supposing that \(\last(\MPCT) = \mach',\pol',\context'\),
+Then, supposing that \(\last(\MPCT) = \mach',\pol',\context'\),
 let \(\components'\) be the set of components that differ
-between \(\mach\) and \(\mach'\). Take any \(\nach\) such that
-\(\mach' \approx_{\components'} \nach\), \(\mach \hookrightarrow \MPCT\), and
-\(\nach \hookrightarrow \NPCT\). A system enjoys
-{\em observational integrity} if for all such \(\MPCT\) and \(\NPCT\),
-\(\obsof(\MPCT) \simeq \obsof(\NPCT)\).
+between \(\mach\) and \(\mach'\). A system enjoys
+{\em observational integrity} if for any \(\nach\) such that
+\(\mach' \approx_{\components'} \nach\), \((\mach,\pol',\context') \hookrightarrow \MPCT\), and
+\((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\obsof(\MPCT) \simeq \obsof(\NPCT)\).
 
-We amend our intuitive statement to: ``No visible reads after dangerous writes.''
+\vspace{\belowdisplayskip}
 
 Confidentiality is more sophisticated. We must capture the intuition that
 secrets do not escape during a call {\em and} are not leaked during a return.
@@ -2943,19 +2930,19 @@ relation from earlier.
 \definition Let \(\components\) be a set of components and \(\mach,\mach'\) and \(\nach,\nach'\)
 be pairs of states. The {\em unsafe set} of \(\components\), written
 \(\bar{\Diamond}(\components,\mach,\mach',\nach,\nach')\), is the set of all components
-\(\component \in \components\) such that if
-\(\mach ~ \component \not = \mach' ~ \component\) or
-\(\nach ~ \component \not = \nach' ~ \component\), then
-\(\mach' ~ \component = \nach' ~ \component\).
+\(\component \in \Delta(\mach,\mach') \cup \Delta(\nach,\nach')\) where
+\(\mach' ~ \component \not = \nach' ~ \component\).
 
-\definition Let \(\depth\) be any depth and \(f_\depth ~ \mach ~ (\_, \rts)\) hold for
-\(|\rts| \geq \depth\). For any reachable segment \(\MPCT \langle f_\depth \rangle\),
+\definition {\bf Observational Stack Confidentiality}
+
+For any call trace \(\MPCT \in \MPCT^*\),
 let \(\head(\MPCT) = \mach,\pol,(\domMap,\rts)\) and
-\(\components\) be the set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
-Let \(\nach\) be a variant such that \(\mach \approx_\components \nach\) and
-\(\nach \hookrightarrow \NPCT | \neg f_\depth \).
+\(\components\) be the set of components \(\component\)
+such that \(\domMap ~ \component \not = \outside\).
 
-A system enjoys {\em observational confidentiality} if for all such
+A system enjoys {\em observational confidentiality} if for all
+\(\nach\) such that \(\mach \approx_\components \nach\) and
+\(\nach \hookrightarrow \NPCT | \neg f_\depth \),
 \(\MPCT\) and \(\NPCT\), the following conditions all hold:
 
 \begin{itemize}
@@ -2977,38 +2964,44 @@ contain leaked information on either side of the first pair of variant traces.
 This becomes the basis for the second variation, because all of these values
 must be protected from leaking for the remainder of the program.
 
-\sna{More to write here. The gist is: this is the extensional property.
-  The one that we would tentatively propose as a real characterization of stack
-  safety.}
+Together with return-after-call, these two properties give us
+{\em Observable Stack Safety}. This is a weaker property
+than the stepwise one, and also much more extensional.
+We can think of stepwise, deferred stepwise, and observational as
+three points along a spectrum from eager to lazy. The first two
+are useful for understanding particular enforcement mechanisms,
+but if we had to choose a single property to represent stack safety,
+it would be observational state safety.
 
 \subsection{Connection to Policies}
 
-    Observable properties allow us to defer enforcement until a property
-    violation would become visible, as in lazy policies. But by formalizing
-    the connection to the eager policy, we can identify when lazy policies
-    miss violations that can become visible. The optimized lazy tag policy from
-    \citet{DBLP:conf/sp/RoesslerD18} tags each stack slot with the call depth
-    at which it was written, and enforces that it must be read from the
-    same depth. However, this allows violations of observable stack safety!
-    Say we have functions {\tt foo}, {\tt bar} and {\tt baz}, where {\tt foo}
-    calls {\tt bar}, and then after {\tt bar} returns {\tt foo} calls
-    {\tt baz}. Since {\tt bar} and {\tt baz} are at the same stack depth, if
-    {\tt bar} writes to {\tt foo}'s frame, {\tt baz} can then read the tainted
-    write and use it to create an observable difference that violates both
-    observable integrity and confidentiality without violating the policy.
+Observable properties allow us to defer enforcement until a property
+violation would become visible, as in lazy policies. But by formalizing
+the connection to the eager policy, we can identify when lazy policies
+miss violations that can become visible. The Lazy Tagging and Clearing
+micro-policy from \citet{DBLP:conf/sp/RoesslerD18} tags each stack slot with the call depth
+at which it was written, and enforces that it must be read from the
+same depth. However, this allows violations of observable stack safety!
+Specifically, a callee might write into the stack and leave tags behind
+for a future callee at the same depth to read. This violates confidentiality and,
+if the writes were in the caller's frame, integrity.
 
-    The lazy policy can be repaired if, instead of tagging each function
-    activation with its depth in the stack, we generate a fresh activation
-    identifier on each call, which prevents a program from exploiting stale
-    tags from previous activations. A related mechanism was explored in the
-    Static Authorities policy of \citet{DBLP:conf/sp/RoesslerD18}, which
-    associates a unique activation identifier to each function, which is
-    however shared by all activations of the same function in order to obtain
-    good cacheability of tag rules. Static Authorities comes closer to
-    observable stack safety, though the example above would still exist
-    if {\tt bar} and {\tt baz} were merged into a single function that tracked
-    whether it had been called previously and changed its behavior accordingly.
-    \ifaftersubmission\apt{More blatently, static authorities doesn't work for recursive calls.}\fi
+Lazy Tagging and Clearing can be repaired if, instead of tagging each function
+activation with its depth in the stack, we generate a fresh activation
+identifier on each call, which prevents a program from exploiting stale
+tags from previous activations. A related mechanism was explored in the
+Static Authorities policy of \citet{DBLP:conf/sp/RoesslerD18}, which
+associates a unique activation identifier to each function, which is
+however shared by all activations of the same function in order to obtain
+good cacheability of tag rules, but that policy allows leaks between
+instances of the same function.
+
+Lazy Per-activation Tagging and Clearing ends up enforcing the combination
+of deferred stepwise stack integrity and stepwise confidentiality -- we
+don't actually need a deferred confidentiality property here. Therefore,
+it also enforces observational stack safety, so we declare it stack safe.
+Our properties have allowed us to reject an enforcement mechanism as
+not really stack safe, and describe a fix.
 
 \section{Related Work}
 \label{sec:relwork}
@@ -3054,29 +3047,8 @@ machine that replaces those pseudo-instructions with their calling convention.
 Their proof of full abstraction uses a standard notion of components, which
 import and export functions through their interfaces; their model of
 observations is limited to cotermination.
-
-We conjecture that the linear capability machines introduced by
-\citep{Skorstengaard+19}, in combination with the StkTokens calling convention,
-can be modeled in our framework and satisfy our definition of stack safety in
-\cref{sec:lse}. Further, we expect them to satisfy the even stronger
-property developed in \cref{sec:enforcement}. Proving (or testing) these conjectures would
-involve exposing their formal definitions of local state encapsulation and
-well-bracketed control flow, which are built-in as part of the
-semantics of the capability machines and not given explicitly.
-The main practical limitation of StkTokens
-is its reliance on linear capabilities, as it is unclear now they could be added
-to practical capability machines, especially in terms of efficiency (previous
-work on micro-policies \citep{yannis-report} has shown how to use that framework
-to implement linear return capabilities.\bcp{But IIUC the Dover realization
-  of micro-policies can't do this...?})\rb{Correct}
-%
-In recent work, \citet{Georges+21} address these efficiency concerns
-with the introduction of a new type of uninitialized capability that
-avoids the need to clear the stack while being more amenable to
-practical hardware implementation, although like
-\citet{Skorstengaard+19b} it lacks a general stack safety theorem,
-instead using a similar logical relation to reason about the safety of
-individual programs.
+\sna{Some of this seems like more detail than we need, and we need to
+  compare ourselves to their list of criteria.}
 
 \paragraph{Protecting the Stack with Micro-Policies}
 %
@@ -3096,6 +3068,12 @@ limited performance overhead. In addition to the baseline ``eager'' policies,
 they propose a number of lazy optimizations, notably Lazy Tagging and Lazy
 Clearing, discussed in \cref{sec:lazy}, with associated improvements in
 performance.
+
+We have evaluated Depth Isolation, Lazy Tagging, and Lazy Clearing against
+our properties, finding that Depth Isolation does indeed enforce stepwise
+stack safety and therefore also observable stack safety. We also found that
+neither lazy micro-policy actually does enforce stack safety, and proposed
+a fix.
 
 \paragraph{Heap Safety as a Security Property}
 
@@ -3121,122 +3099,48 @@ contours computed at each crossing between caller and callee.  \bcp{Didn't
   understand last sentence.}
 
 \section{Future Work}
-  \label{sec:future}
+\label{sec:future}
 
-  We have presented a pure notion of stack safety that omits many complicating
-  factors common to real systems. In particular, our model as presented exploits
-  the simplifying assumption that privilege never increases during a function
-  call, and that therefore a contour computed once on the entry to a function
-  describes its privilege throughout. Our future plans are to extend the model
-  with common language features, some of which violate this assumption. Here we
-  describe the basic principles by which our model can be extended to some of
-  these cases. We also plan to develop a testing framework for quickly
-  checking the validity of different enforcement mechanisms.
+We have introduced a characterization against which stack safety enforcement
+mechanisms can be measured and used it to evaluate tag-based enforcement mechanisms.
+From here there are two natural ways to extend the work. We should thoroughly evaluate
+other mechanisms, especially Cheri-based capability systems. And we can further demonstrate
+the functionality of our definitions by showing that they can be used to prove
+the correctness of a programming logic with strengthened rules around calls and returns.
 
-  \paragraph*{Capability machines}
-  %
-  %Other policies are implemented in hardware or built on hardware mechanisms.
-  Capability machines such as CHERI \citep{Woodruff+14} extend conventional
-  architectures to support efficient and fine-grained control over memory
-  accesses, which can be used to implement security policies, including
-  the stack protection policies of
-  \citet{Skorstengaard+19b} and (with an extension to support linear capabilities) \citet{Skorstengaard+19}.
-  %\bcp{I thought these policies used
-  %  linear capabilities?}\leo{Only the second one AFAIK. What would you
-  %  change to characterize it more accurately?}\rb{StkPointers uses linear
-  %  capabilities, its predecessor users local capabilities (and unlike
-  %  StkPointers could be implemented in CHERI)}.
-  Capabilities package up pointers
-  (ordinary data) with base and bounds information (policy data),
-  and they require rewriting source code (e.g., to use capabilities in place
-  of ordinary pointers), so separating ordinary machine state from policy
-  state is delicate; we conjecture it can be done with some effort.
+\paragraph*{Stack Safety in the Cheri Zoo}
 
-\BCP{This section seems incomplete?}
+There are several proposals around the use of Cheri capabilities to enforce stack safety,
+ranging from mechanisms that use the standard Cheri hardware \citep{Skorstengaard+19b},
+to those that propose entirely new types of capabilities, such as linear
+(\citep{Skorstengaard+19}), uninitialized (\citep{Georges+21}), and monotonic (\sna{cite}).
+Of these, uninitialized capabilities seem particularly promising -- they naturally enforce
+write-before-read behavior, and therefore will enable confidentiality without the need
+to clear large swaths of the stack. We propose to implement a model of the stack safety
+system described in (\citep{Georges+21}) and test it against our properties using
+QuickChick.
 
-  %% Mapping the underlying protection
-  %% mechanisms to policy states and step function would be a delicate operation, as
-  %% those are tightly coupled to the hardware design. However, separating the
-  %% enforcement aspects of a concrete policy (such as StkTokens, where policy state
-  %% would encompass details like the abstract call stack, the capability sealing
-  %% scheme, etc. \rb{is this digging too deep? or on the contrary, say more?}) from
-  %% the machine would be relatively straightforward.  \bcp{Not sure that any of
-  %%   this is comprehensible... :-(}
+Notably, we conjecture that while these systems may implement integrity and confidentiality,
+they fall just short of return-to-caller. This is because the standard way to protect returns
+in Cheri is to construct {\em return capability}, an object capability that must be invoked
+to simultaneously transfer control back to the caller and unseal a capability on an activation
+record. An ill-behaved intermediate caller could always pass its caller's return capability on
+to its callee instead of its own, ensuring that the callee will return past it. Instead,
+we believe that Cheri supports a slightly weaker control-flow property in which only callers
+that obey a dynamic reasonableness property are guaranteed not to be skipped.
 
-  %\paragraph*{Software-only policies}
-  %
-  %Some policies are implemented in software, by modifying code in the
-  %compiler, for example to perform bounds checking~\citep{NagarakatteZMZ09} or
-  %to insert stack canaries~\citep{Cowan+98}. Such approaches can, in principle,
-  %be evaluated in terms of our formal notion of stack safety with a trivial null
-  %policy. But any state maintained by the enforcement mechanism must be in normal
-  %memory and subject to the same confidentiality and integrity concerns (to be
-  %varied, rolled back, etc.), a heavy constraint. Alternately it can be stripped
-  %out as policy state provided that it can be proven to protect itself.
+\paragraph*{Program Logic for Stacks}
 
-%  \paragraph{Stack-derived Pointers}
+Stack integrity suggests a reasoning principle in which knowledge about a caller's
+local data can be carried across a call site. We propose to develop this notion
+into a low-level separation logic with a ``call rule'' that preserves propositions
+whose domains are sealed across a call, while allowing those propositions proven
+about the behavior of the callee to apply to the accessible stack.
 
-%    Common programming idioms involve a caller passing a pointer to
-%    its local data into a callee. Using standard notions of pointer
-%    provenance~\citep{provenance}, we can extend our model to
-%    distinguish safe use of this idiom from true stack safety
-%    violations. We require additional annotation to identify which
-%    addresses within a function's stack frame correspond to distinct
-%    objects. Then a valid pointer to an object is one derived through
-%    legal arithmetic from its base address, and at each call point, an
-%    object's addresses are marked low confidentiality and integrity if
-%    a valid pointer exists in a register or in the transitive closure
-%    of the callee's accessible memory. All pointers to an object cease
-%    to be valid when it is deallocated along with its stack frame.
-
-%  \paragraph{Non-stack control flow}
-
-%    Control structures beyond well-bracketed calls and returns require
-%    modifications to the model. Tail calls, for instance, reuse the caller's
-%    stack frame for its callee, and every nested tail call returns
-%    simultaneously to the top non-tail-calling function. Under normal stack
-%    integrity, the first function in a chain of tail calls returns and violates
-%    integrity, while subsequent tail calls never actually return at all.
-%    Instead we need a variant that treats the entry of a tail call as the
-%    return of its caller.
-
-%    More complex is the addition of a coroutine model, in which multiple stacks
-%    respect stack safety internally, but might also yield to one another.
-%    Here we must distinguish three levels of integrity: accessible, in the same
-%    stack, and in another stack. Stack integrity requires that same-stack data
-%    be unchanged when a function returns, but other-stack data may change. A
-%    similar {\em yield integrity} property requires that, from a yield out of
-%    a coroutine to the next yield back into it, all accessible and same-stack
-%    data are unchanged. Confidentiality properties are split similarly.
-
-%    \paragraph{Random Testing}
-
-%    Part of the motivation for the strong lockstep stack-safety property
-%    is that it uncovers errors quickly, and therefore should be quicker
-%    to test, just like the smarter testing properties
-%    of~\citet{TestingNI:ICFP}. We have already developed a testing
-%    framework for debugging our policy enforcement for this property, and
-%    it would be interesting to explore whether a testing-amenable variant
-%    of the lazy property also exists.
-
-% \rb{Notes from meeting:
-%   \begin{itemize}
-%   \item Explain how the theory applies to production compilers like GCC and
-%     LLVM, which aspects are directly applicable, what are the effects of
-%     alternative calling conventions. Other less charted waters: tail calls,
-%     coroutines, jumps into supervisor mode.
-%   \item CHERI and its operation, documentation and practical configurations and
-%     operation.
-%   \item Compare and contrast with StkTokens.
-%   \item Under what circumstances can stack safety exist without an enforcement
-%     mechanism?
-%   \item Zeroing out of allocated space inside blessed sequences, eager vs lazy.
-%     Possibility of blessed alloc and dealloc sequences, which also manipulate SP
-%     and would not be legal without blessing. In such an extended setting, the
-%     return sequence would check for matching addresses (it would be nice to have
-%     testing for this!).
-%   \end{itemize}
-% }
+It is straightforward to imagine that such a rule could be proven sound in a
+system with lockstep stack safety. But there is a real novelty in considering
+what kind of soundness can be proven from a system that obeys only our observational
+properties.
 
 %% Acknowledgments
 \begin{acks}                            %% acks environment is optional
