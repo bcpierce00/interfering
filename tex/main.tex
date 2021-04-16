@@ -1884,18 +1884,15 @@ nested: we will quantify over subtraces that represent whole calls. For each suc
 subtrace, we will quantify over {\em variants} of its initial state. Then we require
 that the original, {\em primary} traces move in {\em lockstep} with the variant.
 
-\definition \(\MPCT^*\) is the set of all \emph{call traces}, defined as
+\definition \(\MPCT^*\) is the \emph{call set}, defined as
 \[\begin{aligned}
-\bigcup_{\depth \in \mathbb{Z}} \{\MPCT | \MPCT\langle f_\depth \rangle
+\bigcup_{\depth \in \mathbb{Z}} \{\MPCT, \neg f_\depth | \MPCT\langle f_\depth \rangle
 \text{ is a reachable segment}\} \hspace{1em} &
 \text{where } f_\depth ~ (\mach,\pol,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
 \end{aligned}\]
 
-\definition
-For each trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \underscore,\underscore,(\underscore,\rts)\), the
-{\em break condition} of \(\MPCT\) is a predicate on
-states defined as \(\brk(\MPCT) = \neg f_{|\rts|}(\MPCT)\). It follows from our definitions
-that this holds on \(\MPCT\)'s final state, {\em unless it terminated prematurely due to a failstop}.
+We term \(\neg f_\depth\) the {\em break condition} \(\brk\), a predicate on
+states that holds on \(\MPCT\)'s final state, {\em unless it terminated prematurely due to a failstop}.
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
 written \(\mach \approx_\components \nach\), if, for
@@ -1929,13 +1926,14 @@ Let the secret set of a context, \(\secret(\domMap,\rts)\), be the
 set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
 
 \definition
-For any call trace \(\MPCT \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,\context\),
-let \(\components = \mathit{secret}(\context)\) and \(\nach\) be any variant
-such that \(\mach \approx_\components \nach\).
+For any \(\MPCT,\brk \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,\context\),
+let \(\components = \mathit{secret}(\context)\).
 A system enjoys \textbf{\textit{stepwise stack confidentiality}} if,
-for all \(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk(\MPCT)\),
+for any \(\nach\) such that \(\mach \approx_\components \nach\) and the induced trace
+\(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk\),
 \(\MPCT \doteq \NPCT\) holds.\apt{I'm worried about quantifier order here. Surely $n$ needs to be
-universally quantified, and probably also \(\MPCT\) (?) }
+  universally quantified, and probably also \(\MPCT\) (?) }
+\sna{Better?}
 
 %\medskip
 
@@ -1956,7 +1954,7 @@ A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every pa
 \(\mpcstatename = (\underscore,\underscore,(\underscore,\rts))\) and
 \(\mpcstatename' = (\underscore,\underscore,(\underscore,\rts'))\) such that
 \(\mpcstatename \stepsto \mpcstatename'\), if \(|\rts'| < |\rts|\), then
-\(|\rts'| = |\rts|\)
+\(|\rts'| = |\rts|-1\)
 
 %\subsection{Well-bracketed Control Flow}
 %\label{sec:wbcf}
@@ -2422,7 +2420,7 @@ but all properties in this section can be extended to more complex settings
 very naturally.
 
 \definition
-For any \(\MPCT \in \MPCT^*\), let \(\head(\MPCT) = \mach,\pol,\context\) and
+For any \(\MPCT,\brk \in \MPCT^*\), let \(\head(\MPCT) = \mach,\pol,\context\) and
 suppose that \(\last(\MPCT) = \mach',\pol',\context'\) and
 \((\mach',\pol',\context') \hookrightarrow \MPCT'\). Find the set of components
 that changed during the call, \(\components = \prot(\context) \cap \Delta(\mach,\mach')\).
@@ -2512,7 +2510,6 @@ compare up to deletion of \(\tau\) observations, coinductively:
            {\(\obs\obsT_1 \eqsim \obs\obsT_2\)}
 \end{minipage}
 
-
 %\leo{I still don't know how to do this transition. Maybe contrast
 %with the ``perhaps surprisingly'' later?} Note that
 %similarity of observation traces could alternatively be defined coinductively,
@@ -2534,7 +2531,7 @@ after the return---instead of preventing dangerous writes from being read, we
 prevent them from being leaked.
 
 \definition
-For any call trace \(\MPCT \in \MPCT^*\),
+For any \(\MPCT,\brk \in \MPCT^*\),
 let \(\head(\MPCT) = \mach,\pol,\context\).
 %
 Then, supposing that \(\last(\MPCT) = \mach',\pol',\context'\),
@@ -2559,7 +2556,7 @@ be pairs of states. Their {\em unsafe set}, written
 \(\mach' ~ \component \not = \nach' ~ \component\).
 
 \definition
-For any call trace \(\MPCT \in \MPCT^*\),
+For any \(\MPCT,\brk \in \MPCT^*\),
 let \(\head(\MPCT) = \mach,\pol,\context\) and
 \(\components = \secret(\context)\).
 %
@@ -2571,7 +2568,7 @@ A system enjoys {\em observational confidentiality} if for all
 \begin{itemize}
 \item They are observationally equivalent, \(\obsof(\MPCT) = \obsof(\NPCT)\),
   meaning that no secrets leak during the call
-\item \(\brk(\MPCT) ~ \last(\MPCT) \leftrightarrow \brk(\MPCT) ~
+\item \(\brk ~ \last(\MPCT) \leftrightarrow \brk ~
 \last(\NPCT)\)---if one call returns, so does the other
 \item Assuming both calls return, let \(\last(\MPCT) = \mach',\pol',\context'\)
   and \(\pi_\mach(\last(\NPCT)) = \nach'\).
@@ -3115,8 +3112,23 @@ the coroutine-specific properties.
 %stack confidentiality in the passing model, the equivalent property in the
 %coroutine model substitutes the above definitions.
 
+\definition \(\MPCT^\wedge\) is the \emph{yield set}, defined as
+\[\begin{aligned}
+\bigcup_{\stackid \in \STACKS} \hspace{-.5em} \{\MPCT, \neg f_\stackid | \MPCT\langle f_\stackid \rangle
+\text{ is a reachable segment}\} \hspace{1em} &
+\text{where } f_\stackid ~ (\underscore,\underscore,(\underscore,\underscore,\underscore,\stackid')) \triangleq \stackid \not = \stackid' \\
+\end{aligned}\]
+
+Here, we are capturing the entire span that the system spends {\em away} from a given
+coroutine.
+
 \definition
-Let the yield-protected set of a context, \(\prot_Y(\domMap,\rtm,\yts,\stackid)\),
+Let the protected set of a context, \(\prot_Y(\domMap,\rtm,\yts,\stackid)\),
+be the set of components \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\).
+
+\definition
+Let the secret set of a context, \(\secret_Y(\domMap,\rtm,\yts,\stackid)\),
 be the set of components \(\component\) such that
 \(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\).
 
@@ -3125,56 +3137,13 @@ We define {\em stepwise coroutine integrity} in the same way as stepwise stack i
 substituting the above definitions of \(\context\), initial contexts and update
 function, and \(\prot_Y\) for their equivalents. Likewise
 {\em deferred coroutine integrity} and {\em observational coroutine integrity} are defined
-in terms of their simple equivalents.
+in terms of their simple equivalents using \(\MPCT^\wedge\) in place of \(\MPCT^*\).
 
 \definition
-Let the call-secret set of a context, 
-be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid}{\sealed{\underscore}}\)
-or \(\domMap ~ \component = \instack{\stackid}{\passed{\depth,\depth'}}\) and
-\(|\rtm ~ \stackid| < \depth\) or \(|\rtm ~ \stackid| > \depth'\).
-
-
-
-\definition \(\MPCT^*\) is the set of all \emph{call traces}, defined as
-\[\begin{aligned}
-\bigcup_{\depth \in \mathbb{Z}} \{\MPCT | \MPCT\langle f_\depth \rangle
-\text{ is a reachable segment}\} \hspace{1em} &
-\text{where } f_\depth ~ (\mach,\pol,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
-\end{aligned}\]
-
-\definition
-Let the yield-secret set of a context, \(\secret_Y(\domMap,\rtm,\yts,\stackid)\),
-be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\).
-
-
-
-
-\definition
-Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
-\(f_\depth ~ \mach ~ (\underscore, \rtm, \underscore, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
-For any reachable segment \(\MPCT \langle f_\depth \rangle\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
-\(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid}{\unsealed}\) or
-\(\instack{\stackid}{\passed{\depth,\depth'}}\)
-where \(\depth \leq |\rtm ~ \stackid| \leq \depth'\) .
-Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
-\(\nach \hookrightarrow \NPCT\langle f_\depth \rangle\). A system enjoys
-{\em stepwise stack confidentiality} in the coroutine setting if for all
-such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
-
-\definition Let \(\stackid\) be a stack identifier, \(\depth\) be any depth, and
-\(f_\depth ~ \mach ~ (\underscore, \rtm, \underscore, \stackid)\) hold for \(|\rtm ~ \stackid| \geq \depth\).
-For any reachable segment \(\MPCT \langle f_\depth \rangle\),
-let \(\head(\MPCT) = \mach,\pol,(\domMap,\rtm,\yts,\stackid)\). Let
-\(\components\) be the set of components \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid}{\underscore}\).
-Then take any \(\nach\) such that \(\mach \approx_\components \nach\), and
-\(\nach \hookrightarrow \NPCT | \neg f_\depth\). A system enjoys
-{\em stepwise coroutine confidentiality} in the coroutine setting if for all
-such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
+We define {\em stepwise coroutine integrity} in the same way as stepwise stack
+integrity, substituting the above definitions. Likewise
+{\em observational coroutine confidentiality} is defined in terms of observational
+stack confidentiality.
 
 \section{Related Work}
 \label{sec:relwork}
