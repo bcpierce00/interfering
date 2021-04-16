@@ -476,19 +476,22 @@ reveals\bcp{right, Leo?} that it does not enforce confidentiality (either
 stepwise or
 observational): it violates the temporal aspect of confidentiality in
 corner cases where data can leak across repeated calls to the same callee.  We
-propose a variant of Lazy Tagging and Clearing that \emph{does} enforce
+propose a variant of {\em Lazy Tagging and Clearing} that \emph{does} enforce
 confidentiality (as far as our testing can tell), albeit at some performance
 cost.  \bcp{Did Nick and Andre know about this deficiency?  Did they mention
   it in their paper?  (If neither, we should make a bigger deal out of the
   fact that we discovered it.)\apt{Their paper is a little vague on this subject.
     They refer to ``temporal security properties'' as something to do with dangling
-    pointers, but they don't define it. 
+    pointers, but they don't define it.
     Then they say that Depth Isolation has weaker temporal security
     guarantees than Static Authorities (tag=function name), but they don't explain why
     (and I don't see why). They don't say anything explicit about the temporal
     security properties of Lazy Tagging and Clearing, but they consider it to enforce
-    a completely different (and generally weaker) policy anyway (``data flow integrity'' vs. ``memory safety'').}}
-
+    a completely different (and generally weaker) policy anyway (``data flow
+    integrity'' vs. ``memory safety'').}}\bcp{Sigh.  OK, I propose that we
+  leave this issue to deal with later (in consultation with them, which we
+  don't have time to do a good job of today).  At any rate, by my reading we
+are not saying anything incorrect at the moment.}
 
 % A second challenge is that enforcement mechanisms may weaken their
 % protections\bcp{``weaken their protections'' doesn't convey what we mean
@@ -740,7 +743,8 @@ our properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
 \apt{Suddenly we are talking about alternative enforcement mechanisms for the first time.
-  This surely needs \emph{some} foreshadowing in the abstract and intro?}
+  This surely needs \emph{some} foreshadowing in the abstract and
+  intro?}\bcp{Yes!}
 Dividing policy state from machine state helps us reason about
 enforcement mechanisms that keep a significant amount of data separate from the
 primary execution data to inform security. Obviously tag-based systems do this,
@@ -764,7 +768,11 @@ techniques.
   out) is a developer who wants to call out to potentially buggy or
   malicious libraries.  The library code is going to be linked with the
   developer's in the same address space, but the developer wants her private
-  data to be protected from both reading/exfiltrating and overwriting...}
+  data to be protected from both reading/exfiltrating and
+  overwriting... More generally, we can talk about the fact that programmers
+  use simple reasoning principles to think about their programs (e.g., local
+  variables don't change across function calls), and life is better when
+  these principles are actually true...}
 
 Intuitively, stack safety means that the stack frame of each caller (and
 those of its ancestor callers) is protected
@@ -1004,7 +1012,9 @@ int f() {
 \caption{An integrity violation\bcp{Can we align the C-like snippets with
     the corresponding assembly?\apt{Maybe, but it would require adding blank lines
       at places in both the C and asssembly, making them harder to read
-  and eating more space.}}  \ifaftersubmission\bcp{I wonder if we
+  and eating more space.}\bcp{I'm just talking about removing the space
+  above "main" in the left column and moving f down a bit.}}
+\ifaftersubmission\bcp{I wonder if we
     could make the figures easier to read by putting very light, differently
   colored backgrounds under the different parts}\fi}
 \label{fig:int1}
@@ -1058,9 +1068,9 @@ refers to the fact that the property must hold on every step. %Later we will
 %cares about changes it can see after the return, not changes during execution.
 In this case, after instruction 8, {\tt f} has violated integrity by writing to {\tt x},
 so the final return value produced by {\tt main} is wrong.
-
-The black rectangle represents the return address, which is saved by the call
-instruction itself, so is not sealed.
+%
+(The black rectangle represents the return address, which is saved by the call
+instruction itself, so it is not sealed.)
 
 \begin{figure}
 \begin{subfigure}{.2\textwidth}
@@ -1185,7 +1195,7 @@ int f() {
 \label{fig:conf1}
 \end{figure}
 
-Meanwhile, confidentiality intuitively states that a callee is insensitive to 
+Meanwhile, confidentiality intuitively states that a callee is insensitive to
 the context of its call (except for its arguments and any global
 variables).
 We state this as a kind of {\em noninterference} property~\citep{??}.
@@ -1416,7 +1426,7 @@ void f() {
 6         ret
 
 10 f:     add $1,%sp     ; alloc frame
-11        cmp stash, $0  ; stash = 0? 
+11        cmp stash, $0  ; stash = 0?
 12        breq #15       ; branch if so
 13        mov -2(%sp),stash ; set stash
 14        jmp #17
@@ -1554,7 +1564,7 @@ which are either addresses or register names (\(\reg\)) drawn from some set
 program counter {\PCname} and the stack pointer \(\SP\).
 A {\em machine state} is a map from components to values.
 %
-    \[\component \in \COMPONENTS ::= \WORDS + \REGS  \hspace{1in} 
+    \[\component \in \COMPONENTS ::= \WORDS + \REGS  \hspace{1in}
     \mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
 %
 We have a total step function between machine states, written \(\mach \stepsto \mach'\).
@@ -1790,7 +1800,7 @@ Recall that a ``code map'' \(\codemap\) is a predicate on addresses.
               {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
               {\(\domMap'' = \domMap'[\components \mapsto \unsealed]\)}
               {\(\mach,(\domMap,\_::\rts) \stepsto_C \domMap'',\rts'\)}
-              
+
 \vspace*{-3.5ex}
 \judgment[ Default]
          {}
@@ -1833,10 +1843,10 @@ such that \(\mach ~ \component \not = \mach' ~ \component\).
 \definition Two pairs of states \((\mach,\mach')\) and \((\nach,\nach')\)
  {\em change together}, written \((\mach,\mach') \diamond (\nach,\nach')\), if, for all components \(\component\) in
 \(\Delta(\mach,\mach') \cup \Delta(\nach,\nach')\),
-\(\mach' ~ \component = \nach' ~ \component\). 
+\(\mach' ~ \component = \nach' ~ \component\).
 
 \definition A pair of traces \(\machT\) and \(\nachT\) are {\em in lockstep},
-written \(\machT \doteq \nachT\), 
+written \(\machT \doteq \nachT\),
 if their adjacent pairs of states change together.  We define this as a coinductive relation:
 
 \begin{minipage}{.3\textwidth}
@@ -2248,7 +2258,7 @@ presented. \bcp{Too much space between the second and third.}
               {\(\domMap'' = \mathit{pop} ~ \domMap' ~ |\rts|\)}
               {\(\mach,(\domMap,\_::\rts) \stepsto_C \domMap'',\rts'\)}
 
-\vspace*{-3.5ex}            
+\vspace*{-3.5ex}
 \judgment[ Default]
          {}
          {\(\_,\context \stepsto_C \context\)}
@@ -2397,28 +2407,28 @@ such \(\MPCT\) and \(\NPCT\), \(\MPCT \doteq \NPCT\).
 %is annotated as a return, then \(\pi_c(\mpcstatename) = (\_,\_,\_,\stackid')\)
 %where \(\stackid \not = \stackid'\).
 
-\section{Do Micro-Policies Enforce Stack Safety?}
+\section{Case Study: Do Micro-Policies Enforce Stack Safety?}
 \label{sec:enforcement}
 
-\bcp{``Enforcement'' seems like too broad a title.  What about calling it
-  ``Evaluating Micro-Policies'' or ``Do Micro-Policies Enforce Stack
-  Safety?''? And what about folding the testing section into this one?  That
-would keep related things together, would avoid appearing to make overly
-grand claims in either section, and would give us an excuse to write less
-about the mechanism here---we only need to write enough about the mechanism
-itself that readers can understand our validation case study.}
-\leo{Agreed. Took a crack at it.}
+% \bcp{``Enforcement'' seems like too broad a title.  What about calling it
+%   ``Evaluating Micro-Policies'' or ``Do Micro-Policies Enforce Stack
+%   Safety?''? And what about folding the testing section into this one?  That
+% would keep related things together, would avoid appearing to make overly
+% grand claims in either section, and would give us an excuse to write less
+% about the mechanism here---we only need to write enough about the mechanism
+% itself that readers can understand our validation case study.}
+% \leo{Agreed. Took a crack at it.}
 
-\leo{I am not sure we've hit the correct level of detail in this
-  section.}\bcp{Agreed!}
+% \leo{I am not sure we've hit the correct level of detail in this
+%   section.}\bcp{Agreed!}
 
-In this section we sketch an existing enforcement mechanism, Depth
-Isolation from \citet{DBLP:conf/sp/RoesslerD18}, that implements the
-formal stack-safety property described in the previous section; in
-fact, it enforces a stronger, inductive version of that property which
+In this section we sketch an existing enforcement mechanism, {\em Depth
+Isolation}, from \citet{DBLP:conf/sp/RoesslerD18}, that implements the
+formal stack-safety property described in the previous section. (In
+fact, it enforces a slightly stronger, inductive version of that property which
 strengthens the local state encapsulation component by checking for
 integrity and confidentiality violations at every step of the callee's
-execution trace. We validate that claim by developing a property-based
+execution trace.) We validate this claim with a property-based
 testing framework that can quickly uncover inconsistencies between the
 enforcement mechanism and the stack-safety property.
 
@@ -2426,33 +2436,34 @@ enforcement mechanism and the stack-safety property.
 %
 The enforcement policy of \citeauthor{DBLP:conf/sp/RoesslerD18} relies
 on a programmable, tag-based reference monitor that runs alongside the
-program.  To control this monitor, they use a programming model that
-allows fine-grained manipulation of metadata tags to encode so-called
+program,
+allowing fine-grained manipulation of metadata tags to encode so-called
 \emph{micro-policies}~\citep{pump_oakland2015}.
-In such a system, all values in
-memory addresses and registers (including the $\PCname$)
-are enriched with an abstract metadata tag, which can represent
-arbitrary information about the value. A micro-policy is defined as a set of tags and a
-collection of software-defined rules, indexed by machine opcode.
+Every value in
+memory and registers (including the $\PCname$)
+is enriched with an abstract metadata tag, which can represent
+arbitrary information about the value. A micro-policy is then defined as a
+set of tags and a
+collection of software-defined rules.
 At each step of the machine, the relevant rule is applied to the tags on
-the instruction's inputs ($\PCname$, registers, memory) and on the instruction itself, and produces
-one of two outcomes: either the instruction is allowed to execute (and generates
-tags for the result of the operation and the new $\PCname$), or the machine
-fail-stops with a policy violation.
-\citeauthor{pump_oakland2015}\bcp{and PIPE, if there are any references to
-  cite} have shown that a wide range of micro-policies can
-be defined using this scheme.
+the instruction's inputs ($\PCname$, registers, memory) and on the
+instruction opcode itself, producing
+one of two outcomes: either the instruction is permitted to execute (and
+generates tags for the result of the operation and the new $\PCname$), or
+the machine fail-stops with a policy violation.
+\citeauthor{pump_oakland2015}\bcp{additional citations: the noninterference
+  paper, Nick and Andre's papers, ...} show that a wide range of
+micro-policies can be defined using this scheme.
 
-Efficient execution of these micro-policies relies on hardware implementations,
-such as the PUMP architecture~\citep{pump:asplos2015}.  Tags are represented
-as word-size bit vectors, stored separately from the regular memory and registers.
+Efficient execution of these micro-policies relies on hardware acceleration,
+such as the PUMP architecture~\citep{pump:asplos2015}.
 The hardware incorporates a rule cache
 to allow quick retrieval of rule outputs for mapped inputs. If the cache misses,
 the hardware traps to a software handler (running in a privileged context or
 on a co-processor) to compute the rule result. To obtain adequate performance,
 it is important to design micro-policies so that they hit in the cache as
-much as possible. Thus, practical policies maintain a small working set of
-distinct tags.
+much as possible. Thus, practical policies need to maintain a small working
+set of distinct tags.
 %% %
 %% \rb{Maybe go into more detail, examples later\ldots or try to segue into stack
 %% policies}
@@ -2462,8 +2473,8 @@ distinct tags.
 
 The micro-policy we present here to enforce the definition of stack
 safety developed in \cref{sec:lse} is a small variation
-on the Depth Isolation policy presented by
-\citet{DBLP:conf/sp/RoesslerD18}. Their policy tags the stack memory
+on the {\em Depth Isolation} policy presented by
+\citet{DBLP:conf/sp/RoesslerD18}. In their policy,  the stack memory is tagged
 with ownership information associated to each stack frame (and to each
 separate object inside that frame, a more finely grained access
 control that we do not need to consider here), and tags registers containing
@@ -2960,7 +2971,7 @@ it would be observational state safety.
 Observable properties allow us to defer enforcement until a property
 violation would become visible, as in lazy policies. But by formalizing
 the connection to the eager policy, we can identify when lazy policies
-miss violations that can become visible. The Lazy Tagging and Clearing
+miss violations that can become visible. The {\em Lazy Tagging and Clearing}
 micro-policy from \citet{DBLP:conf/sp/RoesslerD18} tags each stack slot with the call depth
 at which it was written, and enforces that it must be read from the
 same depth. However, this allows violations of observable stack safety!
@@ -2968,7 +2979,7 @@ Specifically, a callee might write into the stack and leave tags behind
 for a future callee at the same depth to read. This violates confidentiality and,
 if the writes were in the caller's frame, integrity.
 
-Lazy Tagging and Clearing can be repaired if, instead of tagging each function
+{\em Lazy Tagging and Clearing} can be repaired if, instead of tagging each function
 activation with its depth in the stack, we generate a fresh activation
 identifier on each call, which prevents a program from exploiting stale
 tags from previous activations. A related mechanism was explored in the
@@ -3038,38 +3049,39 @@ observations is limited to cotermination.
 attacks against stack data are in scope (but not side channels or hardware
 attacks), and study the protection of stack data through three families of
 micro-policies that tag stack objects with a pair of frame and object identifiers
-used to validate accesses to the stack: Return Address Protection (which
-prevents an adversary from overwriting designated return addresses), Static
-Authorities (which only allows the code of a function to access the stack frames
-of its own dynamic instances), and Depth Isolation (described in
+used to validate accesses to the stack: {\em Return Address Protection} (which
+prevents an adversary from overwriting designated return addresses), {\em Static
+Authorities} (which only allows the code of a function to access the stack frames
+of its own dynamic instances), and {\em Depth Isolation} (described in
 \cref{sec:enforcement}). All these policies exploit various kinds of spatial and
 temporal locality of stack memory and local call graphs, as well as information
 generated by the compilation toolchain, to strike various balances between
 precision and cacheability, evaluated through benchmarks that demonstrate
 limited performance overhead. In addition to the baseline ``eager'' policies,
-they propose a number of lazy optimizations, notably Lazy Tagging and Lazy
-Clearing, discussed in \cref{sec:lazy}, with associated improvements in
+they propose a number of lazy optimizations, notably {\em Lazy Tagging} and
+{\em Lazy
+Clearing}, discussed in \cref{sec:lazy}, with associated improvements in
 performance.
 
-We have evaluated Depth Isolation, Lazy Tagging, and Lazy Clearing against
-our properties, finding that Depth Isolation does indeed enforce stepwise
-stack safety and therefore also observable stack safety. We also found that
-neither lazy micro-policy actually does enforce stack safety, and proposed
-a fix.
+We have evaluated {\em Depth Isolation}, {\em Lazy Tagging}, and {\em Lazy
+  Clearing} against our properties, finding that {\em Depth Isolation} does
+indeed enforce stepwise stack safety and therefore also observable stack
+safety. We also found that neither lazy micro-policy actually does enforce
+stack safety, and proposed a fix.
 
 \paragraph{Heap Safety as a Security Property}
 
 Heap safety, like stack safety, may be framed as a security property
 in the form of
 noninterference~\citep{DBLP:conf/post/AmorimHP18}\ifaftersubmission\bcp{Should
-be ``Azedevo et al.''}\fi. Just
+be spelled ``Azedevo et al.''  Got to figure out how to make bibtex do that
+(or ask arthur how!).}\fi. Just
 as~\citeauthor{DBLP:conf/post/AmorimHP18} give a rigorous
-characterization of the meaning of (heap) memory safety, in this paper
-we aim to do the same for the stack.\bcp{Let's describe their work in a bit
-  more detail.}
+characterization of the meaning of (heap) memory safety, in this paper,
+inspired by their work, we aim to do the same for the stack.
 %
 Their model describing safety of shared stack-allocated
-objects\bcp{??} extends naturally to heap safety, complicated by the fact that
+objects\BCP{huh?? they were not talking about stacks} extends naturally to heap safety, complicated by the fact that
 these objects are not deallocated by returns\bcp{??}, and therefore a
 function's privilege may increase or decrease after its entry
 point. For instance, if a callee allocates a heap object and returns
@@ -3077,8 +3089,8 @@ the pointer to its caller, that object's addresses become accessible
 in contradiction to a contour computed at the caller's entry. So such
 an extension must enforce trace confidentiality and integrity
 properties separately on continuous segments of each call, with
-contours computed at each crossing between caller and callee.  \bcp{Didn't
-  understand last sentence.}
+contours computed at each crossing between caller and callee.  \BCP{Didn't
+  understand very much of that paragraph.}
 
 \section{Future Work}
 \label{sec:future}
