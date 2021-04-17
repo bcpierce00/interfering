@@ -1939,9 +1939,12 @@ universally quantified, and probably also \(\MPCT\) (?) }
 
 %\medskip
 
-In other words, stepwise stack confidentiality states that if we vary every component of the stack,
-the resulting trace (starting in the same policy state) steps in lockstep with the
-original trace until both have reached the break condition.
+In other words, stepwise stack confidentiality states that if, at the start of the call,
+we vary all stack locations that are supposed to be secret from the callee
+(which in our simple setting is the entirety of the stack),
+the resulting trace remains in lockstep with the original trace
+until either both return together or one failstops. This implies that
+if the callee reads a secret location, it must failstop.\apt{right?}
 %
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the components in \(\components\), and in addition their subtraces are also in
@@ -1949,13 +1952,13 @@ of the components in \(\components\), and in addition their subtraces are also i
 will contain these calls and returns as well, so its return stack pushes and pops
 in lockstep until it breaks at the final return.
 
-Finally, we formalize a version of WBCF, which capture the same informal idea
-as that of \citet{Skorstengaard+19b} using our notion of contexts.
+Finally, we formalize a version of WBCF, which captures the same informal idea
+as that of \citet{Skorstengaard+19b} using our context machinery.
 \definition
 A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every pair of reachable states
 \(\mpcstatename = (\_,\_,(\_,\rts))\) and
 \(\mpcstatename' = (\_,\_,(\_,\rts'))\) such that
-\(\mpcstatename \stepsto \mpcstatename'\), if \(|\rts'| < |\rts|\), then
+\(\mpcstatename \stepsto \mpcstatename'\)\apt{doesn't reachability of $\mpcstatename$ imply reachability of $\mpcstatename'$?}, if \(|\rts'| < |\rts|\), then
 \(|\rts'| = |\rts|\)
 
 %\subsection{Well-bracketed Control Flow}
@@ -2363,7 +2366,7 @@ newly allocated stack frame correctly, but left some of them as
 $\tagNoDepth$. This allowed for a potential integrity violation, but
 only if a rather complicated sequence of events occured.
 The smallest counterexample requires calling a function {\tt f},
-which writes into an uninitialized location $l$ (which is always fine), and then
+which writes into an uninitialized location $l$ (which is always fine\apt{is it??? in the strict policy?}, and then
 calls a further function {\tt g} (which should have the effect of sealing $l$
 for integrity purposes). Then {\tt g} attempts to write to $l$;
 this is allowed because the enforcement mechanism still has
@@ -2383,55 +2386,58 @@ mitigate those costs, they propose a number of optimizations.
 First, they eliminate the initialization pass. In this {\em Lazy Tagging}
 system, the stack is initially tagged as ``clear.''
 \rb{The previous section already presents ``unused'' as the default tag,
-though it doesn't say that it can be overwritten whenever}
+  though it doesn't say that it can be overwritten whenever\apt{but see my
+query re the HEADER\_NO\_INIT bug}}
 A function is permitted
 to overwrite clear memory, and when it does so its depth tag overwrites
 the clear tag, claiming the memory; the remainder of the policy functions
 as {\em Depth Isolation}. On return, the callee must clear its frame, which
 is still a heavy cost.
 
-To eliminate this cost, \citet{DBLP:conf/sp/RoesslerD18} introduce
-{\em Lazy Tagging and Lazy Clearing}. Under this optimizations,
-the policy does not initialize stack frames on entry or clear them on exit,
+To eliminate this cost, \citet{DBLP:conf/sp/RoesslerD18} augment Lazy Tagging
+with {\em Lazy Clearing}. Under this combination of optimizations,
+the policy does not initialize stack frames on entry \emph{or} clear them on exit,
 and it permits all writes to the stack, even when the $\PCname$ tag
-does not match the memory tag. Instead it propagates the \(\PCname\) tag
-to written memory. Then reads from the stack do still require $\PCname$
+does not match the memory tag; the \(\PCname\) tag is always propagated
+to the written location. Reads from the stack do still require $\PCname$
 tag and memory tag to match. Thus, even if a callee illicitly writes to
 a private location in its caller, the caller will eventually detect this
 if it ever tries to read from that location.
 \rb{This is in line with the level of detail in the last section.}
 %
 These \emph{lazy policies} admit more efficient implementations, but
-they deliberately allow violations of stack integrity temporarily,
+they deliberately allow temporary violations of stack integrity,
 with the checks deferred until the point a violation truly becomes
-harmful. The natural question then is, how do we characterize the
-protections provided by these policies once stack safety is broken?
+harmful. The natural question then is: how do we characterize the
+protections provided by these policies once stepwise stack safety is broken?
 How does a harmful violation that must be caught later differ from a
 harmless one?
 
 \paragraph*{Deferring Integrity Checks}
 
-We first notice that, in principle, these properties appear to enforce
+We first notice that, in principle\apt{??}, these properties appear to enforce
 confidentiality outright. So we wish in particular to find an integrity
 property. The intuition is that sealed memory can change, but it is
 then tainted, and its original owner cannot actually read it. This
 leads us to a hybrid of integrity and confidentiality.
 
-For simplicity, our definitions return to the simple stack without sharing,
-but all properties in this section can be extended to more complex settings
-very naturally.
+%For simplicity, our definitions return to the simple stack without sharing,
+%but all properties in this section can be extended to more complex settings
+%very naturally.
 
 \definition
 For any \(\MPCT \in \MPCT^*\), let \(\head(\MPCT) = \mach,\pol,\context\) and
 suppose that \(\last(\MPCT) = \mach',\pol',\context'\) and
-\((\mach',\pol',\context') \hookrightarrow \MPCT'\). Find the set of components
-that changed during the call, \(\components = \mathit{protected}(\context) \cap \Delta(\mach,\mach')\).
-A system enjoys {\em deferred stepwise integrity} if for any \(\nach\) such that
-\(\mach' \approx_{\components'} \nach\) and its induced trace
-\((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\MPCT' \doteq \NPCT\).
+\((\mach',\pol',\context') \hookrightarrow \MPCT'\). Let 
+\(\components = \mathit{protected}(\context) \cap \Delta(\mach,\mach')\), the
+set of sealed components that changed during the call.
+A system enjoys \textbf{\textit{deferred stepwise integrity}} if, for any \(\nach'\) and \(\NPCT'\)
+such that \(\mach' \approx_{\components} \nach'\) and 
+\((\nach',\pol',\context') \hookrightarrow \NPCT'\), \(\MPCT' \doteq \NPCT'\) holds.\apt{again, shouldn't
+we quantify over all $M$?}
 
 In short, if sealed components are modified during the call, the caller may not
-access their values.
+access their values.\apt{This is pretty cryptic.}
 %
 For example, consider again the integrity violation in
 Figure~\ref{fig:int1}. Under a deferred discipline, the write to {\tt
@@ -2440,15 +2446,18 @@ constitute a violation, which happens only when the tainted value is
 read in instruction 4. However, if this instruction added the constant
 that was originally stored in {\tt x} without reading the variable,
 i.e., {\tt add \$42,\%ra}, deferred integrity would not be violated.
-Instead of forbidding such dangerous writes, we say,
+Instead of strictly forbidding such dangerous writes, we say,
 ``No reads after dangerous writes.''
 
 \subsection{Observability}
 
+\apt{Given that the deferred property suffices to specifcy the lazy policies,
+  the case for observable properties is pretty weak.  Should we just cut them?}
+
 We argue that while deferred stepwise integrity meaningfully captures the intuition
 behind lazy tagging, it stops short of the kind of extensional characterization
 that would be viable as a weakest reasonable definition. Consider a hypothetical
-taint-tracking policy, that allows dangerous writes to be copied as long as the
+taint-tracking policy that allows dangerous writes to be copied as long as the
 taint remains hidden from outside observers. In order to characterize
 such a policy, we would need a model of observation.
 Similarly, for such a taint-based policy, lockstep confidentiality would be too
@@ -2491,7 +2500,7 @@ initial observation, a machine-trace, and an observation trace:
 
 \paragraph*{Observational Similarity}
 
-We say that a pair of observation traces $\obsT_1$ and $\obsT_2$ are {\em similar}
+We say that two observation traces $\obsT_1$ and $\obsT_2$ are {\em similar}
 as far as an external observer is concerned, written \(\obsT_1 \eqsim
 \obsT_2\), if the sequence of non-silent observations is the same. That is, we
 compare up to deletion of \(\tau\) observations, coinductively:
@@ -2544,6 +2553,7 @@ and let \((\mach,\pol',\context') \hookrightarrow \MPCT'\).
 A system enjoys {\em observational integrity} if for any \(\nach\) such that
 \(\mach' \approx_{\components'} \nach\), and its induced trace
 \((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\obsof(\MPCT') \simeq \obsof(\NPCT)\).
+\apt{Adjust quantification to match final version of deferred intergrity.}
 
 \medskip
 
@@ -2579,7 +2589,7 @@ A system enjoys {\em observational confidentiality} if for all
   And let \(\nach''\) be a state such that \(\mach' \approx_\components \nach''\).
   Then if \(\mach',\pol',\context' \hookrightarrow \MPCT'\) and
   \(\nach',\pol',\context' \hookrightarrow \NPCT'\), it must be
-  that \(\obsof(\MPCT') \simeq \obsof(\NPCT')\)
+  that \(\obsof(\MPCT') \simeq \obsof(\NPCT')\)\apt{adjust quantification if needed}
 \end{itemize}
 
 This last condition is the most interesting: we identify the components that
@@ -2600,7 +2610,7 @@ it would be observational state safety.
 
 Observable properties allow us to defer enforcement until a property
 violation would become visible, as in lazy policies. But by formalizing
-the connection to the eager policy, we can identify when lazy policies
+the connection to the eager policy\apt{???}, we can identify when lazy policies
 miss violations that can become visible. The {\em Lazy Tagging and Clearing}
 micro-policy from \citet{DBLP:conf/sp/RoesslerD18} tags each stack slot with the call depth
 at which it was written, and enforces that it must be read from the
@@ -2616,7 +2626,7 @@ tags from previous activations. A related mechanism was explored in the
 Static Authorities policy of \citet{DBLP:conf/sp/RoesslerD18}, which
 associates a unique activation identifier to each function, which is
 however shared by all activations of the same function in order to obtain
-good cacheability of tag rules, but that policy allows leaks between
+good cacheability of tag rules---but that policy allows leaks between
 instances of the same function.
 
 {\em Lazy Per-activation Tagging and Clearing} ends up enforcing the combination
