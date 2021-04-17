@@ -565,14 +565,9 @@ For ease of exposition, our development initially assumes a single simple
 stack with no sharing between callers and callees: all parameters and return
 values are passed in registers.  Later, we show how to refine the properties
 to allow passing of scalar stack data, granting a callee access to the
-caller's data.
-%% (We do not consider more sophisticated forms of sharing, such
-%% as taking the address of a variable and treating it like a pointer.)
-%% \rb{But actually, this is discussed at some length is \cref{sec:passing},
-%%   and it is the topic of \cref{fig:passing}.  Reaching that point after
-%%   reading this disclaimer is confusing.}\bcp{So should we just remove that
-%%   sentence?}
-%
+caller's data. Throughout, we note how we expect elements of the formalism
+to interact with enforcement mechanisms beyond micro-policies.
+
 Lastly, we define integrity and confidentiality properties for a coroutine
 system with a static layout, in which each coroutine's stack is constrained
 to a fixed region of memory.  Though simplistic, this extension is a step
@@ -798,10 +793,6 @@ action that would violate the security property;
 our properties are therefore naturally \emph{termination insensitive.}
 This model will be made more precise in \cref{sec:prelim}.
 
-\apt{Suddenly we are talking about alternative enforcement mechanisms for
-  the first time.  This surely needs \emph{some} foreshadowing in the
-  abstract and intro?}\bcp{Yes!}
-%
 Dividing policy state from machine state helps us reason about
 enforcement mechanisms that keep a significant amount of data separate from the
 primary execution data to inform security. Obviously tag-based systems do this,
@@ -1084,8 +1075,8 @@ Colored boxes indicate an assignment of the address to a
 are \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), and \(\outside\)
 (outside the stack entirely.) These are abbreviated \(U\) and \(S(\dots)\) in the
-figures. For our purposes, \(\outside\) will apply to global
-variables.\apt{and code?} Domains are part of the {\em context} of a state.
+figures. \sna{TODO}. For our purposes, \(\outside\) will apply to global
+variables and code. Domains are part of the {\em context} of a state.
 We will introduce the remaining context as needed.
 
 Figure~\ref{fig:int1} shows a simple integrity violation. It consists of a {\tt main}
@@ -2375,12 +2366,11 @@ newly allocated stack frame correctly, but left some of them as
 $\tagNoDepth$. This allowed for a potential integrity violation, but
 only if a rather complicated sequence of events occured.
 The smallest counterexample requires calling a function {\tt f},
-which writes into an uninitialized location $l$,
-% (which is always fine\apt{is it??? in the strict policy?}
-and then
-calls a further function {\tt g} (which should have the effect of sealing $l$
-for integrity purposes). Then {\tt g} attempts to write to $l$;
-this is allowed because the enforcement mechanism still has
+which fails to initialize some of its frame during the blessed sequence,
+but writes into an uninitialized location $l$ later, treating \(l\) as outside
+the stack. Then {\tt f} calls a further function {\tt g} (which should have
+the effect of sealing $l$ for integrity purposes). {\tt g} attempts to write to $l$,
+which is allowed because the enforcement mechanism still has
 $l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s data.
 %\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
 %  and the write from {\tt f} was already a violation.}
@@ -2398,13 +2388,9 @@ and reset them as it is destructed, as
 mitigate those costs, they propose a number of optimizations.
 
 First, they eliminate the initialization pass. In the {\em Lazy Tagging}
-system, the stack is again initially tagged as \(\tagNoDepth\),
-%\rb{The previous section already presents ``unused'' as the default tag,
-%  though it doesn't say that it can be overwritten whenever\apt{but see my
-%    query re the HEADER\_NO\_INIT bug}}\sna{Correct there, but now I'm talking
-%  about laziness.}\leo{Should be better now}
+system, the stack is again initially tagged as \(\tagNoDepth\).
 A function is permitted
-to overwrite clear memory, and when it does so its depth tag overwrites
+to overwrite \(\tagNoDepth\) memory, and when it does so its depth tag overwrites
 the clear tag, claiming the memory; the remainder of the policy functions
 as {\em Depth Isolation}. On return, the callee must clear its frame, restoring
 it to \(\tagNoDepth\), which is still a heavy cost.
