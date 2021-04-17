@@ -1174,8 +1174,7 @@ int f() {
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{1}{\goodc}
-  \memory{1}{\unsealc}
+  \memory{2}{\unsealc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{42}
   \MemoryLabel{-10em}{0.75em}{5}
@@ -1184,8 +1183,7 @@ int f() {
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{1}{\goodc}
-  \memory{1}{\unsealc}
+  \memory{2}{\unsealc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{\(v_0\)}
   \MemoryLabel{-10em}{0.75em}{5}
@@ -2958,10 +2956,10 @@ We add extra information to our call
 annotations to reflect that they may now pass variables on the stack, and that the locations
 of those variables may be dynamic (as in the case of pass-by-reference).
 A call annotation now includes a predicate relating machine states to the components
-that should be passed, expressed as offsets from the stack pointer. \apt{Much better, but the
-actual definition of $P$ is still wrong.}
+that should be passed, expressed as offsets from the stack pointer.
+%
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P \subseteq \WORDS)\]
 
-\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P) \hspace*{1in} P \subseteq (\MACHS \times \COMPONENTS)\]
 We extend the set of domains to include passed components,
 which are labeled with the range of depths of the caller that has passed them.
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \passed{\depth,\depth'}\]
@@ -2974,17 +2972,19 @@ update a domain map at a call from depth \(\depth\).
 \[(\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) ~ \component =
 \begin{cases}
   \sealed{\depth}              & \text{if } \domMap ~ \component = \unsealed \text{ and }
-                                 \sealcon ~ \mach ~ \component \text{ and } \neg P ~ \mach ~ \component \\
+                                 \sealcon ~ \mach ~ \component \text{ and }
+                                 \component - (\mach ~ \rsp) \not \in P \\
   \passed{\depth,\depth+1}     & \text{if } \domMap ~ \component = \unsealed \text{ and }
-                                 \sealcon ~ \mach ~ \component \text{ and } P ~ \mach ~ \component \\
+                                 \sealcon ~ \mach ~ \component \text{ and }
+                                 \component - (\mach ~ \rsp) \in P \\
   \passed{\depth',\depth+1}    & \text{if } \domMap ~ \component = \passed{\depth',\depth} \text{ and }
-                                 \sealcon ~ \mach ~ \component \text{ and } P ~ \mach ~ \component,
-                                 \text{ for any } \depth' \\
+                                 \sealcon ~ \mach ~ \component \\
+                               & \text{ and } (\mach ~ \rsp) \in P, \text{ for any } \depth' \\
   \domMap~\component & \text{else} \\
 \end{cases}\]
 
 At the matching return we just unseal the components at depth \(\depth\):
-
+%
 \[(\mathit{pop} ~ \domMap ~ \depth) ~ \component =
 \begin{cases}
   \unsealed                 & \text{if } \domMap ~ \component = \sealed{\depth} \\
@@ -3261,7 +3261,10 @@ significant inspiration for this work.
 
 We have introduced a characterization against which stack safety enforcement
 mechanisms can be measured and used it to evaluate tag-based enforcement mechanisms.
-From here there are two natural ways to extend the work. We should thoroughly evaluate
+Our immediate next step is to implement testing of observational properties,
+both to validate them and to explore how to effectively test properties that do not
+fail immediately.
+From there there are two natural ways to extend the work. We should thoroughly evaluate
 other mechanisms, especially Cheri-based capability systems. And we can further demonstrate
 the functionality of our definitions by showing that they can be used to prove
 the correctness of a programming logic with strengthened rules around calls and returns.
