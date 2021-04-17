@@ -1961,11 +1961,10 @@ in lockstep until it breaks at the final return.
 Finally, we formalize a version of WBCF, which captures the same informal idea
 as that of \citet{SkorstengaardSTK} using our context machinery.
 \definition
-A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every pair of reachable states
-\(\mpcstatename = (\underscore,\underscore,(\underscore,\rts))\) and
-\(\mpcstatename' = (\underscore,\underscore,(\underscore,\rts'))\) such that
-\(\mpcstatename \stepsto \mpcstatename'\)\apt{doesn't reachability of $\mpcstatename$ imply reachability of $\mpcstatename'$?}, if \(|\rts'| < |\rts|\), then
-\(|\rts'| = |\rts|-1\).
+A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every reachable state
+\(\mpcstatename\) where \(\pi_\context(\mpcstatename) = (\underscore,\rts))\), and
+\(\mpcstatename \stepsto \mpcstatename'\) where \(\pi_\context(\mpcstatename') = (\underscore,\rts'))\),
+if \(|\rts'| < |\rts|\), then \(|\rts'| = |\rts|-1\).
 
 %\subsection{Well-bracketed Control Flow}
 %\label{sec:wbcf}
@@ -2959,23 +2958,17 @@ We add extra information to our call
 annotations to reflect that they may now pass variables on the stack, and that the locations
 of those variables may be dynamic (as in the case of pass-by-reference).
 A call annotation now includes a predicate relating machine states to the components
-that should be passed---when passing by value, this will typically be freshly allocated
-cells at the top of the frame, while passing by reference just gives the
-addresses of the appropriate variables relative to the stack pointer.
-\apt{This still doesn't make sense to me. We cannot
-  give a static annotation that identifies the absolute address of a stack-allocated variable!
-  Only sp-relative addresses make sense.}\leo{Better now? :)}\apt{no: the definition of $P$ is still
-  bogus. It needs to be something like a relation between  $M$ and a set of SP offsets.}
+that should be passed, expressed as offsets from the stack pointer. \apt{Much better, but the
+actual definition of $P$ is still wrong.}
 
 \[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P) \hspace*{1in} P \subseteq (\MACHS \times \COMPONENTS)\]
 We extend the set of domains to include passed components,
 which are labeled with the range of depths of the caller that has passed them.
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \passed{\depth,\depth'}\]
-%\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
-%\times (\rts \in \listT (\target \subseteq \MACHS)) \]
 The definition of context looks the same, but is based on the revised definition of \(\STKDOMS\):
 \[(\domMap,\rts) = \context \in \CONTEXTS ::= (\COMPONENTS \rightarrow \STKDOMS)
- \times (\listT (\target)) \]
+\times (\listT (\target)) \]
+The initial context again maps all components to \(\unsealed\).
 We straightforwardly describe how the sealing convention and passing predicate combine to
 update a domain map at a call from depth \(\depth\).
 \[(\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) ~ \component =
@@ -3031,12 +3024,6 @@ be the set of components \(\component\) such that either \(\domMap ~ \component 
 or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
 \(|\rts| > \depth'\).
 
-\definition
-For each of the stepwise, deferred, and observational versions of
-stack integrity in the simple model, the equivalent property in the
-passing model substitutes the above definitions of \(\context\), initial contexts\apt{not defined above??}  and update
-function, and \(\prot_P\) for their simple equivalents, and is otherwise identical.
-
 \definition Let the \emph{secret set} of a context, written \(\secret_P(\domMap,\rts)\),
 be the set of components \(\component\) such that
 \(\domMap ~ \component = \sealed{\underscore}\) or
@@ -3044,10 +3031,13 @@ be the set of components \(\component\) such that
 where \(\depth \leq |\rts| \leq \depth'\).
 
 \definition
+For each of the stepwise, deferred, and observational versions of
+stack integrity in the simple model, the equivalent property in the
+passing model substitutes the above \(\CONTEXTS\) type and update
+function, and \(\prot_P\), for their equivalents in the simple model.
+
 For both the stepwise and observational versions of stack confidentiality in
-the original model, the equivalent property in the passing model is the same after
-substituting the above definitions of \(\context\), initial contexts\apt{ditto} and update
-function, and \(\prot_P\) for their simple equivalents.
+the original model, the passing model equivalents additionally substitute \(\secret_P\).
 
 \subsection{Coroutines}
 
