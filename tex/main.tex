@@ -483,14 +483,10 @@ We find that Roessler and Dehon's {\em Depth Isolation} micro-policy, in
 which memory cells within each stack frame are tagged with the identity of
 the function activation that owns the frame and access to those locations is
 then permitted only when that activation is currently executing, validates our
-stepwise properties.  On the other hand, testing reveals their more efficient
-\emph{Lazy Tagging} policy does not enforce step-wise integrity. In fact
-we reason that both of their lazy policies violate the temporal aspect of confidentiality in
+stepwise properties. On the other hand, we reason that \emph{Lazy Tagging and Clearing}
+violates the temporal aspect of confidentiality in
 corner cases where data can leak across repeated calls to the same callee,
-and \emph{Lazy Tagging and Clearing} also violates integrity in these instances.\apt{is this
-  right?? I though Lazy tagging was fully ok, and lazy tagging + clearing violated
-  temporal confidentialitty (only).}\sna{I was wrong about that. It's true of lazy tagging
-  (provided the caller initializes their frame) but not lt+c}We
+and also violates integrity if the leak happens to use the caller's frame. We
 propose a variant of {\em Lazy Tagging and Clearing} that \emph{should} enforce
 confidentiality, albeit at some performance cost.
 %
@@ -1174,8 +1170,7 @@ int f() {
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{1}{\goodc}
-  \memory{1}{\unsealc}
+  \memory{2}{\unsealc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{42}
   \MemoryLabel{-10em}{0.75em}{5}
@@ -1184,8 +1179,7 @@ int f() {
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
-  \memory{1}{\goodc}
-  \memory{1}{\unsealc}
+  \memory{2}{\unsealc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{\(v_0\)}
   \MemoryLabel{-10em}{0.75em}{5}
@@ -1744,11 +1738,9 @@ running \(\mpcstatename\) up to \(f\)''):
 %
 \begin{center}
 \judgmenttwo{\(\mpcstatename \hookrightarrow \MPCT'\)}
-%            {\(\PUT ~ f ~ \mpcstatename ~ \MPCT' = \MPCT\)}
             {\(\PUT ~ f ~ \MPCT' = \MPCT\)}
             {\(\mpcstatename \hookrightarrow \MPCT | f\)}
 \end{center}
-\apt{above changed: SNA please check.}
 
 \paragraph*{Context Segments}
 
@@ -1941,7 +1933,6 @@ any \(\nach\) such that \(\mach \approx_{\mathit{secret}(\context)} \nach\), and
 %\(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk\),
 \(\NPCT\) such that \(\nach,\pol,\context \hookrightarrow \NPCT | \brk\),
 \(\MPCT \doteq \NPCT\) holds.
-\apt{changed $dm$ to $ctx$; SNA please check.}
 
 %\medskip
 
@@ -2621,13 +2612,13 @@ however shared by all activations of the same function in order to obtain
 good cacheability of tag rules---but that policy allows leaks between
 instances of the same function.
 
-{\em Lazy Per-activation Tagging and Clearing} ends up enforcing the combination
-of deferred stepwise stack integrity and stepwise confidentiality---we
-don't actually need a deferred confidentiality property here. Therefore,
-it also enforces observational stack safety, so we declare it stack safe.\apt{Ugh.
-  We haven't set up this definition clearly enough (nor should we try).}
+We believe that {\em Lazy Per-activation Tagging and Clearing}, in which
+each activation is tagged uniquely, ends up enforcing the combination
+of deferred stepwise stack integrity and stepwise confidentiality.
+This is because tags that persist between calls will not become active again.
 Our properties have allowed us to reject an enforcement mechanism as
-not really stack safe, and describe a fix.
+not really stack safe, and describe a potential fix that itself is a
+prime candidate for future testing.
 
 \section{Extensions}
 \label{sec:ext}
@@ -2706,7 +2697,7 @@ void f(int a) {
   } \\
   {\tt 11} &
   \memoryaddrs[(1)]{21.5em}
-  \memory{1}{\mainsealc}[Seal(0)]%
+  \memory{1}{\mainsealc}[S(0)]%
   \memory{1}{\mainpassc}[P(0,1)]%
   \memory{1}{\retptrc}[RetPtr]%
   \memory{1}{\unsealc}
@@ -2850,7 +2841,7 @@ void f(int &a) {
       {\tt 20} &
       \memoryaddrs[(1)]{17em}
       \memory{1}{\mainpassc}[{\makebox[0pt]{P(0,1)}}]%
-      \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
+      \memory{1}{\mainsealc}[{\makebox[0pt]{S(0)}}]%
       \memory{1}{\retptrc}
 %      \memory{1}{\unsealc}
       ~$\cdots$ \\
@@ -2871,7 +2862,7 @@ void f(int &a) {
       \\
       {\tt 20} &
       \memoryaddrs[(1)]{17em}
-      \memory{1}{\mainsealc}[{\makebox[0pt]{Seal(0)}}]%
+      \memory{1}{\mainsealc}[{\makebox[0pt]{S(0)}}]%
       \memory{1}{\mainpassc}[{\makebox[0pt]{P(0-1)}}]%
       \memory{1}{\retptrc}
 %      \memory{1}{\unsealc}
@@ -2958,10 +2949,10 @@ We add extra information to our call
 annotations to reflect that they may now pass variables on the stack, and that the locations
 of those variables may be dynamic (as in the case of pass-by-reference).
 A call annotation now includes a predicate relating machine states to the components
-that should be passed, expressed as offsets from the stack pointer. \apt{Much better, but the
-actual definition of $P$ is still wrong.}
+that should be passed, expressed as offsets from the stack pointer.
+%
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P \subseteq \WORDS)\]
 
-\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P) \hspace*{1in} P \subseteq (\MACHS \times \COMPONENTS)\]
 We extend the set of domains to include passed components,
 which are labeled with the range of depths of the caller that has passed them.
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \passed{\depth,\depth'}\]
@@ -2974,17 +2965,19 @@ update a domain map at a call from depth \(\depth\).
 \[(\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) ~ \component =
 \begin{cases}
   \sealed{\depth}              & \text{if } \domMap ~ \component = \unsealed \text{ and }
-                                 \sealcon ~ \mach ~ \component \text{ and } \neg P ~ \mach ~ \component \\
+                                 \sealcon ~ \mach ~ \component \text{ and }
+                                 \component - (\mach ~ \rsp) \not \in P \\
   \passed{\depth,\depth+1}     & \text{if } \domMap ~ \component = \unsealed \text{ and }
-                                 \sealcon ~ \mach ~ \component \text{ and } P ~ \mach ~ \component \\
+                                 \sealcon ~ \mach ~ \component \text{ and }
+                                 \component - (\mach ~ \rsp) \in P \\
   \passed{\depth',\depth+1}    & \text{if } \domMap ~ \component = \passed{\depth',\depth} \text{ and }
-                                 \sealcon ~ \mach ~ \component \text{ and } P ~ \mach ~ \component,
-                                 \text{ for any } \depth' \\
+                                 \sealcon ~ \mach ~ \component \\
+                               & \text{ and } (\mach ~ \rsp) \in P, \text{ for any } \depth' \\
   \domMap~\component & \text{else} \\
 \end{cases}\]
 
 At the matching return we just unseal the components at depth \(\depth\):
-
+%
 \[(\mathit{pop} ~ \domMap ~ \depth) ~ \component =
 \begin{cases}
   \unsealed                 & \text{if } \domMap ~ \component = \sealed{\depth} \\
@@ -3212,7 +3205,7 @@ useful for reasoning; (3) reusable in secure compiler chains; (4)
 arguably ``complete;'' and (5) potentially scalable.  We believe our
 approach competes well with theirs on criteria (1), (4), and (5).
 Their approach is specifically set up to address (3), while
-ours is not. Addressing (2) remains as future work for us.
+ours is not. Addressing (2) remains as future work for us.\apt{OK?}
 
 %% Although there are some important differences between
 %% \citeauthor{SkorstengaardSTK}'s properties and our own, the new
@@ -3271,7 +3264,10 @@ significant inspiration for this work.
 
 We have introduced a characterization against which stack safety enforcement
 mechanisms can be measured and used it to evaluate tag-based enforcement mechanisms.
-From here there are two natural ways to extend the work. We should thoroughly evaluate
+Our immediate next step is to implement testing of observational properties,
+both to validate them and to explore how to effectively test properties that do not
+fail immediately.
+From there there are two natural ways to extend the work. We should thoroughly evaluate
 other mechanisms, especially Cheri-based capability systems. And we can further demonstrate
 the functionality of our definitions by showing that they can be used to prove
 the correctness of a programming logic with strengthened rules around calls and returns.
