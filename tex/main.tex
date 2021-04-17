@@ -327,7 +327,7 @@ including stack canaries~\citep{Cowan+98},
 bounds checking~\citep{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
 split stacks~\citep{Kuznetsov+14},
 shadow stacks~\citep{Dang+15,Shanbhogue+19},
-capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b,Tsampas+19,Georges+21},
+capabilities~\citep{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTK,Georges+21},
 and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \ifaftersubmission\apt{Mostly from
   nick; there could be more}\bcp{Yes, going back to MIT days---we should
   include several more of these, if only to give readers the impression that
@@ -354,7 +354,7 @@ are met by particular implementations.
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
 The most abstract characterization of stack safety that we are aware of is
-recent work by \citet{Skorstengaard+19b,Skorstengaard+19}, which defines stack safety as the conjunction of two
+recent work by \citet{SkorstengaardSTK}, which defines stack safety as the conjunction of two
 properties:
 {\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
 Informally, LSE says that the contents of
@@ -1597,7 +1597,7 @@ odd result directly to $A$.
 %
 Thus, a formal definition of safe use of the stack should include the
 condition that calls and returns are {\em well bracketed}, e.g., $C$ should
-only return to $B$.  This is what \citet{Skorstengaard+19b} describe
+only return to $B$.  This is what \citet{SkorstengaardSTK} describe
 as \emph{well-bracketed control flow (WBCF)}.
 
 \section{Machines and Traces}
@@ -1953,7 +1953,7 @@ will contain these calls and returns as well, so its return stack pushes and pop
 in lockstep until it breaks at the final return.
 
 Finally, we formalize a version of WBCF, which captures the same informal idea
-as that of \citet{Skorstengaard+19b} using our context machinery.
+as that of \citet{SkorstengaardSTK} using our context machinery.
 \definition
 A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every pair of reachable states
 \(\mpcstatename = (\underscore,\underscore,(\underscore,\rts))\) and
@@ -3172,7 +3172,7 @@ stack confidentiality.
 %
 To our knowledge, the only line of work to date that has attempted
 a positive and formal characterization of
-stack safety is \citet{Skorstengaard+19b}, who introduce a calling
+stack safety begins with \citet{SkorstengaardLocal}, who introduce a calling
 convention that uses local capabilities to preserve local state
 encapsulation and well-bracketed control flow, using a logical
 relation to reason about the stack safety of concrete
@@ -3185,7 +3185,7 @@ cleared whenever a security boundary is crossed. Their logical
 relation captures capability safety without ``externally observable
 side-effects (like console output or memory access traces)''
 and can be used to reason about individual programs.
-\citeauthor{Skorstengaard+19b} acknowledge the difficulty of defining
+\citeauthor{SkorstengaardSTK} acknowledge the difficulty of defining
 these concepts precisely:
 ``while [they] claim that [their] calling
 convention enforces control-flow correctness, [they] do not prove a
@@ -3193,7 +3193,7 @@ general theorem that shows this, because it is not clear what such a
 theorem should look like,'' noting that the correctness property
 enjoyed by their technique ``is not made very explicit.''
 
-StkTokens \citep{Skorstengaard+19} continues this work by defining a more efficient
+StkTokens \citep{SkorstengaardSTK} continues this work by defining a more efficient
 calling convention that makes use of linear capabilities for stack and return
 pointers.
 %% The convention operates on a single shared stack and requires that
@@ -3204,7 +3204,7 @@ Still informally, local state encapsulation is defined as
 restricting accesses to the range of memory allocated to the current stack
 frame, and well-bracketed control flow as only allowing returns from the topmost
 frame to the immediately adjacent frame below. Formally, it improves on
-\citet{Skorstengaard+19b} by building those properties into the semantics of a
+\citet{SkorstengaardLocal} by building those properties into the semantics of a
 capability machine with a built-in call stack and call and return instructions,
 which is proven fully abstract with respect to a more concrete capability
 machine.
@@ -3216,7 +3216,7 @@ import and export functions through their interfaces.
 \sna{Some of this seems like more detail than we need, and we need to
   compare ourselves to their list of criteria.}
 \rb{Trimmed this a bit. Are you referring to their list of attack
-  examples, or to something else?}
+  examples, or to something else?\apt{Their list at start of section 4.}}
 
 \paragraph{Protecting the Stack with Micro-Policies}
 %
@@ -3277,16 +3277,17 @@ other mechanisms, especially Cheri-based capability systems. And we can further 
 the functionality of our definitions by showing that they can be used to prove
 the correctness of a programming logic with strengthened rules around calls and returns.
 
-\paragraph*{Stack Safety in the Cheri Zoo}
+\paragraph*{Stack Safety in the Cheri Ecosystem}
 
 There are several proposals around the use of Cheri capabilities to enforce stack safety,
-ranging from mechanisms that use the standard Cheri hardware \citep{Skorstengaard+19b},
+ranging from mechanisms that use the standard Cheri hardware (which includes local
+capabilities) \citep{SkorstengaardLocal},
 to those that propose entirely new types of capabilities, such as linear
-(\citep{Skorstengaard+19}), uninitialized (\citep{Georges+21}), and monotonic (\sna{cite}).
+\citep{SkorstengaardSTK}, uninitialized \citep{Georges+21}, lifetime \citep{Tsampas+19}, and monotonic \citep{GeorgesComplete}.
 Of these, uninitialized capabilities seem particularly promising---they naturally enforce
 write-before-read behavior, and therefore will enable confidentiality without the need
 to clear large swaths of the stack. We propose to implement a model of the stack safety
-system described in (\citep{Georges+21}) and test it against our properties using
+system described in \citet{Georges+21} and test it against our properties using
 QuickChick.
 
 \paragraph*{Program Logic for Stacks}
