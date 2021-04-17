@@ -1637,8 +1637,8 @@ can see the machine state, but cannot modify it. The policy also provides a
 well-formedness predicate, \(\WF \subseteq \MACHS \times \POLS\), describing
 initial states that are properly configured.
 %
-A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
-\Cref{sec:enforcement}.
+%A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
+%\Cref{sec:enforcement}. -- APT: We just said this.
 
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
@@ -1715,7 +1715,7 @@ and a predicate on states \(f \subseteq \MPCS\) and gives the prefix of
 \begin{center}
   \begin{minipage}{.3\textwidth}
     \judgment{\(f ~ \mpcstatename\)}
-             {\(\PUT ~ f ~ \notfinished{\mpcstatename}{\MPCT} = \mpcstatename\)}
+             {\(\PUT ~ f ~ (\notfinished{\mpcstatename}{\MPCT}) = \mpcstatename\)}
   \end{minipage}
 %
   \begin{minipage}{.3\textwidth}
@@ -1725,7 +1725,7 @@ and a predicate on states \(f \subseteq \MPCS\) and gives the prefix of
   \end{minipage}
   \begin{minipage}{.3\textwidth}
     \judgmenttwo{\(\neg f ~ \mpcstatename\)}{\(\PUT ~ f ~ \MPCT = \MPCT'\)}
-                {\(\PUT ~ f ~ \notfinished{\mpcstatename}{\MPCT} = \notfinished{\mpcstatename}{\MPCT'}\)}
+                {\(\PUT ~ f ~ (\notfinished{\mpcstatename}{\MPCT}) = \notfinished{\mpcstatename}{\MPCT'}\)}
   \end{minipage}
 \end{center}
 %
@@ -1744,9 +1744,11 @@ running \(\mpcstatename\) up to \(f\)''):
 %
 \begin{center}
 \judgmenttwo{\(\mpcstatename \hookrightarrow \MPCT'\)}
-            {\(\PUT ~ f ~ \mpcstatename ~ \MPCT' = \MPCT\)}
+%            {\(\PUT ~ f ~ \mpcstatename ~ \MPCT' = \MPCT\)}
+            {\(\PUT ~ f ~ \MPCT' = \MPCT\)}
             {\(\mpcstatename \hookrightarrow \MPCT | f\)}
 \end{center}
+\apt{above changed: SNA please check.}
 
 \paragraph*{Context Segments}
 
@@ -1807,12 +1809,14 @@ conventions, we parameterize over the structure of the stack, particularly
 the means by
 which a caller identifies the data that should be protected during a call. We term
 this the {\em sealing convention},
-\(\sealcon ~ (\mach \in \MACHS) ~ (\component \in \COMPONENTS)\), a
-relation between machine states and the addresses that should be sealed.
+%\(\sealcon ~ (\mach \in \MACHS) ~ (\component \in \COMPONENTS)\),
+\(\sealcon \subseteq (\MACHS \times \COMPONENTS)\),
+a relation between machine states and the addresses that should be sealed.
 If a state's \(\PCname\) is annotated as a call, the sealing convention tells us
 which addresses must be protected until the return. Similarly, we abstract over what
 it means to return with a {\em return convention},
-\(\retcon ~ (\mach \in \MACHS) ~ (\mach' \in \MACHS)\),
+%\(\retcon ~ (\mach \in \MACHS) ~ (\mach' \in \MACHS)\),
+\(\retcon \subseteq (\MACHS \times \MACHS)\),
 which relates call states to the states that can be considered valid returns to that call.
 The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
 and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
@@ -1820,13 +1824,13 @@ and \(\mach'\) has its program counter advanced by one instruction from \(\mach\
 Each system component is assigned to a {\em domain}, which may be {\em Outside}
 of the stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed}
 at a particular depth. Each caller registers a {\em target}
-condition, \(\target ~ \mach\)---a predicate on machine states that means it
+condition, \(\target \subseteq \MACHS\), which is a predicate on machine states that means it
 has been returned to.
 A context is a pair of a ``domain map'' from components to domains, and a
 ``return target list,'' which is a stack of targets, one for each caller awaiting
 return.
 %
-\[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} \hspace*{0.5in} \target \subseteq \MACHS\]
+\[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth}\]
 \[(\domMap,\rts) = \context \in \CONTEXTS ::= (\COMPONENTS \rightarrow \STKDOMS)
   \times (\listT (\target)) \]
 %
@@ -1838,12 +1842,13 @@ A call annotation tells us to push the return target onto the return stack and
 seal all components with the depth of the previous return stack. If we aren't making a call,
 we identify a return by looking ahead and checking if we're about to step to a state
 that matches the topmost return target. If neither is true, the context remains unchanged.
-Recall that a ``code map'' \(\codemap\) is partial function, and we can use its domain
+Recall that a ``code map'' \(\codemap\) is a partial function, and we can use its domain
 as a predicate on addresses.
 
 \judgmentthree[ Call]
               {\(\codemap ~ (\mach ~ \PCname)\)}
-              {\(\components = \sealcon ~ \mach\)}
+%              {\(\components = \sealcon ~ \mach\)}
+              {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
               {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
                 {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
@@ -1932,9 +1937,11 @@ set of components \(\component\) such that \(\domMap ~ \component \not = \outsid
 \definition
 A system enjoys \textbf{\textit{stepwise stack confidentiality}} if,
 for any \(\MPCT,\brk \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,\context\),
-\(\nach\) such that \(\mach \approx_{\mathit{secret}(\context)} \nach\) and the induced trace
-\(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk\),
+any \(\nach\) such that \(\mach \approx_{\mathit{secret}(\context)} \nach\), and any trace
+%\(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk\),
+\(\NPCT\) such that \(\nach,\pol,\context \hookrightarrow \NPCT | \brk\),
 \(\MPCT \doteq \NPCT\) holds.
+\apt{changed $dm$ to $ctx$; SNA please check.}
 
 %\medskip
 
@@ -1943,7 +1950,7 @@ we vary all stack locations that are supposed to be secret from the callee
 (which in our simple setting is the entirety of the stack),
 the resulting trace remains in lockstep with the original trace
 until either both return together or one failstops. This implies that
-if the callee reads a secret location, it must failstop.%\apt{right?}\leo{yes}
+if the callee reads a secret location, it must failstop. %\apt{right?}\leo{yes}
 %
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the components in \(\components\), and in addition their subtraces are also in
@@ -1958,7 +1965,7 @@ A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every pa
 \(\mpcstatename = (\underscore,\underscore,(\underscore,\rts))\) and
 \(\mpcstatename' = (\underscore,\underscore,(\underscore,\rts'))\) such that
 \(\mpcstatename \stepsto \mpcstatename'\)\apt{doesn't reachability of $\mpcstatename$ imply reachability of $\mpcstatename'$?}, if \(|\rts'| < |\rts|\), then
-\(|\rts'| = |\rts|-1\)
+\(|\rts'| = |\rts|-1\).
 
 %\subsection{Well-bracketed Control Flow}
 %\label{sec:wbcf}
@@ -3027,7 +3034,7 @@ stack integrity in the simple model, the equivalent property in the
 passing model substitutes the above definitions of \(\context\), initial contexts\apt{not defined above??}  and update
 function, and \(\prot_P\) for their simple equivalents, and is otherwise identical.
 
-\definition Let the secret set of a context, \(\secret_P(\domMap,\rts)\),
+\definition Let the \emph{secret set} of a context, written \(\secret_P(\domMap,\rts)\),
 be the set of components \(\component\) such that
 \(\domMap ~ \component = \sealed{\underscore}\) or
 \(\domMap ~ \component = \passed{\depth,\depth'}\)
