@@ -735,7 +735,7 @@ model run-time code generation.
 
 \paragraph*{What is a ``call''?}  One significant challenge in formulating our
 properties arises from the fact that we want to define stack safety at the
-machine-code level for a variety of ISAs, including RISCy \sna{RISCy?} ones.  In
+machine-code level for a variety of ISAs, including RISCy \sna{RISCy?}\leo{RISC-like maybe?} ones.  In
 particular, there may be no single ``call'' instruction that does all the
 required manipulation of the \(\PCname\) and stack pointer. Instead, there
 might be just a simple branch instruction that stores the old \(\PCname\) in
@@ -1244,8 +1244,8 @@ the other variable, {\tt z}, has changed. In the primary trace it changed to 42,
 in the variant trace it might have any value \(v_0\). If \(v_0 \neq 42\) then the variant
 has behaved differently than the primary, violating confidentiality.
 
-This form of confidentiality we will term {\em stepwise confidentiality}, defined informally
-as: for any state at the entry to a function, for any variant over the values in the stack,
+We will term this form of confidentiality as {\em stepwise confidentiality}. Informally,
+for any state at the entry to a function, for any variant over the values in the stack,
 the primary state and its variant will step in lockstep until they return. To step in lockstep
 means that if both states step---that is, neither the primary nor the variant failstops---any
 {\em system component} (such as memory cell, register, program counter) that changes
@@ -1754,8 +1754,8 @@ individual calls from a trace by taking subtraces in which the stack is
 at or below a given depth. If \(f\) is still a predicate on states, then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 ``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
-\bcp{Throughout, we could save space and improve beauty by removing some of the
-vertical space between inference rules.}
+\ifspace{\bcp{Throughout, we could save space and improve beauty by removing some of the
+vertical space between inference rules.}\fi
 
 \begin{center}
 \begin{minipage}{.38\textwidth}
@@ -1836,9 +1836,8 @@ A call annotation tells us to push the return target onto the return stack and
 seal all components with the depth of the previous return stack. If we aren't making a call,
 we identify a return by looking ahead and checking if we're about to step to a state
 that matches the topmost return target. If neither is true, the context remains unchanged.
-Recall that a ``code map'' \(\codemap\) is a predicate on addresses.
-\rb{Technically a partial function from addresses to annotations,
-  though its domain can function as a predicate.}
+Recall that a ``code map'' \(\codemap\) is partial function, and we can use its domain
+as a predicate on addresses.
 
 \judgmentthree[ Call]
               {\(\codemap ~ (\mach ~ \PCname)\)}
@@ -1942,7 +1941,7 @@ we vary all stack locations that are supposed to be secret from the callee
 (which in our simple setting is the entirety of the stack),
 the resulting trace remains in lockstep with the original trace
 until either both return together or one failstops. This implies that
-if the callee reads a secret location, it must failstop.\apt{right?}
+if the callee reads a secret location, it must failstop.%\apt{right?}\leo{yes}
 %
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the components in \(\components\), and in addition their subtraces are also in
@@ -2009,9 +2008,9 @@ A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every pa
 In this section we explore how an existing enforcement mechanism, {\em
   Depth Isolation}~\citep{DBLP:conf/sp/RoesslerD18}, implements
 the formal stack-safety property described in the previous
-section. (In fact, it enforces a slightly stronger, inductive version
+section. In fact, it enforces a slightly stronger, inductive version
 of that property which checks for integrity and confidentiality violations at
-every step of the callee's execution trace.) We validate this claim
+every step of the callee's execution trace. We validate this claim
 with a property-based testing framework that can quickly uncover
 inconsistencies between the enforcement mechanism and the stack-safety
 property.
@@ -2035,8 +2034,9 @@ instruction opcode itself, producing
 one of two outcomes: either the instruction is permitted to execute (and
 generates tags for the result of the operation and the new $\PCname$), or
 the machine fail-stops with a policy violation.
-\citeauthor{pump_oakland2015}\bcp{additional citations: the noninterference
-  paper, Nick and Andre's papers, ...} show that a wide range of
+Existing work \citep{TestingNI:ICFP,pump_oakland2015, DBLP:conf/sp/RoesslerD18}
+%\bcp{additional citations: the noninterference paper, Nick and Andre's papers, ...}
+has shown that a wide range of
 micro-policies can be defined using this scheme.
 
 Efficient execution of these micro-policies relies on hardware acceleration,
@@ -2083,7 +2083,8 @@ $\tagNoDepth$), and the {\PCname} has tag $\tagPCDepth{0}$.
 %
 During normal execution, the micro-policy rules only permit load and
 store operations when the target memory is tagged {\em with the same
-  depth} as the current {\PCname} tag.
+  depth} as the current {\PCname} tag, and store operations also when the
+target memory is $\tagNoDepth$.
 
 
 More interesting (from a stack safety perspective) changes to the tags
@@ -2236,13 +2237,12 @@ rights than the caller, this is harmless.
 We validate the micro-policy of the previous section by
 systematically testing that it satisfies eager stack integrity and
 confidentiality. We use a Coq specification of the RISC-V
-architecture
-\footnote{Available at \url{https://github.com/mit-plv/riscv-coq}.}
-\leo{translated from Haskell via hs-2-coq?\apt{not worth saying since
-  the MIT people did it}}  and extend it with a
+architecture\footnote{Available at \url{https://github.com/mit-plv/riscv-coq}.}
+%\leo{translated from Haskell via hs-2-coq?\apt{not worth saying since the MIT people did it}}
+and extend it with a
 runtime monitor implementing the stack-safety
-micro-policy.\footnote{This code will be made public. \leo{More?}} We
-  choose the Coq proof assistant as the setting for our implementation
+micro-policy.\footnote{This code is {\em redacted for review}.} We
+  chose the Coq proof assistant as the setting for our implementation
   for two reasons: first, to ensure that our coinductive trace
   definitions are well-formed, and reason about them\leo{Do we prove
     anything interesting anymore?}, and to leverage the power of the
@@ -2288,7 +2288,7 @@ We extend this technique to keep track of the control flow behavior of
 the program being generated: each time a call or return sequence is
 generated, we ensure that the appropriate policy tags and code
 annotations are set for the entry or return points. At the same time,
-we sometimes allow the generation to relax those constraints,
+we allow the generation to sometimes relax those constraints,
 introducing potentially ill-formed flows: this causes our programs
 to failstop when executed in conjunction with the policy monitor,
 but also allows for revealing errors in our setup.
@@ -2364,13 +2364,15 @@ newly allocated stack frame correctly, but left some of them as
 $\tagNoDepth$. This allowed for a potential integrity violation, but
 only if a rather complicated sequence of events occured.
 The smallest counterexample requires calling a function {\tt f},
-which writes into an uninitialized location $l$ (which is always fine\apt{is it??? in the strict policy?}, and then
+which writes into an uninitialized location $l$,
+% (which is always fine\apt{is it??? in the strict policy?}
+and then
 calls a further function {\tt g} (which should have the effect of sealing $l$
 for integrity purposes). Then {\tt g} attempts to write to $l$;
 this is allowed because the enforcement mechanism still has
 $l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s data.
-\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
-  and the write from {\tt f} was already a violation.}
+%\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
+%  and the write from {\tt f} was already a violation.}
 
 \section{Stack Safety for Lazy Enforcement}
 \label{sec:lazy}
