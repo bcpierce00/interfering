@@ -2636,7 +2636,7 @@ not really stack safe, and describe a fix.
 \section{Extensions}
 \label{sec:ext}
 
-We have shown how our properties apply to an extremely simply
+We have shown how our properties apply to an extremely simple
 subroutine model and validated them through randomized testing.
 But what about more realistic systems? We now demonstrate the
 flexibility of these core concepts as we extend
@@ -2899,15 +2899,15 @@ void f(int &a) {
 \end{figure}
 
 To this point we have ignored function arguments, since our simplest model places them in
-registers. We now implement two kinds of protected
-sharing: passing by value on the stack, and passing by reference. First we will explore
+registers. We now show how to implement two kinds of protected
+sharing: passing by value on the stack, and passing by reference. We first explore
 some examples at the same level of detail as our earlier ones, and then move on to
 extending our formalization.
 
 Example~\ref{fig:passingsimple} shows a sample trace of
 a program that passes a value on the stack, without an attack.
 We extend our call annotation with an additional parameter identifying a memory location to be
-passed, and our diagram displays it in magenta. Our notion of domains is extended as well,
+passed (the diagram displays it in magenta). Our notion of domains is extended as well,
 to include \(\passed{\depth,\depth'}\), recording two depths. We note the
 current depth of the active function next to the stack pointer in the diagram, for reference.
 The argument {\tt a} has
@@ -2931,13 +2931,14 @@ The question is how the local variables {\tt x} and {\tt y} themselves
 should be labelled in order for the policy to detect an integrity violation.
 At the initial call, the address of {\tt x} is marked as passed, and {\tt f} is free to write to it. Then upon
 return, {\tt main}'s frame is unsealed. At the second call it is the address of {\tt y} that is marked as passed,
-and when {\tt f} instead tries to write to {\tt x}, it violates integrity. For that matter
-a future call with no arguments passed by reference would also violate integrity if it wrote
-to either variable.
+and when {\tt f} instead tries to write to {\tt x}, it violates integrity.
+%For that matter
+%a future call with no arguments passed by reference would also violate integrity if it wrote
+%to either variable.
 
 When passing by reference, it is possible to repeatedly pass the same reference further
 and further down the stack. Note, however, that this sharing of the reference must be over
-an unbroken chain of calls. So it suffices to track two depths for each passed
+an unbroken chain of calls. So it suffices for the domain to track two depths for each passed
 cell: the original owner, and the highest depth it has been passed to. The policy considers
 it to be accessible anywhere between the two.
 
@@ -2950,27 +2951,34 @@ same way as a passed argument, with the additional property
 that it remains accessible at \emph{all} stack depths above the caller.
 This prevents most violations of temporal safety, although stale pointers can still be
 used in certain corner cases.
-More seriously, callees are permitted to access the location without having
+But more seriously, callees are permitted to access the location without having
 been explicitly given a pointer to it.  Preventing the latter kind of abuse
 is the provence of a fine-grained memory safety policy, e.g. based on capabilities
 (implemented by tags or otherwise); we argue it is beyond the scope of stack safety
 \emph{per se}.
 
-Next we introduce variable passing. We will need to add extra information to our call
+\paragraph{Formalization of variable passing.}
+We add extra information to our call
 annotations to reflect that they may now pass variables on the stack, and that the locations
 of those variables may be dynamic (as in the case of pass-by-reference).
 A call annotation now includes a predicate relating machine states to the components
 that should be passed---when passing by value, this will typically be freshly allocated
 cells at the top of the frame, while passing by reference just gives the
-addresses of the appropriate variables.
-\[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \callmap(P \subseteq \MACHS \times \COMPONENTS)\]
-And we extend the set of domains to include passed components,
+addresses of the appropriate variables.\apt{This still doesn't make sense to me. We cannot
+  give a static annotation that identifies the absolute address of a stack-allocated variable!
+  Only sp-relative addresses make sense.}
+
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P) \hspace*{1in} P \subseteq (\MACHS \times \COMPONENTS)\]
+We extend the set of domains to include passed components,
 which are labeled with the range of depths of the caller that has passed them.
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \passed{\depth,\depth'}\]
-\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
-\times (\rts \in \listT (\target \subseteq \MACHS)) \]
+%\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
+%\times (\rts \in \listT (\target \subseteq \MACHS)) \]
+The definition of context looks the same, but is based on the revised definition of \(\STKDOMS\):
+\[(\domMap,\rts) = \context \in \CONTEXTS ::= (\COMPONENTS \rightarrow \STKDOMS)
+ \times (\listT (\target)) \]
 We straightforwardly describe how the sealing convention and passing predicate combine to
-update a domain map when pushing it, where \(\depth\) is an integer depth.
+update a domain map at a call from depth \(\depth\).
 \[(\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) ~ \component =
 \begin{cases}
   \sealed{\depth}              & \text{if } \domMap ~ \component = \unsealed \text{ and }
@@ -2983,7 +2991,7 @@ update a domain map when pushing it, where \(\depth\) is an integer depth.
   \domMap~\component & \text{else} \\
 \end{cases}\]
 
-And to pop we just unseal the components at depth \(\depth\):
+At the matching return we just unseal the components at depth \(\depth\):
 
 \[(\mathit{pop} ~ \domMap ~ \depth) ~ \component =
 \begin{cases}
@@ -2994,7 +3002,7 @@ And to pop we just unseal the components at depth \(\depth\):
   \domMap~\component        & \text{else} \\
 \end{cases}\]
 
-Now we can inductively define the context update function; these again apply in the order
+Now we can inductively define the context update function; these rules again apply in the order
 presented. \bcp{Too much space between the second and third.}
 
 \judgmenttwo[Call]
@@ -3027,7 +3035,7 @@ or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
 \definition
 For each of the stepwise, deferred, and observational versions of
 stack integrity in the simple model, the equivalent property in the
-passing model substitutes the above definitions of \(\context\), initial contexts and update
+passing model substitutes the above definitions of \(\context\), initial contexts\apt{not defined above??}  and update
 function, and \(\prot_P\) for their simple equivalents, and is otherwise identical.
 
 \definition Let the secret set of a context, \(\secret_P(\domMap,\rts)\),
@@ -3039,17 +3047,17 @@ where \(\depth \leq |\rts| \leq \depth'\).
 \definition
 For both the stepwise and observational versions of stack confidentiality in
 the original model, the equivalent property in the passing model is the same after
-substituting the above definitions of \(\context\), initial contexts and update
+substituting the above definitions of \(\context\), initial contexts\apt{ditto} and update
 function, and \(\prot_P\) for their simple equivalents.
 
 \subsection{Coroutines}
 
-Our final extension to the model is to add coroutines. We assume a very simple model with
+Our final extension to the model adds coroutines. We assume a very simple model with
 a fixed number of coroutines, each with its own stack.
 Stack identifiers are drawn from a set \(\STACKS\), and there is a static partial map
 \(\stackof\) from addresses to stack ids. Note that we now explicitly reference the stack
 pointer, using the \(\stackof\) of the stack pointer to determine the target of a yield.
-We add a second annotation indicating yields.
+We add a second annotation indicating yields.\apt{seems unchanged from (old version of) previous section}
 
 \[\ann \in \ANNS ::= \callmap(P \subseteq \MACHS \times \COMPONENTS)\]
 \[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \ann \in \ANNS\]
@@ -3068,9 +3076,9 @@ coroutine.
 
 \[\stackDom \in \STKDOMS ::= \unsealed + \sealed{\depth} + \passed{\depth-\depth'}\]
 \[\topDom \in \TOPDOMS ::= \outside + \instack{\stackid}{\stackDom}\]
-\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS) \times
-(\rtm \in \STACKS \rightarrow \listT ~ \target) \times (\yts \in \STACKS \rightarrow
-\target) \times (\stackid \in \STACKS)\]
+\[(\domMap,\rtm,\yts,\stackid) = \context \in \CONTEXTS ::= 
+ (\COMPONENTS \rightarrow \STKDOMS) \times
+(\STACKS \rightarrow \listT(\target)) \times (\STACKS \rightarrow \target) \times \STACKS\]
 
 In our context update rules, calls and returns work the same as in the sharing model,
 with domain updates restricted to the top-level domain corresponding to the active stack,
@@ -3144,7 +3152,7 @@ be the set of components \(\component\) such that
 
 \definition
 We define {\em stepwise coroutine integrity} in the same way as stepwise stack integrity,
-substituting the above definitions of \(\context\), initial contexts and update
+substituting the above definitions of \(\context\), initial contexts\apt{??} and update
 function, and \(\prot_Y\) for their equivalents. Likewise
 {\em deferred coroutine integrity} and {\em observational coroutine integrity} are defined
 in terms of their simple equivalents using \(\MPCT^\wedge\) in place of \(\MPCT^*\).
