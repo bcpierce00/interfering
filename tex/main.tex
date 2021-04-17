@@ -327,7 +327,7 @@ including stack canaries~\citep{Cowan+98},
 bounds checking~\citep{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
 split stacks~\citep{Kuznetsov+14},
 shadow stacks~\citep{Dang+15,Shanbhogue+19},
-capabilities~\citep{Woodruff+14,Chisnall+15,Skorstengaard+19,Skorstengaard+19b,Tsampas+19,Georges+21},
+capabilities~\citep{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTK,Georges+21},
 and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \ifaftersubmission\apt{Mostly from
   nick; there could be more}\bcp{Yes, going back to MIT days---we should
   include several more of these, if only to give readers the impression that
@@ -354,7 +354,7 @@ are met by particular implementations.
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
 The most abstract characterization of stack safety that we are aware of is
-recent work by \citet{Skorstengaard+19b,Skorstengaard+19}, which defines stack safety as the conjunction of two
+recent work by \citet{SkorstengaardSTK}, which defines stack safety as the conjunction of two
 properties:
 {\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
 Informally, LSE says that the contents of
@@ -412,6 +412,7 @@ immediate callees (which, in turn, need protection from their immediate
 callees, etc.). They are also stronger than LSE; even in the absence of the
 control flow guarantees of WBCF, they guarantee callers'
 data safety in the face of control-flow attacks (see \cref{sec:controlflow}).
+\rb{Reference to \cref{sec:running-example}, where this is discussed now?}
 This reflects an arguably cleaner division between data protection and
 control-flow protection than LSE / WBCF.
 
@@ -551,12 +552,13 @@ At first, for ease of exposition, our development assumes a single simple
 stack with no sharing between callers and callees: all parameters and return
 values are passed in registers.  Later, we show how to refine the properties
 to allow passing of scalar stack data, granting a callee access to the
-caller's data. (We do not consider more sophisticated forms of sharing, such
-as taking the address of a variable and treating it like a pointer.)
-\rb{But actually, this is discussed at some length is \cref{sec:passing},
-  and it is the topic of \cref{fig:passing}.  Reaching that point after
-  reading this disclaimer is confusing.}\bcp{So should we just remove that
-  sentence?}
+caller's data.
+%% (We do not consider more sophisticated forms of sharing, such
+%% as taking the address of a variable and treating it like a pointer.)
+%% \rb{But actually, this is discussed at some length is \cref{sec:passing},
+%%   and it is the topic of \cref{fig:passing}.  Reaching that point after
+%%   reading this disclaimer is confusing.}\bcp{So should we just remove that
+%%   sentence?}
 %
 Lastly, we define integrity and confidentiality properties for a coroutine
 system with a static layout, in which each coroutine's stack is constrained
@@ -682,8 +684,10 @@ strict stack
 safety~(\cref{sec:prelim,sec:lse}).
 \item We use property-based randomized testing to check that this stepwise
 property is actually enforced by the {\em Depth Isolation} policy
-of~\citet{DBLP:conf/sp/RoesslerD18} (\cref{sec:enforcement}).
-\bcp{mention that we extend the ICFP 13 gen-by-exec idea with nested stuff...}
+of~\citet{DBLP:conf/sp/RoesslerD18}, and extend the generation by
+execution techniques of \citet{TestingNI:ICFP} to handle nested
+properties (\cref{sec:enforcement}).
+%% \bcp{mention that we extend the ICFP 13 gen-by-exec idea with nested stuff...}
 \item We formalize a
 weaker but more extensional \emph{observational} variant of the stack safety
 property that characterizes a refinement of Roessler and DeHon's more
@@ -1584,7 +1588,7 @@ odd result directly to $A$.
 %
 Thus, a formal definition of safe use of the stack should include the
 condition that calls and returns are {\em well bracketed}, e.g., $C$ should
-only return to $B$.  This is what \citet{Skorstengaard+19b} describe
+only return to $B$.  This is what \citet{SkorstengaardSTK} describe
 as \emph{well-bracketed control flow (WBCF)}.
 
 \section{Machines and Traces}
@@ -1824,6 +1828,8 @@ seal all components with the depth of the previous return stack. If we aren't ma
 we identify a return by looking ahead and checking if we're about to step to a state
 that matches the topmost return target. If neither is true, the context remains unchanged.
 Recall that a ``code map'' \(\codemap\) is a predicate on addresses.
+\rb{Technically a partial function from addresses to annotations,
+  though its domain can function as a predicate.}
 
 \judgmentthree[ Call]
               {\(\codemap ~ (\mach ~ \PCname)\)}
@@ -1936,7 +1942,7 @@ will contain these calls and returns as well, so its return stack pushes and pop
 in lockstep until it breaks at the final return.
 
 Finally, we formalize a version of WBCF, which captures the same informal idea
-as that of \citet{Skorstengaard+19b} using our context machinery.
+as that of \citet{SkorstengaardSTK} using our context machinery.
 \definition
 A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every pair of reachable states
 \(\mpcstatename = (\underscore,\underscore,(\underscore,\rts))\) and
@@ -2220,20 +2226,20 @@ rights than the caller, this is harmless.
 
 We validate the micro-policy of the previous section by
 systematically testing that it satisfies eager stack integrity and
-confidentiality. We used a Coq specification of the RISC-V
+confidentiality. We use a Coq specification of the RISC-V
 architecture
 \footnote{Available at \url{https://github.com/mit-plv/riscv-coq}.}
 \leo{translated from Haskell via hs-2-coq?\apt{not worth saying since
-  the MIT people did it}}  and extended it with a
+  the MIT people did it}}  and extend it with a
 runtime monitor implementing the stack-safety
 micro-policy.\footnote{This code will be made public. \leo{More?}} We
-  chose the Coq proof assistant as the setting for our implementation
+  choose the Coq proof assistant as the setting for our implementation
   for two reasons: first, to ensure that our coinductive trace
   definitions are well-formed, and reason about them\leo{Do we prove
     anything interesting anymore?}, and to leverage the power of the
   QuickChick property-based testing framework~\citep{Pierce:SF4}.
 
-To use QuickChick, we built random test-case generators that produce
+To use QuickChick, we build random test-case generators that produce
 % \begin{enumerate}
 % \item
 (1) an initial RISC-V machine state, including most notably
@@ -2242,7 +2248,7 @@ To use QuickChick, we built random test-case generators that produce
 (2)
   an initial policy state, tagging instructions corresponding to
   blessed call or return sequences appropriately, while marking
-  all potential stack locations as $\tagNoDepth$, and
+  all potential stack locations as $\tagNoDepth$; and
 % \item
 (3)
  a code map and a stack map, accurately characterizing the behavior
@@ -2269,7 +2275,7 @@ the process until we generate or execute some target number of
 instructions, or we reach a point where the machine can't step
 anymore.
 
-We extended this technique to keep track of the control flow behavior of
+We extend this technique to keep track of the control flow behavior of
 the program being generated: each time a call or return sequence is
 generated, we ensure that the appropriate policy tags and code
 annotations are set for the entry or return points. At the same time,
@@ -2278,7 +2284,7 @@ introducing potentially ill-formed flows: this causes our programs
 to failstop when executed in conjunction with the policy monitor,
 but also allows for revealing errors in our setup.
 
-In addition, we needed to extend this technique to handle the nested
+In addition, we need to extend this technique to handle the nested
 nature of our confidentiality property: rather than just generating two
 initial machines that are variants of one another and letting them
 execute to test for noninterference, we generate a new variant
@@ -2290,11 +2296,11 @@ checks the confidentiality of multiple nested calls.
 \paragraph*{Findings}
 
 To ensure the effectiveness of testing against our formal properties, we
-used {\em mutation testing}~\citep{JiaH11}. In mutation testing, we inject errors
+use {\em mutation testing}~\citep{JiaH11}. In mutation testing, we inject errors
 (mutations) in a program that should cause the property of interest (here,
 stack safety) to fail, and ensure that the testing framework can find
-them. The bugs we used for our evaluation were either artificially generated
-by us (deliberately weakening the micro-policy in ways that we expected
+them. The bugs we use for our evaluation are either artificially generated
+by us (deliberately weakening the micro-policy in ways that we expect
 should break its guarantees), or actual bugs that we discovered through
 testing our implementation. We elaborate on some such bugs below.
 
@@ -2332,15 +2338,15 @@ that restriction by not checking the depth equality (row {\em
 Similarly, when storing to a stack location, the correct micro-policy
 needs to ensure that the tag on the memory location is either
 $\tagNoDepth$ or has again the same depth as the current $\PCname$
-tag. Relaxing that constraints causes violations to the integrity
+tag. Relaxing that constraint causes violations to the integrity
 property (row {\em STORE\_NO\_CHECK}).
 
 Naturally, testing also revealed a number of errors in our
 implementation of the enforcement mechanism (the original was written in C++
-and targeted ARM machine code
+and targeted ARM machine code;
 %\bcp{right?}\leo{yeah}
-; we re-implemented it in Coq targeting RISC-V).  These errors ranged
-from trivial typos to ones that required an intriguingly complex setup
+we re-implemented it in Coq targeting RISC-V).  These errors range
+from trivial typos to ones that require an intriguingly complex setup
 to appear.  The most interesting bug (included in the table as row
 {\em HEADER\_NO\_INIT}) was that, on our first try, the blessed call
 sequence %/policy combination\apt{??}
@@ -2610,7 +2616,7 @@ not really stack safe, and describe a fix.
 \section{Extensions}
 \label{sec:ext}
 
-We have shown how our properties apply to an extremely simply
+We have shown how our properties apply to an extremely simple
 subroutine model and validated them through randomized testing.
 But what about more realistic systems? We now demonstrate the
 flexibility of these core concepts as we extend
@@ -2873,15 +2879,15 @@ void f(int &a) {
 \end{figure}
 
 To this point we have ignored function arguments, since our simplest model places them in
-registers. We now implement two kinds of protected
-sharing: passing by value on the stack, and passing by reference. First we will explore
+registers. We now show how to implement two kinds of protected
+sharing: passing by value on the stack, and passing by reference. We first explore
 some examples at the same level of detail as our earlier ones, and then move on to
 extending our formalization.
 
 Example~\ref{fig:passingsimple} shows a sample trace of
 a program that passes a value on the stack, without an attack.
 We extend our call annotation with an additional parameter identifying a memory location to be
-passed, and our diagram displays it in magenta. Our notion of domains is extended as well,
+passed (the diagram displays it in magenta). Our notion of domains is extended as well,
 to include \(\passed{\depth,\depth'}\), recording two depths. We note the
 current depth of the active function next to the stack pointer in the diagram, for reference.
 The argument {\tt a} has
@@ -2905,13 +2911,14 @@ The question is how the local variables {\tt x} and {\tt y} themselves
 should be labelled in order for the policy to detect an integrity violation.
 At the initial call, the address of {\tt x} is marked as passed, and {\tt f} is free to write to it. Then upon
 return, {\tt main}'s frame is unsealed. At the second call it is the address of {\tt y} that is marked as passed,
-and when {\tt f} instead tries to write to {\tt x}, it violates integrity. For that matter
-a future call with no arguments passed by reference would also violate integrity if it wrote
-to either variable.
+and when {\tt f} instead tries to write to {\tt x}, it violates integrity.
+%For that matter
+%a future call with no arguments passed by reference would also violate integrity if it wrote
+%to either variable.
 
 When passing by reference, it is possible to repeatedly pass the same reference further
 and further down the stack. Note, however, that this sharing of the reference must be over
-an unbroken chain of calls. So it suffices to track two depths for each passed
+an unbroken chain of calls. So it suffices for the domain to track two depths for each passed
 cell: the original owner, and the highest depth it has been passed to. The policy considers
 it to be accessible anywhere between the two.
 
@@ -2924,27 +2931,34 @@ same way as a passed argument, with the additional property
 that it remains accessible at \emph{all} stack depths above the caller.
 This prevents most violations of temporal safety, although stale pointers can still be
 used in certain corner cases.
-More seriously, callees are permitted to access the location without having
+But more seriously, callees are permitted to access the location without having
 been explicitly given a pointer to it.  Preventing the latter kind of abuse
 is the provence of a fine-grained memory safety policy, e.g. based on capabilities
 (implemented by tags or otherwise); we argue it is beyond the scope of stack safety
 \emph{per se}.
 
-Next we introduce variable passing. We will need to add extra information to our call
+\paragraph{Formalization of variable passing.}
+We add extra information to our call
 annotations to reflect that they may now pass variables on the stack, and that the locations
 of those variables may be dynamic (as in the case of pass-by-reference).
 A call annotation now includes a predicate relating machine states to the components
 that should be passed---when passing by value, this will typically be freshly allocated
 cells at the top of the frame, while passing by reference just gives the
-addresses of the appropriate variables.
-\[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \callmap(P \subseteq \MACHS \times \COMPONENTS)\]
-And we extend the set of domains to include passed components,
+addresses of the appropriate variables.\apt{This still doesn't make sense to me. We cannot
+  give a static annotation that identifies the absolute address of a stack-allocated variable!
+  Only sp-relative addresses make sense.}
+
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P) \hspace*{1in} P \subseteq (\MACHS \times \COMPONENTS)\]
+We extend the set of domains to include passed components,
 which are labeled with the range of depths of the caller that has passed them.
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \passed{\depth,\depth'}\]
-\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
-\times (\rts \in \listT (\target \subseteq \MACHS)) \]
+%\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
+%\times (\rts \in \listT (\target \subseteq \MACHS)) \]
+The definition of context looks the same, but is based on the revised definition of \(\STKDOMS\):
+\[(\domMap,\rts) = \context \in \CONTEXTS ::= (\COMPONENTS \rightarrow \STKDOMS)
+ \times (\listT (\target)) \]
 We straightforwardly describe how the sealing convention and passing predicate combine to
-update a domain map when pushing it, where \(\depth\) is an integer depth.
+update a domain map at a call from depth \(\depth\).
 \[(\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) ~ \component =
 \begin{cases}
   \sealed{\depth}              & \text{if } \domMap ~ \component = \unsealed \text{ and }
@@ -2957,7 +2971,7 @@ update a domain map when pushing it, where \(\depth\) is an integer depth.
   \domMap~\component & \text{else} \\
 \end{cases}\]
 
-And to pop we just unseal the components at depth \(\depth\):
+At the matching return we just unseal the components at depth \(\depth\):
 
 \[(\mathit{pop} ~ \domMap ~ \depth) ~ \component =
 \begin{cases}
@@ -2968,7 +2982,7 @@ And to pop we just unseal the components at depth \(\depth\):
   \domMap~\component        & \text{else} \\
 \end{cases}\]
 
-Now we can inductively define the context update function; these again apply in the order
+Now we can inductively define the context update function; these rules again apply in the order
 presented. \bcp{Too much space between the second and third.}
 
 \judgmenttwo[Call]
@@ -3001,7 +3015,7 @@ or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
 \definition
 For each of the stepwise, deferred, and observational versions of
 stack integrity in the simple model, the equivalent property in the
-passing model substitutes the above definitions of \(\context\), initial contexts and update
+passing model substitutes the above definitions of \(\context\), initial contexts\apt{not defined above??}  and update
 function, and \(\prot_P\) for their simple equivalents, and is otherwise identical.
 
 \definition Let the secret set of a context, \(\secret_P(\domMap,\rts)\),
@@ -3013,17 +3027,17 @@ where \(\depth \leq |\rts| \leq \depth'\).
 \definition
 For both the stepwise and observational versions of stack confidentiality in
 the original model, the equivalent property in the passing model is the same after
-substituting the above definitions of \(\context\), initial contexts and update
+substituting the above definitions of \(\context\), initial contexts\apt{ditto} and update
 function, and \(\prot_P\) for their simple equivalents.
 
 \subsection{Coroutines}
 
-Our final extension to the model is to add coroutines. We assume a very simple model with
+Our final extension to the model adds coroutines. We assume a very simple model with
 a fixed number of coroutines, each with its own stack.
 Stack identifiers are drawn from a set \(\STACKS\), and there is a static partial map
 \(\stackof\) from addresses to stack ids. Note that we now explicitly reference the stack
 pointer, using the \(\stackof\) of the stack pointer to determine the target of a yield.
-We add a second annotation indicating yields.
+We add a second annotation indicating yields.\apt{seems unchanged from (old version of) previous section}
 
 \[\ann \in \ANNS ::= \callmap(P \subseteq \MACHS \times \COMPONENTS)\]
 \[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \ann \in \ANNS\]
@@ -3042,9 +3056,9 @@ coroutine.
 
 \[\stackDom \in \STKDOMS ::= \unsealed + \sealed{\depth} + \passed{\depth-\depth'}\]
 \[\topDom \in \TOPDOMS ::= \outside + \instack{\stackid}{\stackDom}\]
-\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS) \times
-(\rtm \in \STACKS \rightarrow \listT ~ \target) \times (\yts \in \STACKS \rightarrow
-\target) \times (\stackid \in \STACKS)\]
+\[(\domMap,\rtm,\yts,\stackid) = \context \in \CONTEXTS ::= 
+ (\COMPONENTS \rightarrow \STKDOMS) \times
+(\STACKS \rightarrow \listT(\target)) \times (\STACKS \rightarrow \target) \times \STACKS\]
 
 In our context update rules, calls and returns work the same as in the sharing model,
 with domain updates restricted to the top-level domain corresponding to the active stack,
@@ -3118,7 +3132,7 @@ be the set of components \(\component\) such that
 
 \definition
 We define {\em stepwise coroutine integrity} in the same way as stepwise stack integrity,
-substituting the above definitions of \(\context\), initial contexts and update
+substituting the above definitions of \(\context\), initial contexts\apt{??} and update
 function, and \(\prot_Y\) for their equivalents. Likewise
 {\em deferred coroutine integrity} and {\em observational coroutine integrity} are defined
 in terms of their simple equivalents using \(\MPCT^\wedge\) in place of \(\MPCT^*\).
@@ -3136,7 +3150,7 @@ stack confidentiality.
 %
 To our knowledge, the only line of work to date that has attempted
 a positive and formal characterization of
-stack safety is \citet{Skorstengaard+19b}, who introduce a calling
+stack safety begins with \citet{SkorstengaardLocal}, who introduce a calling
 convention that uses local capabilities to preserve local state
 encapsulation and well-bracketed control flow, using a logical
 relation to reason about the stack safety of concrete
@@ -3149,7 +3163,7 @@ cleared whenever a security boundary is crossed. Their logical
 relation captures capability safety without ``externally observable
 side-effects (like console output or memory access traces)''
 and can be used to reason about individual programs.
-\citeauthor{Skorstengaard+19b} acknowledge the difficulty of defining
+\citeauthor{SkorstengaardSTK} acknowledge the difficulty of defining
 these concepts precisely:
 ``while [they] claim that [their] calling
 convention enforces control-flow correctness, [they] do not prove a
@@ -3157,7 +3171,7 @@ general theorem that shows this, because it is not clear what such a
 theorem should look like,'' noting that the correctness property
 enjoyed by their technique ``is not made very explicit.''
 
-StkTokens \citep{Skorstengaard+19} continues this work by defining a more efficient
+StkTokens \citep{SkorstengaardSTK} continues this work by defining a more efficient
 calling convention that makes use of linear capabilities for stack and return
 pointers.
 %% The convention operates on a single shared stack and requires that
@@ -3168,7 +3182,7 @@ Still informally, local state encapsulation is defined as
 restricting accesses to the range of memory allocated to the current stack
 frame, and well-bracketed control flow as only allowing returns from the topmost
 frame to the immediately adjacent frame below. Formally, it improves on
-\citet{Skorstengaard+19b} by building those properties into the semantics of a
+\citet{SkorstengaardLocal} by building those properties into the semantics of a
 capability machine with a built-in call stack and call and return instructions,
 which is proven fully abstract with respect to a more concrete capability
 machine.
@@ -3177,6 +3191,10 @@ Their proof of full abstraction uses a standard notion of components, which
 import and export functions through their interfaces.
 %% ; their model of
 %% observations is limited to cotermination.
+\sna{Some of this seems like more detail than we need, and we need to
+  compare ourselves to their list of criteria.}
+\rb{Trimmed this a bit. Are you referring to their list of attack
+  examples, or to something else?\apt{Their list at start of section 4.}}
 
 \paragraph{Protecting the Stack with Micro-Policies}
 %
@@ -3226,16 +3244,17 @@ other mechanisms, especially Cheri-based capability systems. And we can further 
 the functionality of our definitions by showing that they can be used to prove
 the correctness of a programming logic with strengthened rules around calls and returns.
 
-\paragraph*{Stack Safety in the Cheri Zoo}
+\paragraph*{Stack Safety in the Cheri Ecosystem}
 
 There are several proposals around the use of Cheri capabilities to enforce stack safety,
-ranging from mechanisms that use the standard Cheri hardware \citep{Skorstengaard+19b},
+ranging from mechanisms that use the standard Cheri hardware (which includes local
+capabilities) \citep{SkorstengaardLocal},
 to those that propose entirely new types of capabilities, such as linear
-(\citep{Skorstengaard+19}), uninitialized (\citep{Georges+21}), and monotonic (\sna{cite}).
+\citep{SkorstengaardSTK}, uninitialized \citep{Georges+21}, lifetime \citep{Tsampas+19}, and monotonic \citep{GeorgesComplete}.
 Of these, uninitialized capabilities seem particularly promising---they naturally enforce
 write-before-read behavior, and therefore will enable confidentiality without the need
 to clear large swaths of the stack. We propose to implement a model of the stack safety
-system described in (\citep{Georges+21}) and test it against our properties using
+system described in \citet{Georges+21} and test it against our properties using
 QuickChick.
 
 \paragraph*{Program Logic for Stacks}
