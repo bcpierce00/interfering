@@ -489,7 +489,8 @@ we reason that both of their lazy policies violate the temporal aspect of confid
 corner cases where data can leak across repeated calls to the same callee,
 and \emph{Lazy Tagging and Clearing} also violates integrity in these instances.\apt{is this
   right?? I though Lazy tagging was fully ok, and lazy tagging + clearing violated
-  temporal confidentialitty (only).} We
+  temporal confidentialitty (only).}\sna{I was wrong about that. It's true of lazy tagging
+  (provided the caller initializes their frame) but not lt+c}We
 propose a variant of {\em Lazy Tagging and Clearing} that \emph{should} enforce
 confidentiality, albeit at some performance cost.
 %
@@ -718,7 +719,7 @@ examples (\cref{sec:running-example}). \Cref{sec:relwork,sec:future} discuss rel
 \paragraph*{Machine model}
 Our properties are defined in terms of an abstract machine model that makes very few
 assumptions about the concrete machine that instantiates it.  We assume a register
-machine with a program counter (\(\PCname\))\apt{and a stack pointer? 5.2 says we need that too}; other
+machine with a program counter (\(\PCname\)) and a stack pointer (\(\rsp\)); other
 details of the machine's ISA are unimportant. We assume that we know ahead of time
 the layout of memory, including where code lives and which addresses are within
 the bounds of the stack. We do not model a heap; programs might choose to use memory
@@ -738,7 +739,8 @@ model run-time code generation.
 
 \paragraph*{What is a ``call''?}  One significant challenge in formulating our
 properties arises from the fact that we want to define stack safety at the
-machine-code level for a variety of ISAs, including RISCy \sna{RISCy?}\leo{RISC-like maybe?} ones.  In
+machine-code level for a variety of ISAs, including RISCy
+\ifaftersubmission\sna{RISCy?}\leo{RISC-like maybe?}\sna{Apparently riscy is a thing.}\fi ones.  In
 particular, there may be no single ``call'' instruction that does all the
 required manipulation of the \(\PCname\) and stack pointer. Instead, there
 might be just a simple branch instruction that stores the old \(\PCname\) in
@@ -757,23 +759,21 @@ representing calls.  We declare that a call has occurred when the machine
 has just executed an instruction marked as a call.
 %
 These call annotations would typically come from a compiler together with
-the machine code, but we do to assume anything about their provenance.
+the machine code, but we do not assume anything about their provenance.
+Annotations connect the enforcement mechanism to the property: we don't
+protect unmarked calls, because a mechanism's starting conditions might
+depend on knowing where calls are.
 
 Returns, on the other hand, need not be annotated: we can tell when a callee
 has returned control to the caller when... we see control return to the
-caller!  For example, under a standard calling convention, we can see that a
+caller! We don't require the callee's cooperation at all.
+For example, under a standard calling convention, we can see that a
 return has occurred occurred when state of the machine reaches a state where
 the stack pointer has the same value as it did at the point of some earlier
 call and the $\PCname$ points to the instruction following that call.  We
 abstract away from the details of specific calling conventions by assuming
 that we are given some way of telling when a given machine state is a
 {\em return target} with respect to some set of pending calls.
-\apt{Ideally, I'd still like to get across the idea that, in general, annotations are
-  also needed to connect the policy to
-  to the enforcement mechanism and provide a basis for the ``well-formedness''
-  criterion discussed in 3. We are only able to get away with annotating
-  just calls because our enforcement mechanism doesn't require any cooperation
-  on the callee side.}
 
 %, returns, and function entry points\BCP{I
 %  still want to talk about whether returns and entry points need to be
@@ -3221,10 +3221,20 @@ Their proof of full abstraction uses a standard notion of components, which
 import and export functions through their interfaces.
 %% ; their model of
 %% observations is limited to cotermination.
+
+Although there are some important differences between
+\citeauthor{SkorstengaardSTK}'s properties and our own, the new
+properties arguably satisfy their list of desiderata for such
+formulations: notably, they reflect (and refine) programmer intuitions
+about stack safety, furnish a comprehensive picture of the meaning of
+stack safety, can be used to reason about program behavior, and are
+flexible enough to be allow extensions to richer settings.
+%
 \sna{Some of this seems like more detail than we need, and we need to
   compare ourselves to their list of criteria.}
 \rb{Trimmed this a bit. Are you referring to their list of attack
-  examples, or to something else?\apt{Their list at start of section 4.}}
+  examples, or to something else?\apt{Their list at start of section 4.
+  \rb{Had a go at this.}}}
 
 \paragraph{Protecting the Stack with Micro-Policies}
 %
