@@ -180,7 +180,7 @@ Definition getComponents (m : MachineState) : list Component :=
   
   (* Observations are values, or silent (tau) *)
   Inductive Observation : Type := 
-  | Out (w:Value) 
+  | Out (w: Word * Value) 
   | Tau. 
 
   Definition w32_eqb (w1 w2 : w32) : bool :=
@@ -199,7 +199,7 @@ Definition getComponents (m : MachineState) : list Component :=
      changes. On a first approximation, monitor all positions (aligned accesses
      only) outside the code segment (whose limits are here, again for simplicity,
      hardcoded). *)
-  Definition findDiff mOld mNew : option Z :=
+  Definition findDiff mOld mNew : option (Word * Value) :=
     let aligned := fun addr =>
                      andb
                        (word.eqb (word.modu addr (word.of_Z 4)) (word.of_Z 0))
@@ -216,7 +216,7 @@ Definition getComponents (m : MachineState) : list Component :=
         (*           | None => trace "Oops!"%string (split 4 0) *)
         (*           end in *)
         (* trace ("findDiff: change to " ++ show (combine 4 w) ++ " (from " ++ show (combine 4 w') ++ ")" ++ nl)%string *)
-        Some (combine 4 w)
+        Some (word.unsigned addr, combine 4 w)
       | None =>
         (* trace ("findDiff: no diff found" ++ nl)%string *)
         None
@@ -244,7 +244,11 @@ Definition getComponents (m : MachineState) : list Component :=
         end
       else
         (* trace ("PCs differ")%string *)
-        (s', Tau)
+        match findDiff (getMem m) (getMem s') with
+        | Some v => (s', Out v)
+        | None => (s', Tau)
+        end
+        (* (s', Tau) *)
     end
   .
 
@@ -606,7 +610,7 @@ Definition pstep (mp : MPState) : option PolicyState :=
 Instance showObs : Show Observation :=
   {|
   show o := match o with
-            | Out v => ("Out " ++ show v)%string
+            | Out (a, v) => ("Out @" ++ show a ++ " <- " ++ show v)%string
             | Tau => "Tau"%string
             end
   |}.
