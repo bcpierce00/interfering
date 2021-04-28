@@ -22,13 +22,14 @@ Require Import coqutil.Map.Interface.
 Require Import riscv.Utility.Words32Naive.
 Require Import riscv.Utility.DefaultMemImpl32.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
-Require Import riscv.Utility.ExtensibleRecords. Import HnatmapNotations. Open Scope hnatmap_scope.
+Require Import riscv.Utility.ExtensibleRecords. Import HnatmapNotations.
+Open Scope hnatmap_scope.
 Require coqutil.Map.SortedList.
 
 Import ListNotations.
 Import RiscvMachine.
 
-From StackSafety Require Import MachineImpl.
+From StackSafety Require Import MachineModule MachineImpl.
 From StackSafety Require Import SubroutineSimple.
 
 From RecordUpdate Require Import RecordSet.
@@ -36,6 +37,19 @@ Import RecordSetNotations.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
+
+Import RISCV.
+Import TagPolicy.
+
+Module DummyMaps : MapMaker RISCV.
+  Definition cdm : CodeMap := fun _ => None.
+  Definition sm : StackMap := fun _ => Some O.
+End DummyMaps.
+
+Module Property := SimpleProp RISCV TagPolicy DummyMaps.
+Import Property.
+Module MPCImpl := MPC RISCV TagPolicy Dom.
+Import MPCImpl.
 
 Definition r0 : Register := 0.
 Definition ra : Register := 1.
@@ -152,11 +166,11 @@ Definition printPCs (m n : MachineState) (p : PolicyState) :=
    else (show val1 ++ "/" ++ show val2))
      ++ " @ " ++ show (pctags p))%string.
 
-Definition CodeMap_Impl := Zkeyed_map CodeStatus.
+Definition CodeMap_Impl := Zkeyed_map (option CodeAnnotation).
 Definition CodeMap_fromImpl (cm : CodeMap_Impl) : CodeMap :=
   fun addr => match map.get cm addr with
               | Some cs => cs
-              | _ => notCode
+              | _ => None
               end.
 
 Instance ShowCodeAnnotation : Show CodeAnnotation :=
@@ -169,13 +183,11 @@ Instance ShowCodeAnnotation : Show CodeAnnotation :=
        | _  => "ret"
        end |}.
 
-Derive Show for CodeStatus.
 Derive Show for StackDomain.
-
 
 Definition printComponent (k : Component)
            (m : MachineState) (p : PolicyState)
-           (cm : CodeMap_Impl) (c : context)
+           (cm : CodeMap_Impl) (c : CtxState)
            (i : LayoutInfo) :=
   let val := proj m k in
   let tag := pproj p k in
@@ -237,7 +249,7 @@ Definition listify1_word mem :=
             (word.unsigned k,val) :: acc
           else acc) nil mem).
 
-Definition printMem (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c : context) (i : LayoutInfo) :=
+Definition printMem (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c : CtxState) (i : LayoutInfo) :=
   let mem := getMem m in
   let tags := memtags p in
   let mts := combine_match (listify1_word mem) (listify1 tags) in
@@ -260,7 +272,7 @@ Definition printMem (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c 
        (show k ++ " : " ++ printed ++ nl ++ s)%string
     ) mts "".
 
-Definition printMems (m n : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c : context) (i : LayoutInfo) :=
+Definition printMems (m n : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c : CtxState) (i : LayoutInfo) :=
   let tags := memtags p in
   let mem1 := getMem m in
   let mts1 := combine_match (listify1_word mem1) (listify1 tags) in
@@ -610,9 +622,9 @@ genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
         (* Existing callsites, lookup fun id *)
       List.map (fun i => 
                   match map.get cm (word.unsigned (getPc m) + i) with
-                  | Some (inFun _ _) =>
+                  | Some _ =>
                     (headerHead i f) 
-                  | _ => exception ("genCall - nofid: " ++ show (word.unsigned (getPc m) + i) ++ nl ++ printMachine m p cm (initC (defstackmap l) m))%string
+                  | _ => exception ("genCall - nofid: " ++ show (word.unsigned (getPc m) + i) ++ nl ++ printMachine m p cm (initCtx (*(defstackmap l)*) m))%string
                   end) existingSites  in
   let newOpts :=
       List.map (fun i => headerSeq i f nextF) newCallSites in
@@ -626,7 +638,7 @@ genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
 Definition returnSeq (f rf : FunID) :=
   [ (Lw   ra sp 0     , [Tinstr; Tr1], f, normal)
   ; (Addi sp sp (-12) , [Tinstr; Tr2], f, normal)
-  ; (Jalr ra ra 0     , [Tinstr; Tr3], rf, MachineImpl.ret)
+  ; (Jalr ra ra 0     , [Tinstr; Tr3], rf, retrn)
   ].
 
 Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
@@ -779,7 +791,7 @@ Fixpoint gen_exec_aux (steps : nat)
          let m'  := setInstrI (getPc m) m  is in
          let p0' := setInstrTagI (word.unsigned (getPc m)) p0 it in
          let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
-         let cm' := map.put cm (word.unsigned (getPc m)) (inFun f' a) in
+         let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
          match mpstep (m', p') with
          | Some ((m'', p''), o) =>
 (*            trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string  *)
@@ -908,7 +920,7 @@ Derive Show for Component.
 Instance ShowValue : Show Value :=
   {| show v := show v |}.
 
-Fixpoint walk (ks : list Component) cm m p (c : context) m' (p' : PolicyState) (c' : context) (traceOut : list (unit -> string))
+Fixpoint walk (ks : list Component) cm m p (c : CtxState) m' (p' : PolicyState) (c' : CtxState) (traceOut : list (unit -> string))
          (cont : unit -> Checker) : Checker :=
   match ks with
   | [] => cont tt
@@ -927,6 +939,8 @@ Fixpoint walk (ks : list Component) cm m p (c : context) m' (p' : PolicyState) (
     end
   end.
 
+Derive Show for unit.
+
 Derive Show for Observation.
 
 Definition SD_eqb s1 s2 :=
@@ -937,7 +951,7 @@ Definition SD_eqb s1 s2 :=
   | _, _ => false
   end.
 
-Definition calcTraceDiff cm (m m' : MachineState) (p p' : PolicyState) (c c' : context) (i : LayoutInfo) (o : Observation) : unit -> string :=
+Definition calcTraceDiff cm (m m' : MachineState) (p p' : PolicyState) (c c' : CtxState) (i : LayoutInfo) (o : Observation) : unit -> string :=
   let compsToTrace :=
       List.filter (fun k =>
                  negb (andb (Z.eqb (proj m k) (proj m' k))
@@ -960,7 +974,7 @@ Definition prop_SimpleStackIntegrityStep fuel i m p cm ctx
       match fuel with
       | O => collect "Out-of-Fuel" true
       | S fuel' => 
-        match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
+        match mpcstep (m,p,ctx) with
         | None => collect ("Failstop", fuel) true
         | Some (m', p', c', o) =>
 (*          match AnnotationOf (CodeMap_fromImpl cm) (proj m PC) with
@@ -979,7 +993,7 @@ Definition prop_SimpleStackIntegrityStep fuel i m p cm ctx
 Definition prop_integrity :=
   let sm := defstackmap defLayoutInfo in
   forAll genMach (fun '(m,p,cm) =>
-                    (prop_SimpleStackIntegrityStep defFuel defLayoutInfo m p cm (initC sm m))).
+                    (prop_SimpleStackIntegrityStep defFuel defLayoutInfo m p cm (initCtx m))).
 
 Extract Constant defNumTests => "500".
 (* QuickCheck prop_integrity.  *)
@@ -1001,7 +1015,7 @@ Definition ksub k :=
 
 (* variantOf (fun k => fst c k = Sealed d) m n -> *)
 Definition genVariantOf (d : nat)
-           (c : context) (m : MachineState)
+           (c : CtxState) (m : MachineState)
   : G MachineState :=
   foldGen (fun macc k =>
              (*trace (show ("Varying:", k, fst c k)) *)
@@ -1025,8 +1039,8 @@ Definition sameDifferenceP (m m' n n' : MachineState) k :=
 Fixpoint prop_lockstepConfidentiality
          (fuel :nat)
          (m n : MachineState) (p : PolicyState)
-         (cm : CodeMap_Impl) (ctx : context)
-         (endP : @MPCState context-> bool)
+         (cm : CodeMap_Impl) (ctx : CtxState)
+         (endP : MPCState -> bool)
   : bool :=
 (* trace (printMachines m n p cm ctx ++ nl)   *)
  (match fuel with
@@ -1037,8 +1051,8 @@ Fixpoint prop_lockstepConfidentiality
     | true, _    => (* collect "Main done" *) true
     | _   , true => (* collect "Vary done" *) true
     | _, _ =>
-      match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx),
-            mpcstep (updateC (CodeMap_fromImpl cm)) (n,p,ctx) with
+      match mpcstep (m,p,ctx),
+            mpcstep (n,p,ctx) with
       | Some (m',p1,c1,o1), Some (n', p2,c2, o2) =>
         andb (List.forallb (sameDifferenceP m m' n n') (getComponents m'))
              (prop_lockstepConfidentiality fuel' m' n' p1 cm c1 endP)
@@ -1053,9 +1067,9 @@ Definition prop_stackConfidentiality
   match fuel with
   | O => checker true
   | S fuel' =>
-    match AnnotationOf (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
+    match (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
     | Some call =>
-      match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
+      match mpcstep (m,p,ctx) with
       | Some (m', p', c', o) =>
         let depth := List.length (snd c') in
         let endP  := fun '(_,_,c) =>
@@ -1073,7 +1087,8 @@ Definition prop_stackConfidentiality
 
 Definition obs_eqb (o1 o2 : Observation) : bool :=
   match o1, o2 with
-  | Out n1, Out n2 => Z.eqb n1 n2
+  (*  | Out n1, Out n2 => Z.eqb n1 n2*)
+  | Out tt, Out tt => true
   | Tau, Tau => true
   | _, _ => false
   end.
@@ -1081,13 +1096,13 @@ Definition obs_eqb (o1 o2 : Observation) : bool :=
 Definition prop_confidentiality :=
   let sm := defstackmap defLayoutInfo in
   forAll genMach (fun '(m,p,cm) =>
-                    (prop_stackConfidentiality defFuel defLayoutInfo m p cm (initC sm m))).
+                    (prop_stackConfidentiality defFuel defLayoutInfo m p cm (initCtx m))).
 
 Extract Constant defNumTests => "500".
 QuickCheck prop_confidentiality. 
 
 Fixpoint prop_laziestLockstepIntegrity
-           fuel m n p cm ctx (endP : MPCState -> bool)
+           fuel m n p ctx (endP : MPCState -> bool)
   : bool :=
   match fuel with
   | O => true
@@ -1097,11 +1112,11 @@ Fixpoint prop_laziestLockstepIntegrity
     | true, _    => (* collect "Main done" *) true
     | _   , true => (* collect "Vary done" *) true
     | _, _ =>
-      match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx),
-            mpcstep (updateC (CodeMap_fromImpl cm)) (n,p,ctx) with
+      match mpcstep (m,p,ctx),
+            mpcstep (n,p,ctx) with
       | Some (m',p1,c1,o1), Some (n', p2,c2, o2) =>
         andb (obs_eqb o1 o2)
-             (prop_laziestLockstepIntegrity fuel' m' n' p1 cm c1 endP)
+             (prop_laziestLockstepIntegrity fuel' m' n' p1 c1 endP)
       | _, _ => true
       end
     end
@@ -1113,9 +1128,9 @@ Definition prop_laziestStackIntegrity
   match fuel with
   | O => checker true
   | S fuel' =>
-    match AnnotationOf (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
+    match (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
     | Some call =>
-      match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
+      match mpcstep (m,p,ctx) with
       | Some (m', p', c', o) =>
         let depth := List.length (snd c') in
         let endP  := fun '(_,_,c) =>
@@ -1124,7 +1139,7 @@ Definition prop_laziestStackIntegrity
                          (fun _ => nil)
                          (fun n' => "")
                          (fun n' =>
-                            prop_laziestLockstepIntegrity defFuel m' n' p' cm c' endP)
+                            prop_laziestLockstepIntegrity defFuel m' n' p' c' endP)
       | _ => checker true
       end
     | _ => checker true
@@ -1134,7 +1149,7 @@ Definition prop_laziestStackIntegrity
 Definition prop_laziestIntegrity :=
   let sm := defstackmap defLayoutInfo in
   forAll genMach (fun '(m,p,cm) =>
-                    (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initC sm m))).
+                    (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initCtx m))).
 
 Extract Constant defNumTests => "500".
-(* QuickCheck prop_laziestIntegrity. *)
+QuickCheck prop_laziestIntegrity.

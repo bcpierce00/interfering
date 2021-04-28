@@ -5,10 +5,12 @@ Require Import Bool.
 Require Import ZArith.
 Require Import Nat.
 
-From StackSafety Require Import Trace MachineImpl ObsTrace.
+From StackSafety Require Import Trace MachineModule ObsTrace.
 
-  Section DOMAIN_MODEL.
-
+Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
+  Import M.
+  Import MM.
+  
   (* In general, a domain is a coherent logical division of the state (both memory and registers)
      that has meaning in one or more of our security properties. Domain models will get
      complicated, but let's start with a simple one: the simple stack, in which we have 
@@ -68,20 +70,12 @@ From StackSafety Require Import Trace MachineImpl ObsTrace.
   | Outside
   .
 
-
   (* All components belong to domain, and a domain map tells us which. *)
   Definition DomainMap := Component -> StackDomain.
   
-End DOMAIN_MODEL.
-
-Section WITH_MAPS.
-
   (* The Code and Stack maps tell us about the initial layout of memory, as determined
      by the compiler. They will help us build our initial DomainMap and identify
      calls and returns in the code, in the form of annotations. *)
-
-  (* sm is a simplified stack map that merely identifies whether an address is in the stack *)
-  Variable sm : Addr -> bool.
 
   (* The stack pointer is by far the most typical, but technically other mechanisms could be
      used to seal addresses. We assume that which addresses are being sealed is deducible from
@@ -89,16 +83,16 @@ Section WITH_MAPS.
      and attempting to re-seal already sealed addresses is a no-op. *)
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
   Definition sc : SealingConvention :=
-    fun m a => wlt a (proj m (Reg SP)).
+    fun m a => wlt a (vtow (proj m (Reg SP))).
 
   (* Likewise, we need to describe what it means to return properly from a call. We parameterize
      this as well, but the standard of course is that the stack pointer must match the original
      call point and the program counter should be one instruction (four cell) later. *)
   Definition ReturnConvention : Type := MachineState -> MachineState -> bool.
   Definition rc : ReturnConvention :=
-    fun m1 m2 => weq (proj m1 (Reg SP)) (proj m2 (Reg SP)) &&
-                 weq (wplus (proj m1 PC) 4)
-                     (wplus (proj m2 PC) 0).
+    fun m1 m2 => weq (vtow (proj m1 (Reg SP))) (vtow (proj m2 (Reg SP))) &&
+                 weq (wplus (vtow (proj m1 PC)) 4)
+                     (wplus (vtow (proj m2 PC)) 0).
 
   Definition ReturnTargets : Type := list (MachineState -> bool).
   Fixpoint popTo (m:MachineState) (rts : ReturnTargets) : option ReturnTargets :=
@@ -114,11 +108,11 @@ Section WITH_MAPS.
      machine with context that will inform our properties. In this case the context is a
      pair of a DomainMap and a ReturnTargets. *)
   
-  Definition context : Type := DomainMap * ReturnTargets.
+  Definition CtxState : Type := DomainMap * ReturnTargets.
 
   (* For the initial context, we construct a domain map that maps the stack to Unsealed
      and everything else to Outside. The stack depth is 0. *)
-  Definition initC (m:MachineState) : context :=
+  Definition initCtx (m:MachineState) : CtxState :=
     let dm := fun k =>
                 match k with
                 | Mem a =>
@@ -129,14 +123,9 @@ Section WITH_MAPS.
                 end in
     (dm, []).
 
-  (* Our update function checks an "annotation" on the code being executed.
-     Annotations are defined in Machine.v, and the ones that matter here are call and return.
-     The annotations are carried by a Code Map, which also tells us which addresses are code. *)
-  Variable cdm : CodeMap.
-
-  Definition updateC (m:MachineState) (prev:context) : context :=
+  Definition CtxStateUpdate (m:MachineState) (prev:CtxState) : CtxState :=
     let '(dm, rts) := prev in
-    match AnnotationOf cdm (proj m PC) with
+    match cdm (vtow (proj m PC)) with
     | Some call => (* On a call, we check what the sealing convention wants to seal.
                       If a component is Sealed, it can't be sealed again under the new depth.
                       Everything else retains its old status, presumably Unsealed. In the standard,
@@ -175,6 +164,17 @@ Section WITH_MAPS.
     | _ => (dm, rts)
     end.
 
+End SimpleDomain.
+
+Module SimpleProp (M : Machine) (P : Policy M) (MM : MapMaker M).
+  Import M.
+  Import P.
+  Import MM.
+  Module Dom := SimpleDomain M MM.
+  Export Dom.
+  Module MPCImp := MPC M P Dom.
+  Import MPCImp.
+  
   (* Now it's quite simple to define a "stepwise" integrity property:
      if we run from any initial state, updating the context as above, then
      at any particular state where a component k is in an Sealed domain,
@@ -183,8 +183,8 @@ Section WITH_MAPS.
      don't change, the most frequently it is possible to check. *)
   Definition SimpleStackIntegrityStep : Prop :=
     forall k d m c p m' p' c' o,
-      Reachable updateC initC (m,p,c) ->
-      mpcstep updateC (m,p,c) = Some (m',p',c',o) ->
+      Reachable (m,p,c) ->
+      mpcstep (m,p,c) = Some (m',p',c',o) ->
       fst c k = Sealed d ->
       proj m k = proj m' k.
 
@@ -194,14 +194,14 @@ Section WITH_MAPS.
         match fuel with
         | O => true
         | S fuel' => 
-          match mpcstep updateC (m,p,c) with
+          match mpcstep (m,p,c) with
           | None => true (* right? *)
           | Some (m', p', c', o) =>
             andb
               (List.forallb (fun k =>
                             match fst c k with
                             | Sealed _ =>
-                              Z.eqb (proj m k) (proj m' k)
+                              weq (vtow (proj m k)) (vtow (proj m' k))
                             | _ => true
                             end)
                             (getComponents m'))
@@ -236,7 +236,7 @@ Section WITH_MAPS.
   (* When we have same-difference, we can talk about traces being in lockstep. Intuitively
      what this means is that, whatever the relationship between their initial states,
      their states evolve in concert according to same-difference. *)
-  Inductive Lockstep : @MPCTrace context -> @MPCTrace context -> Prop :=
+  Inductive Lockstep : MPCTrace -> MPCTrace -> Prop :=
   | bothDone : forall m p c n,
       Lockstep (finished (m,p,c)) (finished (n,p,c))
   | bothStep : forall m p c m' n n' M N,
@@ -255,10 +255,10 @@ Section WITH_MAPS.
   Definition SimpleStackConfidentialityStep : Prop :=
     forall d m p c n M N,
       let P := fun '(_,_,c) => length (snd c) > d in
-      ReachableSegment updateC initC P M ->
+      ReachableSegment P M ->
       head M = (m,p,c) ->
       variantOf (fun k => fst c k = Sealed d) m n ->
-      MPCTraceToWhen updateC P (n,p,c) N ->
+      MPCTraceToWhen P (n,p,c) N ->
       Lockstep M N.
   
   (* ***** Control Flow Properties ***** *)
@@ -276,9 +276,9 @@ Section WITH_MAPS.
 
   Definition ReturnIntegrity : Prop :=
     forall mpc mpc' o,
-      Reachable updateC initC mpc ->
-      mpcstep updateC mpc = Some (mpc',o) ->
-      AnnotationOf cdm (proj (mstate mpc) PC) = Some ret ->
+      Reachable mpc ->
+      mpcstep mpc = Some (mpc',o) ->
+      cdm (vtow (proj (mstate mpc) PC)) = Some retrn ->
       exists rt rts,
         snd (cstate mpc) = rt :: rts /\
         snd (cstate mpc') = rts.
@@ -289,8 +289,8 @@ Section WITH_MAPS.
   
   Definition EntryIntegrity : Prop :=
   forall mpc1 mpc2 o,
-    Reachable updateC initC mpc1 ->
-    mpcstep updateC mpc1 = Some (mpc2,o) ->
+    Reachable CtxStateUpdate initCtx mpc1 ->
+    mpcstep CtxStateUpdate mpc1 = Some (mpc2,o) ->
     AnnotationOf cdm (proj (mstate mpc1) PC) = Some call ->
     em (proj (mstate mpc2) PC) = true. *)
 
@@ -301,5 +301,5 @@ Section WITH_MAPS.
   
   (* Continue to SubroutineShare.v, where we enhance the model with sharing between calls. *)
 
-End WITH_MAPS.
+End SimpleProp.
 
