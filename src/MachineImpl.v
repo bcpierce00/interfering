@@ -238,10 +238,7 @@ Definition getComponents (m : MachineState) : list Component :=
       if Z.eqb (word.unsigned (getPc m))
                (word.unsigned (getPc s'))
       then
-        match findDiff (getMem m) (getMem s') with
-        | Some v => (s', Out v)
-        | None => (s', Tau)
-        end
+        (s', Tau)
       else
         (* trace ("PCs differ")%string *)
         match findDiff (getMem m) (getMem s') with
