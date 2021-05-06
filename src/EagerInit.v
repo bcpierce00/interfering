@@ -26,8 +26,6 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Z.HexNotation.
 Require coqutil.Map.SortedList.
 
-Require Import Lia.
-
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
 

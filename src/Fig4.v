@@ -21,7 +21,9 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Z.HexNotation.
 Require coqutil.Map.SortedList.
 
-From StackSafety Require Import Trace MachineEagerInitGlobal.
+From StackSafety Require Import Trace MachineImpl EagerInitGlobal.
+Import RISCV.
+Import EagerInitGlobal.
 
 Let global_words : nat := 1.
 Let data_words : nat := 8.

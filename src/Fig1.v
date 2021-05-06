@@ -21,7 +21,7 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Z.HexNotation.
 Require coqutil.Map.SortedList.
 
-From StackSafety Require Import Trace MachineImpl MachineEagerInit.
+From StackSafety Require Import Trace MachineImpl EagerInit.
 Import RISCV.
 Import EagerInit.
 
