@@ -62,6 +62,9 @@ Module Type Machine.
   Definition View := Component -> Value.
 
   Parameter proj : MachineState -> Component -> Value.
+  Parameter projw : MachineState -> Component -> Word.
+
+  Parameter proj_vtow : forall m k, vtow (proj m k) = projw m k.
 
   (* Maybe name this pullback instead *)
   Parameter jorp : MachineState -> Component -> Value -> MachineState.
@@ -145,6 +148,7 @@ Module Type MapMaker (M : Machine).
 
   Parameter cdm : CodeMap.
   Parameter sm : StackMap.
+  Parameter defaultStack : StackID.
 End MapMaker.
 
 Module MPC (M:Machine) (P:Policy M) (C:Ctx M).

@@ -4,13 +4,11 @@ Require Import Bool.
 
 From StackSafety Require Import Trace MachineModule ObsTrace.
 
-Module TraceProps (M : Machine) (P : Policy) (C : Ctx).
+Module TraceProps (M : Machine) (P : Policy M) (C : Ctx M).
   Import M.
-  Module Pol := P M.
-  Import Pol.
-  Module Ctx := C M.
-  Import Ctx.
-  Module MPCimpl := MPC M Pol Ctx.
+  Import P.
+  Import C.
+  Module MPCimpl := MPC M P C.
   Import MPCimpl.
   Module Obs := ObsTrace M.
   Import Obs.

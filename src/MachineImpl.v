@@ -149,6 +149,10 @@ Extract Constant exception =>
       end
     end.
 
+  Definition projw := fun m k => vtow (proj m k).
+
+  Lemma proj_vtow : forall m k, vtow (proj m k) = vtow (projw m k). Proof. intros;auto. Qed.
+
   (* Maybe name this pullback instead *)
   Definition jorp (m : MachineState) (k : Component) (v : Value) : MachineState :=
     match k with

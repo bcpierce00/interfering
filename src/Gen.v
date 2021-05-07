@@ -44,6 +44,7 @@ Import TagPolicy.
 Module DummyMaps : MapMaker RISCV.
   Definition cdm : CodeMap := fun _ => None.
   Definition sm : StackMap := fun _ => Some O.
+  Definition defaultStack := O.
 End DummyMaps.
 
 Module Property := SimpleProp RISCV TagPolicy DummyMaps.

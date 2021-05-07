@@ -83,16 +83,16 @@ Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
      and attempting to re-seal already sealed addresses is a no-op. *)
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
   Definition sc : SealingConvention :=
-    fun m a => wlt a (vtow (proj m (Reg SP))).
+    fun m a => wlt a (projw m (Reg SP)).
 
   (* Likewise, we need to describe what it means to return properly from a call. We parameterize
      this as well, but the standard of course is that the stack pointer must match the original
      call point and the program counter should be one instruction (four cell) later. *)
   Definition ReturnConvention : Type := MachineState -> MachineState -> bool.
   Definition rc : ReturnConvention :=
-    fun m1 m2 => weq (vtow (proj m1 (Reg SP))) (vtow (proj m2 (Reg SP))) &&
-                 weq (wplus (vtow (proj m1 PC)) 4)
-                     (wplus (vtow (proj m2 PC)) 0).
+    fun m1 m2 => weq (projw m1 (Reg SP)) (projw m2 (Reg SP)) &&
+                 weq (wplus (projw m1 PC) 4)
+                     (wplus (projw m2 PC) 0).
 
   Definition ReturnTargets : Type := list (MachineState -> bool).
   Fixpoint popTo (m:MachineState) (rts : ReturnTargets) : option ReturnTargets :=
