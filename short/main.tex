@@ -1,5 +1,5 @@
 %% For double-blind review submission, w/o CCS and ACM Reference (max submission space)
-\documentclass[acmsmall,review,anonymous]{acmart}\settopmatter{printfolios=true,printccs=false,printacmref=false}
+\documentclass[acmtog,review,anonymous]{acmart}\settopmatter{printfolios=true,printccs=false,printacmref=false}
 %% For double-blind review submission, w/ CCS and ACM Reference
 %\documentclass[acmsmall,review,anonymous]{acmart}\settopmatter{printfolios=true}
 %% For single-blind review submission, w/o CCS and ACM Reference (max submission space)
@@ -36,7 +36,7 @@
 %% Citation style
 %% Note: author/year citations are required for papers published as an
 %% issue of PACMPL.
-\citestyle{acmauthoryear}   %% For author/year citations
+\citestyle{acmnumeric}   %% For author/year citations
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -237,31 +237,33 @@ specification for stack safety, both to compare the security claims of different
 enforcement techniques and to rigorously validate such claims.
 
 We propose such a characterization,
-using the technical framework of language-based security: a
-combination of an {\em integrity property},
-a {\em confidentiality property}, and a {\em well-bracketedness property}.
-%
-In a setting containing unstructured machine code, true
-control-flow attacks are only meaningful when they bypass a caller that was
-waiting for its return, so well-bracketness guarantees that callees return
-only to their callers. Other control-flow attacks, like
-return-oriented-programming (ROP), appear to return but keep
-the callee in control while accessing the caller's data.
-%
-Our properties treat this scenario as the callee not returning at all,
-so if the ROP attack touches the caller's data, it violates integrity
-or confidentiality.
+using the technical framework of language-based security.
+Stack safety protects a caller from its callee, guaranteeing
+the {\em integrity} and {\em confidentiality} of the caller's local state
+until it regains control. This formulation not only captures the intuition
+that the callee cannot directly access the caller's state, but gives a novel
+way of looking at control-flow attacks such as return-oriented-programming (ROP).
+In an ROP attack, the callee pretends to return to its caller, thus accessing the
+caller's privileges, but does so in such a way that it is still in control of
+execution. Our model allows the caller to dictate the terms of a valid return --
+typically, that the stack pointer is restored and execution proceeds from the
+return address. An ROP attack that ``returns'' and reads the caller's state is
+therefore treated precisely as if the callee had never returned, but attempted
+to read the caller's state directly. It is a confidentiality violation. Likewise
+an attack that would corrupt the caller's state is an integrity violation.
 
-Integrity and confidentiality are also novel in that they
-are ``nested'': {\em each} caller is protected from its
-callees. They come in {\em stepwise} variants, in
-which a caller's data is {\em never}
+We formalize integrity and confidentiality as trace properties, in two different
+variants: {\em stepwise} variants, in which a caller's data is {\em never}
 read or modified during a call, and {\em observational} ones, in which
 callees may read from and write to their caller's stack frame, as
 long as these ``risky'' behaviors do not affect the system's observable
 behavior. The observational properties are more extensional, and
 any reasonable protection mechanism ought to enforce them,
 even if it does not prevent every single dangerous read or write.
+Confidentiality is especially interesting, as it is based on the traditional
+notion of noninterference. But where noninterference is normally presented as an
+end-to-end hyperproperty, stack confidentiality is noninterference applied over
+multiple nested subtraces -- one for every call.
 
 To demonstrate the utility of our properties, we use them
 to validate an existing mechanism, the
