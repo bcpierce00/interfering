@@ -180,7 +180,7 @@ Definition getComponents (m : MachineState) : list Component :=
   
   (* Observations are values, or silent (tau) *)
   Inductive Observation : Type := 
-  | Out (w:Value) 
+  | Out (w: Word * Value) 
   | Tau. 
 
   Definition w32_eqb (w1 w2 : w32) : bool :=
@@ -195,13 +195,30 @@ Definition getComponents (m : MachineState) : list Component :=
     | _, _ => false
     end.
 
-  Definition findDiff mOld mNew : option Z :=
-    match find (fun addr => negb (memAddr_eqb mOld mNew addr)) (map.keys mNew) with
+  (* TODO: We don't have information about which parts of memory to monitor for
+     changes. On a first approximation, monitor all positions (aligned accesses
+     only) outside the code segment (whose limits are here, again for simplicity,
+     hardcoded). *)
+  Definition findDiff mOld mNew : option (Word * Value) :=
+    let aligned := fun addr =>
+                     andb
+                       (word.eqb (word.modu addr (word.of_Z 4)) (word.of_Z 0))
+                       (word.gtu addr (word.of_Z 499)) in
+    let keys := filter aligned (map.keys mNew) in
+    (* trace ("findDiff: new memory keys " ++ show (map word.unsigned keys))%string *)
+    match find (fun addr => negb (memAddr_eqb mOld mNew addr)) keys with
     | Some addr =>
+      trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string
       match loadWord mNew addr with
       | Some w =>
-        Some (combine 4 w)
+        (* let w' := match loadWord mOld addr with *)
+        (*           | Some w => w *)
+        (*           | None => trace "Oops!"%string (split 4 0) *)
+        (*           end in *)
+        (* trace ("findDiff: change to " ++ show (combine 4 w) ++ " (from " ++ show (combine 4 w') ++ ")" ++ nl)%string *)
+        Some (word.unsigned addr, combine 4 w)
       | None =>
+        (* trace ("findDiff: no diff found" ++ nl)%string *)
         None
       end
     | None => None
@@ -211,14 +228,27 @@ Definition getComponents (m : MachineState) : list Component :=
   Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
     (* returns option unit * state *)
     (* TODO: What's an observation? *)
+    (* trace ("Register contents: " *)
+    (*          ++ map.fold *)
+    (*               (fun acc k v => acc ++ "[" ++ show k ++ "," ++ show (word.unsigned v) ++ "]") *)
+    (*               "" (getRegs m) *)
+    (*          ++ nl)%string *)
     match Run.run1 RV32IM m with
     | (_, s') =>
       if Z.eqb (word.unsigned (getPc m))
                (word.unsigned (getPc s'))
       then
-        (s', Tau)
-      else          
-      (s', Tau)
+        match findDiff (getMem m) (getMem s') with
+        | Some v => (s', Out v)
+        | None => (s', Tau)
+        end
+      else
+        (* trace ("PCs differ")%string *)
+        match findDiff (getMem m) (getMem s') with
+        | Some v => (s', Out v)
+        | None => (s', Tau)
+        end
+        (* (s', Tau) *)
     end
   .
 
@@ -577,6 +607,14 @@ Definition pstep (mp : MPState) : option PolicyState :=
     => None
   end).
 
+Instance showObs : Show Observation :=
+  {|
+  show o := match o with
+            | Out (a, v) => ("Out @" ++ show a ++ " <- " ++ show v)%string
+            | Tau => "Tau"%string
+            end
+  |}.
+
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
   let instr : string := 
       match loadWord (getMem (ms mp)) (getPc (ms mp)) with
@@ -596,10 +634,12 @@ Definition mpstep (mp : MPState) : option (MPState * Observation) :=
   p' <- pstep mp; 
   match step (ms mp) with
   | (m', o) =>
+    (* trace ("Trace event " ++ show o ++ nl)%string ( *)
     if Z.eqb (word.unsigned (getPc (ms mp)))
              (word.unsigned (getPc m'))
     then None (* error *)
     else Some (m', p', o)
+    (* ) *)
   end
     )
 .

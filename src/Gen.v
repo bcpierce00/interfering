@@ -1073,7 +1073,7 @@ Definition prop_stackConfidentiality
 
 Definition obs_eqb (o1 o2 : Observation) : bool :=
   match o1, o2 with
-  | Out n1, Out n2 => Z.eqb n1 n2
+  | Out (a1, v1), Out (a2, v2) => Z.eqb a1 a2 && Z.eqb v1 v2
   | Tau, Tau => true
   | _, _ => false
   end.
