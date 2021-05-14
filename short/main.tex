@@ -240,17 +240,7 @@ We propose such a characterization,
 using the technical framework of language-based security.
 Stack safety protects a caller from its callee, guaranteeing
 the {\em integrity} and {\em confidentiality} of the caller's local state
-until it regains control. This formulation not only captures the intuition
-that the callee cannot directly access the caller's state, but gives a novel
-way of looking at control-flow attacks such as return-oriented-programming (ROP).
-In an ROP attack, the callee pretends to return to its caller, thus accessing the
-caller's privileges, but does so in such a way that it is still in control of
-execution. Our model allows the caller to dictate the terms of a valid return --
-typically, that the stack pointer is restored and execution proceeds from the
-return address. An ROP attack that ``returns'' and reads the caller's state is
-therefore treated precisely as if the callee had never returned, but attempted
-to read the caller's state directly. It is a confidentiality violation. Likewise
-an attack that would corrupt the caller's state is an integrity violation.
+until it regains control.
 
 We formalize integrity and confidentiality as trace properties, in two different
 variants: {\em stepwise} variants, in which a caller's data is {\em never}
@@ -260,10 +250,32 @@ long as these ``risky'' behaviors do not affect the system's observable
 behavior. The observational properties are more extensional, and
 any reasonable protection mechanism ought to enforce them,
 even if it does not prevent every single dangerous read or write.
+
+%SNA: will this audience know "hyperproperty?"
 Confidentiality is especially interesting, as it is based on the traditional
 notion of noninterference. But where noninterference is normally presented as an
 end-to-end hyperproperty, stack confidentiality is noninterference applied over
-multiple nested subtraces -- one for every call.
+multiple nested subtraces -- each individual call's behavior must be invariant
+regardless of the state of the stack at its entry.
+
+This formulation not only captures the intuition
+that the callee cannot directly access the caller's state, but gives a novel
+way of looking at control-flow attacks. We are not interested in attacks that
+merely aim to execute arbitrary code -- in fact, our attacker model assumes
+that the (attacking) callee may already execute arbitrary code.
+%
+By extension, we do not place any particular restrictions on control flow.
+Perhaps suprisingly, we can still meaningfully distinguish the caller from
+its callee, and talk about protecting the caller's data. After a call, control
+is considered to belong to the callee until the trace reaches a valid
+``return target,'' typically a state with the program counter at the next instruction
+and the stack pointer restored. If the caller's data are accessed before then,
+it is a violation of integrity or confidentiality.
+
+These properties can optionally be extended with a notion of {\em well-bracketed control flow}
+as in \citet{SkorstengaardSTK}, the system-wide control-flow property that callees always return
+to their immediate caller, if they return at all. This property is largely orthogonal to our
+data-protection properties.
 
 To demonstrate the utility of our properties, we use them
 to validate an existing mechanism, the
@@ -272,22 +284,45 @@ in the Coq proof assistant on top of a RISC-V specification. We
 use QuickChick~\citep{Denes:VSL2014,Pierce:SF4}, a property-based testing
 tool for Coq, to generate random programs and check
 that these micro-policies correctly abort programs that
-would violate stack safety.
+would violate stack safety. Furthermore, we check incorrect
+enforcement variants (both variants that we accidentally created
+during our re-implementation of the micro-policy and ones that we
+intentionally crafted to be broken in order to increase our confidence
+in testing and the enforcement mechanism itself). The testing framework
+is able to generate counterexamples that violate our properties but are not halted by
+incorrect enforcement mechanisms, increasing our confidence when it finds
+no counterexamples under the real enforcement mechanisms.
 
 Our testing supports the stack-safety claim of Roessler and Dehon's {\em Depth
   Isolation} micro-policy, in
-which memory cells within each stack frame are tagged with the identity of
+which memory cells within each stack frame are tagged with the depth of
 the function activation that owns the frame and access to those locations is
-then permitted only when that activation is currently executing. On the other hand, we find that their \emph{Lazy
-  Tagging and Clearing} policy
+then permitted only when that activation is currently executing.
+On the other hand, we find that their \emph{Lazy Tagging and Clearing} policy
 violates the temporal aspect of confidentiality in
 corner cases where data can leak across repeated calls to the same callee,
 and also violates integrity if the leak happens to use the caller's frame. We
-propose a variant of {\em Lazy Tagging and Clearing} that does enforce
-confidentiality (and test that it does), albeit at some performance cost.
+propose a variant of {\em Lazy Tagging and Clearing} that should enforce observational
+integrity and confidentiality, albeit at some performance cost. The next step
+is to expand testing to these properties and validate the variant; efficiently
+testing observational properties presents unique challenges because a property
+violation can be arbitrarily far removed from the initial ``risky'' read or write.
 
-Finally, we demonstrate our model's flexibility by extending it with the passing
-of variables on the stack and to a simple coroutine model.
+Finally, we demonstrate our model's flexibility by extending it to different settings.
+First, we allow variables to be passed on the stack, allowing some of the state of
+the caller to be shared with the callee (and potentially with a further
+callee, and so on.) Then we expand the number of stacks as we move to a simple
+coroutine model, albiet one with statically bounded regions for each stack.
+
+In addition to testing lazy tag-based policies against our observational properties,
+we are adapting the uninitialized capability model of \citet{Georges+21} to work with
+our testing framework for validation against our properties. Of the several Cheri-based
+stack protection schemes, its treatment of unitialized frames seems most compatible
+with our model of confidentiality, without the need for expensive stack clearing
+between calls. We expect that Cheri-based techniques support our properties if we
+assume extra cooperation from callers, namely that they do not leak their capabilities
+to the attacker. There is no equivalent dynamic requirement in a tag-based system because
+the policy can dynamically enforce cooperation.
 
 \bibliography{bcp.bib,local.bib}
 
