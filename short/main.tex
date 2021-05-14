@@ -251,17 +251,17 @@ read or modified during a call, and {\em observational} ones, in which
 callees may read from and write to their caller's stack frame, as
 long as these ``risky'' behaviors do not affect the system's observable
 behavior. The observational properties are more extensional and thus
-allow ``lazier'' protection mechanism that permit risky reads or
-writes as long as they do not affect the program's visible outcomes.
+allow ``lazier'' protection mechanisms that permit risky reads or
+writes as long as they do not affect visible outcomes.
 
 Confidentiality is especially interesting.  It is based on a traditional
-notion of noninterference, but whereas ordinary noninterference is 
+notion of noninterference, but whereas ordinary noninterference is
 an end-to-end hyper-property on whole program runs, stack confidentiality is
-a ``nested'' form of 
+a ``nested'' form of
 noninterference applied to
 subtraces of the whole program trace delimited by call instructions and
 corresponding returns, requiring that the callee's behavior is invariant
-under hypothetical changes to the caller's stack frame.
+under hypothetical changes to\bcp{scrambling of?} the caller's stack frame.
 %behavior of the callee is
 %independent of the caller's stack frame.
 %, between each call
@@ -269,10 +269,13 @@ under hypothetical changes to the caller's stack frame.
 %caller's stack frame is protected from the callee.
 
 This formulation not only captures the intuition
-that the callee cannot directly access the caller's state, but gives a novel
-way of looking at control-flow attacks. We are not interested in attacks that
-merely aim to execute arbitrary code -- in fact, our attacker model assumes
-that the (attacking) callee may already execute arbitrary code.
+that the callee cannot directly access the caller's state; it also gives a novel
+way of looking at control-flow attacks. We are not interested in\bcp{I find
+  ``We are not interested in'' confusing here---the previous sentence
+  promises a novel way of looking, and this opening feels irrelevant to
+  that.} attacks that
+merely aim to execute arbitrary code -- indeed, our model assumes
+that attackers (i.e., callees) may already execute arbitrary code.
 %
 By extension, we do not place any particular restrictions on control flow.
 Perhaps suprisingly, we can still meaningfully distinguish the caller from
@@ -280,29 +283,34 @@ its callee, and talk about protecting the caller's data. After a call, control
 is considered to belong to the callee until the trace reaches a valid
 ``return target,'' typically a state with the program counter at the next instruction
 and the stack pointer restored. If the caller's data are accessed before then,
-it is a violation of integrity or confidentiality.
+it is a violation of integrity or confidentiality.  \bcp{Actually, the whole
+paragraph doesn't make very much sense to me.}
 
 These properties can optionally be extended with a notion of {\em well-bracketed control flow}
-as in \citet{SkorstengaardSTK}, the system-wide control-flow property that callees always return
-to their immediate caller, if they return at all. This property is largely orthogonal to our
+as in \citet{SkorstengaardSTK}---a global requirement that callees
+must always return
+to their immediate caller, if they return at all. This property is
+largely\bcp{``largely'' feels like a weasel word...} orthogonal to our
 data-protection properties.
 
 To demonstrate the utility of our properties, we use them
 to evaluate an existing mechanism, the
 {\em stack-safety micro-policies} of~\citet{DBLP:conf/sp/RoesslerD18}, re-implemented
-in the Coq proof assistant on top of a RISC-V specification. We
+in the Coq proof assistant on top of a RISC-V ISA model\bcp{instead of
+  ``spec''.  OK?}. We
 use QuickChick~\citep{Denes:VSL2014,Pierce:SF4}, a property-based testing
 tool for Coq, to generate random programs and check
 that Roessler and Dehon's micro-policies correctly abort programs that
 would violate stack safety.
-Furthermore, we check incorrect
-enforcement variants (both variants that we accidentally created
+Our testing regime is also able to detect incorrect variants of the
+enforcement mechanisms---both variants that we accidentally created
 during our re-implementation of the micro-policy and ones that we
 intentionally crafted to be broken in order to increase our confidence
-in testing and the enforcement mechanism itself). The testing framework
-is able to generate counterexamples that violate our properties but are not halted by
-incorrect enforcement mechanisms, increasing our confidence when it finds
-no counterexamples under the real enforcement mechanisms.
+in testing and the enforcement mechanism itself. For these broken
+mechanisms, our tester
+generates counterexamples that violate our properties but escape the
+enforcement.  This increases our confidence in enforcement
+mechanisms for which the tester is unable to find  counterexamples.
 
 Our testing supports the stack-safety claim of Roessler and Dehon's {\em Depth
   Isolation} micro-policy, in
@@ -313,26 +321,31 @@ On the other hand, we find that their \emph{Lazy Tagging and Clearing} policy
 violates the temporal aspect of confidentiality in
 corner cases where data can leak across repeated calls to the same callee,
 and also violates integrity if the leak happens to use the caller's frame. We
-propose a variant of {\em Lazy Tagging and Clearing} that should enforce observational
-integrity and confidentiality, albeit at some performance cost. The next step
-is to expand testing to these properties and validate the variant; efficiently
-testing observational properties presents unique challenges because a property
-violation can be arbitrarily far removed from the initial ``risky'' read or write.
+propose a variant of {\em Lazy Tagging and Clearing} that should\bcp{``that
+  we believe will''?} enforce observational
+integrity and confidentiality, albeit at some performance cost. (An obvious next step
+is to expand testing to these properties and validate the variant, but
+efficiently
+testing observational properties is more challenging because a property
+violation can be arbitrarily far removed from the initial ``risky'' read or
+write.)
 
-We have demonstrated our model's flexibility by extending it to different settings.
+We have demonstrated\bcp{let's use the same verb tense consistently---''we
+  do X'' [my preference] or ``we have done X'' or ``we did X''---all the way
+through} our model's flexibility by extending it to different settings.
 First, we can support passing arguments on the stack, allowing some of the state of
-the caller to be shared with the callee (and potentially with a further
-callee, and so on.)  We can also describe a simple coroutine model, with one
+the caller to be shared with the callee (and potentially with a sub-callee,
+and so on.)  We can also describe a simple coroutine model, with one
 statically bounded stack per coroutine, each protected from the others.
 
 In ongoing work, we are investigating whether stack protection schemes
 based on the Cheri capability system~\citep{Woodruff+14,Chisnall+15}
-can enforce our properties.  In particular, we are adapting 
-the uninitialized capability model of \citet{Georges+21} to work with
-our testing framework for validation against our properties. Of the several Cheri-based
-stack protection schemes, its treatment of unitialized frames seems most compatible
+can enforce our properties.  In particular, we are adapting
+the ``uninitialized capability model'' of \citet{Georges+21} to work with
+our testing framework in order to validate it against our properties. Out of several Cheri-based
+stack protection schemes, this one's treatment of unitialized frames seems most compatible
 with our model of confidentiality, without the need for expensive stack clearing
-between calls. We expect that Cheri-based techniques support our properties if we
+between calls. We expect that Cheri-based techniques can support our properties if we
 assume extra cooperation from callers, namely that they do not leak their capabilities
 to the attacker. %There is no equivalent dynamic requirement in a tag-based system because
 %the policy can dynamically enforce cooperation.
