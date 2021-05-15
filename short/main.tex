@@ -274,46 +274,24 @@ the stack to disrupt the program's control flow.
 Our stack safety properties demand that, even in the presence of such
 attackers, confidentiality and integrity must
 still apply to data in suspended stack frames until the callee returns.
-% all of the data they would under more idealized conditions.
-%This formulation not only captures the intuition
-%that the callee cannot directly access the caller's state; it also gives a novel
-%interpretation of integrity and confidentiality in the presence of control-flow
-%attacks.
-% \bcp{I tried rewriting the first part of the paragraph, and I like it
-%   better, but now there's a big gap between that and what comes next.  I
-%   wonder whether we need to turn the next bit into a separate discussion of
-%   ``what it means to return''...  In any case, I felt like the previous
-%   version of the whole paragraph didn't quite nail what we needed to say
-%   about all this.}
-% \sna{Better transition.}
-The question then arises: when, exactly, are suspended frames
-reactivated---or equivalently,
+The question then arises:
 what constitutes a return in this setting? It is not obvious, since our
 setting is a concrete, low-level ISA where the same opcode might sometimes
 be used to return from a call and sometimes for other purposes.
 Our solution is to associate with each call a corresponding predicate on states,
 its ``return target,''
-which defines what it means for that call to truly return: the program counter
-must be at the next instruction, and the stack pointer restored to its original
-value. A callee may execute a return instruction,
-but if it does not reach a return target we simply do not recognize it as a
-return.
-So the callee can be ``active'', and the caller protected, even if the callee is
-executing instructions outside of its normal footprint.  \bcp{I tried
-  another rewrite of the end of the paragraph.  I think it's getting there,
-  but it's probably now a bit too long as well as too detailed.}
-
-%Our attacker model is strong, allowing the attacker to execute arbitrary code, so
-%the callee has no reason to execute the caller's instructions -- any instruction it could
-%jump to, it could already execute. The only reason to perform a ``fake'' return in this setting
-%would be to access the caller's data, which our properties will correctly identify as a violation.
+which holds on the states that would follow a well-behaved return.
+Whether or not a callee executes a return instruction,
+we only recognize it returning only when it reaches a return target.
+So the caller is protected until then, even if the callee is
+executing instructions outside of its normal footprint.
 
 These properties can optionally be extended with a notion of {\em well-bracketed control flow}
 as in \citet{SkorstengaardSTK}---a global requirement that callees
 must always return
 to their immediate caller, if they return at all. This property is orthogonal to our
-data-protection properties. It remains meaningful in our strong attacker model, because
-it supports reasoning about the ordering of valid returns.
+data-protection properties. It remains meaningful in our strong attacker model,
+to support reasoning about the ordering of valid returns.
 
 To demonstrate the utility of our properties, we use them
 to evaluate an existing mechanism, the
@@ -323,15 +301,14 @@ use QuickChick~\citep{Denes:VSL2014,Pierce:SF4}, a property-based testing
 tool for Coq, to generate random programs and check
 that Roessler and Dehon's micro-policies correctly abort programs that
 would violate stack safety.
-Our testing regime is also able to detect incorrect variants of the
-enforcement mechanisms---both variants that we accidentally created
-during our re-implementation of the micro-policy and ones that we
-intentionally crafted to be broken in order to increase our confidence
+Our testing regime also detects incorrect variants of the
+enforcement mechanisms---both errors
+during our re-implementation of the micro-policy and
+intentionally crafted test, meant to be broken in order to increase our confidence
 in testing and the enforcement mechanism itself. For these broken
 mechanisms, our tester
 generates counterexamples that violate our properties but escape the
-enforcement.  This increases our confidence in enforcement
-mechanisms for which the tester is unable to find  counterexamples.
+enforcement.
 
 Our testing supports the stack-safety claim of Roessler and Dehon's {\em Depth
   Isolation} micro-policy, in
@@ -357,12 +334,12 @@ the caller to be shared with the callee (and potentially with a sub-callee,
 and so on.)  We can also describe a simple coroutine model, with one
 statically bounded stack per coroutine, each protected from the others.
 
-In ongoing work, we are investigating whether stack protection schemes
+In ongoing work, we investigate whether stack protection schemes
 based on the Cheri capability system~\citep{Woodruff+14,Chisnall+15}
-can enforce our properties.  In particular, we are adapting
-the ``uninitialized capability model'' of \citet{Georges+21} to work with
-our testing framework in order to validate it against our properties. Out of several Cheri-based
-stack protection schemes, this one's treatment of unitialized frames seems most compatible
+can enforce our properties.  In particular, we aim to validate
+the ``uninitialized capability model'' of \citet{Georges+21} using
+our testing framework. Out of several Cheri-based
+stack protection schemes, their treatment of unitialized frames seems most compatible
 with our model of confidentiality, without the need for expensive stack clearing
 between calls. We expect that Cheri-based techniques can support our properties if we
 assume extra cooperation from callers, namely that they do not leak their capabilities
