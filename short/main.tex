@@ -269,25 +269,25 @@ under hypothetical scrambling of the caller's stack frame.
 %caller's stack frame is protected from the callee.
 
 Our threat model is very strong, allowing the attacker (i.e., the callee) to
-execute arbitrary code, including code that might attempt to smash
+execute arbitrary code, including attempting to smash
 the stack to disrupt the program's control flow.
 Our stack safety properties demand that, even in the presence of such
 attackers, confidentiality and integrity
 still apply to data in suspended stack frames until the callee returns.
 The question then arises:
-what constitutes a return in this setting? It is not obvious, since our
-setting is a concrete, low-level ISA where the same opcode might sometimes
+what constitutes a return in this setting? It is not obvious, since
+our machine model is a low-level ISA where the same opcode might
+sometimes
 be used to return from a call and sometimes for other purposes.
-Our solution is to associate with each call a predicate on states,
-its ``return target,''
-which defines a correct return: the program counter
-must be at the next instruction, and the stack pointer restored to its original
-value. So the callee may
+Our solution is to associate, with each dynamic call in an execution trace, a
+``return target'' that records the address of the instruction following the
+call and the stack pointer when the call was made. Thus, so the callee may
 execute instructions outside of its normal footprint, perhaps due to
 smashing the stack, but
-the caller is protected until the first state that satisfies its return target.
+the caller is protected until the PC and SP simultaneously match its return
+target.
 
-These properties can optionally be extended with a notion of {\em well-bracketed control flow}
+We can also, optionally, include a notion of {\em well-bracketed control flow}
 as in \citet{SkorstengaardSTK}---a global requirement that callees
 must always return
 to their immediate caller, if they return at all. This property is orthogonal to our
@@ -329,13 +329,13 @@ testing observational properties is more challenging because a property
 violation can be arbitrarily far removed from the initial ``risky'' read or
 write.)
 
-We demonstrate our model's flexibility by extending it to different settings.
+We demonstrate our model's flexibility by extending it in two significant ways.
 First, we can support passing arguments on the stack, allowing some of the state of
 the caller to be shared with the callee (and potentially with a sub-callee,
 and so on).  We can also describe a simple coroutine model, with one
 statically bounded stack per coroutine, each protected from the others.
 
-In ongoing work, we investigate whether stack protection schemes
+In ongoing work, we are investigating whether stack protection schemes
 based on the Cheri capability system~\citep{Woodruff+14,Chisnall+15}
 can enforce our properties.  In particular, we aim to validate
 the ``uninitialized capability model'' of \citet{Georges+21} using
