@@ -5,7 +5,7 @@ Require Import Bool.
 Require Import ZArith.
 Require Import Nat.
 
-From StackSafety Require Import Trace MachineModule ObsTrace.
+From StackSafety Require Import Trace MachineModule MapModule CtxModule PolicyModule MPC ObsTrace.
 
 Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
   Import M.

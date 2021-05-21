@@ -3,7 +3,8 @@ Import ListNotations.
 Require Import Nat.
 Require Import Bool.
 
-From StackSafety Require Import Trace MachineModule ObsTrace TraceProperties.
+From StackSafety Require Import Trace MachineModule MapModule PolicyModule CtxModule MPC ObsTrace TraceProperties.
+
 
 Module CoroutineDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
   Import M.

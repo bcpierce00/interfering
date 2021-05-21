@@ -18,8 +18,6 @@ Require Import coqutil.Map.Interface.
 Require Import riscv.Utility.Words32Naive.
 Require Import riscv.Utility.DefaultMemImpl32.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
-Require Import coqutil.Z.HexNotation.
-Require coqutil.Map.SortedList.
 
 (* From StackSafety Require Import Trace MachineEagerInit. *)
 From StackSafety Require Import Trace MachineImpl EagerInit.

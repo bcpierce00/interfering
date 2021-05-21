@@ -1,7 +1,7 @@
 Require Import Coq.Lists.List.
 Import List.ListNotations.
 
-From StackSafety Require Import Trace MachineModule MachineImpl.
+From StackSafety Require Import Trace MachineModule PolicyModule MachineImpl.
 
 Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.
@@ -23,8 +23,6 @@ Require Import coqutil.Word.LittleEndian.
 Require Import riscv.Utility.Words32Naive.
 Require Import riscv.Utility.DefaultMemImpl32.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
-Require Import coqutil.Z.HexNotation.
-Require coqutil.Map.SortedList.
 
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.

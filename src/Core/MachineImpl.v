@@ -1,7 +1,8 @@
+Require Coq.Strings.String. Open Scope string_scope.
 Require Import Coq.Lists.List.
 Import List.ListNotations.
 
-From StackSafety Require Import Trace MachineModule.
+From StackSafety Require Import Trace MachineModule PolicyModule CtxModule.
 
 Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.
@@ -26,6 +27,7 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Z.HexNotation.
 Require coqutil.Map.SortedList.
 
+
 Require Import Lia.
 
 From RecordUpdate Require Import RecordSet.
@@ -46,6 +48,9 @@ Extract Constant exception =>
 
   Definition Word := MachineInt.
   (* Parameter Word *)
+
+  Instance ShowWord : Show word :=
+    {| show x := show (word.signed x) |}.
 
   Definition wlt : Word -> Word -> bool := Z.ltb.
   (*  Parameter wlt : Word -> Word -> bool. *)
@@ -190,7 +195,9 @@ Extract Constant exception =>
   (* Observations are values, or silent (tau) *)
   Inductive Observation : Type := 
   | Out (w:ObsType) 
-  | Tau. 
+  | Tau.
+
+  Definition obs_eqb (o1 o2 : Observation) := true.
 
   Definition w32_eqb (w1 w2 : w32) : bool :=
     let l1 := HList.tuple.to_list w1 in
@@ -321,6 +328,16 @@ Module TagPolicy <: Policy RISCV.
   Definition calleeTag : Tag := Th1.
   
   Definition TagSet : Type := list Tag.
+
+  Fixpoint printTagSet (ts : TagSet) :=
+    match ts with
+    | t :: ts => (show t ++ printTagSet ts)%string
+    | [] => ""
+    end.
+
+  Instance ShowTagSet : Show TagSet :=
+    {| show ts := printTagSet ts |}.
+  
   Definition TagMap : Type := Zkeyed_map TagSet.
   
   Fixpoint TagSet_eqb l1 l2 :=

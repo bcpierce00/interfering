@@ -2,7 +2,7 @@ Require Import List.
 Import ListNotations.
 Require Import Bool.
 
-From StackSafety Require Import Trace MachineModule ObsTrace.
+From StackSafety Require Import Trace MachineModule ObsTrace PolicyModule CtxModule MPC.
 
 Module TraceProps (M : Machine) (P : Policy M) (C : Ctx M).
   Import M.
