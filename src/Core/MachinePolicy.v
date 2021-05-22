@@ -1,8 +1,6 @@
 Require Import Coq.Lists.List.
 Import List.ListNotations.
 
-From StackSafety Require Import Trace.
-
 Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.
 Require Import riscv.Spec.Machine.

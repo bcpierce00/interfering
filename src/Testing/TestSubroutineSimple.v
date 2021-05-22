@@ -1,3 +1,5 @@
+From StackSafety Require Import MachineModule TestingModules DefaultLayout MachineImpl.
+
 Require Import String.
 Require Import List.
 Import ListNotations.
@@ -5,11 +7,9 @@ Require Import Bool.
 Require Import ZArith.
 Require Import Nat.
 
-From StackSafety Require Import MachineModule TestCtxModule PolicyModule LayoutInfoModule TestMPC.
-
 Module TestSimpleDomain (M : Machine) (LI : LayoutInfo M) <: TestCtx M LI.
   Import M.
-  Export LI.
+  Import LI.
   
   Inductive StackDomain :=
   | Sealed (d:nat)
@@ -108,3 +108,5 @@ Module TestSimpleDomain (M : Machine) (LI : LayoutInfo M) <: TestCtx M LI.
     | _ => (dm, rts)
     end.
 End TestSimpleDomain.
+
+Module TSS := TestSimpleDomain RISCV DefaultLayout.
