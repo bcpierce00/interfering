@@ -18,46 +18,70 @@ Require Import coqutil.Map.Interface.
 Require Import riscv.Utility.Words32Naive.
 Require Import riscv.Utility.DefaultMemImpl32.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
-Require Import coqutil.Z.HexNotation.
-Require coqutil.Map.SortedList.
 
-From StackSafety Require Import Trace MachineEagerInit.
+(* From StackSafety Require Import Trace MachineEagerInit. *)
+From StackSafety Require Import Trace MachineImpl EagerInit.
+Import RISCV.
+Import EagerInit.
 
-Let stack_init : Z := 100.
+Let stack_init : Z := 136.
 Let data_words : nat := 8.
 
 (* Writing programs more abstractly *)
-Let RARG : Z := 19.
-Let RRES : Z := 18.
-Let RTMP : Z := 20.
+Let RARG  : Z := 19.
+Let RRES  : Z := 18.
+Let RTMP1 : Z := 20.
+Let RTMP2 : Z := 21.
 
+Let Nop : InstructionI := Addi 0 0 0.
+
+(* In this program, stack frame initialization suffices to prevents
+   the violation, even without a micropolicy. To keep composition and
+   offsets simple, as well as use with both kinds of micropolicies
+   (requiring initialization or not), leave room for those
+   instructions and fill out as needed. Here, we leave some
+   initialization in so as order to initialize tags, and
+   surreptitiously turn it off so that both the eager policies will
+   run and the vulnerability will be exhibited when a policy is not
+   running. However, we will not do clearing. *)
 Definition program : list Instruction := map IInstruction
-  (* 00 *) [Jal RA 8; (* Call main *)
-  (* 04 *) Beq 0 0 0; (* Finish execution (loop) *)
+  (* 000 *) [Jal RA 8; (* Call main *)
+  (* 004 *) Beq 0 0 0; (* Finish execution (loop) *)
   (* main *)
-  (* 08 *) Sw SP RA 0; (* H1 *)
-  (* 12 *) Addi SP SP 12; (* H2 *)
-  (* 16 *) Addi RTMP 0 42; (* For brevity, initial values in sequence *)
-  (* 20 *) Sw SP RTMP (-8); (* Init x *)
-  (* 24 *) Sw SP 0 (-4); (* Init y *)
-  (* 28 *) Addi RARG 0 10;
-  (* 32 *) Jal RA 36; (* Call f *)
-  (* 36 *) Sw SP RRES (-4); (* y not really necessary *)
-  (* 40 *) Lw RTMP SP (-8);
-  (* 44 *) Add RRES RRES RTMP;
-  (* 48 *) Sw SP 0 (-8); (* Clear x *)
-  (* 52 *) Sw SP 0 (-4); (* Clear y *)
-  (* 56 *) Lw RA SP (-12); (* R1 *)
-  (* 60 *) Addi SP SP (-12); (* R2 *)
-  (* 64 *) Jalr RA RA 0; (* R3 *)
+  (* 008 *) Sw SP RA 0; (* H1 *)
+  (* 012 *) Addi SP SP 8; (* H2 *)
+  (* 016 *) Sw SP 0 (-4); (* Init x *)
+  (* 020 *) Jal RA 28; (* Call f *)
+  (* 024 *) Sw SP RRES (-4);
+  (* 028 *) Jal RA 56; (* Call g *)
+  (* (* 032 *) Sw SP 0 (-4); (* Clear x *) *) Nop;
+  (* 036 *) Lw RA SP (-8); (* R1 *)
+  (* 040 *) Addi SP SP (-8); (* R2 *)
+  (* 044 *) Jalr RA RA 0; (* R3 *)
   (* f *)
-  (* 68 *) Sw SP RA 0; (* H1 *)
-  (* 72 *) Addi SP SP 4; (* H2 *)
-  (* 76 *) Sw SP 0 (-12); (* Addi RTMP 0 0; *)
-  (* 80 *) Add RRES RARG RARG;
-  (* 84 *) Lw RA SP (-4); (* R1 *)
-  (* 88 *) Addi SP SP (-4); (* R2 *)
-  (* 92 *) Jalr RA RA 0] (* R3 *)
+  (* 048 *) Sw SP RA 0; (* H1 *)
+  (* 052 *) Addi SP SP 8; (* H2 *)
+  (* 056 *) Sw SP 0 (-4); (* Init y *)
+  (* 060 *) Addi RRES 0 5;
+  (* 064 *) Sw SP RRES (-4);
+  (* (* 068 *) Sw SP 0 (-4); (* Clear y *) *) Nop;
+  (* 072 *) Lw RA SP (-8); (* R1 *)
+  (* 076 *) Addi SP SP (-8); (* R2 *)
+  (* 080 *) Jalr RA RA 0; (* R3 *)
+  (* g *)
+  (* 084 *) Sw SP RA 0; (* H1 *)
+  (* 088 *) Addi SP SP 8; (* H2 *)
+  (* (* 092 *) Sw SP 0 (-4); (* Init z *) *) Nop;
+  (* 096 *) Lw RTMP1 SP (-4);
+  (* 100 *) Addi RTMP2 0 5;
+  (* 104 *) Bne RTMP1 RTMP2 12;
+  (* 108 *) Addi RRES 0 100;
+  (* 112 *) Beq 0 0 8; (* Jump to return *)
+  (* 116 *) Addi RRES 0 10; (* Cascade down to return *)
+  (* (* 120 *) Sw SP 0 (-4); (* Clear z *) *) Nop;
+  (* 124 *) Lw RA SP (-8); (* R1 *)
+  (* 128 *) Addi SP SP (-8); (* R2 *)
+  (* 132 *) Jalr RA RA 0] (* R3 *)
 .
 
 Let instrTags := [Tinstr].
@@ -73,11 +97,15 @@ Let initDataTags := [Tstack 0].
 
 Definition tags : list (list Tag) :=
   [callTags; instrTags]
-    ++ [h1Tags; h2Tags; instrTags; initTags; initTags]
-    ++ [instrTags; callTags]
-    ++ repeat instrTags 3
-    ++ [initTags; initTags; r1Tags; r2Tags; r3Tags]
-    ++ [h1Tags; h2Tags; instrTags; instrTags; r1Tags; r2Tags; r3Tags]
+    (* main *)
+    ++ [h1Tags; h2Tags]
+    ++ [initTags; callTags; instrTags; callTags; instrTags]
+    ++ [r1Tags; r2Tags; r3Tags]
+    (* f *)
+    ++ [h1Tags; h2Tags; initTags] ++ repeat instrTags 3 ++ [r1Tags; r2Tags; r3Tags]
+    (* g *)
+    ++ [h1Tags; h2Tags] ++ repeat instrTags 8 ++ [r1Tags; r2Tags; r3Tags]
+    (* Stack *)
     ++ repeat initDataTags data_words.
 
 (* This example uses the memory only as instruction memory
@@ -126,5 +154,7 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-(* Gets stuck at instruction 76 *)
-Compute (run 30 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
+(* Gets stuck at instruction 96 by eager policy
+   (unless prevented by init/clearing),
+   without policy it runs to completion and returns 100 *)
+Compute (run 40 (initialRiscvMachine program) (initialPumpPolicy tags) nil).

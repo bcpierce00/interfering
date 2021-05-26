@@ -18,80 +18,66 @@ Require Import coqutil.Map.Interface.
 Require Import riscv.Utility.Words32Naive.
 Require Import riscv.Utility.DefaultMemImpl32.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
-Require Import coqutil.Z.HexNotation.
-Require coqutil.Map.SortedList.
 
-From StackSafety Require Import Trace MachineEagerInitGlobal.
+From StackSafety Require Import Trace MachineImpl EagerInit.
+Import RISCV.
+Import EagerInit.
 
-Let global_words : nat := 1.
+Let stack_init : Z := 100.
 Let data_words : nat := 8.
-(* TODO: Compute addresses (also based on program) *)
-Let stash_addr := 120.
-Let stack_init : Z := 124.
 
 (* Writing programs more abstractly *)
-Let RARG  : Z := 19.
-Let RRES  : Z := 18.
-Let RTMP1 : Z := 20.
-Let RTMP2 : Z := 21.
+Let RARG : Z := 19.
+Let RRES : Z := 18.
+Let RTMP : Z := 20.
 
 Definition program : list Instruction := map IInstruction
-  (* 000 *) [Sw SP 0 (-4); (* Hackily initialize stash *)
-  (* 004 *) Jal RA 8; (* Call main *)
-  (* 008 *) Beq 0 0 0; (* Finish execution (loop) *)
+  (* 00 *) [Jal RA 8; (* Call main *)
+  (* 04 *) Beq 0 0 0; (* Finish execution (loop) *)
   (* main *)
-  (* 012 *) Sw SP RA 0; (* H1 *)
-  (* 016 *) Addi SP SP 8; (* H2 *)
-  (* 020 *) Addi RTMP1 0 1; (* For brevity, initial values in sequence *)
-  (* 024 *) Sw SP RTMP1 (-4); (* Init x *)
-  (* 028 *) Jal RA 40; (* First call to f *)
-  (* 032 *) Lw RTMP1 SP (-4);
-  (* 036 *) Sub RTMP1 0 RTMP1;
-  (* 040 *) Sw SP RTMP1 (-4);
-  (* 044 *) Jal RA 24; (* Second call to f *)
-  (* 048 *) Lw RRES SP (-4);
-  (* 052 *) Sw SP 0 (-4); (* Clear x *)
-  (* 056 *) Lw RA SP (-8); (* R1 *)
-  (* 060 *) Addi SP SP (-8); (* R2 *)
-  (* 064 *) Jalr RA RA 0; (* R3 *)
+  (* 08 *) Sw SP RA 0; (* H1 *)
+  (* 12 *) Addi SP SP 12; (* H2 *)
+  (* 16 *) Addi RTMP 0 42; (* For brevity, initial values in sequence *)
+  (* 20 *) Sw SP RTMP (-8); (* Init x *)
+  (* 24 *) Sw SP 0 (-4); (* Init y *)
+  (* 28 *) Addi RARG 0 10;
+  (* 32 *) Jal RA 36; (* Call f *)
+  (* 36 *) Sw SP RRES (-4); (* y not really necessary *)
+  (* 40 *) Lw RTMP SP (-8);
+  (* 44 *) Add RRES RRES RTMP;
+  (* 48 *) Sw SP 0 (-8); (* Clear x *)
+  (* 52 *) Sw SP 0 (-4); (* Clear y *)
+  (* 56 *) Lw RA SP (-12); (* R1 *)
+  (* 60 *) Addi SP SP (-12); (* R2 *)
+  (* 64 *) Jalr RA RA 0; (* R3 *)
   (* f *)
-  (* 068 *) Sw SP RA 0; (* H1 *)
-  (* 072 *) Addi SP SP 4; (* H2 *)
-  (* 076 *) Addi RTMP1 0 stash_addr;
-  (* 080 *) Lw RTMP2 RTMP1 0;
-  (* 084 *) Bne RTMP2 0 16; (* Does stash hold a value? *)
-  (* 088 *) Lw RTMP2 SP (-4);
-  (* 092 *) Sw RTMP1 RTMP2 0; (* If it doesn't, store RA *)
-  (* 096 *) Beq 0 0 12; (* Jump to return *)
-  (* 100 *) Sw SP RTMP2 (-4); (* If it does, overwrite RA *)
-  (* 104 *) Sw RTMP1 0 0; (* Cascade down to return *)
-  (* 108 *) Lw RA SP (-4); (* R1 *)
-  (* 112 *) Addi SP SP (-4); (* R2 *)
-  (* 116 *) Jalr RA RA 0] (* R3 *)
+  (* 68 *) Sw SP RA 0; (* H1 *)
+  (* 72 *) Addi SP SP 4; (* H2 *)
+  (* 76 *) Sw SP 0 (-12); (* Addi RTMP 0 0; *)
+  (* 80 *) Add RRES RARG RARG;
+  (* 84 *) Lw RA SP (-4); (* R1 *)
+  (* 88 *) Addi SP SP (-4); (* R2 *)
+  (* 92 *) Jalr RA RA 0] (* R3 *)
 .
 
-Let instrTags  := [Tinstr].
-Let callTags   := [Tinstr; Tcall].
-Let h1Tags     := [Tinstr; Th1].
-Let h2Tags     := [Tinstr; Th2].
-Let r1Tags     := [Tinstr; Tr1].
-Let r2Tags     := [Tinstr; Tr2].
-Let r3Tags     := [Tinstr; Tr3].
-Let initTags   := [Tinstr; Tinit].
-Let globalTags := [Tglobal].
+Let instrTags := [Tinstr].
+Let callTags  := [Tinstr; Tcall].
+Let h1Tags    := [Tinstr; Th1].
+Let h2Tags    := [Tinstr; Th2].
+Let r1Tags    := [Tinstr; Tr1].
+Let r2Tags    := [Tinstr; Tr2].
+Let r3Tags    := [Tinstr; Tr3].
+Let initTags  := [Tinstr; Tinit].
 
 Let initDataTags := [Tstack 0].
 
 Definition tags : list (list Tag) :=
-  [instrTags; callTags; instrTags]
-    ++ [h1Tags; h2Tags; instrTags; initTags]
-    ++ [callTags; instrTags; instrTags; instrTags]
-    ++ [callTags; instrTags]
-    ++ [initTags; r1Tags; r2Tags; r3Tags]
-    ++ [h1Tags; h2Tags]
-    ++ repeat instrTags 8
-    ++ [r1Tags; r2Tags; r3Tags]
-    ++ repeat globalTags global_words
+  [callTags; instrTags]
+    ++ [h1Tags; h2Tags; instrTags; initTags; initTags]
+    ++ [instrTags; callTags]
+    ++ repeat instrTags 3
+    ++ [initTags; initTags; r1Tags; r2Tags; r3Tags]
+    ++ [h1Tags; h2Tags; instrTags; instrTags; r1Tags; r2Tags; r3Tags]
     ++ repeat initDataTags data_words.
 
 (* This example uses the memory only as instruction memory
@@ -107,8 +93,7 @@ Definition zeroedRiscvMachine: RiscvMachine := {|
 |}.
 
 Definition initialRiscvMachine(insts: list Instruction): RiscvMachine :=
-  let words := map (@wrap 32) (map encode insts)
-               ++ repeat (wrap 0) (global_words + data_words) in
+  let words := map (@wrap 32) (map encode insts) ++ repeat (wrap 0) data_words in
   let imem := map unsigned words in
   putProgram imem (ZToReg 0) zeroedRiscvMachine.
 
@@ -141,6 +126,5 @@ Fixpoint run (fuel: nat) (s: RiscvMachine) (p : PolicyState) (os : list Observat
                end
   end.
 
-(* Gets stuck at instruction 88 (operation on SP, before further misbehavior)
-   With no policy, it would terminate and RRES would wrongly contain 1  *)
-Compute (run 60 (initialRiscvMachine program) (initialPumpPolicy tags) nil).
+(* Gets stuck at instruction 76 *)
+Compute (run 30 (initialRiscvMachine program) (initialPumpPolicy tags) nil).

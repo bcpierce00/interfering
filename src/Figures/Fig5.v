@@ -18,10 +18,10 @@ Require Import coqutil.Map.Interface.
 Require Import riscv.Utility.Words32Naive.
 Require Import riscv.Utility.DefaultMemImpl32.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
-Require Import coqutil.Z.HexNotation.
-Require coqutil.Map.SortedList.
 
-From StackSafety Require Import Trace MachineEagerInitArgGlobal.
+From StackSafety Require Import Trace MachineImpl EagerInitArgGlobal.
+Import RISCV.
+Import EagerInitArgGlobal.
 
 Let global_words : nat := 0.
 Let data_words : nat := 8.

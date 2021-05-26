@@ -2,13 +2,17 @@ Require Import List.
 Import ListNotations.
 Require Import Bool.
 
-From StackSafety Require Import Trace MachineImpl ObsTrace.
+From StackSafety Require Import Trace MachineModule ObsTrace PolicyModule CtxModule MPC.
 
-Section WITH_CONTEXT.
-
-  Variable context : Type.
-  Variable updateC : MachineState -> context -> context.
-
+Module TraceProps (M : Machine) (P : Policy M) (C : Ctx M).
+  Import M.
+  Import P.
+  Import C.
+  Module MPCimpl := MPC M P C.
+  Import MPCimpl.
+  Module Obs := ObsTrace M.
+  Import Obs.
+  
   Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
     forall k, ~ K k -> proj m k = proj n k.
 
@@ -17,7 +21,7 @@ Section WITH_CONTEXT.
       (proj m k <> proj m' k \/ proj n k <> proj n' k) ->
       proj m' k = proj n' k.
 
-  Inductive Lockstep : @MPCTrace context -> @MPCTrace context -> Prop :=
+  Inductive Lockstep : MPCTrace -> MPCTrace -> Prop :=
   | bothDone : forall m p c n,
       Lockstep (finished (m,p,c)) (finished (n,p,c))
   | bothStep : forall m p c m' n n' M N,
@@ -31,39 +35,38 @@ Section WITH_CONTEXT.
   Definition TraceConfidentialityStep
              (K : Component -> Prop)
              (P : MPCState -> Prop)
-             (M : @MPCTrace context) : Prop :=
+             (M : MPCTrace) : Prop :=
     forall m p c n N,
       head M = (m,p,c) ->
       variantOf K m n ->
-      MPCTraceToWhen updateC P (n,p,c) N ->
-      Lockstep M N
-  .
+      MPCTraceToWhen P (n,p,c) N ->
+      Lockstep M N.
 
-  Definition StepIntegrity (K : Component -> Prop) (mpc:@MPCState context) : Prop :=
+  Definition StepIntegrity (K : Component -> Prop) (mpc:MPCState) : Prop :=
     forall mpc' o k,
-    mpcstep updateC mpc = Some (mpc',o) ->
+    mpcstep mpc = Some (mpc',o) ->
     K k ->
     proj (mstate mpc) k = proj (mstate mpc') k.
 
   Definition TraceIntegrityLazy
              (K : Component -> Prop)
-             (M : @MPCTrace context) : Prop :=
+             (M : MPCTrace) : Prop :=
     forall m p c,
       Last M (m,p,c) ->
       let K' := fun k => K k /\ proj (mstate (head M)) k <> proj (mstate (m,p,c)) k in
       let P := fun _ => False in
-      TraceConfidentialityStep K' P (MPCTraceOf updateC (m,p,c)).
+      TraceConfidentialityStep K' P (MPCTraceOf (m,p,c)).
 
   Definition TraceConfidentialityLazy
              (K : Component -> Prop)
              (P : MPCState -> Prop)
-             (M : @MPCTrace context) : Prop :=
+             (M : MPCTrace) : Prop :=
     forall m p c n N Om On, 
       head M = (m,p,c) ->
       variantOf K m n ->
-      MPCTraceToWhen updateC P (n,p,c) N ->
-      ObsOfMPC updateC M Om ->
-      ObsOfMPC updateC N On ->
+      MPCTraceToWhen P (n,p,c) N ->
+      ObsOfMPC M Om ->
+      ObsOfMPC N On ->
       Om ~=_O On /\
       ((exists mpcend, Last M mpcend /\ P mpcend) <->
        (exists npcend, Last N npcend /\ P npcend)) /\
@@ -74,14 +77,14 @@ Section WITH_CONTEXT.
           P (nend,pend,cend) ->
           let K' := fun k => proj mend k <> proj nend k in
           variantOf K' mend n' ->
-          FullObsTrace updateC (mend,pend,cend) Om' ->
-          FullObsTrace updateC (n',pend,cend) On' ->
+          FullObsTrace (mend,pend,cend) Om' ->
+          FullObsTrace (n',pend,cend) On' ->
           Om' ~=_O On').
 
-End WITH_CONTEXT.
+End TraceProps.
 
-Arguments StepIntegrity {_} _ _.
+(*Arguments StepIntegrity {_} _ _.
 Arguments TraceConfidentialityStep {_} _ _ _ _.
 Arguments TraceIntegrityLazy {_} _ _.
-Arguments TraceConfidentialityLazy {_} _ _ _ _.
+Arguments TraceConfidentialityLazy {_} _ _ _ _.*)
 

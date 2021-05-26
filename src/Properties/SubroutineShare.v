@@ -3,16 +3,12 @@ Import ListNotations.
 Require Import Bool.
 Require Import Nat.
 
-From StackSafety Require Import Trace MachineImpl ObsTrace TraceProperties.
+From StackSafety Require Import Trace MachineModule MapModule PolicyModule CtxModule MPC ObsTrace TraceProperties.
 
-(*
-Module SubroutineShare (M: MachineSpec).
+Module SharingDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
   Import M.
-  Module O := ObsTrace(M).
-  Import O.
-  Module TP := TraceProperties(M).
-  Import TP.
-*)
+  Import MM.
+
   (* To introduce sharing, we extend our domain model with two new domains:
    Passed indicates memory that is sealed by a function but explicitly designated
    to allow the immediate callee to access it. Shared indicates memory that has been
@@ -31,7 +27,6 @@ Module SubroutineShare (M: MachineSpec).
    We regard this as a separate property that might well be enforced in parallel to
    stack safety, but is outside of its scope.
  *)
-Section DOMAIN_MODEL.
   
   Inductive StackDomain :=
   | Sealed (d:nat)
@@ -43,25 +38,17 @@ Section DOMAIN_MODEL.
   (* All components belong to domain, and a domain map tells us which. *)
   Definition DomainMap := Component -> StackDomain.
   
-End DOMAIN_MODEL.
-
-Section WITH_MAPS.
-
-  Variable cdm : CodeMap. (* Map of where code lives in memory and its annotation. *)
-  Variable sm : Addr -> bool. (* Determines whether an address is in the stack. *)
-  Variable pOf : MachineState -> PolicyState. (* Policy initialization function. *)
-
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
   Definition sc : SealingConvention :=
-    fun m a => wlt a (proj m (Reg SP)).
+    fun m a => wlt a (projw m (Reg SP)).
 
   (* Likewise, we need to describe what it means to return properly from a call. We parameterize
      this as well, but the standard of course is that the stack pointer must match the original
      call point and the program counter should be one instruction (four cell) later. *)
   Definition ReturnConvention : Type := MachineState -> MachineState -> bool.
   Definition rc : ReturnConvention :=
-    fun m1 m2 => weq (proj m1 (Reg SP)) (proj m2 (Reg SP)) &&
-                 weq (proj m1 PC) (wplus (proj m2 PC) 4).
+    fun m1 m2 => weq (projw m1 (Reg SP)) (projw m2 (Reg SP)) &&
+                 weq (projw m1 PC) (wplus (projw m2 PC) 4).
 
   Definition ReturnTargets : Type := list (MachineState -> bool).
   Fixpoint popTo (m:MachineState) (rts : ReturnTargets) : option ReturnTargets :=
@@ -77,11 +64,11 @@ Section WITH_MAPS.
      machine with context that will inform our properties. In this case the context is a
      pair of a DomainMap and a ReturnTargets. *)
   
-  Definition context : Type := DomainMap * ReturnTargets.
+  Definition CtxState : Type := DomainMap * ReturnTargets.
 
   (* For the initial context, we construct a domain map that maps the stack to Unsealed
      and everything else to Outside. The stack depth is 0. *)
-  Definition initC (m:MachineState) : context :=
+  Definition initCtx (m:MachineState) : CtxState :=
     let dm := fun k =>
                 match k with
                 | Mem a =>
@@ -92,9 +79,9 @@ Section WITH_MAPS.
                 end in
     (dm, []).
   
-  Definition updateC (m:MachineState) (prev:context) : context :=
+  Definition CtxStateUpdate (m:MachineState) (prev:CtxState) : CtxState :=
     let '(dm, rts) := prev in
-    match AnnotationOf cdm (proj m PC) with
+    match cdm (projw m PC) with
     | Some call =>
       let dm' := fun k =>
                     match k, dm k with
@@ -119,7 +106,7 @@ Section WITH_MAPS.
                    end in
       let rt := rc m in
       (dm', rt::rts)
-    | Some ret =>
+    | Some retrn =>
       match popTo (fst (step m)) rts with
       | Some rts' =>
         let d := length rts' in
@@ -143,29 +130,38 @@ Section WITH_MAPS.
 
   (* A component is inaccessible for writes if it is sealed or if it is passed by the a
      function other than the current one, or its immediate caller. *)
-  Definition Inaccessible (c:context) (k:Component) : Prop :=
+  Definition Inaccessible (c:CtxState) (k:Component) : Prop :=
     exists d,
       fst c k = (Sealed d) \/
       (fst c k = (Passed d) /\ d = (length (snd c))-1).
 
+End SharingDomain.
+
+Module ShareProp (M : Machine) (P : Policy M) (MM : MapMaker M).
+  Import M.
+  Import P.
+  Import MM.
+  Module Dom := SharingDomain M MM.
+  Export Dom.
+  Module MPCImp := MPC M P Dom.
+  Import MPCImp.
+  Module TPImp := TraceProps M P Dom.
+  Import TPImp.
+
   (* So we can do ultra eager integrity, like before. *)
   Definition StackIntegrityEager : Prop :=
     forall m c p,
-      Reachable updateC initC (m,p,c) ->
-      StepIntegrity updateC (Inaccessible c) (m,p,c).
+      Reachable (m,p,c) ->
+      StepIntegrity (Inaccessible c) (m,p,c).
     
   Definition StackConfidentialityEager : Prop :=
     forall MCP d m p c,
       let P := (fun '(m,p,c) => length (snd c) >= d) in
       let K := (fun k => Inaccessible c k \/ (fst c) k = Unsealed) in
-      ReachableSegment updateC initC P MCP ->
+      ReachableSegment P MCP ->
       head MCP = (m,p,c) ->
-      TraceConfidentialityStep updateC K P MCP.
+      TraceConfidentialityStep K P MCP.
 
   (* Continued in Coroutine.v *)
   
-End WITH_MAPS.
-
-(*
-End SubroutineShare.
-*)
+End ShareProp.

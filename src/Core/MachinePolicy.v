@@ -1,8 +1,6 @@
 Require Import Coq.Lists.List.
 Import List.ListNotations.
 
-From StackSafety Require Import Trace.
-
 Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.
 Require Import riscv.Spec.Machine.
@@ -30,17 +28,6 @@ Require Import Lia.
 
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
-
-From QuickChick Require Import QuickChick.
-Axiom exception : forall {A}, string -> A.
-Extract Constant exception =>
-  "(fun l ->
-   let s = Bytes.create (List.length l) in
-   let rec copy i = function
-    | [] -> s
-    | c :: l -> Bytes.set s i c; copy (i+1) l
-   in failwith (""Exception: "" ^ Bytes.to_string (copy 0 l)))".
-
 
   Definition Word := MachineInt.
   (* Parameter Word *)
@@ -146,106 +133,17 @@ Extract Constant exception =>
       end
     end.
 
-  (* Maybe name this pullback instead *)
-Definition jorp (m : MachineState) (k : Component) (v : Value) : MachineState :=
-  match k with
-  | Mem a =>
-    withMem
-    (unchecked_store_byte_list (word.of_Z a)
-                               (Z32s_to_bytes [v]) (getMem m)) m
-  | Reg r => 
-    withRegs (map.put (getRegs m) r (word.of_Z v)) m
-  | PC =>
-    withPc (word.of_Z v) m
-  end.
-  
-Definition getComponents (m : MachineState) : list Component :=
-    (* PC *)
-    let pc := [PC] in
-    (* Non-zero registers. *)
-    let regs :=
-        List.map (fun x => Reg x) 
-                 (List.rev
-                    (map.fold (fun acc z v => z :: acc) nil 
-                              (RiscvMachine.getRegs m))) in
-    (* Non-zero memory-locs. *)
-    let mem :=
-        List.rev
-          (map.fold (fun acc w v =>
-                       let z := word.unsigned w in
-                       if Z.eqb (snd (Z.div_eucl z 4)) 0
-                       then (Mem z) :: acc else acc) nil 
-                    (RiscvMachine.getMem m)) in
-    pc ++ regs ++ mem.
-  
   (* Observations are values, or silent (tau) *)
   Inductive Observation : Type := 
-  | Out (w: Word * Value) 
+  | Out (w:Value) 
   | Tau. 
-
-  Definition w32_eqb (w1 w2 : w32) : bool :=
-    let l1 := HList.tuple.to_list w1 in
-    let l2 := HList.tuple.to_list w2 in
-    let l12 := List.combine l1 l2 in
-    forallb (fun '(b1, b2) => Byte.eqb b1 b2) l12.
-
-  Definition memAddr_eqb (mem mem' : DefaultMemImpl32.Mem) (addr : word32) : bool :=
-    match loadWord mem addr, loadWord mem' addr with
-    | Some w, Some w' => w32_eqb w w'
-    | _, _ => false
-    end.
-
-  (* TODO: We don't have information about which parts of memory to monitor for
-     changes. On a first approximation, monitor all positions (aligned accesses
-     only) outside the code segment (whose limits are here, again for simplicity,
-     hardcoded). *)
-  Definition findDiff mOld mNew : option (Word * Value) :=
-    let aligned := fun addr =>
-                     andb
-                       (word.eqb (word.modu addr (word.of_Z 4)) (word.of_Z 0))
-                       (word.gtu addr (word.of_Z 499)) in
-    let keys := filter aligned (map.keys mNew) in
-    (* trace ("findDiff: new memory keys " ++ show (map word.unsigned keys))%string *)
-    match find (fun addr => negb (memAddr_eqb mOld mNew addr)) keys with
-    | Some addr =>
-      trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string
-      match loadWord mNew addr with
-      | Some w =>
-        (* let w' := match loadWord mOld addr with *)
-        (*           | Some w => w *)
-        (*           | None => trace "Oops!"%string (split 4 0) *)
-        (*           end in *)
-        (* trace ("findDiff: change to " ++ show (combine 4 w) ++ " (from " ++ show (combine 4 w') ++ ")" ++ nl)%string *)
-        Some (word.unsigned addr, combine 4 w)
-      | None =>
-        (* trace ("findDiff: no diff found" ++ nl)%string *)
-        None
-      end
-    | None => None
-    end.
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
     (* returns option unit * state *)
     (* TODO: What's an observation? *)
-    (* trace ("Register contents: " *)
-    (*          ++ map.fold *)
-    (*               (fun acc k v => acc ++ "[" ++ show k ++ "," ++ show (word.unsigned v) ++ "]") *)
-    (*               "" (getRegs m) *)
-    (*          ++ nl)%string *)
     match Run.run1 RV32IM m with
-    | (_, s') =>
-      if Z.eqb (word.unsigned (getPc m))
-               (word.unsigned (getPc s'))
-      then
-        (s', Tau)
-      else
-        (* trace ("PCs differ")%string *)
-        match findDiff (getMem m) (getMem s') with
-        | Some v => (s', Out v)
-        | None => (s', Tau)
-        end
-        (* (s', Tau) *)
+    | (_, s') => (s', Tau)
     end
   .
 
@@ -316,8 +214,6 @@ Inductive Tag : Type :=
 | Tcall
 | Th1
 | Th2
-| Th3
-| Th4    
 | Tinstr
 | Tpc (n : nat)
 | Tr1
@@ -327,16 +223,11 @@ Inductive Tag : Type :=
 | Tstack (n : nat)
 .
 
-Derive Show for Tag.
-Derive Show for InstructionI.
-
 Definition tag_eqb (t1 t2 :  Tag) : bool :=
   match t1, t2 with
   | Tcall, Tcall
   | Th1, Th1
   | Th2, Th2
-  | Th3, Th3
-  | Th4, Th4           
   | Tinstr, Tinstr
   | Tr1, Tr1
   | Tr2, Tr2
@@ -355,14 +246,6 @@ Definition calleeTag : Tag := Th1.
 Definition TagSet : Type := list Tag.
 Definition TagMap : Type := Zkeyed_map TagSet.
 
-Fixpoint TagSet_eqb l1 l2 :=
-  match l1, l2 with
-  | nil,nil => true
-  | cons t1 l1', cons t2 l2' =>
-    andb (tag_eqb t1 t2) (TagSet_eqb l1' l2')
-  | _, _ => false
-  end.
-
 (* Map of memory tags *)
 Record PolicyState : Type :=
   {
@@ -374,23 +257,6 @@ Record PolicyState : Type :=
 
 Instance etaPolicyState : Settable _ :=
   settable! Build_PolicyState <nextid; pctags; regtags; memtags>.
-
-  (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Component):  TagSet :=
-    match k with
-    | Mem a =>
-      match map.get (memtags p) a with
-      | Some t => t
-      | _ => nil
-      end
-    | Reg r =>
-      match map.get (regtags p) r with
-      | Some t => t
-      | _ => nil
-      end
-    | PC => pctags p
-    end.
-
 
 (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
 Definition MPState : Type := MachineState * PolicyState.
@@ -434,9 +300,9 @@ Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : op
     | true, true => Some (p <| regtags := map.put (regtags p) rd [] |>)
     | _, _ => None
     end
-  | [Tinstr; Th1] =>
-    match existsb (tag_eqb Th1) tpc, trs with
-    | true, [Tsp] => Some (p <| pctags := filter (tag_neqb Th1) tpc ++ [Th2] |>
+  | [Tinstr; Th2] =>
+    match existsb (tag_eqb Th2) tpc, trs with
+    | true, [Tsp] => Some (p <| pctags := filter (tag_neqb Th2) tpc |>
                              <| regtags := map.put (regtags p) rd [Tsp] |>)
     | _, _ => None
     end
@@ -486,17 +352,13 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   let tpc := pctags p in
   trs <- map.get (regtags p) rs;
   match tinstr with
-
   | [Tinstr] =>
-(*    Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR *) *)
-
     match tpc, taddr with
     | [Tpc pcdepth], [Tstack memdepth] =>
       if Nat.leb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
       else None
     | _, _ => None
     end
-
   | [Tinstr; Tr1] =>
     match trs, taddr with
     | [Tsp], [Tpc _] => Some (p <| pctags := pctags p ++ [Tr2] |>
@@ -523,46 +385,16 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
   match tinstr with
   | [Tinstr] =>
     (* TODO: Relaxed in order for program to work: no stack-indexed writes? *)
-    match tpc, existsb (tag_eqb Tsp) taddr, trs, tmem with
-    | [Tpc depth], (*false*)_, [], [] =>
-        Some (p <| memtags := map.put (memtags p) addr [Tpc depth] |>)
-    | [Tpc depth], (*false*)_, [], [Tpc memdepth] =>
-      if Nat.eqb depth memdepth then  
-        Some (p <| memtags := map.put (memtags p) addr [Tpc depth] |>)
-      else None  
+    match tpc, existsb (tag_eqb Tsp) taddr, trs, existsb (tag_eqb Tinstr) tmem with
+    | [Tpc depth], (*false*)_, [], false => Some (p <| memtags := map.put (memtags p) addr [Tstack depth] |>)
     | _, _, _, _ => None
     end
-  | [Tinstr; Th2] =>
-    (*    trace (show (tpc, existsb (tag_eqb Th1) tpc, trs, taddr) ++ nl)%string *)
-    ( 
-    match existsb (tag_eqb Th2) tpc, trs, taddr with
-    | true, cons (Tpc depth) nil, cons Tsp nil =>
-      Some (p <| pctags := filter (tag_neqb Th2) tpc ++ [Th3] |>
-              <| memtags := map.put (memtags p) addr [Tpc depth] |>)
-    | _, _, _ =>
-      None
-    end)
-  | [Tinstr; Th3] =>
-    (* trace (show (tpc, existsb (tag_eqb Th3) tpc, trs, taddr) ++ nl)%string  *)
-    ( 
-    match tpc, taddr with
-    | ([Tpc depth; Th3]), cons Tsp nil =>
-      Some (p <| pctags := filter (tag_neqb Th3) tpc ++ [Th4] |>
-              <| memtags := map.put (memtags p) addr [Tpc depth] |>)
-    | _, _ =>
-      None
-    end)
-  | [Tinstr; Th4] =>
-    (*    trace (show (tpc, existsb (tag_eqb Th1) tpc, trs, taddr) ++ nl)%string *)
-    ( 
-    match tpc, taddr with
-    | ([Tpc depth; Th4]), cons Tsp nil =>
-      Some (p <| pctags := filter (tag_neqb Th4) tpc |>
-              <| memtags := map.put (memtags p) addr [Tpc depth] |>)
-    | _, _ =>
-      None
-    end      
-      )
+  | [Tinstr; Th1] =>
+    match existsb (tag_eqb Th1) tpc, trs, taddr with
+    | true, [Tpc depth], [Tsp] => Some (p <| pctags := filter (tag_neqb Th1) tpc ++ [Th2] |>
+                                          <| memtags := map.put (memtags p) addr [Tpc depth] |>)
+    | _, _, _ => None
+    end
   | _ => None
   end.
 
@@ -573,8 +405,6 @@ Definition decodeI (w : w32) : option InstructionI :=
   end.
 
 Definition pstep (mp : MPState) : option PolicyState :=
-  (*  trace ("Entering pstep..." ++ nl)%string *)
-  (
   let '(m, p) := mp in
   let pc := getPc m in
   w <- loadWord (getMem m) pc;
@@ -602,43 +432,13 @@ Definition pstep (mp : MPState) : option PolicyState :=
        policyStore p pc rddata rd rs imm
   | _
     => None
-  end).
-
-Instance showObs : Show Observation :=
-  {|
-  show o := match o with
-            | Out (a, v) => ("Out @" ++ show a ++ " <- " ++ show v)%string
-            | Tau => "Tau"%string
-            end
-  |}.
+  end.
 
 Definition mpstep (mp : MPState) : option (MPState * Observation) :=
-  let instr : string := 
-      match loadWord (getMem (ms mp)) (getPc (ms mp)) with
-      | Some w32 =>
-        match decode RV32I (        LittleEndian.combine _ w32)  with
-        | IInstruction inst =>
-          show inst
-        | _ => "<Not inst>"%string
-        end
-      | _ => "<Not inst2>"%string
-      end in
-
-  
-(*  trace ("Entering mpstep with" ++ show (word.unsigned (getPc (ms mp))) ++ " @ " ++ show (pctags (ps mp)) ++ " : " ++ instr ++ nl
-        )%string*)
-        (
-  p' <- pstep mp; 
+  p' <- pstep mp;
   match step (ms mp) with
-  | (m', o) =>
-    (* trace ("Trace event " ++ show o ++ nl)%string ( *)
-    if Z.eqb (word.unsigned (getPc (ms mp)))
-             (word.unsigned (getPc m'))
-    then None (* error *)
-    else Some (m', p', o)
-    (* ) *)
+  | (m', o) => Some (m', p', o)
   end
-    )
 .
 
 Axiom mpstepCompat :
@@ -719,7 +519,7 @@ Section WITH_STATE.
 
   Definition mpcstep (mpc:MPCState) : option (MPCState * Observation) :=
     option_map
-      (fun '(m,p,o) => (m,p,CtxStateUpdate (mstate mpc) (cstate mpc),o))
+      (fun '(m,p,o) => (m,p,CtxStateUpdate m (cstate mpc),o))
       (mpstep (mstate mpc,pstate mpc)).
   
   Inductive StepsTo : MPCState -> MPCState -> Prop :=
@@ -849,5 +649,4 @@ Arguments StepsToWhenObs {_} _ _ _ _.
 Arguments StepsToWhen {_} _ _ _.
 Arguments ReachableSegment {_} _ _ _.
 Arguments NeverStepsToObs {_} _ _ _.
-Arguments FullObsTrace {_} _ _.
 
