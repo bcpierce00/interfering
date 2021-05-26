@@ -211,14 +211,30 @@ Extract Constant exception =>
     | _, _ => false
     end.
 
+ (* TODO: We don't have information about which parts of memory to monitor for
+     changes. On a first approximation, monitor all positions (aligned accesses
+     only) outside the code segment (whose limits are here, again for simplicity,
+     hardcoded). *)
   Definition findDiff mOld mNew : option Z :=
-    match find (fun addr => negb (memAddr_eqb mOld mNew addr)) (map.keys mNew) with
+    let aligned := fun addr =>
+                     andb
+                       (word.eqb (word.modu addr (word.of_Z 4)) (word.of_Z 0))
+                       (word.gtu addr (word.of_Z 499)) in
+    let keys := filter aligned (map.keys mNew) in
+    (* trace ("findDiff: new memory keys " ++ show (map word.unsigned keys))%string *)
+    match find (fun addr => negb (memAddr_eqb mOld mNew addr)) keys with
     | Some addr =>
+      trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string
       match loadWord mNew addr with
       | Some w =>
+        (* let w' := match loadWord mOld addr with *)
+        (*           | Some w => w *)
+        (*           | None => trace "Oops!"%string (split 4 0) *)
+        (*           end in *)
+        (* trace ("findDiff: change to " ++ show (combine 4 w) ++ " (from " ++ show (combine 4 w') ++ ")" ++ nl)%string *)
         Some (combine 4 w)
-      | None =>
-        None
+      | None => None
+        (* trace ("findDiff: no diff found" ++ nl)%string *)
       end
     | None => None
     end.
@@ -627,3 +643,4 @@ Module TagPolicy <: Policy RISCV.
   (* TODO: More interesting well-formedness condition *)
   Definition WFInitMPState (mp:MPState) := True.
 End TagPolicy.
+y
