@@ -171,6 +171,7 @@ Module Cerise (P:Params) : Machine.
   Definition obs_eqb (o1 o2:Observation) : bool := true.
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
+  Fail
   Definition step `{MachineParameters} (m:MachineState) : MachineState * Observation :=
     let '(rs,mem) := m in
     let pc := rs !r! addr_reg.PC in
@@ -183,6 +184,23 @@ Module Cerise (P:Params) : Machine.
     | (Executable, m') => (m',Tau)
     | _ => (m,Tau)
     end.
+
+  Definition step' `{MachineParameters} (m:MachineState) : MachineState * Observation.
+  Proof.
+    destruct m as [rs mem].
+    set (pc := rs !r! addr_reg.PC).
+    eset (a := match pc with
+               | inl _ => top (* dummy *)
+               | inr (_, _, _, _, a) => a
+               end).
+    set (i := decodeInstrW (mem !m! a)).
+    exact (match exec i (rs, mem) with
+           | (Executable, m') => (m',Tau)
+           | _ => ((rs, mem),Tau)
+           end).
+    Unshelve.
+    econstructor. instantiate (1 := 1). all:reflexivity.
+  Defined.
 
   Parameter FunID : Type.
   Parameter StackID : Type.
