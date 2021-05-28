@@ -45,26 +45,30 @@ Module Cerise (P:Params) : Machine.
 
 
   Definition Word : Type := machine_base.Word.
+  Definition Addr : Type := Addr.
+  Definition Value : Type := Word.
 
+  Definition wtoa (w:Word) :=
+    match w with
+    | inl z => z_to_addr z
+    | inr (_,_,_,a) => Some a
+    end.
+      
+  Definition vtow (v:Value) := v.
+  
   Definition wlt (w1 w2:Word) : bool :=
     match w1,w2 with
     | inl z1, inl z2 => z1 <? z2
-    | inr ((_), base1,off1,_), inr ((_),base2,off2,_) =>
-      match (base1 + (z_of off1))%a, (base2 + (z_of off2))%a with
-      | Some a1, Some a2 => a1 <? a2
-      | _, _ => false
-      end
+    | inr ((_),_,_,a1), inr ((_),_,_,a2) =>
+      a1 <? a2
     | _,_ => false
     end.
 
   Definition weq (w1 w2:Word) : bool :=
     match w1,w2 with
     | inl z1, inl z2 => z1 =? z2
-    | inr ((_), base1,off1,_), inr ((_),base2,off2,_) =>
-      match (base1 + (z_of off1))%a, (base2 + (z_of off2))%a with
-      | Some a1, Some a2 => a1 =? a2
-      | _, _ => false
-      end
+    | inr ((_),_,a1,_), inr ((_),_,a2,_) =>
+      a1 =? a2
     | _,_ => false
     end.
 
@@ -84,23 +88,21 @@ Module Cerise (P:Params) : Machine.
   Definition wplus (w:Word) (n:nat) : Word :=
     match w with
     | inl z => inl (z + (Z.of_nat n))
-    | inr (p,base,off,bnd) =>
-      let off' := (off + (Z.of_nat n))%a in
+    | inr (p,base,ptr,bnd) =>
+      let ptr' := (ptr + (Z.of_nat n))%a in
       inr (p,base,get_addr_from_option_addr None,bnd)
     end.
 
     Definition wminus (w:Word) (n:nat) : Word :=
     match w with
     | inl z => inl (z - (Z.of_nat n))
-    | inr (p,base,off,bnd) =>
-      let off' := (off - (Z.of_nat n))%a in
+    | inr (p,base,ptr,bnd) =>
+      let ptr' := (ptr - (Z.of_nat n))%a in
       inr (p,base,get_addr_from_option_addr None,bnd)
     end.
   
   Axiom wplus_neq : forall w (n : nat),
       (n > 0)%nat -> w <> wplus w n.
-
-  Definition Addr : Type := Addr.
 
   Definition Register : Type := RegName.
 
@@ -131,9 +133,6 @@ Module Cerise (P:Params) : Machine.
     | PC, PC => true
     | _, _ => false
     end.
-
-  Definition Value : Type := Word.
-  Definition vtow (v:Value) := v.
 
   Definition MachineState : Type := (machine_base.Reg * machine_base.Mem).
 
@@ -172,7 +171,7 @@ Module Cerise (P:Params) : Machine.
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Fail
-  Definition step `{MachineParameters} (m:MachineState) : MachineState * Observation :=
+  Definition step' `{MachineParameters} (m:MachineState) : MachineState * Observation :=
     let '(rs,mem) := m in
     let pc := rs !r! addr_reg.PC in
     let a := match pc with
@@ -185,7 +184,7 @@ Module Cerise (P:Params) : Machine.
     | _ => (m,Tau)
     end.
 
-  Definition step' `{MachineParameters} (m:MachineState) : MachineState * Observation.
+  Definition step (*`{MachineParameters}*) (m:MachineState) : MachineState * Observation.
   Proof.
     destruct m as [rs mem].
     set (pc := rs !r! addr_reg.PC).
@@ -202,8 +201,8 @@ Module Cerise (P:Params) : Machine.
     econstructor. instantiate (1 := 1). all:reflexivity.
   Defined.
 
-  Parameter FunID : Type.
-  Parameter StackID : Type.
+  Definition FunID : Type := nat.
+  Definition StackID : Type := nat.
 
   (*Definition EntryMap := Addr -> bool.*)
 
@@ -224,13 +223,23 @@ Module Cerise (P:Params) : Machine.
   
   Definition CodeMap := Addr -> option CodeAnnotation.
 
-  Parameter activeStack : StackMap -> MachineState -> option StackID.
-   
-  Parameter stack_eqb : StackID -> StackID -> bool.
+  Definition activeStack (sm : StackMap) (m : MachineState) : option StackID :=
+    match projw m (Reg SP) with
+    | inl z => None
+    | inr (_,_,ptr,_) => sm ptr
+    end.
+  
+  Definition stack_eqb (sid1 sid2 : StackID) := sid1 =? sid2.
 
-  Parameter optstack_eqb : option StackID -> option StackID -> bool.
+  Definition optstack_eqb (osid1 osid2 : option StackID) :=
+    match osid1, osid2 with
+    | Some sid1, Some sid2 => sid1 =? sid2
+    | _, _ => false
+    end.
 
-  Parameter justRet : MachineState -> MachineState -> Prop.
+  Definition justRet (mc m : MachineState) : Prop :=
+    projw m PC = wplus (projw mc PC) 4 /\ projw m (Reg SP) = projw mc (Reg SP).
 
-  Parameter justRet_dec : forall mc m, {justRet mc m} + {~ justRet mc m}.
-End Machine.
+  Axiom justRet_dec : forall mc m, {justRet mc m} + {~ justRet mc m}.
+  
+End Cerise.

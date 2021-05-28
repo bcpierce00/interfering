@@ -11,7 +11,12 @@ Module Type Machine.
 
 
   Parameter Word : Type.
+  Parameter Addr : Type.
+  Parameter Value : Type.
 
+  Parameter wtoa : Word -> option Addr.
+  Parameter vtow : Value -> Word.
+  
   Parameter wlt : Word -> Word -> bool.
 
   Parameter weq : Word -> Word -> bool.
@@ -35,8 +40,6 @@ Module Type Machine.
   Parameter wplus_neq : forall w (n : nat),
       (n > O)%nat -> w <> wplus w n.
 
-  Definition Addr := Word.
-
   Parameter Register : Type.
 
   Parameter RA : Register.
@@ -49,9 +52,6 @@ Module Type Machine.
   | PC.
 
   Parameter keqb : Component -> Component -> bool.
-
-  Parameter Value : Type.
-  Parameter vtow : Value -> Word.
 
   Parameter MachineState : Type.
   Definition View := Component -> Value.
