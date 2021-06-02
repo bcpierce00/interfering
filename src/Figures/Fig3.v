@@ -20,7 +20,7 @@ Require Import riscv.Utility.DefaultMemImpl32.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
 
 (* From StackSafety Require Import Trace MachineEagerInit. *)
-From StackSafety Require Import Trace MachineImpl EagerInit.
+From StackSafety Require Import Trace RISCVMachine EagerInit.
 Import RISCV.
 Import EagerInit.
 

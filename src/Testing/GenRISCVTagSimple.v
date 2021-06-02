@@ -1,5 +1,5 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     MachineImpl DefaultLayout TestSubroutineSimple PrintRISCVTagSimple.
+     RISCVMachine DefaultLayout TestSubroutineSimple PrintRISCVTagSimple.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.

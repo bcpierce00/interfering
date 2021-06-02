@@ -1,7 +1,7 @@
 Require Import Coq.Lists.List.
 Import List.ListNotations.
 
-From StackSafety Require Import Trace MachineModule PolicyModule MachineImpl.
+From StackSafety Require Import Trace MachineModule PolicyModule RISCVMachine.
 
 Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.

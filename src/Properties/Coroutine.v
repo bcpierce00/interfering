@@ -30,7 +30,11 @@ Module CoroutineDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
   
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
   Definition sc : SealingConvention :=
-    fun m a => wlt a (projw m (Reg SP)).
+    fun m a =>
+      match wtoa (projw m (Reg SP)) with
+      | Some a' => alt a a'
+      | None => false
+      end.
 
   (* Likewise, we need to describe what it means to return properly from a call. We parameterize
      this as well, but the standard of course is that the stack pointer must match the original
@@ -101,12 +105,15 @@ Module CoroutineDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
                 end in
     (dm,initRM,fun _ => None,sid).
   
-  (* Once again we need an update function for out context. Note that yields don't
-     actually change the domain map, as they don't change which addresses belong to which
-     stacks. So we still only consider sharing, calls, and returns. *)
+  Definition flatten {A} (o:option (option A)) : option A :=
+    match o with
+    | Some (Some o') => Some o'
+    | _ => None
+    end.
+
   Definition CtxStateUpdate (m:MachineState) (prev:CtxState) : CtxState :=
-    let '(dm,rm,yt,sid) := prev in 
-    match cdm (projw m PC) with
+    let '(dm,rm,yt,sid) := prev in
+    match flatten (option_map cdm (wtoa (projw m PC))) with
     | Some call =>
       let dm' := fun k =>
                    match k, dm k with                      
@@ -199,7 +206,9 @@ Module CoroutProp (M : Machine) (P : Policy M) (MM : MapMaker M).
   Definition CoroutineIntegrityEager : Prop :=
     forall m c p,
       Reachable (m,p,c) ->
-      StepIntegrity (fun k => sm (projw m k) = activeStack sm m) (m,p,c).
+      StepIntegrity
+        (fun k => flatten (option_map sm (wtoa (projw m k))) = activeStack sm m)
+        (m,p,c).
     
   (* We can actually do ultra eager confidentiality for coroutines without any more complexity,
      because coroutine properties don't care about allocation and initialization. That only comes
@@ -221,7 +230,8 @@ Module CoroutProp (M : Machine) (P : Policy M) (MM : MapMaker M).
   Definition CoroutineConfidentialityEager : Prop :=
     forall MPC sid,
       let P := (fun '(m,p,c) => activeStack sm m = Some sid) in
-      let K := (fun k => sm (projw (mstate (head MPC)) k) = activeStack sm (mstate (head MPC))) in
+      let K := (fun k => flatten (option_map sm (wtoa (projw (mstate (head MPC)) k))) =
+                         activeStack sm (mstate (head MPC))) in
       ReachableSegment P MPC ->
       TraceConfidentialityStep K P MPC.
 
@@ -243,9 +253,10 @@ Module CoroutProp (M : Machine) (P : Policy M) (MM : MapMaker M).
 
   Definition YieldBackIntegrity : Prop :=
     forall mpc1 mpc2,
-      let P := (fun mpc => sm (projw (mstate mpc1) (Reg SP)) = sm (projw (mstate mpc) (Reg SP))) in
+      let P := (fun mpc => flatten (option_map sm (wtoa (projw (mstate mpc1) (Reg SP))))
+                           = flatten (option_map sm (wtoa (projw (mstate mpc) (Reg SP))))) in
       Reachable mpc1 ->
-      cdm (projw (mstate mpc1) PC) = Some yield ->
+      flatten (option_map cdm (wtoa (projw (mstate mpc1) PC))) = Some yield ->
       StepsToWhen P mpc1 mpc2 ->
       justRet (mstate mpc1) (mstate mpc2).
 

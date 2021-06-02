@@ -64,6 +64,8 @@ Module Cerise (P:Params) : Machine.
     | _,_ => false
     end.
 
+  Definition alt a1 a2 := (a1 <? a2)%a.
+
   Definition weq (w1 w2:Word) : bool :=
     match w1,w2 with
     | inl z1, inl z2 => z1 =? z2
@@ -72,8 +74,12 @@ Module Cerise (P:Params) : Machine.
     | _,_ => false
     end.
 
+  Definition aeq a1 a2 := (a1 =? a2)%a.
+  
   Lemma WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2}.
   Proof. solve_decision. Qed.
+
+  Definition AddrEqDec := addr_eq_dec.
 
   Axiom weq_implies_eq :
     forall w1 w2,
@@ -83,7 +89,17 @@ Module Cerise (P:Params) : Machine.
     forall w1 w2,
       weq w1 w2 = false -> w1 <> w2.
 
+  Axiom aeq_implies_eq :
+    forall a1 a2,
+      aeq a1 a2 = true -> a1 = a2.
+
+  Axiom not_aeq_implies_neq :
+    forall a1 a2,
+      aeq a1 a2 = false -> a1 <> a2.
+  
   Definition wle (w1 w2:Word) : bool := wlt w1 w2 || weq w1 w2.
+
+  Definition ale a1 a2 := (a1 <=? a2)%a.
   
   Definition wplus (w:Word) (n:nat) : Word :=
     match w with
@@ -93,13 +109,19 @@ Module Cerise (P:Params) : Machine.
       inr (p,base,get_addr_from_option_addr None,bnd)
     end.
 
-    Definition wminus (w:Word) (n:nat) : Word :=
+  Definition aplus a n :=
+    get_addr_from_option_addr (a + (Z.of_nat n))%a.
+
+  Definition wminus (w:Word) (n:nat) : Word :=
     match w with
     | inl z => inl (z - (Z.of_nat n))
     | inr (p,base,ptr,bnd) =>
       let ptr' := (ptr - (Z.of_nat n))%a in
       inr (p,base,get_addr_from_option_addr None,bnd)
     end.
+
+  Definition aminus a n :=
+    get_addr_from_option_addr (a + (Z.of_nat n))%a.
   
   Axiom wplus_neq : forall w (n : nat),
       (n > 0)%nat -> w <> wplus w n.

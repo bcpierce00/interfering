@@ -37,8 +37,8 @@ From QuickChick Require Import QuickChick.
 
 Module RISCV <: Machine.
 
-Axiom exception : forall {A}, string -> A.
-Extract Constant exception =>
+  Axiom exception : forall {A}, string -> A.
+  Extract Constant exception =>
   "(fun l ->
    let s = Bytes.create (List.length l) in
    let rec copy i = function
@@ -47,24 +47,30 @@ Extract Constant exception =>
    in failwith (""Exception: "" ^ Bytes.to_string (copy 0 l)))".
 
   Definition Word := MachineInt.
-  (* Parameter Word *)
-
+  Definition Value := Word.
+  Definition Addr := Word.
+  
+  Definition wtoa (w : Word) : option Addr := Some w.
+  Definition vtow (v : Value) : Word := v.
+  
   Instance ShowWord : Show word :=
     {| show x := show (word.signed x) |}.
 
-  Definition wlt : Word -> Word -> bool := Z.ltb.
-  (*  Parameter wlt : Word -> Word -> bool. *)
-
-  Definition weq : Word -> Word -> bool := Z.eqb.
-  (* Parameter weq : Word -> Word -> bool. *)
+  Definition wlt := Z.ltb.
+  Definition alt := Z.ltb.
+  
+  Definition weq := Z.eqb.
+  Definition aeq := Z.eqb.
 
   Definition WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2} := Z.eq_dec.
-
+  Definition AddrEqDec : forall (a1 a2 : Addr), {a1 = a2} + {a1 <> a2} := Z.eq_dec.
+  
   Lemma weq_implies_eq :
     forall w1 w2,
       weq w1 w2 = true -> w1 = w2.
     apply Z.eqb_eq.
   Qed.
+  Definition aeq_implies_eq := weq_implies_eq.
 
   Lemma not_weq_implies_neq :
     forall w1 w2,
@@ -75,9 +81,11 @@ Extract Constant exception =>
     rewrite HEq in HEqb.
     congruence.
   Qed.
+  Definition not_aeq_implies_neq := not_weq_implies_neq.
 
   Definition wle (w1 w2: Word) : bool :=
     orb (wlt w1 w2) (weq w1 w2).
+  Definition ale := wle.
 
   (*
     Parameter wplus : Word -> nat -> Word.
@@ -85,6 +93,7 @@ Extract Constant exception =>
    *)
   Definition wplus (w : Word) (n : nat) : Word :=
     w + Z.of_nat n.
+  Definition aplus := wplus.
 
   Lemma wplus_neq : forall w (n : nat),
       (n > O)%nat -> w <> wplus w n.
@@ -96,8 +105,7 @@ Extract Constant exception =>
 
   Definition wminus (w : Word) (n : nat) : Word :=
     w - Z.of_nat n.
-
-  Definition Addr : Type := Word.
+  Definition aminus := wminus.
   
   Definition Register : Type := Word.
 
@@ -124,10 +132,6 @@ Extract Constant exception =>
   Axiom not_keqb_implies_neq :
     forall k1 k2,
       keqb k1 k2 = false -> k1 <> k2.
-
-  (* A Value is a Word. *)
-  Definition Value : Type := Word.
-  Definition vtow (v : Value) : Word := v.
 
   (* We use a risc-v machine as our machine state and a view as a map from its
      components to their values. *)
