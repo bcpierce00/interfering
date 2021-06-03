@@ -1,38 +1,84 @@
 From StackSafety Require Import MachineModule.
+From iris.proofmode Require Import tactics.
 
+Require Import ZArith. Open Scope Z.
 Require Import cap_machine.machine_parameters.
-Require Import cap_machine.machine_run.
 Require Import cap_machine.machine_base.
 Require Import cap_machine.cap_lang.
-
-From stdpp Require Import gmap fin_maps list countable.
-Require Import ZArith. Open Scope Z.
+Require Import cap_machine.addr_reg. Open Scope Addr_scope.
 
 Module Type Params.
-(*  Parameter decodeInstr' : Z → instr.
-  Parameter encodeInstr' : instr → Z.
+  Parameter decodeInstr : Z → instr.
+  Parameter encodeInstr : instr → Z.
 
   Parameter decode_encode_instr_inv :
-    forall (i: instr), decodeInstr' (encodeInstr' i) = i.
+    forall (i: instr), decodeInstr (encodeInstr i) = i.
 
   Parameter encodePerm : Perm → Z.
   Parameter encodePerm_inj : Inj eq eq encodePerm.
 
-  Parameter encodeLoc : Locality → Z.
-  Parameter encodeLoc_inj : Inj eq eq encodeLoc.
+  Parameter decodePerm : Z → Perm.
 
-  Parameter decodePermPair : Z → Perm * Locality.
-  Parameter encodePermPair : Perm * Locality → Z.
+  Parameter decode_encode_perm_inv :
+    forall pl, decodePerm (encodePerm pl) = pl.
 
-  Parameter decode_encode_permPair_inv :
-    forall pl, decodePermPair (encodePermPair pl) = pl.*)
-
-  Parameter params : MachineParameters.
-  Instance paramsIs : MachineParameters := params.
+  Program Instance params : MachineParameters :=
+    @Build_MachineParameters
+      decodeInstr encodeInstr decode_encode_instr_inv
+      encodePerm encodePerm_inj
+      decodePerm decode_encode_perm_inv.
 End Params.
 
-Module Cerise (P:Params) : Machine.
-  Import P.
+Module AwkwardParams : Params.
+  Definition encodeInstr (i: instr): Z := Zpos (encode i).
+  Definition encodePerm (p: Perm): Z := Zpos (encode p).  
+
+  Definition decodeInstr (z: Z): instr :=
+    match z with
+    | Zpos p =>
+      match decode p with
+      | Some i => i
+      | None => Fail
+      end
+    | _ => Fail
+    end.
+  
+  Definition decodePerm (z: Z): Perm  :=
+    match z with
+    | Zpos p =>
+      match decode p with
+      | Some pl => pl
+      | None => O (* dummy *)
+      end
+    | _ => O
+    end.
+
+  Definition decode_encode_instr_inv :
+    forall (i: instr), decodeInstr (encodeInstr i) = i.
+  Proof.
+    intros; rewrite /decodeInstr /encodeInstr decode_encode //.
+  Qed.
+
+  Definition decode_encode_perm_inv :
+    forall (pl: Perm), decodePerm (encodePerm pl) = pl.
+  Proof.
+    intros; rewrite /decodePerm /encodePerm decode_encode //.
+  Qed.
+
+  Definition encodePerm_inj : Inj eq eq encodePerm.
+  Proof.
+    unfold Inj. intros. unfold encodePerm in H. unfold encode in H. inv H.
+    destruct x; destruct y; auto; discriminate.
+  Qed.
+
+  Program Instance params : MachineParameters :=
+    @Build_MachineParameters
+      decodeInstr encodeInstr decode_encode_instr_inv
+      encodePerm encodePerm_inj
+      decodePerm decode_encode_perm_inv.
+End AwkwardParams.
+
+Module Cerise (P:Params) <: Machine.
 
   (*  Axiom exception : forall {A}, string -> A.
       Extract Constant exception =>
@@ -58,7 +104,7 @@ Module Cerise (P:Params) : Machine.
   
   Definition wlt (w1 w2:Word) : bool :=
     match w1,w2 with
-    | inl z1, inl z2 => z1 <? z2
+    | inl z1, inl z2 => (z1 <? z2)%Z
     | inr ((_),_,_,a1), inr ((_),_,_,a2) =>
       a1 <? a2
     | _,_ => false
@@ -68,13 +114,13 @@ Module Cerise (P:Params) : Machine.
 
   Definition weq (w1 w2:Word) : bool :=
     match w1,w2 with
-    | inl z1, inl z2 => z1 =? z2
+    | inl z1, inl z2 => (z1 =? z2)%Z
     | inr ((_),_,a1,_), inr ((_),_,a2,_) =>
       a1 =? a2
     | _,_ => false
     end.
 
-  Definition aeq a1 a2 := (a1 =? a2)%a.
+  Definition aeq a1 a2 := a1 =? a2.
   
   Lemma WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2}.
   Proof. solve_decision. Qed.
@@ -99,11 +145,11 @@ Module Cerise (P:Params) : Machine.
   
   Definition wle (w1 w2:Word) : bool := wlt w1 w2 || weq w1 w2.
 
-  Definition ale a1 a2 := (a1 <=? a2)%a.
+  Definition ale a1 a2 := a1 <=? a2.
   
   Definition wplus (w:Word) (n:nat) : Word :=
     match w with
-    | inl z => inl (z + (Z.of_nat n))
+    | inl z => inl (z + (Z.of_nat n))%Z
     | inr (p,base,ptr,bnd) =>
       let ptr' := (ptr + (Z.of_nat n))%a in
       inr (p,base,get_addr_from_option_addr None,bnd)
@@ -128,15 +174,15 @@ Module Cerise (P:Params) : Machine.
 
   Definition Register : Type := RegName.
 
-  Lemma one_less : 1%nat <=? RegNum = true. Proof. auto. Qed.
-  Lemma two_less : 1%nat <=? RegNum = true. Proof. auto. Qed.
+  Lemma one_less : (1 <=? RegNum)%nat = true. Proof. auto. Qed.
+  Lemma two_less : (1 <=? RegNum)%nat = true. Proof. auto. Qed.
 
   Definition RA : Register := R 1%nat one_less.
   Definition SP : Register := R 2%nat two_less.
 
   Definition regEq (r1 r2 : Register) : bool :=
     match r1,r2 with
-    | R n1 _, R n2 _ => n1 =? n2
+    | R n1 _, R n2 _ => (n1 =? n2)%nat
     | PC, PC => true
     | _, _ => false
     end.
@@ -192,36 +238,18 @@ Module Cerise (P:Params) : Machine.
   Definition obs_eqb (o1 o2:Observation) : bool := true.
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
-  Fail
-  Definition step' `{MachineParameters} (m:MachineState) : MachineState * Observation :=
+  Definition step (m:MachineState) : MachineState * Observation :=
     let '(rs,mem) := m in
     let pc := rs !r! addr_reg.PC in
     let a := match pc with
              | inl _ => top (* dummy *)
-             | inr (_, _, _, _, a) => a
+             | inr (_, _, _, a) => a
              end in
     let i := decodeInstrW (mem !m! a) in
     match exec i (rs, mem) with
     | (Executable, m') => (m',Tau)
     | _ => (m,Tau)
     end.
-
-  Definition step (*`{MachineParameters}*) (m:MachineState) : MachineState * Observation.
-  Proof.
-    destruct m as [rs mem].
-    set (pc := rs !r! addr_reg.PC).
-    eset (a := match pc with
-               | inl _ => top (* dummy *)
-               | inr (_, _, _, _, a) => a
-               end).
-    set (i := decodeInstrW (mem !m! a)).
-    exact (match exec i (rs, mem) with
-           | (Executable, m') => (m',Tau)
-           | _ => ((rs, mem),Tau)
-           end).
-    Unshelve.
-    econstructor. instantiate (1 := 1). all:reflexivity.
-  Defined.
 
   Definition FunID : Type := nat.
   Definition StackID : Type := nat.
@@ -251,11 +279,11 @@ Module Cerise (P:Params) : Machine.
     | inr (_,_,ptr,_) => sm ptr
     end.
   
-  Definition stack_eqb (sid1 sid2 : StackID) := sid1 =? sid2.
+  Definition stack_eqb (sid1 sid2 : StackID) := (sid1 =? sid2)%nat.
 
   Definition optstack_eqb (osid1 osid2 : option StackID) :=
     match osid1, osid2 with
-    | Some sid1, Some sid2 => sid1 =? sid2
+    | Some sid1, Some sid2 => (sid1 =? sid2)%nat
     | _, _ => false
     end.
 
@@ -265,3 +293,5 @@ Module Cerise (P:Params) : Machine.
   Axiom justRet_dec : forall mc m, {justRet mc m} + {~ justRet mc m}.
   
 End Cerise.
+
+Module DefCerise := Cerise AwkwardParams.
