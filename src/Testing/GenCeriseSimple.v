@@ -1,5 +1,5 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     RISCVMachine DefaultLayout TestSubroutineSimple PrintRISCVTagSimple.
+     MachineImpl DefaultLayout TestSubroutineSimple PrintRISCVTagSimple.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -26,8 +26,8 @@ Import RiscvMachine.
 
 Import TagPolicy.
 
-Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSSRiscvDefault.
-  Module MPC := TestMPC RISCV TagPolicy DefaultLayout TSSRiscvDefault.
+Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSS.
+  Module MPC := TestMPC RISCV TagPolicy DefaultLayout TSS.
   Import MPC.
 
   Definition defFuel := 42%nat.

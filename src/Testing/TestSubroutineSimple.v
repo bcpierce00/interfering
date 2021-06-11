@@ -1,4 +1,4 @@
-From StackSafety Require Import MachineModule TestingModules.
+From StackSafety Require Import MachineModule TestingModules RISCVMachine DefaultLayout.
 
 Require Import String.
 Require Import List.
@@ -119,5 +119,6 @@ Module TestSimpleDomain (M : Machine) (LI : LayoutInfo M) <: TestCtx M LI.
     end.
 End TestSimpleDomain.
 
-(*Module TSS := TestSimpleDomain RISCV DefaultLayout.*)
+Module TSSRiscvDefault := TestSimpleDomain RISCV DefaultLayout.
 From StackSafety Require Import CeriseMachine CeriseLayout.
+Module TSSCeriseDefault := TestSimpleDomain DefCerise CeriseLayout.

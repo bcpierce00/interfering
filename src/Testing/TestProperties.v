@@ -210,7 +210,7 @@ Definition prop_integrity :=
 End TestPropsRISCVSimple.
 
 Module TestRISCVTagSimple := TestPropsRISCVSimple TagPolicy DefaultLayout
-                                                  TSS GenRISCVTagSimple
+                                                  TSSRiscvDefault GenRISCVTagSimple
                                                   PrintRISCVTagSimple.
 
 Import TestRISCVTagSimple.

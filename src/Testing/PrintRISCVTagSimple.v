@@ -16,8 +16,8 @@ Require Import Coq.Lists.List. Import ListNotations.
 Import RiscvMachine.
 Import TagPolicy.
 
-Module PrintRISCVTagSimple : Printing RISCV TagPolicy DefaultLayout TSS.
-  Module MPC := TestMPC RISCV TagPolicy DefaultLayout TSS.
+Module PrintRISCVTagSimple : Printing RISCV TagPolicy DefaultLayout TSSRiscvDefault.
+  Module MPC := TestMPC RISCV TagPolicy DefaultLayout TSSRiscvDefault.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".
