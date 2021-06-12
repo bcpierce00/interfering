@@ -1,5 +1,5 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     MachineImpl DefaultLayout TestSubroutineSimple PrintRISCVTagSimple.
+     CeriseMachine CeriseLayout TestSubroutineSimple PrintCeriseSimple.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -8,67 +8,65 @@ Require Coq.Strings.String. Open Scope string_scope.
 Require Import Coq.Lists.List.
 
 Require Import ZArith. Open Scope Z.
-Require Import riscv.Utility.Encode.
-Require Import riscv.Utility.InstructionCoercions. Open Scope ilist_scope.
-Require Import coqutil.Word.Properties.
-Require Import riscv.Spec.Machine.
-Require Import riscv.Spec.Decode.
-Require Import riscv.Utility.Utility.
-Require Import riscv.Platform.Memory.
-Require Import coqutil.Map.Interface.
-Require Import coqutil.Map.Z_keyed_SortedListMap.
+Require Import cap_machine.addr_reg.
+Require Import machine_base.
 
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
 
 Import ListNotations.
-Import RiscvMachine.
 
-Import TagPolicy.
-
-Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSS.
-  Module MPC := TestMPC RISCV TagPolicy DefaultLayout TSS.
+Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefault.
+  Module MPC := TestMPC DefCerise CerisePolicy CeriseLayout TSSCeriseDefault.
   Import MPC.
-
+  Import PrintCeriseSimple.
+  
   Definition defFuel := 42%nat.
-
-  Definition r0 : Register := 0.
-  Definition ra : Register := 1.
-  Definition sp : Register := 2.
   
+  Definition r0 : Register.
+  Proof.
+    assert ((0 <=? RegNum)%nat = true) by auto. 
+    eexact (R 0 H).
+  Defined.
+
+  Definition ra : Register.
+  Proof.
+    assert ((1 <=? RegNum)%nat = true) by auto. 
+    eexact (R 1 H).
+  Defined.
+
+  Definition sp : Register.
+  Proof.
+    assert ((2 <=? RegNum)%nat = true) by auto. 
+    eexact (R 2 H).
+  Defined.
+    
   (*- TODO: Sometimes we might want to use/target ra and sp to inject/find bugs? *)
-  Definition minReg : Register := 8.
+  Definition minReg : nat := 8%nat.
   Definition noRegs : nat := 3%nat.
-  Definition maxReg : Register := minReg + Z.of_nat noRegs - 1.
+  Definition maxReg : nat := minReg + noRegs - 1.
   
-  Record TagInfo :=
-    { regTag  : TagSet
-    ; codeTag : TagSet
-    ; dataTag : TagSet 
-    ; pcTag   : TagSet
-    }.
-
-  Definition defTagInfo :=
-    {| regTag  := nil
-     ; codeTag := [Tinstr]
-     ; dataTag := nil                    
-     ; pcTag   := [Tpc 0]
-    |}.
-
-  Record PtrInfo := { pID     : Register
+  Record PtrInfo := { pID     : RegName
                     ; pVal    : Z
                     ; pMinImm : Z
                     ; pMaxImm : Z
-                    ; pTag : TagSet
                     }.
 
+  Definition showRegName (r:RegName) :=
+    match r with
+    | addr_reg.PC => "PC"
+    | R n _ => ("r" ++ show n)%string
+    end.
+
+  Instance ShowRegName : Show RegName :=
+    {| show r := showRegName r |}.
+  
   Instance ShowPtrInfo : Show PtrInfo :=
     {| show p :=
          "{| " ++ "pID: " ++ show (pID p) ++ " ; "
                ++ "pVal: " ++ show (pVal p) ++ " ; "
                ++ "pMinImm: " ++ show (pMinImm p) ++ " ; "
                ++ "pMaxImm: " ++ show (pMaxImm p) ++ " ; "
-               ++ "pTag: " ++ show (pTag p) ++ " |}"
     |}%string.
 
   Record ArithInfo := { aID : Register }.
@@ -84,11 +82,12 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSS.
     let len := Z.to_nat (Z.div (hi - lo) 4) in
     let fix aux start len :=
         match len with
-        | O => []
+        | 0%nat => []
         | S len' => start :: aux (start + 4) len'
         end in
     aux lo len.
-    
+
+  (*TODO: InstructionI -> instr *)
   Definition setInstrI addr (m : MachineState) (i : InstructionI) : MachineState :=
     let prog := [encode i] in
     withXAddrs
@@ -97,9 +96,6 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSS.
       (withMem
          (unchecked_store_byte_list addr
                                     (Z32s_to_bytes prog) (getMem m)) m).
-
-  Definition setInstrTagI addr (p : PolicyState) (t : TagSet) : PolicyState :=
-    p <| memtags := map.put (memtags p) addr t |>.
 
   (*
     -- dataP, codeP : Predicates over the tagset to establish potential invariants for code/data pointers.
@@ -232,6 +228,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSS.
     bindGen (choose (0, Z.div n 4))
             (fun n' => ret (Z.mul 4 n')).
 
+  (* TODO: RegName generator *)
   Definition genTargetReg (m : MachineState) : G Register :=
     choose (minReg, maxReg).
 
@@ -245,6 +242,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSS.
     (TagSet -> Bool) -> (TagSet -> Bool) ->
     (Instr_I -> Gen TagSet) -> Gen (Instr_I, TagSet)
    *)
+  (* TODO: InstructionI -> instr *)
   Definition genInstr (i : LayoutInfo) (t : TagInfo)
              (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
              (dataP codeP : TagSet -> bool) (f : FunID)
@@ -336,6 +334,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSS.
   Definition headerHead offset f :
     list (InstructionI * TagSet * FunID * CodeAnnotation) := [(Jal ra offset , [Tinstr; Tcall], f    , call)].
 
+  (* TODO: Cheri specific header sequence *)
   Definition headerSeq offset f nextF :
     list (InstructionI * TagSet * FunID * CodeAnnotation) :=
     headerHead offset f ++

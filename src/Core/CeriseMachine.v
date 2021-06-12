@@ -1,4 +1,4 @@
-From StackSafety Require Import MachineModule.
+From StackSafety Require Import MachineModule PolicyModule.
 From iris.proofmode Require Import tactics.
 
 Require Import ZArith. Open Scope Z.
@@ -6,6 +6,14 @@ Require Import cap_machine.machine_parameters.
 Require Import cap_machine.machine_base.
 Require Import cap_machine.cap_lang.
 Require Import cap_machine.addr_reg. Open Scope Addr_scope.
+Require Import coqutil.Map.Z_keyed_SortedListMap.
+Require Import coqutil.Map.Interface.
+Require coqutil.Map.SortedList.
+
+From RecordUpdate Require Import RecordSet.
+Import RecordSetNotations.
+
+From QuickChick Require Import QuickChick.
 
 Module Type Params.
   Parameter decodeInstr : Z → instr.
@@ -79,15 +87,16 @@ Module AwkwardParams : Params.
 End AwkwardParams.
 
 Module Cerise (P:Params) <: Machine.
+  Export P.
 
-  (*  Axiom exception : forall {A}, string -> A.
-      Extract Constant exception =>
-      "(fun l ->
-          let s = Bytes.create (List.length l) in
-          let rec copy i = function
-          | [] -> s
-          | c :: l -> Bytes.set s i c; copy (i+1) l
-          in failwith (""Exception: "" ^ Bytes.to_string (copy 0 l)))". *)
+  Axiom exception : forall {A}, string -> A.
+  Extract Constant exception =>
+  "(fun l ->
+      let s = Bytes.create (List.length l) in
+      let rec copy i = function
+      | [] -> s
+      | c :: l -> Bytes.set s i c; copy (i+1) l
+      in failwith (""Exception: "" ^ Bytes.to_string (copy 0 l)))".
 
 
   Definition Word : Type := machine_base.Word.
@@ -100,7 +109,7 @@ Module Cerise (P:Params) <: Machine.
     | inr (_,_,_,a) => Some a
     end.
       
-  Definition vtow (v:Value) := v.
+  Definition vtow (v:Value) : Word := v.
   
   Definition wlt (w1 w2:Word) : bool :=
     match w1,w2 with
@@ -246,10 +255,7 @@ Module Cerise (P:Params) <: Machine.
              | inr (_, _, _, a) => a
              end in
     let i := decodeInstrW (mem !m! a) in
-    match exec i (rs, mem) with
-    | (Executable, m') => (m',Tau)
-    | _ => (m,Tau)
-    end.
+    (snd (exec i (rs, mem)),Tau).
 
   Definition FunID : Type := nat.
   Definition StackID : Type := nat.
@@ -295,3 +301,49 @@ Module Cerise (P:Params) <: Machine.
 End Cerise.
 
 Module DefCerise := Cerise AwkwardParams.
+
+Module CerisePolicy <: Policy DefCerise.
+  Import DefCerise.
+  
+  Definition PolicyState := unit.
+  
+  (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
+  Definition MPState : Type := MachineState * PolicyState.
+  Definition ms (mp : MPState) := fst mp.
+  Definition ps (mp : MPState) := snd mp.
+
+  Definition pstep (mp : MPState) : option PolicyState :=
+    let '(rs,mem) := fst mp in
+    let pc := rs !r! addr_reg.PC in
+    let a := match pc with
+             | inl _ => top (* dummy *)
+             | inr (_, _, _, a) => a
+             end in
+    let i := decodeInstrW (mem !m! a) in
+    match exec i (rs, mem) with
+    | (Failed, _) => None
+    | _ => Some tt
+    end.
+
+  Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+    let '(rs,mem) := fst mp in
+    let pc := rs !r! addr_reg.PC in
+    let a := match pc with
+             | inl _ => top (* dummy *)
+             | inr (_, _, _, a) => a
+             end in
+    let i := decodeInstrW (mem !m! a) in
+    match exec i (rs, mem) with
+    | (Failed, _) => None
+    | (_, m') => Some (m',tt,Tau)
+    end.
+
+  Axiom mpstepCompat :
+    forall m p o m' p',
+      mpstep (m,p) = Some (m',p',o) ->
+      step m = (m',o).
+
+
+  (* TODO: More interesting well-formedness condition *)
+  Definition WFInitMPState (mp:MPState) := True.
+End CerisePolicy.

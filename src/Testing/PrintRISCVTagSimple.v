@@ -91,7 +91,7 @@ Module PrintRISCVTagSimple : Printing RISCV TagPolicy DefaultLayout TSSRiscvDefa
     | nil, nil => nil
     | _, _ => exception ("combine_match: " ++ (show (l1,l2)))%string
     end.
-
+  
   Definition listify2 {A B} `{Show A} `{Show B}
              (m1 : Zkeyed_map A)
              (m2 : Zkeyed_map B) : list (Z * A * B) :=
