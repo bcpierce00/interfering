@@ -1,0 +1,159 @@
+> OOPSLA 2021 Paper #16 Reviews and Comments
+> ===========================================================================
+> Paper #16 Stack Safety is a Security Property
+> 
+> 
+> Review #16A
+> ===========================================================================
+> 
+> Overall merit
+> -------------
+> 3. Weak accept
+> 
+> Review confidence
+> -----------------
+> 3. High
+> 
+> Paper summary
+> -------------
+> The paper gives an elegant, careful, formal treatment on what it means to ensure stack safety -- that callers and callees do not read or write each other's stacks, at least not in a way that has an observable impact, and that functions never return to the wrong place.   This is formalized in a suitably abstract fashion with a range of more eager to more lazy definitions of correctness such that particular enforcement mechanisms can be analyzed for correctness.  Property testing validates a particular eager algorithm from the literature and reveals problems, then corrected, with a lazier algorithm.  Extensions toward allowing unobservable stack corruptions and supporting a simple form of coroutines are then developed.
+> 
+> Strengths and Weaknesses
+> ------------------------
+> I really enjoyed this paper and would highly recommend it to anyone working on low-level security mechanisms.  The exposition is clear, precise, well-motivated, and in many ways synthesizing many years of insights into what it really means to protect the call stack.  The examples are well-thought out, the definitions unimpeachable, and the clarity of thought impressive.  Throughout reading the paper, I anticipated giving a 'strong accept' rating.
+> 
+> What gives me pause is the relative lack of validation or even discussion of why there isn't more validation.  I don't know if the authors simply haven't had time yet, think it is unnecessary, or ran into challenges or complexities that remain unexplained.  I do consider significant the property-based testing that was done both to validate the simpler tagging approach and identify (obvious in hindsight, but that's not a criticism) problems with the lazier tagging.  But that still leaves:
+> 
+> * Any discussion on whether it is feasible/desirable/in-progress/etc. to prove enforcement mechanisms correct.  After all, the authors already have a fully formal definition and an implementation in Coq.  While this sort of work does not necessarily need a correctness proof in Coq -- I still lean slightly toward accept after all -- it seems quite strange not to discuss even the possibility of validation including the ability to pursue a correctness argument for an enforcement mechanism beyond property testing.
+> 
+> * The testing for the lazy tagging/clearing found mistakes but the "potential fix [is] itself a prime candidate for future testing" [line 868]
+> 
+> * Any validation for the lazier observability definition (this is listed as future work.)
+> 
+> * Any validation for the coroutine work.
+> 
+> So: I believe this paper represents an important, sound conceptual advance that can inform the research community, but I was disappointed by the gaps in evaluation -- these gaps are acknowledged but not discussed (do they matter? how might they be closed? ...).
+> 
+> Comments for author
+> -------------------
+> There is one topic beyond my evaluation above worth considering: callee-save registers.  I fear these may be fairly tricky to support in your set-up.  Upon function entry, callee-save registers hold data private to the caller that may be passed arbitrarily deeper into the call stack, then saved into arbitrary stack locations, but then must be restored before return.  Have you or the closely related prior work on enforcement mechanisms considered this complexity?  The invariants are clear enough informally, but the issue seems to add substantial difficulty to tracking that a function faithfully implements the calling convention.
+> 
+> As a minor question you don't need to answer, just take as low-level feedback: Do you /need/ to separate contexts (section 5.2) from policies, or is this just a matter of convenience since in practice various policies benefit from similar context information?
+> 
+> Another minor question: The difference between [nested] call-by-reference and passing address-of-local was interesting, but I'm not sure how much it makes sense to argue the latter is "beyond the scope of stack safety per se" [line 939] without arguing the same of the former.  Perhaps the argument can be made that address-of-local can be put in the heap while a by-reference parameter cannot and since you don't guarantee heap safety, you shouldn't try to do anything useful with address-of-local?
+> 
+> typos:
+> * line 189
+> * line 1020
+> 
+> Questions for authors’ response
+> ---------------------------------
+> See prior sections:
+> 
+> * Can you explain the gaps in validation/evaluation and how a revised paper can address them?
+> 
+> * Any thoughts on callee-save registers?
+> 
+> 
+> 
+> Review #16B
+> ===========================================================================
+> 
+> Overall merit
+> -------------
+> 2. Weak reject
+> 
+> Review confidence
+> -----------------
+> 2. Medium
+> 
+> Paper summary
+> -------------
+> Low-level attacks exploit the unprotected access to the stack in languages like C. By writing outside the current stack frame, attackers may manipulate sensitive data and alter the control flow of the program. The paper formalizes the notion of _stack safety_, which protects against this type of attacks. Stack safety consists of two parts: Stack confidentiality and integrity, which say that protected regions on the stack cannot be read and altered. The definitions of stack safety target a language semantics in form of an abstract machine. The paper evaluates the approach by implementing an existing stack-safety enforcement mechanism and uncovering potential stack-safety violations.
+> 
+> Strengths and Weaknesses
+> ------------------------
+> Strengths:
+> - The problem that this paper solves is relevant. Countless attacks that exploit unprotected stack access and protection methods against these attacks emphasize the relevance of this problem.
+> - I was convinced by the evaluation of this paper. Their approach uncovered potential stack-safety violations in an existing enforcement mechanism by Reossler and DeHon.
+> 
+> Weaknesses:
+> - I question the novelty of this work. In particular, it is unclear how this paper improves upon Skorstengaard et al (question 1).
+> - It is unclear how this approach generalizes to other languages (question 2).
+> - The presentation of the paper can be improved. In particular, section 2 and 3 are very abstract because of the lack of examples and the readability of definitions in section 5 and 6 can be improved (see detailed comments).
+> 
+> Because of the questionable novelty and a lacking presentation, I think this paper is not ready for publication yet.
+> 
+> Comments for author
+> -------------------
+> Detailed Comments
+> =====================
+> 
+> The following comments are organised in the order of reading the paper front to back. On first read, I had some misunderstandings that got cleared up later, however, they may indicate places where the paper can be improved.
+> 
+> ### Section 1
+> - L32-40: It is unclear how this paper improves over Skorstengaard et al. Why isn't their definition of stack safety not already good enough?
+> 
+> ### Section 2
+> - L124: You did not introduce the acronyms "ISA" and "RISC"
+> - I found it quite hard to understand section 2 because the text is very abstract. I would have appreciated a few examples, like those you provide in section 4.
+> - L148: Why do you need these policies?
+> - L154: In this paragraph you motivate why you need policies. I would have appreciated this motivation a paragraph earlier.
+> 
+> ### Section 3
+> - The text of section 3 is equally hard to understand as in section 2 because of the lack of examples.
+> 
+> ### Section 4
+> - L214: Remind the reader that the register `%sp` refers to the stack pointer.
+> - I like the example in figure 1. The figure would be easier to understand if you would write "unsealed" and "sealed" instead of "U" and "S".
+> - Figure 2: Why are there two stacks side by side?
+> 
+> ### Section 5
+> - L389: What are "w" and "a"?
+> - I find the terms "MPC-state" and "MP trace" confusing.
+> 
+> ### Section 6
+> - L499-509: There are so many different variable names that make it difficult to read the rules ("m", "cm", "dm", "rts", "tar", "ctx"). These variable names are explained somewhere in the text, but their explanation is scatter across multiple pages. Consider declaring these variables in a table in a central place.
+> - Definition 6.2: Explain what the definition means instead of just stating it mathematically. What is pi_m?
+> - Consider applying these rules and definitions to an example of section 4 and explain where stack integrity and confidentiality is violated.
+> 
+> ### Section 10
+> - The related work section seems a bit superficial since it only discusses 4 related works. Consider adding a discussion of the software and hardware protection techniques mentioned in the introduction.
+> 
+> Questions for authors’ response
+> ---------------------------------
+> Q1. How does this work improve upon Skorstengaard et al? Neither the introduction nor related work section give a satisfying answer to this.
+> 
+> Q2. In L117-121 you state certain assumptions about the language semantics. It is unclear to me if these assumptions restrict the languages to which your stack safety definition apply. For example, does a language with a heap allow you to break stack safety? What about a language with delimited continuations that manipulate the stack?
+> 
+> Q3. Why don't you assume well-bracketed control flow like Skorstengaard et al (L289-291)? What are the implications of that?
+> 
+> 
+> 
+> Review #16C
+> ===========================================================================
+> 
+> Overall merit
+> -------------
+> 1. Reject
+> 
+> Review confidence
+> -----------------
+> 2. Medium
+> 
+> Paper summary
+> -------------
+> The paper formalizes a definition of stack safety and presents extensions of it. The definition considers three properties: integrity, confidentiality, and well-bracketed control flow.
+> The authors also use these properties to validate the stack-safety “micro-policies” proposed by earlier work.
+> 
+> Strengths and Weaknesses
+> ------------------------
+> - It is a bit difficult to assess the merits of this work. Yes, the stack safety property is important for security, but what new results or new capabilities does the proposed definition bring in? If it is positioned as a security solution,  does it lead to more efficient defenses of control flow attacks? Does it prevent any new attacks that existing defenses fail? The paper does not talk about data flow across heap and stack, which is an important element for many real-world memory corruption attacks.
+> 
+> - The formalization seems intuitively correct, however there is no formal proof for its overall soundness properties and there is no real-world evaluation of its applications.
+> 
+> - The paper is titled "stack safety is a security property". I don't see why this is surprising, or what's the novelty here. Memory safety is almost always connected with security properties.
+> 
+> Comments for author
+> -------------------
+> I might have missed something important. Are there any applications of the proposed formalization?
