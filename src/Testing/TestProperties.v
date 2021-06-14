@@ -40,7 +40,7 @@ Import RecordSetNotations.
 Import ListNotations.
 Import RiscvMachine.
 
-Import TagPolicy.
+Import TagPolicyLazyFixed.
 
 Module TestPropsRISCVSimple
        (P : Policy RISCV)
@@ -64,7 +64,7 @@ Module TestPropsRISCVSimple
   
   Definition calcTraceDiff cm (m m' : MachineState) (p p' : PolicyState) (c c' : CtxState) (i : LayoutInfo) (o : Observation) : unit -> string :=
     let compsToTrace :=
-        List.filter (fun k =>
+        List.filter (fun k => 
                        (orb (negb (Z.eqb (proj m k) (proj m' k)))
                             (interestingComponent c c' k)))
                                   (*(andb (TagSet_eqb (pproj p k) (pproj p k))*)
@@ -75,6 +75,24 @@ Module TestPropsRISCVSimple
                         concatStr (List.map (fun k => printComponent k m p cm c i ++ nl) compsToTrace) ++ 
                         "to: " ++ nl ++
                         concatStr (List.map (fun k => printComponent k m' p' cm c' i ++ nl) compsToTrace) ++ nl)%string).
+
+  
+  Fixpoint walk (ks : list Component) (cm : CodeMap_Impl) (m : MachineState) (p : PolicyState) (c : CtxState) (m' : MachineState) (p' : PolicyState) (c' : CtxState) (traceOut : list (unit -> string))
+           (cont : unit -> Checker) : Checker :=
+    match ks with
+    | [] => cont tt
+    | k :: ks' =>
+      if integrityComponent c k then
+        if Z.eqb (proj m k) (proj m' k)
+        then walk ks' cm m p c m' p' c' traceOut cont
+        else whenFail ("Initial Machine:" ++ nl ++
+                                          concatStr (List.rev (List.map (fun f => f tt) traceOut)) ++
+                                          "Integrity failure at component: " ++ show k ++ nl ++
+                                          "Component values: " ++ show (proj m k) ++ " vs " ++ show (proj m' k) ++ nl ++
+                                          "Final state: " ++ nl ++
+                                          printMachine m p cm c)%string false
+      else walk ks' cm m p c m' p' c' traceOut cont
+    end.
   
   Definition prop_SimpleStackIntegrityStep fuel i m p cm ctx
     : Checker.Checker :=
@@ -98,10 +116,10 @@ Module TestPropsRISCVSimple
         end in
     aux fuel m p ctx ([fun tt => printMachine m p cm ctx]).
 
-Definition prop_integrity :=
-  let sm := defStackMap defLayoutInfo in
-  forAll genMach (fun '(m,p,cm) =>
-                    (prop_SimpleStackIntegrityStep defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
+  Definition prop_integrity :=
+    let sm := defStackMap defLayoutInfo in
+    forAll genMach (fun '(m,p,cm) =>
+                      (prop_SimpleStackIntegrityStep defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
   
   Fixpoint prop_lockstepConfidentiality
          (fuel :nat)
@@ -209,7 +227,7 @@ Definition prop_integrity :=
 
 End TestPropsRISCVSimple.
 
-Module TestRISCVTagSimple := TestPropsRISCVSimple TagPolicy DefaultLayout
+Module TestRISCVTagSimple := TestPropsRISCVSimple TagPolicyLazyFixed DefaultLayout
                                                   TSS GenRISCVTagSimple
                                                   PrintRISCVTagSimple.
 
@@ -217,4 +235,3 @@ Import TestRISCVTagSimple.
 
 Extract Constant defNumTests => "500".
 QuickCheck prop_integrity.
-QuickCheck prop_confidentiality.

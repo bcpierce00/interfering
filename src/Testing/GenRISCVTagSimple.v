@@ -24,10 +24,10 @@ Import RecordSetNotations.
 Import ListNotations.
 Import RiscvMachine.
 
-Import TagPolicy.
+Import TagPolicyLazyFixed.
 
-Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSS.
-  Module MPC := TestMPC RISCV TagPolicy DefaultLayout TSS.
+Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
+  Module MPC := TestMPC RISCV TagPolicyLazyFixed DefaultLayout TSS.
   Import MPC.
 
   Definition defFuel := 42%nat.
@@ -341,8 +341,8 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSS.
     headerHead offset f ++
                [ (Addi sp sp 12 , [Tinstr; Th1]  , nextF, normal)
                ; (Sw sp ra 0    , [Tinstr; Th2]  , nextF, normal)
-               ; (Sw sp 8 (-8) , [Tinstr; Th3]  , nextF, normal)
-               ; (Sw sp 9 (-4) , [Tinstr; Th4]  , nextF, normal)        
+(*               ; (Sw sp 8 (-8) , [Tinstr; Th3]  , nextF, normal)
+               ; (Sw sp 9 (-4) , [Tinstr; Th4]  , nextF, normal)*)
                ].
   
   (* Based on Rob's 
@@ -653,7 +653,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicy DefaultLayout TSS.
               500
               ([Tstack 0]))
              (*map.empty (* map.put map.empty 500 (cons Tsp nil) *)*)
-    |}. 
+    |}.
   
   Definition genMach :=
   let codeP := fun tt => true in

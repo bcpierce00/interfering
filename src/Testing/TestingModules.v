@@ -21,6 +21,7 @@ Module Type TestCtx (M:Machine) (LI:LayoutInfo M).
   Parameter CtxStateUpdate : MachineState -> CodeMap_Impl -> CtxState -> CtxState.
 
   Parameter interestingComponent : CtxState -> CtxState -> Component -> bool.
+  Parameter integrityComponent : CtxState -> Component -> bool.
   Parameter depthOf : CtxState -> nat.
 End TestCtx.
 
@@ -63,12 +64,8 @@ Module Type Printing (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestC
 
   Parameter printMachine : MachineState -> PolicyState -> CodeMap_Impl -> CtxState -> string.
 
-  Parameter walk : list Component -> CodeMap_Impl -> MachineState -> PolicyState -> CtxState ->
-                   MachineState -> PolicyState -> CtxState -> list (ObsType -> string) ->
-                   (ObsType -> Checker) -> Checker.
-
   Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl):=
-    {| show := fun '(m,p,cm) => "" (*printMachine m p cm (initC (defstackmap defLayoutInfo) m) *) |}.
+    {| show := fun '(m,p,cm) => printMachine m p cm (initCtx defLayoutInfo) |}.
 End Printing.
 
 Module Type TestProps (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestCtx M LI).

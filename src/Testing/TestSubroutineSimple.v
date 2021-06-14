@@ -53,7 +53,14 @@ Module TestSimpleDomain (M : Machine) (LI : LayoutInfo M) <: TestCtx M LI.
   Definition CtxState : Type := DomainMap * ReturnTargets.
 
   Definition interestingComponent (c c' : CtxState) (k : Component) :=
-    negb (SD_eqb (fst c k) (fst c' k)). 
+    negb (SD_eqb (fst c k) (fst c' k)).
+
+  Definition integrityComponent (c : CtxState) (k : Component) :=
+    match fst c k with
+    | Sealed _ => true
+    | _ => false
+    end.
+
   Definition depthOf (c : CtxState) := length (snd c).
   
   Definition initCtx (li:LayoutInfo) : CtxState :=

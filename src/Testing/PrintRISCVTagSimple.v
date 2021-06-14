@@ -14,10 +14,10 @@ Require Import coqutil.Map.Interface.
 Require Import Coq.Lists.List. Import ListNotations.
 
 Import RiscvMachine.
-Import TagPolicy.
+Import TagPolicyLazyFixed.
 
-Module PrintRISCVTagSimple : Printing RISCV TagPolicy DefaultLayout TSS.
-  Module MPC := TestMPC RISCV TagPolicy DefaultLayout TSS.
+Module PrintRISCVTagSimple : Printing RISCV TagPolicyLazyFixed DefaultLayout TSS.
+  Module MPC := TestMPC RISCV TagPolicyLazyFixed DefaultLayout TSS.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".
@@ -156,26 +156,7 @@ Module PrintRISCVTagSimple : Printing RISCV TagPolicy DefaultLayout TSS.
   Instance ShowValue : Show Value :=
     {| show v := show v |}.
 
-  Fixpoint walk (ks : list Component) cm m p (c : CtxState) m' (p' : PolicyState) (c' : CtxState) (traceOut : list (unit -> string))
-           (cont : unit -> Checker) : Checker :=
-    match ks with
-    | [] => cont tt
-    | k :: ks' =>
-      match fst c k with
-      | Sealed _ =>
-        if Z.eqb (proj m k) (proj m' k)
-        then walk ks' cm m p c m' p' c' traceOut cont
-        else whenFail ("Initial Machine:" ++ nl ++
-                                          concatStr (List.rev (List.map (fun f => f tt) traceOut)) ++
-                                          "Integrity failure at component: " ++ show k ++ nl ++
-                                          "Component values: " ++ show (proj m k) ++ " vs " ++ show (proj m' k) ++ nl ++
-                                          "Final state: " ++ nl ++
-                                          printMachine m p cm c)%string false
-      | _ => walk ks' cm m p c m' p' c' traceOut cont
-      end
-    end.
-
   Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl):=
-    {| show := fun '(m,p,cm) => "" (*printMachine m p cm (initC (defstackmap defLayoutInfo) m) *) |}.
+    {| show := fun '(m,p,cm) => printMachine m p cm (initCtx defLayoutInfo) |}.
 
 End PrintRISCVTagSimple.
