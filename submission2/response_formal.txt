@@ -24,17 +24,16 @@
 
 * Reviewer A *
 
-We propose above to add further discussion of validation. Here is a rough
+We will extend the paper with a more detailed discussion of our roadmap for verification and
+testing, and the issues that we expect to arise. Here is a rough
 outline of how it would cover your concerns. 
 
 > ...discussion on whether it is feasible/desirable/in-progress/etc. to prove enforcement mechanisms correct.
 
 These properties would absolutely be amenable to a correctness proof. Such a proof would be a
-lot of work in a setting with a full ISA, but there is not reason it should be impossible. The
-primary challenge we would predict in such an effort, beyond raw effort, is in determining for a given
-enforcement mechanism what invariants it needs to maintain in order to work correctly, and proving that
-it maintains them. This is very feasible for a proof of an individual, well-understood enforcement
-mechanism, but not for our goal of evaluating several such mechanisms.
+lot of work in a setting with a full ISA, but there is not reason it should be impossible.
+Testing simply makes more sense for our goal of evaluating multiple enforcement mechanisms
+to uncover possible bugs -- it is lower effort, but if bugs are found, high reward.
 
 > * The testing for the lazy tagging/clearing found mistakes but the "potential fix [is] itself a prime candidate for future testing" [line 868]
 > 
@@ -42,16 +41,16 @@ mechanism, but not for our goal of evaluating several such mechanisms.
 >
 > * Any validation for the coroutine work.
 
-Here we should discuss our roadmap for testing in more detail. At present we are working to implement
-testing of observable properties alongside the fixed version of the lazy tagging/clearing micro-policy.
-Observational integrity is implemented, but confidentiality is not -- since the lazy policy enforced
-normal, stepwise confidentiality this is sufficient to test it. But we did not have this ready before
-the deadline. Note that this has been implemented since submission, so we will need to take care not
+At present we are working to implement
+testing of observable properties, and to apply this to the putatively fixed version of the lazy tagging/clearing micro-policy.
+Observational integrity testing is implemented, but observational confidentiality testing is not -- since the lazy policy enforces
+normal, stepwise confidentiality this is sufficient to test it. [APT: Do we have the results of these tests?] But we did not have this ready before
+the deadline. We will therefore take care not
 to describe it as a contribution.
 
 Our other immediate goal is to implement testing of a secondary architecture. We will evaluate a Cheri
 implementation of stack safety to demonstrate that our properties are not strictly tied to tag-based
-enforcement.
+enforcement. [APT: Current status of this?]
 
 We consider validation of the passing system to be a secondary priority and coroutines tertiary.
 The passing system has existing enforcement mechanisms and serves an important role in common
@@ -67,10 +66,11 @@ tag-based) to validate.
 > tracking that a function faithfully implements the calling convention.
 
 Callee-save registers are plausible in our setup, but would require tweaks to the domain system.
+[APT: for my info, what tweaks?] [SNA: I should be clearer -- it needs its own initCtx and updateCtx functions.]
 They actually provide another use-case for observational properties! Focusing on integrity:
 callee-save registers may be overwritten (violating stepwise integrity) but should always be
 restored before a return. This behavior corresponds to marking such registers as permanently sealed
-in the context of observational integrity -- recall that observational integrity compares sealed
+while enforcing observational integrity -- recall that observational integrity compares sealed
 components at the start and end of a callee, so the interim changes are not violations.
 (Note as well that the formalization permits domains such as "sealed" to apply to registers as well
 as to addresses, we just haven't taken advantage of this ability.)
@@ -78,10 +78,16 @@ as to addresses, we just haven't taken advantage of this ability.)
 Confidentiality can be applied similarly. We would permanently treat the stack pointer and
 argument registers as "passed", and so exempt from confidentiality. Then, when a callee-save
 register is copied to the stack and later restored before return, the register value does
-not represent a visible difference in state between the entry and the return.
+not represent a visible difference in state between the entry and the return. [APT: I didn't
+understand this para]
 
 We had briefly considered this complexity and chosen to avoid it, because it is an extra layer
 of detail to apply domains to registers.
+
+[RB: It is worth pointing out that the prior work of Skorstengaard et al. also
+relies on a calling convention which clears all non-argument registers before
+calls and all non-return registers before returns.]
+
 
 > Another minor question: The difference between [nested] call-by-reference and passing
 > address-of-local was interesting, but I'm not sure how much it makes sense to argue the
@@ -108,14 +114,14 @@ be much more interesting.
 > Q1. How does this work improve upon Skorstengaard et al? Neither the introduction nor related work section give a satisfying answer to this.^M
 
 We improve upon Skorstengaard et. al. in the following ways.
-1. We capture the dynamic nesting of security concerns implicit in stack-based reasoning
+1. We capture the dynamic nesting of security concerns implicit in stack-based reasoning [APT: what does this mean?]
 2. We therefore do not assume a static division of trusted and untrusted code
 
 Taken together, these distinctions give the practical advantage that we can reason about stack safety
 in contexts where a buggy function is compromised and used to attack other instances of the same function.
 
 3. We clearly state the property in terms of a machine's behavior, without appealing to the reader's
-understanding of a specific abstract machine
+understanding of a specific abstract machine [APT: I don't understand this distinction.]
 4. Skorstengaard's approach to proving safety via fully-abstract overlay semantics relies on the abstract
 machine being architecturally similar to the concrete one (beyond the specific call and return semantics
 that distinguish them). Therefore it is less portable: each architecture it applies to wants its own
@@ -128,9 +134,9 @@ safety is expressible as a formal security property.
 > Q2. In L117-121 you state certain assumptions about the language semantics. It is unclear to me if these assumptions restrict the languages to which your stack safety definition apply. For example, does a language with a heap allow you to break stack safety? What about a language with delimited continuations that manipulate the stack?^M
 
 The section should be broken into assumptions that are necessarily for our properties, and assumptions
-that we explicitly do not make. Our stack safety model applies regardless of how a language uses non-stack,
+that we explicitly do not make. [APT: ??] Our stack safety model applies regardless of how a language uses non-stack,
 non-code memory, including to languages with a heap. They apply to any layout of memory as long as it is
-known in advance.
+known statically.
 
 Delimited continuations are not supported by our base model, so a language that has them would violate
 stack safety. We extend the base model with argument passing on the stack to demonstrate how it can
@@ -146,7 +152,7 @@ as well as arbitrary jumps, which should not.
 
 In Skorstengaard, an untrusted adversary can exhibit such behavior, but only trusted code can
 expect its data to be protected. We extend this protection to all callers, even those that
-exhibit unusual control flow.
+exhibit unusual control flow. [APT: Don't think I get this.]
 
 * Reviewer C *
 
