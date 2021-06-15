@@ -1,4 +1,4 @@
-From StackSafety Require Import MachineModule PolicyModule TestingModules MachineImpl.
+From StackSafety Require Import MachineModule PolicyModule TestingModules RISCVObs.
 
 Import ZArith. Open Scope Z.
 Require Import coqutil.Map.Z_keyed_SortedListMap.

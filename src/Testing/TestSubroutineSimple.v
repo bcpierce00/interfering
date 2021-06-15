@@ -1,4 +1,4 @@
-From StackSafety Require Import MachineModule TestingModules DefaultLayout MachineImpl.
+From StackSafety Require Import MachineModule TestingModules DefaultLayout RISCVObs.
 
 Require Import String.
 Require Import List.

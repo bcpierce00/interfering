@@ -1,6 +1,6 @@
 Require Coq.Strings.String. Open Scope string_scope.
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     MachineImpl DefaultLayout TestSubroutineSimple.
+     RISCVObs DefaultLayout TestSubroutineSimple.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
