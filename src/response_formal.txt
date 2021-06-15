@@ -1,0 +1,161 @@
+** Overview **
+
+
+
+** Changes **
+
+1. Give a more thorough discussion of validation. Discuss the feasibility of proofs
+   and of randomized testing of more complex properties. Detail our roadmap for
+   further validation of different versions of the property.
+
+2. Give an explicit, direct comparison to the work of Skorstengaard et. al. Currently
+   we discuss them briefly in our related work section, but our novelty has not been
+   obvious, so we can be more thorough in explaining the differences.
+
+3. There are a number of improvements we can make to the presentation. We need to
+   gradually introduce the examples and associated intuition (including our visual
+   metaphors) as early as possible, starting in the introduction.
+
+4. Draw a clearer distinction between language features that are compatible with our
+   model but not assumed, those that are required for the model to function,
+   and those that are incompatible.
+
+** Detailed Comments **
+
+* Reviewer A *
+
+We propose above to add further discussion of validation. Here is a rough
+outline of how it would cover your concerns. 
+
+> ...discussion on whether it is feasible/desirable/in-progress/etc. to prove enforcement mechanisms correct.
+
+These properties would absolutely be amenable to a correctness proof. Such a proof would be a
+lot of work in a setting with a full ISA, but there is not reason it should be impossible. The
+primary challenge we would predict in such an effort, beyond raw effort, is in determining for a given
+enforcement mechanism what invariants it needs to maintain in order to work correctly, and proving that
+it maintains them. This is very feasible for a proof of an individual, well-understood enforcement
+mechanism, but not for our goal of evaluating several such mechanisms.
+
+> * The testing for the lazy tagging/clearing found mistakes but the "potential fix [is] itself a prime candidate for future testing" [line 868]
+> 
+> * Any validation for the lazier observability definition (this is listed as future work.)^M
+>
+> * Any validation for the coroutine work.
+
+Here we should discuss our roadmap for testing in more detail. At present we are working to implement
+testing of observable properties alongside the fixed version of the lazy tagging/clearing micro-policy.
+Observational integrity is implemented, but confidentiality is not -- since the lazy policy enforced
+normal, stepwise confidentiality this is sufficient to test it. But we did not have this ready before
+the deadline. Note that this has been implemented since submission, so we will need to take care not
+to describe it as a contribution.
+
+Our other immediate goal is to implement testing of a secondary architecture. We will evaluate a Cheri
+implementation of stack safety to demonstrate that our properties are not strictly tied to tag-based
+enforcement.
+
+We consider validation of the passing system to be a secondary priority and coroutines tertiary.
+The passing system has existing enforcement mechanisms and serves an important role in common
+stack use-cases. Coroutines will require the development of an enforcement mechanism (likely
+tag-based) to validate.
+
+> There is one topic beyond my evaluation above worth considering: callee-save registers.
+> I fear these may be fairly tricky to support in your set-up.  Upon function entry, callee-save
+> registers hold data private to the caller that may be passed arbitrarily deeper into the call stack,
+> then saved into arbitrary stack locations, but then must be restored before return.
+> Have you or the closely related prior work on enforcement mechanisms considered this complexity?
+> The invariants are clear enough informally, but the issue seems to add substantial difficulty to
+> tracking that a function faithfully implements the calling convention.
+
+Callee-save registers are plausible in our setup, but would require tweaks to the domain system.
+They actually provide another use-case for observational properties! Focusing on integrity:
+callee-save registers may be overwritten (violating stepwise integrity) but should always be
+restored before a return. This behavior corresponds to marking such registers as permanently sealed
+in the context of observational integrity -- recall that observational integrity compares sealed
+components at the start and end of a callee, so the interim changes are not violations.
+(Note as well that the formalization permits domains such as "sealed" to apply to registers as well
+as to addresses, we just haven't taken advantage of this ability.)
+
+Confidentiality can be applied similarly. We would permanently treat the stack pointer and
+argument registers as "passed", and so exempt from confidentiality. Then, when a callee-save
+register is copied to the stack and later restored before return, the register value does
+not represent a visible difference in state between the entry and the return.
+
+We had briefly considered this complexity and chosen to avoid it, because it is an extra layer
+of detail to apply domains to registers.
+
+> Another minor question: The difference between [nested] call-by-reference and passing
+> address-of-local was interesting, but I'm not sure how much it makes sense to argue the
+> latter is "beyond the scope of stack safety per se" [line 939] without arguing the same
+> of the former.  Perhaps the argument can be made that address-of-local can be put in the
+> heap while a by-reference parameter cannot and since you don't guarantee heap safety,
+> you shouldn't try to do anything useful with address-of-local?
+
+Yes, this is the sort of issue that makes address-of-local hard to handle without heap safety.
+More broadly the issue is one of assuming intent on the part of the code. We tend to
+assume that an address-of-local should be treated similarly to the address of a heap object,
+but with a different lifetime. For instance, if a heap model treats heap pointers like capabilities,
+we would treat stack pointers the same. In heap model that permits pointer forging (restricted to
+within compartments, say,) we would expect to be able to forge pointers to address-taken locals
+in the same circumstances. By contrast, the expected behavior of stack allocated arguments is
+closely tied to that of the stack itself.
+
+In the longer term we would like to extend our model with a heap, and then the interplay between
+heap-derived and stack-derived pointers (with similar behaviors but different lifespans) will
+be much more interesting.
+
+* Reviewer B *
+
+> Q1. How does this work improve upon Skorstengaard et al? Neither the introduction nor related work section give a satisfying answer to this.^M
+
+We improve upon Skorstengaard et. al. in the following ways.
+1. We capture the dynamic nesting of security concerns implicit in stack-based reasoning
+2. We therefore do not assume a static division of trusted and untrusted code
+
+Taken together, these distinctions give the practical advantage that we can reason about stack safety
+in contexts where a buggy function is compromised and used to attack other instances of the same function.
+
+3. We clearly state the property in terms of a machine's behavior, without appealing to the reader's
+understanding of a specific abstract machine
+4. Skorstengaard's approach to proving safety via fully-abstract overlay semantics relies on the abstract
+machine being architecturally similar to the concrete one (beyond the specific call and return semantics
+that distinguish them). Therefore it is less portable: each architecture it applies to wants its own
+abstract machine. Our properties apply directly to a wide range of architectures.
+
+We also differ from Skorstengaard et. al. in our focus. We use the language of formal security properties
+to apply the established intuitions and formal techniques of non-interference. This demonstrates that stack
+safety is expressible as a formal security property.
+
+> Q2. In L117-121 you state certain assumptions about the language semantics. It is unclear to me if these assumptions restrict the languages to which your stack safety definition apply. For example, does a language with a heap allow you to break stack safety? What about a language with delimited continuations that manipulate the stack?^M
+
+The section should be broken into assumptions that are necessarily for our properties, and assumptions
+that we explicitly do not make. Our stack safety model applies regardless of how a language uses non-stack,
+non-code memory, including to languages with a heap. They apply to any layout of memory as long as it is
+known in advance.
+
+Delimited continuations are not supported by our base model, so a language that has them would violate
+stack safety. We extend the base model with argument passing on the stack to demonstrate how it can
+accommodate a programming language feature that shares stack data between callers and callees. A
+similar extension to delimited continuations would be more complex.
+
+> Q3. Why don't you assume well-bracketed control flow like Skorstengaard et al (L289-291)? What are the implications of that?
+
+We want our properties to be applicable even to low-level code that may not keep function
+footprints isolated from one another. Consider a program that mixes C code with hand-written
+assembly -- the assembly may make calls and returns, which should be protected by stack safety,
+as well as arbitrary jumps, which should not.
+
+In Skorstengaard, an untrusted adversary can exhibit such behavior, but only trusted code can
+expect its data to be protected. We extend this protection to all callers, even those that
+exhibit unusual control flow.
+
+* Reviewer C *
+
+> I might have missed something important. Are there any applications of the proposed formalization?
+
+A formal definition of a type of security is valuable in its own right. The main application
+is identifying bugs in real world enforcement mechanisms -- without such a definition, we
+can't necessarily agree that a given behavior is a bug. It gives us the ability to reason
+clearly about what is gained from applying a given enforcement mechanism to a system. Since
+many enforcement mechanisms are quite costly in speed, dollars, and silicon, it is important
+to understand precisely what they buy us.
+
