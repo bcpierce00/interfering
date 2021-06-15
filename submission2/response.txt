@@ -25,23 +25,72 @@
 > What gives me pause is the relative lack of validation or even discussion of why there isn't more validation.  I don't know if the authors simply haven't had time yet, think it is unnecessary, or ran into challenges or complexities that remain unexplained.  I do consider significant the property-based testing that was done both to validate the simpler tagging approach and identify (obvious in hindsight, but that's not a criticism) problems with the lazier tagging.  But that still leaves:
 > 
 > * Any discussion on whether it is feasible/desirable/in-progress/etc. to prove enforcement mechanisms correct.  After all, the authors already have a fully formal definition and an implementation in Coq.  While this sort of work does not necessarily need a correctness proof in Coq -- I still lean slightly toward accept after all -- it seems quite strange not to discuss even the possibility of validation including the ability to pursue a correctness argument for an enforcement mechanism beyond property testing.
+
+These properties would absolutely be amenable to a correctness proof. Such a proof would be a
+lot of work in a setting with a full ISA, but there is not reason it should be impossible. The
+primary challenge we would predict in such an effort, beyond raw effort, is in determining for a given
+enforcement mechanism what invariants it needs to maintain in order to work correctly, and proving that
+it maintains them. This is very feasible for a proof of an individual, well-understood enforcement
+mechanism, but not for our goal of evaluating several such mechanisms.
+
 > 
 > * The testing for the lazy tagging/clearing found mistakes but the "potential fix [is] itself a prime candidate for future testing" [line 868]
 > 
 > * Any validation for the lazier observability definition (this is listed as future work.)
 > 
 > * Any validation for the coroutine work.
+
+Here we should discuss our roadmap for testing in more detail. At present we are working to implement
+testing of observable properties alongside the fixed version of the lazy tagging/clearing micro-policy.
+Observational integrity is implemented, but confidentiality is not -- since the lazy policy enforced
+normal, stepwise confidentiality this is sufficient to test it. But we did not have this ready before
+the deadline.
+
+Our other major goal is to implement testing of a secondary architecture. We will evaluate a Cheri
+implementation of stack safety to demonstrate that our properties are not strictly tied to tag-based
+enforcement.
+
+We consider validation of the passing system to be a secondary priority and coroutines tertiary.
+The passing system has existing enforcement mechanisms and serves an important role in common
+stack use-cases. Coroutines will require the development of an enforcement mechanism (likely
+tag-based) to validate.
+
 > 
 > So: I believe this paper represents an important, sound conceptual advance that can inform the research community, but I was disappointed by the gaps in evaluation -- these gaps are acknowledged but not discussed (do they matter? how might they be closed? ...).
 > 
 > Comments for author
 > -------------------
 > There is one topic beyond my evaluation above worth considering: callee-save registers.  I fear these may be fairly tricky to support in your set-up.  Upon function entry, callee-save registers hold data private to the caller that may be passed arbitrarily deeper into the call stack, then saved into arbitrary stack locations, but then must be restored before return.  Have you or the closely related prior work on enforcement mechanisms considered this complexity?  The invariants are clear enough informally, but the issue seems to add substantial difficulty to tracking that a function faithfully implements the calling convention.
-> 
+
+Callee-save registers are plausible in our setup, but would require tweaks to the domain system.
+They actually provide another use-case for observational properties! If we focus on integrity
+the reason becomes clear. Non-argument registers will naturally be overwritten (violating
+stepwise integrity) but should always be restored before a return. This behavior corresponds
+to marking such registers as permanently sealed (never unsealing them) in the context of
+observational integrity. (Note that while our specific properties leave registers unsealed,
+the formalization permits the same set of domains to apply to them as to addresses.
+
+Confidentiality can be applied similarly. We would permanently treat the stack pointer and
+argument registers as passed, and so exempt from confidentiality. Then, when a non-argument
+register is copied to the stack and later restored before return, the register value does
+not represent a visible difference in state between the entry and the return.
+
+We had briefly considered this complexity and chosen to avoid it, because it is an extra layer
+of detail to apply domains to registers.
+
 > As a minor question you don't need to answer, just take as low-level feedback: Do you /need/ to separate contexts (section 5.2) from policies, or is this just a matter of convenience since in practice various policies benefit from similar context information?
-> 
+
+The distinction is moral: policies are part of the system being evaluated, while contexts
+inform the property.
+
 > Another minor question: The difference between [nested] call-by-reference and passing address-of-local was interesting, but I'm not sure how much it makes sense to argue the latter is "beyond the scope of stack safety per se" [line 939] without arguing the same of the former.  Perhaps the argument can be made that address-of-local can be put in the heap while a by-reference parameter cannot and since you don't guarantee heap safety, you shouldn't try to do anything useful with address-of-local?
-> 
+
+Yes, this is the sort of issue that makes address-of-local hard to handle without heap safety.
+The restrictions that we might place on such a pointer are typically restrictions that also
+apply to heap pointers, such as treating them like capabilities. In the longer term we would
+like to extend our model with a heap, and then the interplay between heap-derived and stack-derived
+pointers (with similar behaviors but different lifespans) will be much more interesting.
+
 > typos:
 > * line 189
 > * line 1020
@@ -53,8 +102,10 @@
 > * Can you explain the gaps in validation/evaluation and how a revised paper can address them?
 > 
 > * Any thoughts on callee-save registers?
-> 
-> 
+
+
+
+
 > 
 > Review #16B
 > ===========================================================================
@@ -123,13 +174,48 @@
 > Questions for authors’ response
 > ---------------------------------
 > Q1. How does this work improve upon Skorstengaard et al? Neither the introduction nor related work section give a satisfying answer to this.
-> 
+
+We improve upon Skorstengaard et. al. in the following ways.
+1. We capture the dynamic nesting of security concerns implicit in stack-based reasoning
+2. We therefore do not assume a static division of trusted and untrusted code
+
+Taken together, these distinctions give the practical advantage that we can reason about stack safety
+in contexts where a buggy function is compromised and used to attack other instances of the same function.
+
+3. We clearly state the property in terms of a machine's behavior, without appealing to the reader's
+understanding of a specific abstract machine
+4. Skorstengaard's approach to proving safety via fully-abstract overlay semantics relies on the abstract
+machine being architecturally similar to the concrete one (beyond the specific call and return semantics
+that distinguish them). Therefore it is less portable: each architecture it applies to wants its own
+abstract machine. Our properties apply directly to a wide range of architectures.
+
+We also differ from Skorstengaard et. al. in our focus. We use the language of formal security properties
+to apply the established intuitions and formal techniques of non-interference. This demonstrates that stack
+safety is expressible as a formal security property.
+
 > Q2. In L117-121 you state certain assumptions about the language semantics. It is unclear to me if these assumptions restrict the languages to which your stack safety definition apply. For example, does a language with a heap allow you to break stack safety? What about a language with delimited continuations that manipulate the stack?
-> 
+
+The section should be broken into assumptions that are necessarily for our properties, and assumptions
+that we explicitly do not make. Our stack safety model applies regardless of how a language uses non-stack,
+non-code memory, including to languages with a heap. They apply to any layout of memory as long as it is
+known in advance.
+
+Delimited continuations are not supported by our base model, so a language that has them would violate
+stack safety. We extend the base model with argument passing on the stack to demonstrate how it can
+accommodate a programming language feature that shares stack data between callers and callees. A
+similar extension to delimited continuations would be more complex.
+
 > Q3. Why don't you assume well-bracketed control flow like Skorstengaard et al (L289-291)? What are the implications of that?
-> 
-> 
-> 
+
+We want our properties to be applicable even to low-level code that may not keep function
+footprints isolated from one another. Consider a program that mixes C code with hand-written
+assembly -- the assembly may make calls and returns, which should be protected by stack safety,
+as well as arbitrary jumps, which should not.
+
+In Skorstengaard, an untrusted adversary can exhibit such behavior, but only trusted code can
+expect its data to be protected. We extend this protection to all callers, even those that
+exhibit unusual control flow.
+
 > Review #16C
 > ===========================================================================
 > 
@@ -153,7 +239,17 @@
 > - The formalization seems intuitively correct, however there is no formal proof for its overall soundness properties and there is no real-world evaluation of its applications.
 > 
 > - The paper is titled "stack safety is a security property". I don't see why this is surprising, or what's the novelty here. Memory safety is almost always connected with security properties.
-> 
+
+The title refers to a formal notion of security property as a mathematical description of
+the possible behaviors of a system. This may be unclear to a reader unfamiliar with the concept.
+
 > Comments for author
 > -------------------
 > I might have missed something important. Are there any applications of the proposed formalization?
+
+A formal definition of a type of security is valuable in its own right. The main application
+is identifying bugs in real world enforcement mechanisms -- without such a definition, we
+can't necessarily agree that a given behavior is a bug. It gives us the ability to reason
+clearly about what is gained from applying a given enforcement mechanism to a system. Since
+many enforcement mechanisms are quite costly in speed, dollars, and silicon, it is important
+to understand precisely what they buy us.
