@@ -2,7 +2,7 @@
 
 We thank the reviewers for their comments. The reviews identify 
 some areas that the paper fails to explain adequately.
-Fortunately [APT: hmm] none of these issues are in the formalism itself, but meta questions: How does
+None of these issues are in the formalism itself, but meta questions: How does
 the work improve on existing formalizations of stack safety? Do we have a plan to validate the model further?
 Can our work be extended to cover more complex uses of the stack? We have answers to these questions, and we can
 address them explicitly in the paper.
@@ -22,9 +22,14 @@ address them explicitly in the paper.
    visual metaphors) as early as possible, starting in the
    introduction.
 
-4. We will more clearly distinguish language features that are compatible with our
-   model but not assumed [APT: don't understand this phrasing], those that are required for the model to function,
-   and those that are incompatible.
+4. Our model avoids talking about language features other than the stack, but it is unclear at times
+   whether those features could be added without compromising stack safety. We will more clearly call out
+   common language features, such as heaps, that are compatible with stack safety.
+
+[SNA: Do we want to promise to add callee-saves registers? I wasn't going to at first, but actually there's
+      a good story here. Something like:]
+5. We will add a discussion of how to extend the model to a callee-saves registers convention, which
+   demonstrates a concrete use for observational properties and a clear advance over the state-of-the-art.
 
 ** Detailed Comments **
 
@@ -39,12 +44,9 @@ outline of how it would cover your concerns.
 These properties would absolutely be amenable to a correctness proof. Such a
 proof would be a lot of work in a setting with a full ISA, but we see no
 fundamental barriers.  We chose to concentrate on testing because it
-is better aligned with our immediate goal of evaluating multiple enforcement
+is better aligned with our immediate goal of evaluating enforcement
 mechanisms to uncover possible bugs -- it is lower effort, but if bugs are
-found, high reward.
-
-[BCP: Might be a little dangerous to say "multiple" here because we didn't
-actually do very many yet.]
+found, still high reward.
 
 > * The testing for the lazy tagging/clearing found mistakes but the "potential fix [is] itself a prime candidate for future testing" [line 868]
 >
@@ -90,11 +92,9 @@ return, the property will allow the original register to be read normally after 
 But the property will not allow it to be leaked in any other way.
 
 We had briefly considered adding this complexity and chosen to avoid it, because it is an extra layer
-of detail to apply domains to registers.
-
-[RB: It is worth pointing out that the prior work of Skorstengaard et al. also
-relies on a calling convention which clears all non-argument registers before
-calls and all non-return registers before returns.] [BCP: Yes!]
+of detail to apply domains to registers. It is worth noting that the primary existing work in this
+area, Skorstengaard et al., relies on a calling convention which clears all non-argument registers before
+calls and all non-return registers before returns.
 
 
 > Another minor question: The difference between [nested] call-by-reference and passing
@@ -114,9 +114,9 @@ Similarly, if the heap model permits pointer forging (restricted to
 within compartments, say) we would expect to be able to forge pointers to address-taken locals
 in the same circumstances. 
 
-In the longer term we would like to extend our model with a heap,[BCP: Cite
-Arthur's paper and point out that it is phrased in similar terms and should
-thus be compatible!] and then the interplay between heap-derived and
+In the longer term we would like to extend our model with a heap, in the style of
+Azevedo de Amorim et al.'s "The Meaning of Memory Safety," which is phrased in similar
+terms to our model and should be compatible. Then the interplay between heap-derived and
 stack-derived pointers (with similar behaviors but different lifespans) will
 be much more interesting.
 
@@ -145,10 +145,6 @@ safety is expressible as a formal security property.
 
 > Q2. In L117-121 you state certain assumptions about the language semantics. It is unclear to me if these assumptions restrict the languages to which your stack safety definition apply. For example, does a language with a heap allow you to break stack safety? What about a language with delimited continuations that manipulate the stack?^M
 
-We will edit section 2 to draw a clearer distinction between language features
-that are compatible with our model but not assumed [APT: again, don't understand this language], those that are required for
-the model to function, and those that are incompatible.
-
 Our stack safety model applies regardless of how a language uses non-stack,
 non-code memory, so it works for languages with a heap. It applies to any layout of memory as long as that is
 known statically.
@@ -158,16 +154,16 @@ stack safety. We extend the base model with argument passing on the stack to dem
 accommodate a programming language feature that shares stack data between callers and callees. A
 similar extension to delimited continuations would be more complex.
 
+This distinction, between a feature that could be added without changing the properties and one that
+would require enhanced properties, is important, and we will clarify in section 2 which features fall
+into which category.
+
 > Q3. Why don't you assume well-bracketed control flow like Skorstengaard et al (L289-291)? What are the implications of that?
 
 We want our properties to be applicable even to low-level code that may not keep function
 footprints isolated from one another. Consider a program that mixes C code with hand-written
 assembly -- the assembly may make calls and returns, which should be protected by stack safety,
 as well as arbitrary jumps, which should not.
-
-In Skorstengaard, an untrusted adversary can exhibit such behavior, but only trusted code can
-expect its data to be protected. We extend this protection to all callers, even those that
-exhibit unusual control flow. [APT: Don't think I get this.]
 
 * Reviewer C *
 
@@ -180,18 +176,28 @@ exhibit unusual control flow. [APT: Don't think I get this.]
 >   across heap and stack, which is an important element for many
 >   real-world memory corruption attacks.
 
+> - The paper is titled "stack safety is a security property". I don't
+>   see why this is surprising, or what's the novelty here. Memory safety
+>   is almost always connected with security properties.
+
+We agree that the title is confusing and should be changed. It refers to a concept in 
+theoretical security: a formal notion of security property as a mathematical description of
+the possible behaviors of a system. In that context, it was not actually clear that stack
+safety could be defined in these terms.
+
 [BCP: We definitely need to respond directly to this.  First, we should
 agree that the title is confusing (of course it is a security property) and
 needs changing, and then we should say clearly what we meant by it.]
 
 > I might have missed something important. Are there any applications of the proposed formalization?
 
-A formal definition of a type of security is valuable in its own right. The main application
-is identifying bugs in real world enforcement mechanisms -- without such a definition, we
-can't necessarily agree that a given behavior is a bug. It gives us the ability to reason
+A formal definition of a type of security is valuable in its own right. It tells us whether
+any given behavior is a violation, and we can therefore use it to identify bugs. In our case
+study we identify a previously unknown bug in Roessler and Dehon's proposed "lazy tagging" micro-policy,
+and also use randomized testing to increase confidence that their "depth isolation" micro-policy
+correctly implements stack safety.
+
+More broadly, it gives us the ability to reason
 clearly about what is gained from applying a given enforcement mechanism to a system. Since
 many enforcement mechanisms are quite costly in speed, dollars, and silicon, it is important
 to understand precisely what they buy us.
-
-[BCP: Also, we intended to use it for bug finding, and the case study
-confirms that it is suitable for this purpose.]
