@@ -125,13 +125,17 @@ be much more interesting.
 > Q1. How does this work improve upon Skorstengaard et al? Neither the introduction nor related work section give a satisfying answer to this.^M
 
 We improve upon Skorstengaard et. al. in the following ways.
-1. We capture a desireable security characteristic of dynamically nested functions, that every caller is safe from its callee
+1. We capture a desireable security characteristic of dynamically nested calls, that every caller is safe from its callee
 2. We therefore do not assume a static division of trusted and untrusted code
 
-Taken together, these distinctions give the practical advantage that we can reason about stack safety
-in contexts where a buggy function is compromised and used to attack other
-instances of the same function.  [BCP: Example? Plus a clear explanation of
-why S. et al cannot handle it while we can.]
+Specifically, Skorstengaard et. al. divide the world into trusted functions, which feature
+additional dynamic constraints on their behavior, and for which their properties hold,
+and adversaries, which may violate the dynamic "reasonableness" constraints. Suppose we
+have a single function that recursively traverses a linked list, loading data into local
+memory. What if it has a bug, and certain data cause it to violate the reasonableness condition?
+In Skorstengaard's model, it must be an adversary, and activations lower in the stack are not
+guaranteed protection. In our model, only the badly behaved activation is an attacker, and its
+caller(s) are guaranteed protection.
 
 3. Skorstengaard's approach to proving safety via fully-abstract overlay semantics relies on the abstract
 machine being architecturally similar to the concrete one (beyond the specific call and return semantics
@@ -169,27 +173,7 @@ as well as arbitrary jumps, which should not.
 
 > - It is a bit difficult to assess the merits of this work. Yes, the
 >   stack safety property is important for security, but what new results
->   or new capabilities does the proposed definition bring in? If it is
->   positioned as a security solution, does it lead to more efficient
->   defenses of control flow attacks? Does it prevent any new attacks
->   that existing defenses fail? The paper does not talk about data flow
->   across heap and stack, which is an important element for many
->   real-world memory corruption attacks.
-
-> - The paper is titled "stack safety is a security property". I don't
->   see why this is surprising, or what's the novelty here. Memory safety
->   is almost always connected with security properties.
-
-We agree that the title is confusing and should be changed. It refers to a concept in 
-theoretical security: a formal notion of security property as a mathematical description of
-the possible behaviors of a system. In that context, it was not actually clear that stack
-safety could be defined in these terms.
-
-[BCP: We definitely need to respond directly to this.  First, we should
-agree that the title is confusing (of course it is a security property) and
-needs changing, and then we should say clearly what we meant by it.]
-
-> I might have missed something important. Are there any applications of the proposed formalization?
+>   or new capabilities does the proposed definition bring in?
 
 A formal definition of a type of security is valuable in its own right. It tells us whether
 any given behavior is a violation, and we can therefore use it to identify bugs. In our case
@@ -201,3 +185,21 @@ More broadly, it gives us the ability to reason
 clearly about what is gained from applying a given enforcement mechanism to a system. Since
 many enforcement mechanisms are quite costly in speed, dollars, and silicon, it is important
 to understand precisely what they buy us.
+
+>   The paper does not talk about data flow
+>   across heap and stack, which is an important element for many
+>   real-world memory corruption attacks.
+
+We plan to combine our stack model with a heap model in the style of Acevedo de Amorim et al.
+as future work.
+
+> - The paper is titled "stack safety is a security property". I don't
+>   see why this is surprising, or what's the novelty here. Memory safety
+>   is almost always connected with security properties.
+
+We agree that the title is confusing and should be changed. It refers to a concept in 
+theoretical security: a formal notion of security property as a mathematical description of
+the possible behaviors of a system. In that context, it was not actually obvious that stack
+safety could be defined in these terms, but now we have done so. That said, the title should
+not require readers to understand this specific terminology to be comprehensible.
+
