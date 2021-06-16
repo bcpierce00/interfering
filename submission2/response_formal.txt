@@ -42,7 +42,9 @@ section.
    properties?][LEO: I think the current motivation is efficiency in the
    paper - this would tie things together beautifully IMO - and we can say
    we left it out due to space/complexity concerns but that in retrospect
-   putting it in paints a more complete picture.]
+   putting it in paints a more complete picture.][APT: Agreed, but I'm worried
+   about over-promising. However, see my note in the callee-save discussion
+   below: I'm not clear just how much we need to add.]
 
 # Detailed Comments
 
@@ -103,16 +105,17 @@ validate.
 > informally, but the issue seems to add substantial difficulty to tracking
 > that a function faithfully implements the calling convention.
 
-Callee-save registers are compatible with our approach, using a version of
-the sharing model with its context initialization and updates modified to
-apply appropriate domains to registers.  Indeed, they actually provide
-another interesting use case for the "observational" variants of our
-properties. Focusing on integrity: callee-save registers may be overwritten
-(violating stepwise integrity) but should always be restored before a
-return. This requirement corresponds to observational integrity with the
-callee-save registers sealed. (Recall that observational integrity compares
-sealed components at the start and end of a callee's execution, so the
-interim changes are not violations.)
+Callee-save registers are compatible with our approach, using a
+version of the sharing model with its context initialization and
+updates modified to apply appropriate domains to registers as well as
+stack locations.  Indeed, they actually provide another interesting
+use case for the "observational" variants of our properties. Focusing
+on integrity: callee-save registers may be overwritten (violating
+stepwise integrity) but should always be restored before a
+return. This requirement corresponds to observational integrity with
+the callee-save registers sealed. (Recall that observational integrity
+compares sealed components at the start and end of a callee's
+execution, so the interim changes are not violations.)
 
 Confidentiality for callee-saves is similar. A callee-save register should
 be secret, but in observational confidentiality, if it is copied to the
@@ -130,6 +133,10 @@ what we plan to do.][LEO: The point I guess is that now we're only applying
 domains on stack addresses, while this would require domains over arbitrary
 components (including registers). I don't think it's particularly hard to
 do, just an extra layer of complexity.]
+[APT: I'm a little confused here. Formally, doesn't the
+paper already state everything in terms of components, which include registers
+as well as stack locations? Does anything need to be added except a tweak to
+the sealing convention (which, by the way, seems to be a little underspecified anyhow) ?]
 
 It is worth noting that the main prior work in this area by Skorstengaard et
 al. relies [BCP: fundamentally?] on a calling convention that clears all
@@ -155,11 +162,12 @@ permits pointer forging (restricted to within compartments, say) we would
 expect to be able to forge pointers to address-taken locals in the same
 circumstances.
 
-In the longer term we would like to extend our model with a heap, in the
-style of Azevedo de Amorim et al.'s "The Meaning of Memory Safety," POST 2018,
-which is phrased in similar terms to our model and should be compatible. In this
-setting the interplay between heap-derived and stack-derived pointers (with
-similar behaviors but different lifespans) will be much more interesting.
+In the longer term we would like to extend our model with a heap, in
+the style of Azevedo de Amorim et al. [1] which is phrased in similar
+terms to our model and should be compatible. In this setting the
+interplay between heap-derived and stack-derived pointers (with
+similar behaviors but different lifespans) will be much more
+interesting.
 
 ## Reviewer B
 
@@ -169,7 +177,7 @@ similar behaviors but different lifespans) will be much more interesting.
 We improve upon Skorstengaard et. al. in the following ways.
 
 1. We capture a desireable security characteristic of dynamically nested
-   calls: that EVERY caller should be protected from its callee.
+   calls: that EVERY caller should be protected from its callees.
 
    By contrast, Skorstengaard et. al. statically divide the world into
    trusted functions, which feature additional dynamic constraints on their
@@ -183,7 +191,7 @@ We improve upon Skorstengaard et. al. in the following ways.
    the stack are not guaranteed protection. In our model, only the badly
    behaved activation is an attacker, and its caller(s) are guaranteed
    protection.  [BCP: Not clear enough -- Indeed, I think the example might
-   be too subtle.] [LEO: "We will expand on such an example in the revised
+   be too subtle.] [APT:+ 1] [LEO: "We will expand on such an example in the revised
    version"?]
    [RB: This part also read confusingly to me. What needs to be made clear, I
    think, is that in the world of StkTokens one needs to establish a boundary
@@ -196,12 +204,14 @@ We improve upon Skorstengaard et. al. in the following ways.
    semantics relies on the abstract machine being architecturally similar to
    the concrete one (beyond the specific call and return semantics that
    distinguish them). This makes it less portable: each architecture it
-   applies to wants its own abstract machine. Our properties should apply
+   applies to needs its own abstract machine. Our properties should apply
    directly to a wide range of architectures.
 
    We also differ from Skorstengaard et. al. in our focus. We use the
    language of formal security properties to apply established intuitions
    and formal techniques of non-interference.
+   [APT: Can we distinguish the fact that we define things in terms of traces of behavior
+   rather than in terms of "correct by construction" machines?] 
 
 > Q2. In L117-121 you state certain assumptions about the language
 > semantics. It is unclear to me if these assumptions restrict the languages
@@ -211,7 +221,7 @@ We improve upon Skorstengaard et. al. in the following ways.
 
 Our stack safety model applies regardless of how a language uses non-stack,
 non-code memory, so it works for languages with a heap.  It also applies to
-any layout of memory (that is known statically).
+any (statically known) memory layout.
 
 Delimited continuations are not supported by our base model, so a language
 that has them would violate stack safety. We do extend the base model with
@@ -234,7 +244,8 @@ footprints have to do with well-bracketing...] For example, consider a
 program that mixes C code with hand-written assembly: the assembly may make
 calls and returns, which should be protected by stack safety, as well as
 arbitrary jumps, which should not. [LEO: I also don't fully follow this
-answer]
+answer][APT: +1. Can we sketch a concrete example -- maybe a variant of
+one in the paper -- that we allow by SK does not?]
 
 ## Reviewer C
 
@@ -262,7 +273,7 @@ that their "depth isolation" micro-policy correctly implements stack safety.
 >   real-world memory corruption attacks.
 
 Agreed!  We plan to combine our stack model with a heap model in the style
-of Azevedo de Amorim et al. as future work.  Both models are phrased in the
+of Azevedo de Amorim et al. [1] as future work.  Both models are phrased in the
 conceptual terminology of language-based security, so we have reason to
 believe that they will fit together cleanly.
 
@@ -277,4 +288,9 @@ mathematical definitions -- confidentiality, integrity, noninterference,
 etc. -- that have been used for decades to reason about security.
 
 We'll think of a more helpful title.
-[BCP: Any ideas?][LEO: s/is/as]
+[BCP: Any ideas?][LEO: s/is/as][APT: "Formalizing Stack Safety as a Security Property"] 
+
+----------------
+
+[1] A. Azevedo de Amorim, C. Hritcu, and B. Pierce, "The Meaning of Memory Safety,"
+Proc. Principles of Security and Trust, 2018. 
