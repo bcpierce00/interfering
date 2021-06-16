@@ -32,19 +32,11 @@ section.
 4. We will more clearly call out common language features, such as the heap,
    that are compatible with our treatment of stack safety.
 
-5. [SNA: Do we want to promise to add callee-saves registers? I wasn't going to
-   at first, but actually there's a good story here. Something like:] [BCP: If
-   we think we can really do this, we should say so!]
-   We will add a discussion of how to extend the model to a callee-saves
-   registers convention, which demonstrates a concrete use for the observational
-   properties.
-   [BCP: Doesn't the current draft also demonstrate a use for the observational
-   properties?][LEO: I think the current motivation is efficiency in the
-   paper - this would tie things together beautifully IMO - and we can say
-   we left it out due to space/complexity concerns but that in retrospect
-   putting it in paints a more complete picture.][APT: Agreed, but I'm worried
-   about over-promising. However, see my note in the callee-save discussion
-   below: I'm not clear just how much we need to add.]
+5. We will add a discussion of how to extend the model to a callee-saves
+   registers convention, which demonstrates a second concrete use for 
+   the observational properties. Previously we were concerned about space
+   and explanatory complexity, but in retrospect its presence would
+   paint a more complete picture.
 
 # Detailed Comments
 
@@ -75,6 +67,7 @@ implemented; observational confidentiality testing is not, but -- since the
 lazy policy enforces normal, stepwise confidentiality -- this is actually
 sufficient to test it. [APT: Do we have the results of these tests?][BCP: +1
 -- if we could actually say something about results it would be fantastic!]
+[SNA: We are fighting with Quickchick a bit, trying to get these.]
 But we did not have this ready before the deadline. [BCP: IIRC, we have not
 been forbidden from mentioning new results that we would include in the
 final paper if accepted, and IMO there is little risk of annoying the
@@ -85,9 +78,8 @@ mechanism -- a Cheri implementation of stack safety -- to demonstrate that
 our properties are not strictly tied to tag-based enforcement. We are
 currently working on QuickChick generators for Cheri programs, which
 have a different calling convention (a more complicated one, which is easier
-to get wrong!).  [BCP: We should probably add something like: "But this
-effort falls outside the scope of the current paper" to make clear that we
-are not promising it.][LEO: Agreed.]
+to get wrong!). This work is for a future paper, but its plausibility is
+relevant to the discussion here.
 
 Validation of the argument-passing and coroutine models are longer-term
 projects.  The argument-passing model has existing enforcement mechanisms and serves
@@ -123,23 +115,20 @@ stack and then restored before return, the property will allow the original
 register to be read normally after return.  But the property will not allow
 it to be leaked in any other way.
 
-We had considered adding this complexity and chosen to avoid it, because it
-is an extra layer of detail to apply domains to registers.  [BCP: Don't
-understand this.  Maybe just drop it and say we will add this discussion to
-the paper?  Or do we even want to say that we think we can extend the model
-and our testing framework to callee-saves before the camera-ready?... My
-sense is that this is too much work, but either way we should say (again)
-what we plan to do.][LEO: The point I guess is that now we're only applying
-domains on stack addresses, while this would require domains over arbitrary
-components (including registers). I don't think it's particularly hard to
-do, just an extra layer of complexity.]
+We will add this discussion to the paper, where previously we had ommitted
+it due to concerns for space and for the complexity of the explanations.
+But it both demonstrates the model's flexibility and ties in neatly to
+observational properties, so it is worth including.
+
 [APT: I'm a little confused here. Formally, doesn't the
 paper already state everything in terms of components, which include registers
 as well as stack locations? Does anything need to be added except a tweak to
 the sealing convention (which, by the way, seems to be a little underspecified anyhow) ?]
+[SNA: initCtx needs to put the registers in Unsealed instead of Outside,
+as well.]
 
 It is worth noting that the main prior work in this area by Skorstengaard et
-al. relies [BCP: fundamentally?] on a calling convention that clears all
+al. relies fundamentally on a calling convention that clears all
 non-argument registers before calls and all non-return registers before
 returns.
 
@@ -209,9 +198,9 @@ We improve upon Skorstengaard et. al. in the following ways.
 
    We also differ from Skorstengaard et. al. in our focus. We use the
    language of formal security properties to apply established intuitions
-   and formal techniques of non-interference.
-   [APT: Can we distinguish the fact that we define things in terms of traces of behavior
-   rather than in terms of "correct by construction" machines?] 
+   and formal techniques of non-interference. This entails defining
+   our properties in terms of traces of the machine's behavior, rather
+   than in terms of a machine that is "correct by construction."
 
 > Q2. In L117-121 you state certain assumptions about the language
 > semantics. It is unclear to me if these assumptions restrict the languages
@@ -238,14 +227,20 @@ would look like?]
 > Q3. Why don't you assume well-bracketed control flow like Skorstengaard et
 > al (L289-291)? What are the implications of that?
 
-We want our properties to be applicable even to low-level code that may not
-keep function footprints isolated from one another. [BCP: Not clear what
-footprints have to do with well-bracketing...] For example, consider a
-program that mixes C code with hand-written assembly: the assembly may make
-calls and returns, which should be protected by stack safety, as well as
-arbitrary jumps, which should not. [LEO: I also don't fully follow this
-answer][APT: +1. Can we sketch a concrete example -- maybe a variant of
+Skorstengaard et al. don't assume well-bracketed control flow, but the
+terms in which they define differ from ours. Their version assumes
+a code layout where each function has an isolated footprint and their
+property doesn't permit unrestricted jumps between footprints. In that
+model it is always obvious when a function returns.
+
+We want our properties to be applicable even to low-level code 
+that may not keep function footprints isolated from one another, so our
+definition must recognize the returns...
+[APT: +1. Can we sketch a concrete example -- maybe a variant of
 one in the paper -- that we allow by SK does not?]
+[SNA: Still figuring out how to explain this... An example would be
+good, yes.]
+
 
 ## Reviewer C
 
@@ -287,8 +282,8 @@ be formulated using (a refinement of) the same formal terminology and
 mathematical definitions -- confidentiality, integrity, noninterference,
 etc. -- that have been used for decades to reason about security.
 
-We'll think of a more helpful title.
-[BCP: Any ideas?][LEO: s/is/as][APT: "Formalizing Stack Safety as a Security Property"] 
+We will change the title to:
+"Formalizing Stack Safety as a Security Property" 
 
 ----------------
 
