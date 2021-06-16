@@ -50,12 +50,8 @@ to describe it as a contribution.
 
 Our other immediate goal is to implement testing of a secondary architecture. We will evaluate a Cheri
 implementation of stack safety to demonstrate that our properties are not strictly tied to tag-based
-enforcement. [APT: Current status of this?]
-[RB: SNA refactored the models and Cerise (the capability machine development)
-fits quite well in it, so a lot of the machinery for generation and testing is
-easily reusable. The tricky part will probably be the generation of blessed
-sequences corresponding to the StkTokens-like calling convention, as this is
-quite involved.]
+enforcement. We are currently working on the QuickChick generators for Cheri programs, which have a
+different (more complicated) calling convention.
 
 We consider validation of the passing system to be a secondary priority and coroutines tertiary.
 The passing system has existing enforcement mechanisms and serves an important role in common
@@ -70,21 +66,18 @@ tag-based) to validate.
 > The invariants are clear enough informally, but the issue seems to add substantial difficulty to
 > tracking that a function faithfully implements the calling convention.
 
-Callee-save registers are plausible in our setup, but would require tweaks to the domain system.
-[APT: for my info, what tweaks?] [SNA: I should be clearer -- it needs its own initCtx and updateCtx functions.]
+Callee-save registers are plausible in our setup, using a version of the sharing model
+with its context initialization and updates modified to apply appropriate domains to registers.
 They actually provide another use-case for observational properties! Focusing on integrity:
 callee-save registers may be overwritten (violating stepwise integrity) but should always be
-restored before a return. This behavior corresponds to marking such registers as permanently sealed
-while enforcing observational integrity -- recall that observational integrity compares sealed
+restored before a return. This requirement corresponds to observational integrity with the
+callee-save registers sealed -- recall that observational integrity compares sealed
 components at the start and end of a callee, so the interim changes are not violations.
-(Note as well that the formalization permits domains such as "sealed" to apply to registers as well
-as to addresses, we just haven't taken advantage of this ability.)
 
-Confidentiality can be applied similarly. We would permanently treat the stack pointer and
-argument registers as "passed", and so exempt from confidentiality. Then, when a callee-save
-register is copied to the stack and later restored before return, the register value does
-not represent a visible difference in state between the entry and the return. [APT: I didn't
-understand this para]
+Confidentiality can be applied similarly. A callee-save register should be secret, but
+in observational confidentiality, if it is copied to the stack and then restored before
+return, the property will allow the original register to be read normally after return.
+But the property will not allow it to be leaked in any other way.
 
 We had briefly considered this complexity and chosen to avoid it, because it is an extra layer
 of detail to apply domains to registers.
@@ -119,15 +112,13 @@ be much more interesting.
 > Q1. How does this work improve upon Skorstengaard et al? Neither the introduction nor related work section give a satisfying answer to this.^M
 
 We improve upon Skorstengaard et. al. in the following ways.
-1. We capture the dynamic nesting of security concerns implicit in stack-based reasoning [APT: what does this mean?]
+1. We capture a desireable security characteristic of dynamically nested functions, that every caller is safe from its callee
 2. We therefore do not assume a static division of trusted and untrusted code
 
 Taken together, these distinctions give the practical advantage that we can reason about stack safety
 in contexts where a buggy function is compromised and used to attack other instances of the same function.
 
-3. We clearly state the property in terms of a machine's behavior, without appealing to the reader's
-understanding of a specific abstract machine [APT: I don't understand this distinction.]
-4. Skorstengaard's approach to proving safety via fully-abstract overlay semantics relies on the abstract
+3. Skorstengaard's approach to proving safety via fully-abstract overlay semantics relies on the abstract
 machine being architecturally similar to the concrete one (beyond the specific call and return semantics
 that distinguish them). Therefore it is less portable: each architecture it applies to wants its own
 abstract machine. Our properties apply directly to a wide range of architectures.
@@ -138,8 +129,11 @@ safety is expressible as a formal security property.
 
 > Q2. In L117-121 you state certain assumptions about the language semantics. It is unclear to me if these assumptions restrict the languages to which your stack safety definition apply. For example, does a language with a heap allow you to break stack safety? What about a language with delimited continuations that manipulate the stack?^M
 
-The section should be broken into assumptions that are necessarily for our properties, and assumptions
-that we explicitly do not make. [APT: ??] Our stack safety model applies regardless of how a language uses non-stack,
+We will edit section 2 to draw a clearer distinction between language features
+that are compatible with our model but not assumed, those that are required for
+the model to function, and those that are incompatible.
+
+Our stack safety model applies regardless of how a language uses non-stack,
 non-code memory, including to languages with a heap. They apply to any layout of memory as long as it is
 known statically.
 
