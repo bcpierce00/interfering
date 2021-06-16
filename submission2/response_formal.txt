@@ -1,4 +1,4 @@
-# Overview 
+# Overview
 
 We thank the reviewers for their comments.
 
@@ -40,7 +40,7 @@ section.
    [BCP: Doesn't the current draft also demonstrate a use for the observational
    properties?]
 
-# Detailed Comments 
+# Detailed Comments
 
 ## Reviewer A
 
@@ -137,50 +137,63 @@ returns.
 > by-reference parameter cannot and since you don't guarantee heap safety,
 > you shouldn't try to do anything useful with address-of-local?
 
-Yes, this was exactly our thinking.
-We know what constitutes legal access to stack-allocated arguments, but for explicit pointers
-this is much less clear, and depends on the intent of the programmer. We believe
-an address-of-local should be treated similarly to the address of a heap object,
-but with a different lifetime. For instance, if a heap safety model treats heap pointers like capabilities
-(possession implies access rights), we would treat stack pointers the same.
-Similarly, if the heap model permits pointer forging (restricted to
-within compartments, say) we would expect to be able to forge pointers to address-taken locals
-in the same circumstances.
+Yes, this was exactly our thinking.  We know what constitutes legal access
+to stack-allocated arguments, but for explicit pointers this is much less
+clear, and depends on the intent of the programmer. We believe an
+address-of-local should be treated similarly to the address of a heap
+object, but with a different lifetime. For instance, if a heap safety model
+treats heap pointers like capabilities (possession implies access rights),
+we would treat stack pointers the same.  Similarly, if the heap model
+permits pointer forging (restricted to within compartments, say) we would
+expect to be able to forge pointers to address-taken locals in the same
+circumstances.
 
-In the longer term we would like to extend our model with a heap, in the style of
-Azevedo de Amorim et al.'s "The Meaning of Memory Safety," which is phrased in similar
-terms to our model and should be compatible. Then the interplay between heap-derived and
-stack-derived pointers (with similar behaviors but different lifespans) will
-be much more interesting.
+In the longer term we would like to extend our model with a heap, in the
+style of Azevedo de Amorim et al.'s "The Meaning of Memory Safety," which is
+phrased in similar terms to our model and should be compatible. In this
+setting the interplay between heap-derived and stack-derived pointers (with
+similar behaviors but different lifespans) will be much more interesting.
 
-* Reviewer B *
+## Reviewer B
 
-> Q1. How does this work improve upon Skorstengaard et al? Neither the introduction nor related work section give a satisfying answer to this.^M
+> Q1. How does this work improve upon Skorstengaard et al? Neither the
+> introduction nor related work section give a satisfying answer to this.
 
 We improve upon Skorstengaard et. al. in the following ways.
-1. We capture a desireable security characteristic of dynamically nested calls, that every caller is safe from its callee
+
+1. We capture a desireable security characteristic of dynamically nested
+   calls, that every caller is safe from its callee.
+
 2. We therefore do not assume a static division of trusted and untrusted code
 
-Specifically, Skorstengaard et. al. divide the world into trusted functions, which feature
-additional dynamic constraints on their behavior, and for which their properties hold,
-and adversaries, which may violate the dynamic "reasonableness" constraints. Suppose we
-have a single function that recursively traverses a linked list, loading data into local
-memory. What if it has a bug, and certain data cause it to violate the reasonableness condition?
-In Skorstengaard's model, it must be an adversary, and activations lower in the stack are not
-guaranteed protection. In our model, only the badly behaved activation is an attacker, and its
-caller(s) are guaranteed protection.
+   Specifically, Skorstengaard et. al. divide the world into trusted
+   functions, which feature additional dynamic constraints on their
+   behavior, and for which their properties hold, and adversaries, which may
+   violate the dynamic "reasonableness" constraints. Suppose we have a
+   single function that recursively traverses a linked list, loading data
+   into local memory. What if it has a bug, and certain data cause it to
+   violate the reasonableness condition?  In Skorstengaard's model, it must
+   be an adversary, and activations lower in the stack are not guaranteed
+   protection. In our model, only the badly behaved activation is an
+   attacker, and its caller(s) are guaranteed protection.
 
-3. Skorstengaard's approach to proving safety via fully-abstract overlay semantics relies on the abstract
-machine being architecturally similar to the concrete one (beyond the specific call and return semantics
-that distinguish them). Therefore it is less portable: each architecture it applies to wants its own
-abstract machine. Our properties should apply directly to a wide range of
-architectures.
+3. Skorstengaard's approach to proving safety via fully-abstract overlay
+   semantics relies on the abstract machine being architecturally similar to
+   the concrete one (beyond the specific call and return semantics that
+   distinguish them). Therefore it is less portable: each architecture it
+   applies to wants its own abstract machine. Our properties should apply
+   directly to a wide range of architectures.
 
-We also differ from Skorstengaard et. al. in our focus. We use the language of formal security properties
-to apply the established intuitions and formal techniques of non-interference. This demonstrates that stack
-safety is expressible as a formal security property.
+   We also differ from Skorstengaard et. al. in our focus. We use the
+   language of formal security properties to apply the established
+   intuitions and formal techniques of non-interference. This demonstrates
+   that stack safety is expressible as a formal security property.
 
-> Q2. In L117-121 you state certain assumptions about the language semantics. It is unclear to me if these assumptions restrict the languages to which your stack safety definition apply. For example, does a language with a heap allow you to break stack safety? What about a language with delimited continuations that manipulate the stack?^M
+> Q2. In L117-121 you state certain assumptions about the language
+> semantics. It is unclear to me if these assumptions restrict the languages
+> to which your stack safety definition apply. For example, does a language
+> with a heap allow you to break stack safety? What about a language with
+> delimited continuations that manipulate the stack?^M
 
 Our stack safety model applies regardless of how a language uses non-stack,
 non-code memory, so it works for languages with a heap. It applies to any layout of memory as long as that is
@@ -202,36 +215,45 @@ footprints isolated from one another. Consider a program that mixes C code with 
 assembly -- the assembly may make calls and returns, which should be protected by stack safety,
 as well as arbitrary jumps, which should not.
 
-* Reviewer C *
+## Reviewer C
 
 > - It is a bit difficult to assess the merits of this work. Yes, the
 >   stack safety property is important for security, but what new results
 >   or new capabilities does the proposed definition bring in?
 
-A formal definition of a type of security is valuable in its own right. It tells us whether
-any given behavior is a violation, and we can therefore use it to identify bugs. In our case
-study we identify a previously unknown bug in Roessler and Dehon's proposed "lazy tagging" micro-policy,
-and also use randomized testing to increase confidence that their "depth isolation" micro-policy
-correctly implements stack safety.
+First, we hope (and believe) that a formal definition of stack safety is
+valuable in its own right, as a way of shifting the discussion away from
+specific examples of bad behavior that must be prevented and toward general
+mechanisms that ensure good behavior.  A formal definition gives us the
+ability to reason clearly about what is gained from applying a given
+enforcement mechanism to a system. Since many enforcement mechanisms are
+quite costly in speed, dollars, and/or silicon, it is important to
+understand precisely what they buy us.
 
-More broadly, it gives us the ability to reason
-clearly about what is gained from applying a given enforcement mechanism to a system. Since
-many enforcement mechanisms are quite costly in speed, dollars, and silicon, it is important
-to understand precisely what they buy us.
+More immediately, we can use a formal definition like this to test proposed
+enforecement mechanisms for violations of the policy.  In our case study, we
+identify a previously unknown bug in Roessler and Dehon's proposed "lazy
+tagging" micro-policy, and we use randomized testing to increase confidence
+that their "depth isolation" micro-policy correctly implements stack safety.
 
 >   The paper does not talk about data flow
 >   across heap and stack, which is an important element for many
 >   real-world memory corruption attacks.
 
-We plan to combine our stack model with a heap model in the style of Acevedo de Amorim et al.
-as future work.
+Agreed!  We plan to combine our stack model with a heap model in the style
+of Acevedo de Amorim et al. as future work.  Both models are phrased in the
+conceptual terminology of language-based security, so we have reason to
+believe that they will fit together cleanly.
 
 > - The paper is titled "stack safety is a security property". I don't
 >   see why this is surprising, or what's the novelty here. Memory safety
 >   is almost always connected with security properties.
 
-We agree that the title is confusing and should be changed. It refers to a concept in
-theoretical security: a formal notion of security property as a mathematical description of
-the possible behaviors of a system. In that context, it was not actually obvious that stack
-safety could be defined in these terms, but now we have done so. That said, the title should
-not require readers to understand this specific terminology to be comprehensible.
+In hindsight, our choice of title was confusing: We did not just mean that
+stack safety impacts security (which is obvious), but that it can usefully
+be formulated using (a refinement of) the same formal terminology and
+mathematical definitions -- confidentiality, integrity, noninterference,
+etc. -- that have been used for decades to reason about security.
+
+We'll think of a more helpful title.
+[BCP: Any ideas?]
