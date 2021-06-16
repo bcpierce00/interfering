@@ -1010,7 +1010,7 @@ Definition genVariantOf (d : nat)
                returnGen macc
              | _ =>
                bindGen (genImm 40) (fun z =>
-(*               trace ("Trying to set: " ++ show k ++ " to " ++ show z ++ " which was " ++ show (fst c k) ++ nl ++ "Previous value was: " ++ show (proj macc k) ++ nl ++ " Next value will be: " ++ show (proj (jorp macc k z) k) ++ nl ++ "Nearby values are: " ++ show (kplus k) ++ " : " ++ show (proj macc (kplus k)) ++ " and " ++ show (ksub k) ++ " : " ++ show (proj macc (ksub k)) ++ nl)%string *)
+              trace ("Trying to set: " ++ show k ++ " to " ++ show z ++ " which was " ++ show (fst c k) ++ nl ++ "Previous value was: " ++ show (proj macc k) ++ nl ++ " Next value will be: " ++ show (proj (jorp macc k z) k) ++ nl ++ "Nearby values are: " ++ show (kplus k) ++ " : " ++ show (proj macc (kplus k)) ++ " and " ++ show (ksub k) ++ " : " ++ show (proj macc (ksub k)) ++ nl)%string
                      (returnGen (jorp macc k z)))
              end)
           )
@@ -1047,19 +1047,21 @@ Fixpoint prop_lockstepConfidentiality
     end
   end).
 
-Definition prop_stackConfidentiality
-           fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx 
+Fixpoint prop_stackConfidentiality
+         fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx 
   : Checker.Checker :=
   match fuel with
   | O => checker true
   | S fuel' =>
     match AnnotationOf (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
     | Some call =>
+      trace ("call match" ++ nl)%string
       match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
       | Some (m', p', c', o) =>
         let depth := List.length (snd c') in
         let endP  := fun '(_,_,c) =>
                        (Nat.ltb (List.length (snd c)) depth) in
+        trace ("stack confidentiality: trying to generate variant")%string
         forAllShrinkShow (genVariantOf depth c' m')
                          (fun _ => nil)
                          (fun n' => "")
@@ -1067,7 +1069,11 @@ Definition prop_stackConfidentiality
                             prop_lockstepConfidentiality defFuel m' n' p' cm c' endP)
       | _ => checker true
       end
-    | _ => checker true
+    | _ =>
+      (* trace ("not a call" ++ nl)%string *)
+      trace ("** Memory:" ++ nl ++ printMem m p cm ctx i ++ nl)%string
+      prop_stackConfidentiality fuel' i m p cm ctx
+    (* | _ => checker true *)
     end
   end.
 
