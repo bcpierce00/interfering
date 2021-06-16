@@ -26,17 +26,22 @@
 
 We will extend the paper with a more detailed discussion of our roadmap for verification and
 testing, and the issues that we expect to arise. Here is a rough
-outline of how it would cover your concerns. 
+outline of how it would cover your concerns.
 
 > ...discussion on whether it is feasible/desirable/in-progress/etc. to prove enforcement mechanisms correct.
 
-These properties would absolutely be amenable to a correctness proof. Such a proof would be a
-lot of work in a setting with a full ISA, but there is not reason it should be impossible.
-Testing simply makes more sense for our goal of evaluating multiple enforcement mechanisms
-to uncover possible bugs -- it is lower effort, but if bugs are found, high reward.
+These properties would absolutely be amenable to a correctness proof. Such a
+proof would be a lot of work in a setting with a full ISA, but there is no
+reason it should be impossible.  We concentrated here on testing because it
+is better aligned with our immediate goal of evaluating multiple enforcement
+mechanisms to uncover possible bugs -- it is lower effort, but if bugs are
+found, high reward.
+
+[BCP: Might be a little dangerous to say "multiple" here because we didn't
+actually do very many yet.]
 
 > * The testing for the lazy tagging/clearing found mistakes but the "potential fix [is] itself a prime candidate for future testing" [line 868]
-> 
+>
 > * Any validation for the lazier observability definition (this is listed as future work.)^M
 >
 > * Any validation for the coroutine work.
@@ -46,21 +51,23 @@ testing of observable properties, and to apply this to the putatively fixed vers
 Observational integrity testing is implemented, but observational confidentiality testing is not -- since the lazy policy enforces
 normal, stepwise confidentiality this is sufficient to test it. [APT: Do we have the results of these tests?] But we did not have this ready before
 the deadline. We will therefore take care not
-to describe it as a contribution.
+to describe it as a contribution.  [BCP: Last sentence not needed.]
 
-Our other immediate goal is to implement testing of a secondary architecture. We will evaluate a Cheri
-implementation of stack safety to demonstrate that our properties are not strictly tied to tag-based
-enforcement. [APT: Current status of this?]
-[RB: SNA refactored the models and Cerise (the capability machine development)
-fits quite well in it, so a lot of the machinery for generation and testing is
-easily reusable. The tricky part will probably be the generation of blessed
-sequences corresponding to the StkTokens-like calling convention, as this is
-quite involved.]
+Our other immediate goal is to implement testing of a second, rather
+different architecture. We plan to evaluate a Cheri implementation of stack
+safety to demonstrate that our properties are not strictly tied to tag-based
+enforcement. [APT: Current status of this?]  [RB: SNA refactored the models
+and Cerise (the capability machine development) fits quite well in it, so a
+lot of the machinery for generation and testing is easily reusable. The
+tricky part will probably be the generation of blessed sequences
+corresponding to the StkTokens-like calling convention, as this is quite
+involved.] [BCP: And thus likely to be wrong. :-) ]
 
-We consider validation of the passing system to be a secondary priority and coroutines tertiary.
-The passing system has existing enforcement mechanisms and serves an important role in common
-stack use-cases. Coroutines will require the development of an enforcement mechanism (likely
-tag-based) to validate.
+We consider validation of the passing system [BCP: ??] to be a secondary
+priority and coroutines tertiary.  The passing system has existing
+enforcement mechanisms and serves an important role in common stack
+use-cases. Coroutines will require the development of an enforcement
+mechanism (e.g., one based on tags) to validate.
 
 > There is one topic beyond my evaluation above worth considering: callee-save registers.
 > I fear these may be fairly tricky to support in your set-up.  Upon function entry, callee-save
@@ -86,12 +93,12 @@ register is copied to the stack and later restored before return, the register v
 not represent a visible difference in state between the entry and the return. [APT: I didn't
 understand this para]
 
-We had briefly considered this complexity and chosen to avoid it, because it is an extra layer
+We had briefly considered adding this complexity and chosen to avoid it, because it is an extra layer
 of detail to apply domains to registers.
 
 [RB: It is worth pointing out that the prior work of Skorstengaard et al. also
 relies on a calling convention which clears all non-argument registers before
-calls and all non-return registers before returns.]
+calls and all non-return registers before returns.] [BCP: Yes!]
 
 
 > Another minor question: The difference between [nested] call-by-reference and passing
@@ -110,8 +117,10 @@ within compartments, say,) we would expect to be able to forge pointers to addre
 in the same circumstances. By contrast, the expected behavior of stack allocated arguments is
 closely tied to that of the stack itself.
 
-In the longer term we would like to extend our model with a heap, and then the interplay between
-heap-derived and stack-derived pointers (with similar behaviors but different lifespans) will
+In the longer term we would like to extend our model with a heap,[BCP: Cite
+Arthur's paper and point out that it is phrased in similar terms and should
+thus be compatible!] and then the interplay between heap-derived and
+stack-derived pointers (with similar behaviors but different lifespans) will
 be much more interesting.
 
 * Reviewer B *
@@ -123,14 +132,17 @@ We improve upon Skorstengaard et. al. in the following ways.
 2. We therefore do not assume a static division of trusted and untrusted code
 
 Taken together, these distinctions give the practical advantage that we can reason about stack safety
-in contexts where a buggy function is compromised and used to attack other instances of the same function.
+in contexts where a buggy function is compromised and used to attack other
+instances of the same function.  [BCP: Example? Plus a clear explanation of
+why S. et al cannot handle it while we can.]
 
 3. We clearly state the property in terms of a machine's behavior, without appealing to the reader's
 understanding of a specific abstract machine [APT: I don't understand this distinction.]
 4. Skorstengaard's approach to proving safety via fully-abstract overlay semantics relies on the abstract
 machine being architecturally similar to the concrete one (beyond the specific call and return semantics
 that distinguish them). Therefore it is less portable: each architecture it applies to wants its own
-abstract machine. Our properties apply directly to a wide range of architectures.
+abstract machine. Our properties should apply directly to a wide range of
+architectures. 
 
 We also differ from Skorstengaard et. al. in our focus. We use the language of formal security properties
 to apply the established intuitions and formal techniques of non-interference. This demonstrates that stack
@@ -161,6 +173,19 @@ exhibit unusual control flow. [APT: Don't think I get this.]
 
 * Reviewer C *
 
+> - It is a bit difficult to assess the merits of this work. Yes, the
+>   stack safety property is important for security, but what new results
+>   or new capabilities does the proposed definition bring in? If it is
+>   positioned as a security solution, does it lead to more efficient
+>   defenses of control flow attacks? Does it prevent any new attacks
+>   that existing defenses fail? The paper does not talk about data flow
+>   across heap and stack, which is an important element for many
+>   real-world memory corruption attacks.
+
+[BCP: We definitely need to respond directly to this.  First, we should
+agree that the title is confusing (of course it is a security property) and
+needs changing, and then we should say clearly what we meant by it.]
+
 > I might have missed something important. Are there any applications of the proposed formalization?
 
 A formal definition of a type of security is valuable in its own right. The main application
@@ -170,3 +195,5 @@ clearly about what is gained from applying a given enforcement mechanism to a sy
 many enforcement mechanisms are quite costly in speed, dollars, and silicon, it is important
 to understand precisely what they buy us.
 
+[BCP: Also, we intended to use it for bug finding, and the case study
+confirms that it is suitable for this purpose.]
