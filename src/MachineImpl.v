@@ -491,14 +491,14 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   match tinstr with
 
   | [Tinstr] =>
-(*    Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR *) *)
+   Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR *)
 
-    match tpc, taddr with
-    | [Tpc pcdepth], [Tstack memdepth] =>
-      if Nat.leb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
-      else None
-    | _, _ => None
-    end
+    (* match tpc, taddr with *)
+    (* | [Tpc pcdepth], [Tstack memdepth] => *)
+    (*   if Nat.leb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>) *)
+    (*   else None *)
+    (* | _, _ => None *)
+    (* end *)
 
   | [Tinstr; Tr1] =>
     match trs, taddr with
