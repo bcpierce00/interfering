@@ -1,52 +1,60 @@
-** Overview **
+# Overview 
 
-We thank the reviewers for their comments. The reviews identify 
-some areas that the paper fails to explain adequately.
-None of these issues are in the formalism itself, but meta questions: How does
-the work improve on existing formalizations of stack safety? Do we have a plan to validate the model further?
-Can our work be extended to cover more complex uses of the stack? We have answers to these questions, and we can
-address them explicitly in the paper.
+We thank the reviewers for their comments.
 
-** Changes **
+The reviews identify some areas that the paper fails to explain
+adequately -- in particular, "framing" questions: How does the work improve
+on existing formalizations of stack safety? Do we have a plan to validate
+the model further?  Can our work be extended to cover more complex uses of
+the stack?
 
-1. We will give a more thorough discussion of validation, discuss the feasibility of proofs
-   and of randomized testing of more complex properties, and detail our roadmap for
-   further validation of different versions of the property.
+In the next section, we outline the changes we plan to make in the paper to
+clarify these questions.  We discuss the issues in more detail in the third
+section.
 
-2. We will give an explicit, direct comparison to the work of Skorstengaard et. al. Currently
-   we discuss it briefly in our related work section, but our novelty has not been
-   obvious, so we will be more thorough in explaining the differences.
+## Changes
 
-3. We will improve the presentation as suggested. We need to gradually
-   introduce the examples and associated intuition (including our
-   visual metaphors) as early as possible, starting in the
-   introduction.
+1. We will give a more thorough discussion of validation, discuss the
+   feasibility of proofs and of randomized testing of more complex
+   properties, and detail our roadmap for further validation of different
+   versions of the property.
 
-4. Our model avoids talking about language features other than the stack, but it is unclear at times
-   whether those features could be added without compromising stack safety. We will more clearly call out
-   common language features, such as heaps, that are compatible with stack safety.
+2. We will give a more explicit and direct comparison to the work of
+   Skorstengaard et. al. Currently we discuss it briefly in our related work
+   section, but the novelty of our work does not come through clearly
+   enough; we will explain the differences more thoroughly.
 
-[SNA: Do we want to promise to add callee-saves registers? I wasn't going to at first, but actually there's
-      a good story here. Something like:]
-5. We will add a discussion of how to extend the model to a callee-saves registers convention, which
-   demonstrates a concrete use for observational properties and a clear advance over the state-of-the-art.
+3. We will improve the presentation as suggested. In particular, we will
+   gradually introduce the examples and associated intuitions (including our
+   visual metaphors) as early as possible, starting in the introduction.
 
-** Detailed Comments **
+4. We will more clearly call out common language features, such as the heap,
+   that are compatible with our treatment of stack safety.
 
-* Reviewer A *
+5. [SNA: Do we want to promise to add callee-saves registers? I wasn't going to
+   at first, but actually there's a good story here. Something like:] [BCP: If
+   we think we can really do this, we should say so!]
+   We will add a discussion of how to extend the model to a callee-saves
+   registers convention, which demonstrates a concrete use for the observational
+   properties.
+   [BCP: Doesn't the current draft also demonstrate a use for the observational
+   properties?]
 
-We will extend the paper with a more detailed discussion of our roadmap for verification and
-testing, and the issues that we expect to arise. Here is a rough
-outline of how it would cover your concerns.
+# Detailed Comments 
+
+## Reviewer A
+
+We will extend the paper with a more detailed discussion of our roadmap for
+verification and testing and the issues that we expect to arise. Here is a
+rough outline of how it would cover the concerns raised in the review.
 
 > ...discussion on whether it is feasible/desirable/in-progress/etc. to prove enforcement mechanisms correct.
 
-These properties would absolutely be amenable to a correctness proof. Such a
-proof would be a lot of work in a setting with a full ISA, but we see no
-fundamental barriers.  We chose to concentrate on testing because it
-is better aligned with our immediate goal of evaluating enforcement
-mechanisms to uncover possible bugs -- it is lower effort, but if bugs are
-found, still high reward.
+The formal security properties we define would absolutely be amenable to a
+correctness proof. Such a proof would be considerable work to carry out for
+a full ISA like RISC-V, but we see no fundamental barriers.  We chose to
+concentrate on testing because it is better aligned with our immediate goal
+of evaluating real enforcement mechanisms for real machine architectures.
 
 > * The testing for the lazy tagging/clearing found mistakes but the "potential fix [is] itself a prime candidate for future testing" [line 868]
 >
@@ -54,57 +62,82 @@ found, still high reward.
 >
 > * Any validation for the coroutine work.
 
-At present we are working to implement
-testing of observable properties, and to apply this to the putatively fixed version of the lazy tagging/clearing micro-policy.
-Observational integrity testing is implemented, but observational confidentiality testing is not -- since the lazy policy enforces
-normal, stepwise confidentiality this is sufficient to test it. [APT: Do we have the results of these tests?] But we did not have this ready before
-the deadline. 
+We are working to implement testing of observable properties and to apply
+this to the putatively fixed version of the lazy tagging/clearing
+micro-policy.  At the moment, testing of observational integrity is
+implemented; observational confidentiality testing is not, but -- since the
+lazy policy enforces normal, stepwise confidentiality -- this is actually
+sufficient to test it. [APT: Do we have the results of these tests?][BCP: +1
+-- if we could actually say something about results it would be fantastic!]
+But we did not have this ready before the deadline. [BCP: IIRC, we have not
+been forbidden from mentioning new results that we would include in the
+final paper if accepted, and IMO there is little risk of annoying the
+reviewers if we mention them in response to direct criticisms or questions.]
 
-Our other immediate priority is to implement testing of a secondary enforcement mechanism. We will evaluate a Cheri
-implementation of stack safety to demonstrate that our properties are not strictly tied to tag-based
-enforcement. We are currently working on the QuickChick generators for Cheri programs, which have a
-different calling convention -- a more complicated one, which is easier to get wrong.
+Our other short-term plan is to implement testing of a second enforcement
+mechanism -- a Cheri implementation of stack safety -- to demonstrate that
+our properties are not strictly tied to tag-based enforcement. We are
+currently working on the QuickChick generators for Cheri programs, which
+have a different calling convention (a more complicated one, which is easier
+to get wrong!).  [BCP: We should probably add something like: "But this
+effort falls outside the scope of the current paper" to make clear that we
+are not promising it.]
 
-Validation of the argument-passing and coroutining models are longer-term priorities.
-The passing system has existing enforcement mechanisms and serves an important role in common stack
-use-cases. Coroutines will require the development of an enforcement
-mechanism (e.g., one based on tags) to validate.
+Validation of the argument-passing and coroutine models are longer-term
+projects.  The passing system has existing enforcement mechanisms and serves
+an important role in common stack use-cases. Coroutines will require the
+development of an enforcement mechanism (e.g., one based on tags) to
+validate.
 
-> There is one topic beyond my evaluation above worth considering: callee-save registers.
-> I fear these may be fairly tricky to support in your set-up.  Upon function entry, callee-save
-> registers hold data private to the caller that may be passed arbitrarily deeper into the call stack,
-> then saved into arbitrary stack locations, but then must be restored before return.
-> Have you or the closely related prior work on enforcement mechanisms considered this complexity?
-> The invariants are clear enough informally, but the issue seems to add substantial difficulty to
-> tracking that a function faithfully implements the calling convention.
+> There is one topic beyond my evaluation above worth considering:
+> callee-save registers.  I fear these may be fairly tricky to support in
+> your set-up.  Upon function entry, callee-save registers hold data private
+> to the caller that may be passed arbitrarily deeper into the call stack,
+> then saved into arbitrary stack locations, but then must be restored
+> before return.  Have you or the closely related prior work on enforcement
+> mechanisms considered this complexity?  The invariants are clear enough
+> informally, but the issue seems to add substantial difficulty to tracking
+> that a function faithfully implements the calling convention.
 
-Callee-save registers are compatible with our approach, using a version of the sharing model
-with its context initialization and updates modified to apply appropriate domains to registers.
-They actually provide another use-case for observational properties! Focusing on integrity:
-callee-save registers may be overwritten (violating stepwise integrity) but should always be
-restored before a return. This requirement corresponds to observational integrity with the
-callee-save registers sealed -- recall that observational integrity compares sealed
-components at the start and end of a callee, so the interim changes are not violations.
+Callee-save registers are compatible with our approach, using a version of
+the sharing model with its context initialization and updates modified to
+apply appropriate domains to registers.  Indeed, they actually provide
+another interesting use-case for the "observational" variants of our
+properties. Focusing on integrity: callee-save registers may be overwritten
+(violating stepwise integrity) but should always be restored before a
+return. This requirement corresponds to observational integrity with the
+callee-save registers sealed. (Recall that observational integrity compares
+sealed components at the start and end of a callee's execution, so the
+interim changes are not violations.)
 
-Confidentiality can be applied similarly. A callee-save register should be secret, but
-in observational confidentiality, if it is copied to the stack and then restored before
-return, the property will allow the original register to be read normally after return.
-But the property will not allow it to be leaked in any other way.
+Confidentiality for callee-saves is similar. A callee-save register should
+be secret, but in observational confidentiality, if it is copied to the
+stack and then restored before return, the property will allow the original
+register to be read normally after return.  But the property will not allow
+it to be leaked in any other way.
 
-We had briefly considered adding this complexity and chosen to avoid it, because it is an extra layer
-of detail to apply domains to registers. It is worth noting that the primary existing work in this
-area, Skorstengaard et al., relies on a calling convention which clears all non-argument registers before
-calls and all non-return registers before returns.
+We had considered adding this complexity and chosen to avoid it, because it
+is an extra layer of detail to apply domains to registers.  [BCP: Don't
+understand this.  Maybe just drop it and say we will add this discussion to
+the paper?  Or do we even want to say that we think we can extend the model
+and our testing framework to callee-saves before the camera-ready?... My
+sense is that this is too much work, but either way we should say (again)
+what we plan to do.]
 
+It is worth noting that the main prior work in this area by Skorstengaard et
+al. relies [BCP: fundamentally?] on a calling convention which clears all
+non-argument registers before calls and all non-return registers before
+returns.
 
-> Another minor question: The difference between [nested] call-by-reference and passing
-> address-of-local was interesting, but I'm not sure how much it makes sense to argue the
-> latter is "beyond the scope of stack safety per se" [line 939] without arguing the same
-> of the former.  Perhaps the argument can be made that address-of-local can be put in the
-> heap while a by-reference parameter cannot and since you don't guarantee heap safety,
+> Another minor question: The difference between [nested] call-by-reference
+> and passing address-of-local was interesting, but I'm not sure how much it
+> makes sense to argue the latter is "beyond the scope of stack safety per
+> se" [line 939] without arguing the same of the former.  Perhaps the
+> argument can be made that address-of-local can be put in the heap while a
+> by-reference parameter cannot and since you don't guarantee heap safety,
 > you shouldn't try to do anything useful with address-of-local?
 
-Yes, this was exactly our thinking.  
+Yes, this was exactly our thinking.
 We know what constitutes legal access to stack-allocated arguments, but for explicit pointers
 this is much less clear, and depends on the intent of the programmer. We believe
 an address-of-local should be treated similarly to the address of a heap object,
@@ -112,7 +145,7 @@ but with a different lifetime. For instance, if a heap safety model treats heap 
 (possession implies access rights), we would treat stack pointers the same.
 Similarly, if the heap model permits pointer forging (restricted to
 within compartments, say) we would expect to be able to forge pointers to address-taken locals
-in the same circumstances. 
+in the same circumstances.
 
 In the longer term we would like to extend our model with a heap, in the style of
 Azevedo de Amorim et al.'s "The Meaning of Memory Safety," which is phrased in similar
@@ -141,7 +174,7 @@ caller(s) are guaranteed protection.
 machine being architecturally similar to the concrete one (beyond the specific call and return semantics
 that distinguish them). Therefore it is less portable: each architecture it applies to wants its own
 abstract machine. Our properties should apply directly to a wide range of
-architectures. 
+architectures.
 
 We also differ from Skorstengaard et. al. in our focus. We use the language of formal security properties
 to apply the established intuitions and formal techniques of non-interference. This demonstrates that stack
@@ -197,9 +230,8 @@ as future work.
 >   see why this is surprising, or what's the novelty here. Memory safety
 >   is almost always connected with security properties.
 
-We agree that the title is confusing and should be changed. It refers to a concept in 
+We agree that the title is confusing and should be changed. It refers to a concept in
 theoretical security: a formal notion of security property as a mathematical description of
 the possible behaviors of a system. In that context, it was not actually obvious that stack
 safety could be defined in these terms, but now we have done so. That said, the title should
 not require readers to understand this specific terminology to be comprehensible.
-
