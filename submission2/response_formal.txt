@@ -162,58 +162,64 @@ similar behaviors but different lifespans) will be much more interesting.
 We improve upon Skorstengaard et. al. in the following ways.
 
 1. We capture a desireable security characteristic of dynamically nested
-   calls, that every caller is safe from its callee.
+   calls: that EVERY caller should be protected from its callee.
 
-2. We therefore do not assume a static division of trusted and untrusted code
+   By contrast, Skorstengaard et. al. statically divide the world into
+   trusted functions, which feature additional dynamic constraints on their
+   behavior and for which their properties hold, and adversary functions,
+   which may violate the dynamic "reasonableness" constraints.
 
-   Specifically, Skorstengaard et. al. divide the world into trusted
-   functions, which feature additional dynamic constraints on their
-   behavior, and for which their properties hold, and adversaries, which may
-   violate the dynamic "reasonableness" constraints. Suppose we have a
-   single function that recursively traverses a linked list, loading data
-   into local memory. What if it has a bug, and certain data cause it to
-   violate the reasonableness condition?  In Skorstengaard's model, it must
-   be an adversary, and activations lower in the stack are not guaranteed
-   protection. In our model, only the badly behaved activation is an
-   attacker, and its caller(s) are guaranteed protection.
+   For example, suppose we have a single function that recursively traverses
+   a linked list, loading data into local memory. What if it has a bug, and
+   certain data cause it to violate the reasonableness condition?  In
+   Skorstengaard's model, it must be an adversary, and activations lower in
+   the stack are not guaranteed protection. In our model, only the badly
+   behaved activation is an attacker, and its caller(s) are guaranteed
+   protection.  [BCP: Not clear enough -- Indeed, I think the example might
+   be too subtle.]
 
-3. Skorstengaard's approach to proving safety via fully-abstract overlay
+2. Skorstengaard's approach to proving safety via fully abstract overlay
    semantics relies on the abstract machine being architecturally similar to
    the concrete one (beyond the specific call and return semantics that
-   distinguish them). Therefore it is less portable: each architecture it
+   distinguish them). This makes it less portable: each architecture it
    applies to wants its own abstract machine. Our properties should apply
    directly to a wide range of architectures.
 
    We also differ from Skorstengaard et. al. in our focus. We use the
-   language of formal security properties to apply the established
-   intuitions and formal techniques of non-interference. This demonstrates
-   that stack safety is expressible as a formal security property.
+   language of formal security properties to apply established intuitions
+   and formal techniques of non-interference.
 
 > Q2. In L117-121 you state certain assumptions about the language
 > semantics. It is unclear to me if these assumptions restrict the languages
 > to which your stack safety definition apply. For example, does a language
 > with a heap allow you to break stack safety? What about a language with
-> delimited continuations that manipulate the stack?^M
+> delimited continuations that manipulate the stack?
 
 Our stack safety model applies regardless of how a language uses non-stack,
-non-code memory, so it works for languages with a heap. It applies to any layout of memory as long as that is
-known statically.
+non-code memory, so it works for languages with a heap.  It also applies to
+any layout of memory (that is known statically).
 
-Delimited continuations are not supported by our base model, so a language that has them would violate
-stack safety. We extend the base model with argument passing on the stack to demonstrate how it can
-accommodate a programming language feature that shares stack data between callers and callees. A
+Delimited continuations are not supported by our base model, so a language
+that has them would violate stack safety. We do extend the base model with
+argument passing on the stack to demonstrate how it can accommodate a
+language feature that shares stack data between callers and callees, but a
 similar extension to delimited continuations would be more complex.
 
-This distinction, between a feature that could be added without changing the properties and one that
-would require enhanced properties, is important, and we will clarify in section 2 which features fall
-into which category.
+This distinction -- between features that could be added without changing
+the properties and ones that would require enhanced properties -- is
+important, and we will clarify in section 2 which features fall into which
+category.  [BCP: Can we say anything here about what that categorization
+would look like?]
 
-> Q3. Why don't you assume well-bracketed control flow like Skorstengaard et al (L289-291)? What are the implications of that?
+> Q3. Why don't you assume well-bracketed control flow like Skorstengaard et
+> al (L289-291)? What are the implications of that?
 
-We want our properties to be applicable even to low-level code that may not keep function
-footprints isolated from one another. Consider a program that mixes C code with hand-written
-assembly -- the assembly may make calls and returns, which should be protected by stack safety,
-as well as arbitrary jumps, which should not.
+We want our properties to be applicable even to low-level code that may not
+keep function footprints isolated from one another. [BCP: Not clear what
+footprints have to do with well-bracketing...] For example, consider a
+program that mixes C code with hand-written assembly: the assembly may make
+calls and returns, which should be protected by stack safety, as well as
+arbitrary jumps, which should not.
 
 ## Reviewer C
 
@@ -221,9 +227,9 @@ as well as arbitrary jumps, which should not.
 >   stack safety property is important for security, but what new results
 >   or new capabilities does the proposed definition bring in?
 
-First, we hope (and believe) that a formal definition of stack safety is
-valuable in its own right, as a way of shifting the discussion away from
-specific examples of bad behavior that must be prevented and toward general
+First, we contend that a formal definition of stack safety is valuable in
+its own right, as a way of shifting the discussion away from specific
+examples of bad behavior that must be prevented and toward general
 mechanisms that ensure good behavior.  A formal definition gives us the
 ability to reason clearly about what is gained from applying a given
 enforcement mechanism to a system. Since many enforcement mechanisms are
