@@ -56,8 +56,10 @@ Definition genTargetReg (m : MachineState) : G Register :=
   choose (minReg, maxReg).
 
 Definition genImm (n : Z) : G Z :=
-  bindGen (choose (0, Z.div n 4))
-          (fun n' => ret (Z.mul 4 n')).
+  if n >? 0 then
+    bindGen (choose (0, Z.div n 4))
+            (fun n' => ret (Z.mul 4 n'))
+  else ret 0.
 
 Record ArithInfo := { aID : Register }.
 
@@ -837,7 +839,7 @@ genGPRTs pplus p genGPRTag = do
 -- TODO:  move sptag stuff from genMachine to here
  *)
 
-Definition defFuel := 42%nat.
+Definition defFuel := 100%nat.
 
 Definition genMachine
            (i : LayoutInfo) (t : TagInfo)
@@ -982,7 +984,7 @@ Definition prop_integrity :=
                     (prop_SimpleStackIntegrityStep defFuel defLayoutInfo m p cm (initC sm m))).
 
 Extract Constant defNumTests => "500".
-(* QuickCheck prop_integrity.  *)
+(*QuickCheck prop_integrity. *)
 
 (* Confidentiality *)
 
@@ -1015,6 +1017,17 @@ Definition genVariantOf (d : nat)
              end)
           )
           (getComponents m) m .
+
+Definition genVariantByList (ks : list Component) (m : MachineState) : G MachineState :=
+  trace "Varying" (
+  foldGen (fun macc k =>
+             match List.find (fun k' => keqb k k') ks with
+             | Some _ => bindGen (genImm 40) (fun z => returnGen (jorp macc k z))
+             | None => returnGen macc
+             end)
+          ks m
+        )
+  .
 
 Definition sameDifferenceP (m m' n n' : MachineState) k :=
   if (orb (negb (Z.eqb (proj m k) (proj m' k)))
@@ -1055,13 +1068,13 @@ Fixpoint prop_stackConfidentiality
   | S fuel' =>
     match AnnotationOf (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
     | Some call =>
-      trace ("call match" ++ nl)%string
+      (*trace ("call match" ++ nl)%string*)
       match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
       | Some (m', p', c', o) =>
         let depth := List.length (snd c') in
         let endP  := fun '(_,_,c) =>
                        (Nat.ltb (List.length (snd c)) depth) in
-        trace ("stack confidentiality: trying to generate variant")%string
+        (*trace ("stack confidentiality: trying to generate variant")%string*)
         forAllShrinkShow (genVariantOf depth c' m')
                          (fun _ => nil)
                          (fun n' => "")
@@ -1071,7 +1084,7 @@ Fixpoint prop_stackConfidentiality
       end
     | _ =>
       (* trace ("not a call" ++ nl)%string *)
-      trace ("** Memory:" ++ nl ++ printMem m p cm ctx i ++ nl)%string
+      (*trace ("** Memory:" ++ nl ++ printMem m p cm ctx i ++ nl)%string*)
       prop_stackConfidentiality fuel' i m p cm ctx
     (* | _ => checker true *)
     end
@@ -1090,7 +1103,7 @@ Definition prop_confidentiality :=
                     (prop_stackConfidentiality defFuel defLayoutInfo m p cm (initC sm m))).
 
 Extract Constant defNumTests => "500".
-QuickCheck prop_confidentiality. 
+(*QuickCheck prop_confidentiality. *)
 
 Fixpoint prop_laziestLockstepIntegrity
            fuel m n p cm ctx (endP : MPCState -> bool)
@@ -1113,47 +1126,53 @@ Fixpoint prop_laziestLockstepIntegrity
     end
   end.
 
-    Fixpoint prop_checkAtReturn
-             fuel i mcall m p cm ctx (d : nat) : Checker.Checker :=
-      match fuel with
-      | O => checker true
-      | S fuel' =>
-        if (Nat.ltb (depthOf c) depth then
-          [compare components between m and mcall and take the set that changed]
-            forAllShrinkShow (genVariantOf depth c' m)
-                         (fun _ => nil)
-                         (fun n' => "")
-                         (fun n' =>
-                            prop_laziestLockstepIntegrity defFuel m' n' p' c' cm (fun '(_,_,_) => False))
-        else
-          match mpcstep (m,p,ctx) with 
-          | Some m',_,_ => prop_checkAtReturn fuel' i mcall m' p cm ctx d
-          | _ => true
-          end
-      end
-  
-  Definition prop_laziestStackIntegrity
-           fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx
-  : Checker.Checker :=
+Fixpoint prop_checkAtReturn
+         fuel (i:LayoutInfo) mcall m p cm (ctx : context) (d : nat) : Checker.Checker :=
   match fuel with
   | O => checker true
   | S fuel' =>
-    match (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
-    | Some call =>
-      match mpcstep (m,p,ctx) cm with
-      | Some (m', p', c', o) =>
-        let depth := depthOf c' in
-        prop_checkAtReturn defFuel i m m p cm ctx depth
+    let depth := List.length (snd ctx) in
+    if Nat.ltb depth d then
+      let danger := fun k =>
+                      match (fst ctx) k with
+                      | Sealed _ => negb (Z.eqb (proj mcall k) (proj m k))
+                      | _ => false
+                      end in
+      let changed := List.filter danger (getComponents mcall) in
+      forAllShrinkShow (genVariantByList changed m)
+        (fun _ => nil)
+        (fun n => "")
+        (fun n =>
+           prop_laziestLockstepIntegrity defFuel m n p cm ctx (fun '(_,_,_) => false))
+    else
+      match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with 
+      | Some (m',_,_,_) => prop_checkAtReturn fuel' i mcall m' p cm ctx d
       | _ => checker true
       end
-    | _ => [recurse]
-    end
   end.
+  
+  Fixpoint prop_laziestStackIntegrity
+           fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx
+    : Checker.Checker :=
+    match fuel with
+    | O => checker true
+    | S fuel' =>
+      match AnnotationOf (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
+      | Some call =>
+        match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx)  with
+        | Some (m', p', c', o) =>
+          let depth := List.length (snd ctx) in
+          prop_checkAtReturn defFuel i m m p cm ctx depth
+        | _ => checker true
+        end
+      | _ => prop_laziestStackIntegrity fuel' i m p cm ctx
+      end
+    end.
 
 Definition prop_laziestIntegrity :=
   let sm := defstackmap defLayoutInfo in
   forAll genMach (fun '(m,p,cm) =>
                     (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initC sm m))).
 
-Extract Constant defNumTests => "500".
-(* QuickCheck prop_laziestIntegrity. *)
+Extract Constant defNumTests => "200".
+QuickCheck prop_laziestIntegrity.

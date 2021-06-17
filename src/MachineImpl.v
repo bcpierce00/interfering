@@ -205,20 +205,20 @@ Definition getComponents (m : MachineState) : list Component :=
                        (word.eqb (word.modu addr (word.of_Z 4)) (word.of_Z 0))
                        (word.gtu addr (word.of_Z 499)) in
     let keys := filter aligned (map.keys mNew) in
-    trace ("findDiff: new memory keys " ++ show (map word.unsigned keys))%string
+    (*trace ("findDiff: new memory keys " ++ show (map word.unsigned keys))%string*)
     match find (fun addr => negb (memAddr_eqb mOld mNew addr)) keys with
     | Some addr =>
-      trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string
+      (*trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string*)
       match loadWord mNew addr with
       | Some w =>
         let w' := match loadWord mOld addr with
                   | Some w => w
                   | None => trace "Oops!"%string (split 4 0)
                   end in
-        trace ("findDiff: change to " ++ show (combine 4 w) ++ " (from " ++ show (combine 4 w') ++ ")" ++ nl)%string
+        (*trace ("findDiff: change to " ++ show (combine 4 w) ++ " (from " ++ show (combine 4 w') ++ ")" ++ nl)%string*)
         Some (word.unsigned addr, combine 4 w)
       | None =>
-        trace ("findDiff: no diff found" ++ nl)%string
+        (*trace ("findDiff: no diff found" ++ nl)%string*)
         None
       end
     | None => None
@@ -228,11 +228,11 @@ Definition getComponents (m : MachineState) : list Component :=
   Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
     (* returns option unit * state *)
     (* TODO: What's an observation? *)
-    trace ("Register contents: "
+(*    trace ("Register contents: "
              ++ map.fold
                   (fun acc k v => acc ++ "[" ++ show k ++ "," ++ show (word.unsigned v) ++ "]")
                   "" (getRegs m)
-             ++ nl)%string
+             ++ nl)%string*)
     match Run.run1 RV32IM m with
     | (_, s') =>
       if Z.eqb (word.unsigned (getPc m))
@@ -243,7 +243,7 @@ Definition getComponents (m : MachineState) : list Component :=
         | None => (s', Tau)
         end
       else
-        trace ("PCs differ")%string
+(*        trace ("PCs differ")%string*)
         match findDiff (getMem m) (getMem s') with
         | Some v => (s', Out v)
         | None => (s', Tau)
@@ -576,7 +576,7 @@ Definition decodeI (w : w32) : option InstructionI :=
   end.
 
 Definition pstep (mp : MPState) : option PolicyState :=
-   trace ("Entering pstep..." ++ nl)%string
+   (*trace ("Entering pstep..." ++ nl)%string*)
   (
   let '(m, p) := mp in
   let pc := getPc m in
@@ -628,20 +628,20 @@ Definition mpstep (mp : MPState) : option (MPState * Observation) :=
       end in
 
   
- trace ("Entering mpstep with" ++ show (word.unsigned (getPc (ms mp))) ++ " @ " ++ show (pctags (ps mp)) ++ " : " ++ instr ++ nl
+(* trace ("Entering mpstep with" ++ show (word.unsigned (getPc (ms mp))) ++ " @ " ++ show (pctags (ps mp)) ++ " : " ++ instr ++ nl
         )%string
-        (
+        ( *)
   p' <- pstep mp; 
   match step (ms mp) with
   | (m', o) =>
-    trace ("Trace event " ++ show o ++ nl)%string (
+    (*trace ("Trace event " ++ show o ++ nl)%string ( *)
     if Z.eqb (word.unsigned (getPc (ms mp)))
              (word.unsigned (getPc m'))
     then None (* error *)
     else Some (m', p', o)
-    )
+    (*)*)
   end
-    )
+    (*)*)
 .
 
 Axiom mpstepCompat :
