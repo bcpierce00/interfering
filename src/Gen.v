@@ -839,7 +839,7 @@ genGPRTs pplus p genGPRTag = do
 -- TODO:  move sptag stuff from genMachine to here
  *)
 
-Definition defFuel := 100%nat.
+Definition defFuel := 42%nat.
 
 Definition genMachine
            (i : LayoutInfo) (t : TagInfo)
@@ -1019,14 +1019,13 @@ Definition genVariantOf (d : nat)
           (getComponents m) m .
 
 Definition genVariantByList (ks : list Component) (m : MachineState) : G MachineState :=
-  trace "Varying" (
   foldGen (fun macc k =>
              match List.find (fun k' => keqb k k') ks with
              | Some _ => bindGen (genImm 40) (fun z => returnGen (jorp macc k z))
              | None => returnGen macc
              end)
           ks m
-        )
+        
   .
 
 Definition sameDifferenceP (m m' n n' : MachineState) k :=
@@ -1139,6 +1138,7 @@ Fixpoint prop_checkAtReturn
                       | _ => false
                       end in
       let changed := List.filter danger (getComponents mcall) in
+      trace ("return to depth: " ++ show d ++ "   size of changed: " ++ (show (List.length changed)) ++ nl)
       forAllShrinkShow (genVariantByList changed m)
         (fun _ => nil)
         (fun n => "")
@@ -1146,7 +1146,7 @@ Fixpoint prop_checkAtReturn
            prop_laziestLockstepIntegrity defFuel m n p cm ctx (fun '(_,_,_) => false))
     else
       match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with 
-      | Some (m',_,_,_) => prop_checkAtReturn fuel' i mcall m' p cm ctx d
+      | Some (m',p',ctx',_) => prop_checkAtReturn fuel' i mcall m' p' cm ctx' d
       | _ => checker true
       end
   end.
@@ -1161,18 +1161,34 @@ Fixpoint prop_checkAtReturn
       | Some call =>
         match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx)  with
         | Some (m', p', c', o) =>
-          let depth := List.length (snd ctx) in
-          prop_checkAtReturn defFuel i m m p cm ctx depth
+          let depth := List.length (snd c') in
+          let sealed := fun k =>
+                          match (fst ctx) k with
+                          | Sealed _ => true
+                          | _ => false
+                          end in
+          trace ("callee depth: " ++ show depth ++ "   size of sealed: " ++
+                                  (show (List.length (List.filter sealed (getComponents m'))) ++ nl))
+                (
+                  conjoin
+                    ([prop_checkAtReturn defFuel i m' m' p' cm c' depth] ++
+                     [prop_laziestStackIntegrity fuel' i m' p' cm c']))
         | _ => checker true
         end
-      | _ => prop_laziestStackIntegrity fuel' i m p cm ctx
+      | _ =>
+        match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx)  with
+        | Some (m', p', c', o) =>
+          prop_laziestStackIntegrity fuel' i m' p' cm c'
+        | _ => checker true
+        end
       end
     end.
 
-Definition prop_laziestIntegrity :=
-  let sm := defstackmap defLayoutInfo in
-  forAll genMach (fun '(m,p,cm) =>
-                    (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initC sm m))).
+  Definition prop_laziestIntegrity :=
+    trace (nl ++ nl) (
+            let sm := defstackmap defLayoutInfo in
+            forAll genMach (fun '(m,p,cm) =>
+                              (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initC sm m)))).
 
-Extract Constant defNumTests => "200".
+Extract Constant defNumTests => "500".
 QuickCheck prop_laziestIntegrity.
