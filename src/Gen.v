@@ -1113,27 +1113,40 @@ Fixpoint prop_laziestLockstepIntegrity
     end
   end.
 
-Definition prop_laziestStackIntegrity
+    Fixpoint prop_checkAtReturn
+             fuel i mcall m p cm ctx (d : nat) : Checker.Checker :=
+      match fuel with
+      | O => checker true
+      | S fuel' =>
+        if (Nat.ltb (depthOf c) depth then
+          [compare components between m and mcall and take the set that changed]
+            forAllShrinkShow (genVariantOf depth c' m)
+                         (fun _ => nil)
+                         (fun n' => "")
+                         (fun n' =>
+                            prop_laziestLockstepIntegrity defFuel m' n' p' c' cm (fun '(_,_,_) => False))
+        else
+          match mpcstep (m,p,ctx) with 
+          | Some m',_,_ => prop_checkAtReturn fuel' i mcall m' p cm ctx d
+          | _ => true
+          end
+      end
+  
+  Definition prop_laziestStackIntegrity
            fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx
   : Checker.Checker :=
   match fuel with
   | O => checker true
   | S fuel' =>
-    match AnnotationOf (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
+    match (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
     | Some call =>
-      match mpcstep (updateC (CodeMap_fromImpl cm)) (m,p,ctx) with
+      match mpcstep (m,p,ctx) cm with
       | Some (m', p', c', o) =>
-        let depth := List.length (snd c') in
-        let endP  := fun '(_,_,c) =>
-                       (Nat.ltb (List.length (snd c)) depth) in
-        forAllShrinkShow (genVariantOf depth c' m')
-                         (fun _ => nil)
-                         (fun n' => "")
-                         (fun n' =>
-                            prop_laziestLockstepIntegrity defFuel m' n' p' cm c' endP)
+        let depth := depthOf c' in
+        prop_checkAtReturn defFuel i m m p cm ctx depth
       | _ => checker true
       end
-    | _ => checker true
+    | _ => [recurse]
     end
   end.
 
