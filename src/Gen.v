@@ -389,7 +389,8 @@ Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
   let noSp p t :=
       andb (p t) (negb (existsb (tag_eqb Tsp) t)) in
   let getDataInfo :=
-      getInfo (noSp dataP) (stackLo i) (stackHi i) in 
+      getInfo (noSp dataP) (stackLo i) (stackHi i) in
+  (* TODO: To generate bad writes, resort to SP *)
   let getCodeInfo :=
       getInfo (noSp codeP) (instLo i) (instHi i) in
   let isStackLoc p t :=
@@ -1082,6 +1083,7 @@ Fixpoint prop_stackConfidentiality
       | _ => checker true
       end
     | _ =>
+      (* FIXME: mpcstep *)
       (* trace ("not a call" ++ nl)%string *)
       (*trace ("** Memory:" ++ nl ++ printMem m p cm ctx i ++ nl)%string*)
       prop_stackConfidentiality fuel' i m p cm ctx
