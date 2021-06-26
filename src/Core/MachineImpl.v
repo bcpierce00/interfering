@@ -212,7 +212,7 @@ Extract Constant exception =>
     | _, _ => false
     end.
 
- (* TODO: We don't have information about which parts of memory to monitor for
+  (* TODO: We don't have information about which parts of memory to monitor for
      changes. On a first approximation, monitor all positions (aligned accesses
      only) outside the code segment (whose limits are here, again for simplicity,
      hardcoded). *)
