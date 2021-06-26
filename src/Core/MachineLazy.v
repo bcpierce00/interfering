@@ -1,7 +1,8 @@
+Require Coq.Strings.String. Open Scope string_scope.
 Require Import Coq.Lists.List.
 Import List.ListNotations.
 
-From StackSafety Require Import Trace.
+From StackSafety Require Import MachineModule PolicyModule.
 
 Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.
@@ -31,8 +32,24 @@ Require Import Lia.
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
 
+From QuickChick Require Import QuickChick.
+
+Module RISCV <: Machine.
+
+Axiom exception : forall {A}, string -> A.
+Extract Constant exception =>
+  "(fun l ->
+   let s = Bytes.create (List.length l) in
+   let rec copy i = function
+    | [] -> s
+    | c :: l -> Bytes.set s i c; copy (i+1) l
+   in failwith (""Exception: "" ^ Bytes.to_string (copy 0 l)))".
+
   Definition Word := MachineInt.
   (* Parameter Word *)
+
+  Instance ShowWord : Show word :=
+    {| show x := show (word.signed x) |}.
 
   Definition wlt : Word -> Word -> bool := Z.ltb.
   (*  Parameter wlt : Word -> Word -> bool. *)
@@ -60,7 +77,7 @@ Import RecordSetNotations.
 
   Definition wle (w1 w2: Word) : bool :=
     orb (wlt w1 w2) (weq w1 w2).
-  
+
   (*
     Parameter wplus : Word -> nat -> Word.
     Parameter wminus : Word -> nat -> Word.
@@ -92,6 +109,8 @@ Import RecordSetNotations.
   | Reg (r:Register)
   | PC.
 
+  Derive Show for Component.
+
   Definition keqb (k1 k2 : Component) : bool :=
     match k1, k2 with
     | Mem a1, Mem a2 => Z.eqb a1 a2
@@ -109,6 +128,7 @@ Import RecordSetNotations.
 
   (* A Value is a Word. *)
   Definition Value : Type := Word.
+  Definition vtow (v : Value) : Word := v.
 
   (* We use a risc-v machine as our machine state and a view as a map from its
      components to their values. *)
@@ -135,17 +155,117 @@ Import RecordSetNotations.
       end
     end.
 
+  Definition projw := fun m k => vtow (proj m k).
+
+  Lemma proj_vtow : forall m k, vtow (proj m k) = vtow (projw m k). Proof. intros;auto. Qed.
+
+  (* Maybe name this pullback instead *)
+  Definition jorp (m : MachineState) (k : Component) (v : Value) : MachineState :=
+    match k with
+    | Mem a =>
+      withMem
+        (unchecked_store_byte_list (word.of_Z a)
+                                   (Z32s_to_bytes [v]) (getMem m)) m
+    | Reg r =>
+      withRegs (map.put (getRegs m) r (word.of_Z v)) m
+    | PC =>
+      withPc (word.of_Z v) m
+    end.
+
+  Definition getComponents (m : MachineState) : list Component :=
+    (* PC *)
+    let pc := [PC] in
+    (* Non-zero registers. *)
+    let regs :=
+        List.map (fun x => Reg x)
+                 (List.rev
+                    (map.fold (fun acc z v => z :: acc) nil
+                              (RiscvMachine.getRegs m))) in
+    (* Non-zero memory-locs. *)
+    let mem :=
+        List.rev
+          (map.fold (fun acc w v =>
+                       let z := word.unsigned w in
+                       if Z.eqb (snd (Z.div_eucl z 4)) 0
+                       then (Mem z) :: acc else acc) nil
+                    (RiscvMachine.getMem m)) in
+    pc ++ regs ++ mem.
+
+  Definition ObsType : Type := Word * Value.
+
   (* Observations are values, or silent (tau) *)
-  Inductive Observation : Type := 
-  | Out (w:Value) 
-  | Tau. 
+  Inductive Observation : Type :=
+  | Out (o: ObsType)
+  | Tau.
+
+  Definition obs_eqb (o1 o2 : Observation) := true. (* FIXME *)
+
+  Definition w32_eqb (w1 w2 : w32) : bool :=
+    let l1 := HList.tuple.to_list w1 in
+    let l2 := HList.tuple.to_list w2 in
+    let l12 := List.combine l1 l2 in
+    forallb (fun '(b1, b2) => Byte.eqb b1 b2) l12.
+
+  Definition memAddr_eqb (mem mem' : DefaultMemImpl32.Mem) (addr : word32) : bool :=
+    match loadWord mem addr, loadWord mem' addr with
+    | Some w, Some w' => w32_eqb w w'
+    | _, _ => false
+    end.
+
+  (* TODO: We don't have information about which parts of memory to monitor for
+     changes. On a first approximation, monitor all positions (aligned accesses
+     only) outside the code segment (whose limits are here, again for simplicity,
+     hardcoded). *)
+  Definition findDiff mOld mNew : option (Word * Value) :=
+    let aligned := fun addr =>
+                     andb
+                       (word.eqb (word.modu addr (word.of_Z 4)) (word.of_Z 0))
+                       (word.gtu addr (word.of_Z 499)) in
+    let keys := filter aligned (map.keys mNew) in
+    (* trace ("findDiff: new memory keys " ++ show (map word.unsigned keys))%string *)
+    match find (fun addr => negb (memAddr_eqb mOld mNew addr)) keys with
+    | Some addr =>
+      trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string
+      match loadWord mNew addr with
+      | Some w =>
+        (* let w' := match loadWord mOld addr with *)
+        (*           | Some w => w *)
+        (*           | None => trace "Oops!"%string (split 4 0) *)
+        (*           end in *)
+        (* trace ("findDiff: change to " ++ show (combine 4 w) ++ " (from " ++ show (combine 4 w') ++ ")" ++ nl)%string *)
+        Some (word.unsigned addr, combine 4 w)
+      | None =>
+        (* trace ("findDiff: no diff found" ++ nl)%string *)
+        None
+      end
+    | None => None
+    end.
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
     (* returns option unit * state *)
     (* TODO: What's an observation? *)
+(*    trace ("Register contents: "
+             ++ map.fold
+                  (fun acc k v => acc ++ "[" ++ show k ++ "," ++ show (word.unsigned v) ++ "]")
+                  "" (getRegs m)
+             ++ nl)%string*)
     match Run.run1 RV32IM m with
-    | (_, s') => (s', Tau)
+    | (_, s') =>
+      if Z.eqb (word.unsigned (getPc m))
+               (word.unsigned (getPc s'))
+      then
+        match findDiff (getMem m) (getMem s') with
+        | Some v => (s', Out v)
+        | None => (s', Tau)
+        end
+      else
+(*        trace ("PCs differ")%string*)
+        match findDiff (getMem m) (getMem s') with
+        | Some v => (s', Out v)
+        | None => (s', Tau)
+        end
+        (* (s', Tau) *)
     end
   .
 
@@ -158,7 +278,7 @@ Import RecordSetNotations.
 
   Inductive CodeAnnotation :=
   | call
-  | ret
+  | retrn
   | yield
   | scall (f: MachineState -> Addr -> bool)
   | normal
@@ -168,8 +288,8 @@ Import RecordSetNotations.
   | inFun   : FunID -> CodeAnnotation -> CodeStatus
   | notCode : CodeStatus
   .
-  
-  Definition CodeMap := Addr -> CodeStatus.
+
+  Definition CodeMap := Addr -> option CodeAnnotation.
 
   (* Stack ID of stack pointer *)
   Definition activeStack (sm: StackMap) (m: MachineState) :
@@ -186,19 +306,6 @@ Import RecordSetNotations.
     | _, _ => false
     end.
 
-  Definition AnnotationOf (cdm : CodeMap) (a:Addr) : option CodeAnnotation :=
-    match cdm a with
-    | inFun f normal => None
-    | inFun f ann => Some ann
-    | notCode => None
-    end.
-
-  Definition isCode' (cdm : CodeMap) (a:Addr) : bool :=
-    match cdm a with
-    | inFun _ _ => true
-    | notCode => false
-    end.
-
   Definition justRet (mc m: MachineState) : Prop :=
     proj m PC = wplus (proj mc PC) 4 /\ proj m (Reg SP) = proj mc (Reg SP).
 
@@ -210,6 +317,8 @@ Import RecordSetNotations.
       try solve [left; auto];
       right; intros [? ?]; auto.
   Qed.
+
+End RISCV.
 
 (* TODO: More interesting state/abstract *)
 Inductive Tag : Type :=
