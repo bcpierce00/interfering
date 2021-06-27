@@ -651,4 +651,3 @@ Module TagPolicy <: Policy RISCV.
   (* TODO: More interesting well-formedness condition *)
   Definition WFInitMPState (mp:MPState) := True.
 End TagPolicy.
-y
