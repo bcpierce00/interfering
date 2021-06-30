@@ -38,7 +38,6 @@ From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
 
 Import ListNotations.
-Import RiscvMachine.
 
 Module TestPropsRISCVSimple
        (M : RISCV)
@@ -53,7 +52,7 @@ Module TestPropsRISCVSimple
   Import GenImp.
   Import PrintImp.
   
-  Definition defFuel := 420%nat.
+  Definition defFuel := 42%nat.
 
   Definition sameDifferenceP (m m' n n' : MachineState) k :=
     if (orb (negb (Z.eqb (proj m k) (proj m' k)))
@@ -235,7 +234,8 @@ Fixpoint prop_checkAtReturn
                   conjoin
                     ([prop_checkAtReturn defFuel i m' m' p' cm c' depth] ++
                      [prop_laziestStackIntegrity fuel' i m' p' cm c']))
-        | _ => checker true
+        | _ =>
+          collect ("Failstop", fuel) true
         end
       | _ =>
         match mpcstep (m,p,ctx) cm with
