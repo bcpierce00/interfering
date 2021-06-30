@@ -46,6 +46,7 @@ Module Type Gen (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestCtx M 
   Import MPC.
 
   Parameter genVariantOf : nat -> CtxState -> MachineState -> G MachineState.
+  Parameter genVariantByList : list Component -> MachineState -> G MachineState.
   
   Parameter genMach : G (MachineState * PolicyState * CodeMap_Impl).
 End Gen.

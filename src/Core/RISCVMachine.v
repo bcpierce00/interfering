@@ -34,7 +34,8 @@ Import RecordSetNotations.
 
 From QuickChick Require Import QuickChick.
 
-Module RISCV <: Machine.
+Module Type RISCV <: Machine.
+  Export RiscvMachine.
 
 Axiom exception : forall {A}, string -> A.
 Extract Constant exception =>
@@ -191,14 +192,14 @@ Extract Constant exception =>
                     (RiscvMachine.getMem m)) in
     pc ++ regs ++ mem.
 
-  Definition ObsType := unit.
+  Parameter ObsType : Type.
 
   (* Observations are values, or silent (tau) *)
   Inductive Observation : Type := 
   | Out (w:ObsType) 
   | Tau.
 
-  Definition obs_eqb (o1 o2 : Observation) := true.
+  Parameter obs_eqb : Observation -> Observation -> bool.
 
   Definition w32_eqb (w1 w2 : w32) : bool :=
     let l1 := HList.tuple.to_list w1 in
@@ -216,34 +217,11 @@ Extract Constant exception =>
      changes. On a first approximation, monitor all positions (aligned accesses
      only) outside the code segment (whose limits are here, again for simplicity,
      hardcoded). *)
-  Definition findDiff mOld mNew : option Z :=
-    let aligned := fun addr =>
-                     andb
-                       (word.eqb (word.modu addr (word.of_Z 4)) (word.of_Z 0))
-                       (word.gtu addr (word.of_Z 499)) in
-    let keys := filter aligned (map.keys mNew) in
-    (* trace ("findDiff: new memory keys " ++ show (map word.unsigned keys))%string *)
-    match find (fun addr => negb (memAddr_eqb mOld mNew addr)) keys with
-    | Some addr =>
-      trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string
-      match loadWord mNew addr with
-      | Some w =>
-        (* let w' := match loadWord mOld addr with *)
-        (*           | Some w => w *)
-        (*           | None => trace "Oops!"%string (split 4 0) *)
-        (*           end in *)
-        (* trace ("findDiff: change to " ++ show (combine 4 w) ++ " (from " ++ show (combine 4 w') ++ ")" ++ nl)%string *)
-        Some (combine 4 w)
-      | None => None
-        (* trace ("findDiff: no diff found" ++ nl)%string *)
-      end
-    | None => None
-    end.
+  Parameter findDiff : MachineState -> MachineState -> option ObsType.
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
     (* returns option unit * state *)
-    (* TODO: What's an observation? *)
     match Run.run1 RV32IM m with
     | (_, s') =>
       if Z.eqb (word.unsigned (getPc m))
@@ -251,9 +229,11 @@ Extract Constant exception =>
       then
         (s', Tau)
       else          
-      (s', Tau)
-    end
-  .
+        match findDiff m s' with
+        | Some v => (s', Out v)
+        | None => (s', Tau)
+        end
+    end.
 
   Definition FunID := nat.
   Definition StackID := nat.
@@ -300,8 +280,8 @@ Extract Constant exception =>
   Qed.
 End RISCV.
 
-Module TagPolicyEager <: Policy RISCV.
-  Import RISCV.
+Module TagPolicyEager (M: RISCV) <: Policy M.
+  Import M.
   
   (* TODO: More interesting state/abstract *)
   Inductive Tag : Type :=
@@ -645,22 +625,22 @@ Module TagPolicyEager <: Policy RISCV.
   Definition WFInitMPState (mp:MPState) := True.
 End TagPolicyEager.
 
-Module TagPolicyLazyFixed <: Policy RISCV.
-  Import RISCV.
+Module TagPolicyLazyFixed (M : RISCV) <: Policy M.
+  Import M.
   
-(* TODO: More interesting state/abstract *)
-Inductive Tag : Type :=
-| Tcall
-| Th1
-| Th2
-| Tinstr
-| Tpc (n : nat)
-| Tr1
-| Tr2
-| Tr3
-| Tsp
-| Tstack (n : nat)
-.
+  (* TODO: More interesting state/abstract *)
+  Inductive Tag : Type :=
+  | Tcall
+  | Th1
+  | Th2
+  | Tinstr
+  | Tpc (n : nat)
+  | Tr1
+  | Tr2
+  | Tr3
+  | Tsp
+  | Tstack (n : nat)
+  .
 
 Definition tag_eqb (t1 t2 :  Tag) : bool :=
   match t1, t2 with

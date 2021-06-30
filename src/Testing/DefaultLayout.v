@@ -1,11 +1,11 @@
-From StackSafety Require Import MachineModule PolicyModule TestingModules MachineImpl.
+From StackSafety Require Import MachineModule PolicyModule TestingModules RISCVMachine.
 
 Import ZArith. Open Scope Z.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Map.Interface.
 
-Module DefaultLayout <: LayoutInfo RISCV.
-  Import RISCV.
+Module DefaultLayout (M : RISCV) <: LayoutInfo M.
+  Import M.
 
   Record myLayoutInfo := { instLo : Z
                          ; instHi : Z

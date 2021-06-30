@@ -1,5 +1,5 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     MachineImpl DefaultLayout TestSubroutineSimple PrintRISCVTagSimple.
+     RISCVObs DefaultLayout TestSubroutineSimple PrintRISCVTagSimple.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -24,10 +24,8 @@ Import RecordSetNotations.
 Import ListNotations.
 Import RiscvMachine.
 
-Import TagPolicyLazyFixed.
-
-Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
-  Module MPC := TestMPC RISCV TagPolicyLazyFixed DefaultLayout TSS.
+Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
+  Module MPC := TestMPC RISCVObs TPLazyFixedObs DLObs TSS.
   Import MPC.
 
   Definition defFuel := 42%nat.
@@ -108,7 +106,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
     --                 integer registers
    *)
 
-    Definition listify1 {A} (m : Zkeyed_map A)
+  Definition listify1 {A} (m : Zkeyed_map A)
     : list (Z * A) :=
     List.rev (map.fold (fun acc z v => (z,v) :: acc) nil m).
   
@@ -334,7 +332,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
  *)
 
   Definition headerHead offset f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) := [(Jal ra offset , [Tinstr; Tcall], f    , call)].
+    list (InstructionI * TagSet * FunID * CodeAnnotation) := [(Jal ra offset , [Tinstr; Tcall], f, call)].
 
   Definition headerSeq offset f nextF :
     list (InstructionI * TagSet * FunID * CodeAnnotation) :=
@@ -344,7 +342,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
 (*               ; (Sw sp 8 (-8) , [Tinstr; Th3]  , nextF, normal)
                ; (Sw sp 9 (-4) , [Tinstr; Th4]  , nextF, normal)*)
                ].
-  
+
   (* Based on Rob's 
      (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
      (* 12 *) IInstruction (Addi SP SP 12); (* H2 *)
@@ -355,16 +353,6 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
              (callP :  TagSet -> bool) :
     option (G (list (InstructionI * TagSet * FunID * CodeAnnotation)))
     :=
-      (*  
-          genCall :: PolicyPlus -> Machine_State -> PIPE_State ->
-          (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
-          (Instr_I -> Gen TagSet) ->
-          (Integer -> [(Instr_I, TagSet)]) ->
-          Gen [(Instr_I, TagSet)]
-          genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
-          let m = ms ^. fmem
-          t = Map.assocs $ ps ^. pmem
-       *)
       let existingSites :=
           List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
                    (List.filter (fun '(i,t) => callP t)
@@ -391,13 +379,11 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
                       end) existingSites  in
       let newOpts :=
           List.map (fun i => headerSeq i f nextF) newCallSites in
-      (* TODO: re-call *)
-      match (* exOpts ++ *) newOpts with
+      match exOpts ++ newOpts with
       | [] => None
       | x :: xs =>
         Some (elems_ x (x :: xs))
       end.
-
   
   Definition returnSeq (f rf : FunID) :=
     [ (Lw   ra sp 0     , [Tinstr; Tr1], f, normal)
@@ -453,12 +439,21 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
                   returnGen macc
                 | _ =>
                   bindGen (genImm 40) (fun z =>
-                                         (*               trace ("Trying to set: " ++ show k ++ " to " ++ show z ++ " which was " ++ show (fst c k) ++ nl ++ "Previous value was: " ++ show (proj macc k) ++ nl ++ " Next value will be: " ++ show (proj (jorp macc k z) k) ++ nl ++ "Nearby values are: " ++ show (kplus k) ++ " : " ++ show (proj macc (kplus k)) ++ " and " ++ show (ksub k) ++ " : " ++ show (proj macc (ksub k)) ++ nl)%string *)
+                                         (*               trace ("Trying to set: " ++ show k ++ " to " ++ show z ++ " which was " ++ show (fst c k) ++ nl ++ "Previous value was: " ++ show (proj macc k) ++ nl ++ " Next value will be: " ++ show (proj (jorp macc k z) k) ++ nl ++ nl)%string *)
                                          (returnGen (jorp macc k z)))
                 end)
             )
             (getComponents m) m .
 
+  Definition genVariantByList (ks : list Component) (m : MachineState) : G MachineState :=
+    foldGen (fun macc k =>
+               match List.find (fun k' => keqb k k') ks with
+               | Some _ => bindGen (genImm 40) (fun z => returnGen (jorp macc k z))
+               | None => returnGen macc
+               end)
+          ks m.
+        
+  
   (*
     -- | Generation by execution receives an initial machine X PIPE state and
     -- | generates instructions until n steps have been executed.
@@ -490,7 +485,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
        | Some _ =>
          match its with
          | nil =>
-           (*      trace ("Existing instruction found: " ++ nl)%string *)
+           trace ("Existing instruction found." ++ nl)%string
            (            
              (* Instruction already exists, step... *)
              match mpstep (m,p) with
@@ -498,16 +493,15 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
                (* ...and recurse. *)
                gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP genInstrTag
              | _ =>
-               (* ... something went wrong. Trace something? *)
-               ret (m0, p0, cm)
+               exception "Something went wrong."
              end
            )
          | _ =>
-           (*trace ("Existing instruction mid-sequence" ++ nl)%string*)
+           trace ("Existing instruction mid-sequence" ++ nl)%string
            (ret (m0, p0, cm))
          end
        | _ =>
-         (*      trace ("No instruction found " ++ nl)%string *)
+         (*trace ("No instruction found " ++ nl)%string *)
          (* Check if there is anything left to put *)
          (bindGen (match its with
                    | [] =>
@@ -594,14 +588,6 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
              (dataP codeP callP : TagSet -> bool)
              (genInstrTag : InstructionI -> G TagSet)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
-    (*  
-        genMachine :: PolicyPlus -> (PolicyPlus -> Gen TagSet) -> (PolicyPlus -> Gen TagSet) ->
-        (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
-        (Integer -> [(Instr_I, TagSet)]) -> [(Instr_I, TagSet)] ->
-        (Instr_I -> Gen TagSet) -> TagSet -> 
-        Gen RichState
-        genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag spTag = do
-     *)
     bindGen (genDataMemory i t m0 p0)
             (fun '(ms,ps) =>
                bindGen (genGPRs t ms ps)
