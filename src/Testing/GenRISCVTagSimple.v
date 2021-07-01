@@ -117,9 +117,9 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
     | (z1,a)::l1',(z2,b)::l2' =>
       if Z.eqb z1 z2 then
         (z1, a, b) :: combine_match l1' l2'
-      else exception ("combine_match - not_eq " ++ (show (l1, l2))%string)
+      else combine_match l1' l2' (*exception ("combine_match - not_eq " ++ (show (l1, l2))%string)*)
     | nil, nil => nil
-    | _, _ => exception ("combine_match: " ++ (show (l1,l2)))%string
+    | _, _ => nil (*exception ("combine_match: " ++ (show (l1,l2)))%string*)
     end.
 
   Definition listify2 {A B} `{Show A} `{Show B}
@@ -227,8 +227,10 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
     |}.
 
   Definition genImm (n : Z) : G Z :=
-    bindGen (choose (0, Z.div n 4))
-            (fun n' => ret (Z.mul 4 n')).
+    if (n >=? 0)
+    then bindGen (choose (0, Z.div n 4))
+                 (fun n' => ret (Z.mul 4 n'))
+    else ret 0.
 
   Definition genTargetReg (m : MachineState) : G Register :=
     choose (minReg, maxReg).
@@ -332,8 +334,10 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
   Definition headerSeq offset f nextF :
     list (InstructionI * TagSet * FunID * CodeAnnotation) :=
     headerHead offset f ++
-               [ (Addi sp sp 12 , [Tinstr; Th1]  , nextF, normal)
-               ; (Sw sp ra 0    , [Tinstr; Th2]  , nextF, normal)
+               [
+                 (Sw sp ra 0    , [Tinstr; Th1]  , nextF, normal)
+               ; (Addi sp sp 12 , [Tinstr; Th2]  , nextF, normal)
+               
 (*               ; (Sw sp 8 (-8) , [Tinstr; Th3]  , nextF, normal)
                ; (Sw sp 9 (-4) , [Tinstr; Th4]  , nextF, normal)*)
                ].
@@ -446,7 +450,9 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
                | None => returnGen macc
                end)
           ks m.
-        
+
+  Instance ShowStuff : Show (InstructionI * TagSet * FunID * CodeAnnotation) :=
+    {| show '(i, ts, f, a) := (show i ++ "@" ++ show ts ++ "|" ++ show f)%string |}.
   
   (*
     -- | Generation by execution receives an initial machine X PIPE state and
@@ -467,7 +473,7 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
            (dataP codeP callP : TagSet -> bool)
     (* num calls? *)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
-    (*  trace (show ("GenExec...", steps, its, printPC m p) ++ nl)%string *)
+    (*trace ("GenExec..." ++ show steps ++ " " ++ show its ++ printPC m p ++ nl)%string*)
     (match steps with
      | O =>
        (* Out-of-fuel: End generation. *)
@@ -477,7 +483,7 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
        | Some _ =>
          match its with
          | nil =>
-           trace ("Existing instruction found." ++ nl)%string
+           (*trace ("Existing instruction found." ++ nl)%string*)
            (            
              (* Instruction already exists, step... *)
              match mpstep (m,p) with
@@ -485,7 +491,7 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
                (* ...and recurse. *)
                gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP
              | _ =>
-               exception "Something went wrong."
+               trace "Something went wrong." ret (m0,p0,cm)
              end
            )
          | _ =>
@@ -493,7 +499,7 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
            (ret (m0, p0, cm))
          end
        | _ =>
-         (*trace ("No instruction found " ++ nl)%string *)
+         (*trace ("No instruction found " ++ nl)%string*)
          (* Check if there is anything left to put *)
          (bindGen
             (match its with
@@ -504,7 +510,7 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
                        (fun itfas =>
                           match itfas with
                           | (i,t,f',a) :: itfs' =>
-                            (*                              trace (show (f',ist, ists') ++ nl)%string*)
+                            trace (show (i,t,f',a) ++ nl)%string
                             (returnGen (a, f', (i,t), itfs'))
                           | _ => exception "EmptyInstrSeq"
                           end)

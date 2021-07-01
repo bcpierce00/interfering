@@ -60,6 +60,8 @@ Module Type Printing (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestC
     {| show o := printObsType o |}.
   Derive Show for Observation.
 
+  Parameter printPC : MachineState -> PolicyState -> string.
+  
   Parameter printComponent : Component -> MachineState -> PolicyState -> 
                              CodeMap_Impl -> CtxState -> LayoutInfo -> string.
 

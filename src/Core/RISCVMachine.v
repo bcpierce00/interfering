@@ -840,9 +840,9 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
     match existsb (tag_eqb Th1) tpc, trs, taddr with
     | true, [Tpc id], [Tsp] => Some (p <| pctags := filter (tag_neqb Th1) tpc ++ [Th2] |>
                                           <| memtags := map.put (memtags p) addr [Tpc id] |>)
-    | _, _, _ => trace ("Failstop on Load: Tr1" ++ nl) None
+    | _, _, _ => trace ("Failstop on Store: Tr1" ++ nl) None
     end
-  | _ => trace ("Failstop on Load: no tag!" ++ nl) None
+  | _ => trace ("Failstop on Store: no tag!" ++ nl) None
   end.
 
 Definition decodeI (w : w32) : option InstructionI :=

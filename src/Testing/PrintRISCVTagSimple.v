@@ -84,9 +84,9 @@ Module PrintRISCVTagSimple : Printing RISCVObs TPLazyFixedObs DLObs TSS.
     | (z1,a)::l1',(z2,b)::l2' =>
       if Z.eqb z1 z2 then
         (z1, a, b) :: combine_match l1' l2'
-      else exception ("combine_match - not_eq " ++ (show (l1, l2))%string)
+      else combine_match l1' l2' (*exception ("combine_match - not_eq " ++ (show (l1, l2))%string)*)
     | nil, nil => nil
-    | _, _ => exception ("combine_match: " ++ (show (l1,l2)))%string
+    | _, _ => nil (*exception ("combine_match: " ++ (show (l1,l2)))%string*)
     end.
 
   Definition listify2 {A B} `{Show A} `{Show B}

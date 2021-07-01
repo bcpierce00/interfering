@@ -260,4 +260,4 @@ Module TestRISCVTagSimple := TestPropsRISCVSimple RISCVObs TPLazyFixedObs DLObs
 Import TestRISCVTagSimple.
 
 Extract Constant defNumTests => "500".
-QuickCheck prop_integrity.
+QuickCheck prop_laziestIntegrity.
