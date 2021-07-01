@@ -46,6 +46,7 @@ Module Type Gen (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestCtx M 
   Import MPC.
 
   Parameter genVariantOf : nat -> CtxState -> MachineState -> G MachineState.
+  Parameter genVariantByList : list Component -> MachineState -> G MachineState.
   
   Parameter genMach : G (MachineState * PolicyState * CodeMap_Impl).
 End Gen.
@@ -59,6 +60,8 @@ Module Type Printing (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestC
     {| show o := printObsType o |}.
   Derive Show for Observation.
 
+  Parameter printPC : MachineState -> PolicyState -> string.
+  
   Parameter printComponent : Component -> MachineState -> PolicyState -> 
                              CodeMap_Impl -> CtxState -> LayoutInfo -> string.
 

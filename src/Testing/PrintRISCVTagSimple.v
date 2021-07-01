@@ -1,6 +1,6 @@
 Require Coq.Strings.String. Open Scope string_scope.
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     MachineImpl DefaultLayout TestSubroutineSimple.
+     RISCVMachine RISCVObs DefaultLayout TestSubroutineSimple.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -13,11 +13,8 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Map.Interface.
 Require Import Coq.Lists.List. Import ListNotations.
 
-Import RiscvMachine.
-Import TagPolicyLazyFixed.
-
-Module PrintRISCVTagSimple : Printing RISCV TagPolicyLazyFixed DefaultLayout TSS.
-  Module MPC := TestMPC RISCV TagPolicyLazyFixed DefaultLayout TSS.
+Module PrintRISCVTagSimple : Printing RISCVObs TPLazyFixedObs DLObs TSS.
+  Module MPC := TestMPC RISCVObs TPLazyFixedObs DLObs TSS.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".
@@ -26,11 +23,11 @@ Module PrintRISCVTagSimple : Printing RISCV TagPolicyLazyFixed DefaultLayout TSS
   Derive Show for Observation.
 
   Definition printPC (m : MachineState) (p : PolicyState) :=
-  (show (word.unsigned (getPc m)) ++ " @ " ++ show (pctags p))%string.
+  (show (projw m PC) ++ " @ " ++ show (pctags p))%string.
 
   Definition printPCs (m n : MachineState) (p : PolicyState) :=
-    let val1 := word.unsigned (getPc m) in
-    let val2 := word.unsigned (getPc n) in
+    let val1 := projw m PC in
+    let val2 := projw n PC in
     ((if Z.eqb val1 val2 then
         show val1
       else (show val1 ++ "/" ++ show val2))
@@ -87,9 +84,9 @@ Module PrintRISCVTagSimple : Printing RISCV TagPolicyLazyFixed DefaultLayout TSS
     | (z1,a)::l1',(z2,b)::l2' =>
       if Z.eqb z1 z2 then
         (z1, a, b) :: combine_match l1' l2'
-      else exception ("combine_match - not_eq " ++ (show (l1, l2))%string)
+      else combine_match l1' l2' (*exception ("combine_match - not_eq " ++ (show (l1, l2))%string)*)
     | nil, nil => nil
-    | _, _ => exception ("combine_match: " ++ (show (l1,l2)))%string
+    | _, _ => nil (*exception ("combine_match: " ++ (show (l1,l2)))%string*)
     end.
 
   Definition listify2 {A B} `{Show A} `{Show B}
@@ -100,7 +97,7 @@ Module PrintRISCVTagSimple : Printing RISCV TagPolicyLazyFixed DefaultLayout TSS
   Definition printGPRs (m : MachineState) (p : PolicyState) :=
     List.fold_left (fun acc '(rID, rVal, rTag) =>
                       show rID ++ " : " ++ show rVal ++ " @ " ++ show rTag ++ nl ++ acc)%string 
-                   (listify2 (getRegs m) (regtags p)) "". 
+                   (listify2 (getRegs m) (regtags p)) "".
 
   Definition listify1_word mem := 
   List.rev

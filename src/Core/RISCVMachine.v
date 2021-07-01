@@ -34,7 +34,8 @@ Import RecordSetNotations.
 
 From QuickChick Require Import QuickChick.
 
-Module RISCV <: Machine.
+Module Type RISCV <: Machine.
+  Export RiscvMachine.
 
 Axiom exception : forall {A}, string -> A.
 Extract Constant exception =>
@@ -191,14 +192,14 @@ Extract Constant exception =>
                     (RiscvMachine.getMem m)) in
     pc ++ regs ++ mem.
 
-  Definition ObsType := unit.
+  Parameter ObsType : Type.
 
   (* Observations are values, or silent (tau) *)
   Inductive Observation : Type := 
   | Out (w:ObsType) 
   | Tau.
 
-  Definition obs_eqb (o1 o2 : Observation) := true.
+  Parameter obs_eqb : Observation -> Observation -> bool.
 
   Definition w32_eqb (w1 w2 : w32) : bool :=
     let l1 := HList.tuple.to_list w1 in
@@ -216,34 +217,11 @@ Extract Constant exception =>
      changes. On a first approximation, monitor all positions (aligned accesses
      only) outside the code segment (whose limits are here, again for simplicity,
      hardcoded). *)
-  Definition findDiff mOld mNew : option Z :=
-    let aligned := fun addr =>
-                     andb
-                       (word.eqb (word.modu addr (word.of_Z 4)) (word.of_Z 0))
-                       (word.gtu addr (word.of_Z 499)) in
-    let keys := filter aligned (map.keys mNew) in
-    (* trace ("findDiff: new memory keys " ++ show (map word.unsigned keys))%string *)
-    match find (fun addr => negb (memAddr_eqb mOld mNew addr)) keys with
-    | Some addr =>
-      trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string
-      match loadWord mNew addr with
-      | Some w =>
-        (* let w' := match loadWord mOld addr with *)
-        (*           | Some w => w *)
-        (*           | None => trace "Oops!"%string (split 4 0) *)
-        (*           end in *)
-        (* trace ("findDiff: change to " ++ show (combine 4 w) ++ " (from " ++ show (combine 4 w') ++ ")" ++ nl)%string *)
-        Some (combine 4 w)
-      | None => None
-        (* trace ("findDiff: no diff found" ++ nl)%string *)
-      end
-    | None => None
-    end.
+  Parameter findDiff : MachineState -> MachineState -> option ObsType.
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
     (* returns option unit * state *)
-    (* TODO: What's an observation? *)
     match Run.run1 RV32IM m with
     | (_, s') =>
       if Z.eqb (word.unsigned (getPc m))
@@ -251,9 +229,11 @@ Extract Constant exception =>
       then
         (s', Tau)
       else          
-      (s', Tau)
-    end
-  .
+        match findDiff m s' with
+        | Some v => (s', Out v)
+        | None => (s', Tau)
+        end
+    end.
 
   Definition FunID := nat.
   Definition StackID := nat.
@@ -300,8 +280,8 @@ Extract Constant exception =>
   Qed.
 End RISCV.
 
-Module TagPolicyEager <: Policy RISCV.
-  Import RISCV.
+Module TagPolicyEager (M: RISCV) <: Policy M.
+  Import M.
   
   (* TODO: More interesting state/abstract *)
   Inductive Tag : Type :=
@@ -645,22 +625,23 @@ Module TagPolicyEager <: Policy RISCV.
   Definition WFInitMPState (mp:MPState) := True.
 End TagPolicyEager.
 
-Module TagPolicyLazyFixed <: Policy RISCV.
-  Import RISCV.
+(* Deliberately breaking for now. *)
+Module TagPolicyLazyFixed (M : RISCV) <: Policy M.
+  Import M.
   
-(* TODO: More interesting state/abstract *)
-Inductive Tag : Type :=
-| Tcall
-| Th1
-| Th2
-| Tinstr
-| Tpc (n : nat)
-| Tr1
-| Tr2
-| Tr3
-| Tsp
-| Tstack (n : nat)
-.
+  (* TODO: More interesting state/abstract *)
+  Inductive Tag : Type :=
+  | Tcall
+  | Th1
+  | Th2
+  | Tinstr
+  | Tpc (n : nat)
+  | Tr1
+  | Tr2
+  | Tr3
+  | Tsp
+  | Tstack (n : nat)
+  .
 
 Definition tag_eqb (t1 t2 :  Tag) : bool :=
   match t1, t2 with
@@ -728,27 +709,27 @@ Instance etaPolicyState : Settable _ :=
     | PC => pctags p
     end.
 
-(* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
-Definition MPState : Type := MachineState * PolicyState.
-Definition ms (mp : MPState) := fst mp.
-Definition ps (mp : MPState) := snd mp.
+  (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
+  Definition MPState : Type := MachineState * PolicyState.
+  Definition ms (mp : MPState) := fst mp.
+  Definition ps (mp : MPState) := snd mp.
 
-(* TODO: Real policy. *)
-(* ...
-   TODO: Use [MonadNotations] *)
+  (* TODO: Real policy. *)
+  (* ...
+     TODO: Use [MonadNotations] *)
 
-(* Definition callTags := [Tinstr; Tcall]. *)
+  (* Definition callTags := [Tinstr; Tcall]. *)
 
-(* TODO: Monadic syntax *)
-Definition policyArith (p : PolicyState) (pc : word) (rd rs1 rs2 : Z) : option PolicyState :=
-  tinstr <- map.get (memtags p) (word.unsigned pc);
-  trs1 <- map.get (regtags p) rs1;
-  trs2 <- map.get (regtags p) rs2;
-  trd <- map.get (regtags p) rd;
-  match tinstr, existsb (tag_eqb Tsp) trs1, existsb (tag_eqb Tsp) trs2, trd with
-  | [Tinstr], false, false, [] => Some p
-  | _, _, _, _ => None
-  end.
+  (* TODO: Monadic syntax *)
+  Definition policyArith (p : PolicyState) (pc : word) (rd rs1 rs2 : Z) : option PolicyState :=
+    tinstr <- map.get (memtags p) (word.unsigned pc);
+    trs1 <- map.get (regtags p) rs1;
+    trs2 <- map.get (regtags p) rs2;
+    trd <- map.get (regtags p) rd;
+    match tinstr, existsb (tag_eqb Tsp) trs1, existsb (tag_eqb Tsp) trs2, trd with
+    | [Tinstr], false, false, [] => Some p
+    | _, _, _, _ => trace ("Failstop in Arith" ++ nl) None
+    end.
 
 Definition policyBranch (p : PolicyState) (pc : word) (rs1 rs2 : Z) : option PolicyState :=
   tinstr <- map.get (memtags p) (word.unsigned pc);
@@ -756,7 +737,7 @@ Definition policyBranch (p : PolicyState) (pc : word) (rs1 rs2 : Z) : option Pol
   trs2 <- map.get (regtags p) rs2;
   match tinstr, existsb (tag_eqb Tsp) trs1, existsb (tag_eqb Tsp) trs2 with
   | [Tinstr], false, false => Some p
-  | _, _, _ => None
+  | _, _, _ => trace ("Failstop in Branch" ++ nl) None
   end.
 
 Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
@@ -768,21 +749,21 @@ Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : op
   | [Tinstr] =>
     match forallb (tag_neqb Tsp) trs, forallb (tag_neqb Tsp) trd with
     | true, true => Some (p <| regtags := map.put (regtags p) rd [] |>)
-    | _, _ => None
+    | _, _ => trace ("Failstop in ImmArith: just instr" ++ nl) None
     end
   | [Tinstr; Th2] =>
     match existsb (tag_eqb Th2) tpc, trs with
     | true, [Tsp] => Some (p <| pctags := filter (tag_neqb Th2) tpc |>
                              <| regtags := map.put (regtags p) rd [Tsp] |>)
-    | _, _ => None
+    | _, _ => trace ("Failstop in ImmArith: Th2" ++ nl) None
     end
   | [Tinstr; Tr2] =>
     match existsb (tag_eqb Tr2) tpc, trs with
     | true, [Tsp] => Some (p <| pctags := filter (tag_neqb Tr2) tpc ++ [Tr3] |>
                              <| regtags := map.put (regtags p) rd [Tsp] |>)
-    | _, _ => None
+    | _, _ => trace ("Failstop in ImmArith: Tr2" ++ nl) None
     end
-  | _ => None
+  | _ => trace ("Failstop in ImmArith: no tag" ++ nl) None
   end.
 
 Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState :=
@@ -792,7 +773,7 @@ Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState
     Some (p <| nextid := newid |>
             <| pctags := [Tpc newid; Th1] |>
             <| regtags := map.put (regtags p) rd [Tpc old] |>)
-  | _, _ => None
+  | _, _ => trace ("Failstop on Jal" ++ nl) None
   end.
 
 Definition policyJalr (p : PolicyState) (pc : word) (rd rs : Z) : option PolicyState :=
@@ -804,15 +785,15 @@ Definition policyJalr (p : PolicyState) (pc : word) (rd rs : Z) : option PolicyS
   | [Tinstr] =>
     match tpc, ttarget, treturn with
     | [Tpc _], [], [] => Some p
-    | _, _, _ => None
+    | _, _, _ => trace ("Failstop on Jalr" ++ nl) None
     end
   | [Tinstr; Tr3] =>
     match tpc, ttarget with
     | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
                                          <| regtags := map.put (regtags p) rd [] |>)
-    | _, _ => None
+    | _, _ => trace ("Failstop on Jalr" ++ nl) None
     end
-  | _ => None
+  | _ => trace ("Failstop on Jalr" ++ nl) None
   end.
 
 Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : option PolicyState :=
@@ -823,19 +804,19 @@ Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : opt
   trs <- map.get (regtags p) rs;
   match tinstr with
   | [Tinstr] =>
-    match tpc, taddr with
+(*    match tpc, taddr with
     | [Tpc pcdepth], [Tstack memdepth] =>
-      if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
-      else None
+      if Nat.eqb pcdepth memdepth then*) Some (p <| regtags := map.put (regtags p) rd [] |>)
+      (*else None
     | _, _ => None
-    end
+    end*)
   | [Tinstr; Tr1] =>
     match trs, taddr with
     | [Tsp], [Tpc _] => Some (p <| pctags := pctags p ++ [Tr2] |>
                                 <| regtags := map.put (regtags p) rd taddr |>)
-    | _, _ => None
+    | _, _ => trace ("Failstop on Load: Tr1" ++ nl) None
     end
-  | _ => None
+  | _ => trace ("Failstop on Load: no tag!" ++ nl) None
   end.
 
 Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
@@ -850,17 +831,18 @@ Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : op
     (* TODO: Relaxed in order for program to work: no stack-indexed writes? *)
     (* TODO: Restrictions on [trs] here?
        [tmem] could be [Stack _] or [Nostack], when implemented *)
-    match tpc, existsb (tag_eqb Tsp) taddr, trs, existsb (tag_eqb Tinstr) tmem with
+    (*match tpc, existsb (tag_eqb Tsp) taddr, trs, existsb (tag_eqb Tinstr) tmem with
     | [Tpc id], (*false*)_, _, false => Some (p <| memtags := map.put (memtags p) addr [Tstack id] |>)
     | _, _, _, _ => None
-    end
+    end*)
+    Some (p <| memtags := map.put (memtags p) rd [] |>)
   | [Tinstr; Th1] =>
     match existsb (tag_eqb Th1) tpc, trs, taddr with
     | true, [Tpc id], [Tsp] => Some (p <| pctags := filter (tag_neqb Th1) tpc ++ [Th2] |>
                                           <| memtags := map.put (memtags p) addr [Tpc id] |>)
-    | _, _, _ => None
+    | _, _, _ => trace ("Failstop on Store: Tr1" ++ nl) None
     end
-  | _ => None
+  | _ => trace ("Failstop on Store: no tag!" ++ nl) None
   end.
 
 Definition decodeI (w : w32) : option InstructionI :=

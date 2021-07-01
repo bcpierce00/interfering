@@ -2,7 +2,7 @@ Require Coq.Strings.String. Open Scope string_scope.
 Require Import Coq.Lists.List.
 Import List.ListNotations.
 
-From StackSafety Require Import MachineModule PolicyModule.
+From StackSafety Require Import MachineModule RISCVMachine PolicyModule.
 
 Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.
@@ -35,7 +35,8 @@ Import RecordSetNotations.
 
 From QuickChick Require Import QuickChick.
 
-Module RISCV <: Machine.
+Module RISCVObs <: RISCV.
+  Export RiscvMachine.
 
 Axiom exception : forall {A}, string -> A.
 Extract Constant exception =>
@@ -109,6 +110,8 @@ Extract Constant exception =>
   | Mem (a:Addr)
   | Reg (r:Register)
   | PC.
+
+  Derive Show for Component.
 
   Definition keqb (k1 k2 : Component) : bool :=
     match k1, k2 with
@@ -192,7 +195,6 @@ Extract Constant exception =>
 
   Definition ObsType : Type := Word*Value.
 
-  (* Observations are values, or silent (tau) *)
   Inductive Observation : Type := 
   | Out (w:ObsType) 
   | Tau.
@@ -220,7 +222,9 @@ Extract Constant exception =>
      changes. On a first approximation, monitor all positions (aligned accesses
      only) outside the code segment (whose limits are here, again for simplicity,
      hardcoded). *)
-  Definition findDiff mOld mNew : option (Word*Value) :=
+  Definition findDiff (mOld mNew : MachineState) : option (Word*Value) :=
+    let mOld := getMem mOld in
+    let mNew := getMem mNew in
     let aligned := fun addr =>
                      andb
                        (word.eqb (word.modu addr (word.of_Z 4)) (word.of_Z 0))
@@ -229,7 +233,7 @@ Extract Constant exception =>
     (* trace ("findDiff: new memory keys " ++ show (map word.unsigned keys))%string *)
     match find (fun addr => negb (memAddr_eqb mOld mNew addr)) keys with
     | Some addr =>
-      trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string
+      (*trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string*)
       match loadWord mNew addr with
       | Some w =>
         (* let w' := match loadWord mOld addr with *)
@@ -247,7 +251,6 @@ Extract Constant exception =>
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
     (* returns option unit * state *)
-    (* TODO: What's an observation? *)
     match Run.run1 RV32IM m with
     | (_, s') =>
       if Z.eqb (word.unsigned (getPc m))
@@ -255,7 +258,7 @@ Extract Constant exception =>
       then
         (s', Tau)
       else          
-        match findDiff (getMem m) (getMem s') with
+        match findDiff m s' with
         | Some v => (s', Out v)
         | None => (s', Tau)
         end
@@ -305,10 +308,13 @@ Extract Constant exception =>
       try solve [left; auto];
       right; intros [? ?]; auto.
   Qed.
-End RISCV.
+End RISCVObs.
 
-Module TagPolicy <: Policy RISCV.
-  Import RISCV.
+Module TPEagerObs := TagPolicyEager RISCVObs.
+Module TPLazyFixedObs := TagPolicyLazyFixed RISCVObs.
+
+(*Module TagPolicyObs <: Policy RISCVObs.
+  Import RISCVObs.
   
   (* TODO: More interesting state/abstract *)
   Inductive Tag : Type :=
@@ -434,6 +440,8 @@ Module TagPolicy <: Policy RISCV.
     | _, _, _ => None
     end.
 
+  Open Scope list.
+  
   Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
     tinstr <- map.get (memtags p) (word.unsigned pc);
     let tpc := pctags p in
@@ -650,4 +658,4 @@ Module TagPolicy <: Policy RISCV.
 
   (* TODO: More interesting well-formedness condition *)
   Definition WFInitMPState (mp:MPState) := True.
-End TagPolicy.
+End TagPolicyObs.*)

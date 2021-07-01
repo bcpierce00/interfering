@@ -1,5 +1,5 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     MachineImpl DefaultLayout TestSubroutineSimple PrintRISCVTagSimple.
+     RISCVObs DefaultLayout TestSubroutineSimple PrintRISCVTagSimple.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -22,13 +22,11 @@ From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
 
 Import ListNotations.
-Import RiscvMachine.
 
-Import TagPolicyLazyFixed.
-
-Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
-  Module MPC := TestMPC RISCV TagPolicyLazyFixed DefaultLayout TSS.
+Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
+  Module MPC := TestMPC RISCVObs TPLazyFixedObs DLObs TSS.
   Import MPC.
+  Import PrintRISCVTagSimple.
 
   Definition defFuel := 42%nat.
 
@@ -108,7 +106,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
     --                 integer registers
    *)
 
-    Definition listify1 {A} (m : Zkeyed_map A)
+  Definition listify1 {A} (m : Zkeyed_map A)
     : list (Z * A) :=
     List.rev (map.fold (fun acc z v => (z,v) :: acc) nil m).
   
@@ -119,9 +117,9 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
     | (z1,a)::l1',(z2,b)::l2' =>
       if Z.eqb z1 z2 then
         (z1, a, b) :: combine_match l1' l2'
-      else exception ("combine_match - not_eq " ++ (show (l1, l2))%string)
+      else combine_match l1' l2' (*exception ("combine_match - not_eq " ++ (show (l1, l2))%string)*)
     | nil, nil => nil
-    | _, _ => exception ("combine_match: " ++ (show (l1,l2)))%string
+    | _, _ => nil (*exception ("combine_match: " ++ (show (l1,l2)))%string*)
     end.
 
   Definition listify2 {A B} `{Show A} `{Show B}
@@ -229,8 +227,10 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
     |}.
 
   Definition genImm (n : Z) : G Z :=
-    bindGen (choose (0, Z.div n 4))
-            (fun n' => ret (Z.mul 4 n')).
+    if (n >=? 0)
+    then bindGen (choose (0, Z.div n 4))
+                 (fun n' => ret (Z.mul 4 n'))
+    else ret 0.
 
   Definition genTargetReg (m : MachineState) : G Register :=
     choose (minReg, maxReg).
@@ -248,7 +248,6 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
   Definition genInstr (i : LayoutInfo) (t : TagInfo)
              (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
              (dataP codeP : TagSet -> bool) (f : FunID)
-             (genInstrTag : InstructionI -> G TagSet)
     : G (InstructionI * TagSet * FunID * CodeAnnotation) :=
     let groups := groupRegisters i t m p dataP codeP in
     let a := arith groups in
@@ -275,8 +274,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
                 bindGen (genTargetReg m) (fun rd =>
                 bindGen (genImm (dataHi i)) (fun imm =>
                 let instr := Addi rd (aID ai) imm in
-                bindGen (genInstrTag instr) (fun tag =>
-                ret (instr, tag, f, normal))))))
+                ret (instr, [Tinstr], f, normal)))))
              ;  (3%nat, match map.get (getRegs m) sp with
                         | Some spVal' =>
                           let spVal := word.unsigned spVal' in
@@ -286,8 +284,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
                           let imm := minImm + imm' in
                           bindGen (genTargetReg m) (fun rd =>
                           let instr := Lw rd sp imm in
-                          bindGen (genInstrTag instr) (fun tag =>
-                          ret (instr, tag, f, normal))))
+                          ret (instr, [Tinstr], f, normal)))
 
                         | _ => exception "No sp?"
                         end)
@@ -308,15 +305,13 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
                  bindGen (genImm (pMaxImm pi - pMinImm pi)) (fun imm' =>
                  let imm := pMinImm pi + imm' in
                  let instr := Sw (pID pi) rs imm in
-                 bindGen (genInstrTag instr) (fun tag => 
-                 ret (instr, tag, f, normal)))))) 
+                 ret (instr, [Tinstr], f, normal))))) 
              ;   (onNonEmpty a 1%nat,
                   bindGen (elems_ def_a a) (fun ai1 =>
                   bindGen (elems_ def_a a) (fun ai2 =>
                   bindGen (genTargetReg m) (fun rd =>
                   let instr := Add rd (aID ai1) (aID ai2) in
-                  bindGen (genInstrTag instr) (fun tag => 
-                  ret (instr, tag, f, normal))))))
+                  ret (instr, [Tinstr], f, normal)))))
     ])).
 (*
 -- TODO: Uncomment this and add stack.dpl rule
@@ -334,17 +329,19 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
  *)
 
   Definition headerHead offset f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) := [(Jal ra offset , [Tinstr; Tcall], f    , call)].
+    list (InstructionI * TagSet * FunID * CodeAnnotation) := [(Jal ra offset , [Tinstr; Tcall], f, call)].
 
   Definition headerSeq offset f nextF :
     list (InstructionI * TagSet * FunID * CodeAnnotation) :=
     headerHead offset f ++
-               [ (Addi sp sp 12 , [Tinstr; Th1]  , nextF, normal)
-               ; (Sw sp ra 0    , [Tinstr; Th2]  , nextF, normal)
+               [
+                 (Sw sp ra 0    , [Tinstr; Th1]  , nextF, normal)
+               ; (Addi sp sp 12 , [Tinstr; Th2]  , nextF, normal)
+               
 (*               ; (Sw sp 8 (-8) , [Tinstr; Th3]  , nextF, normal)
                ; (Sw sp 9 (-4) , [Tinstr; Th4]  , nextF, normal)*)
                ].
-  
+
   (* Based on Rob's 
      (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
      (* 12 *) IInstruction (Addi SP SP 12); (* H2 *)
@@ -355,16 +352,6 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
              (callP :  TagSet -> bool) :
     option (G (list (InstructionI * TagSet * FunID * CodeAnnotation)))
     :=
-      (*  
-          genCall :: PolicyPlus -> Machine_State -> PIPE_State ->
-          (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
-          (Instr_I -> Gen TagSet) ->
-          (Integer -> [(Instr_I, TagSet)]) ->
-          Gen [(Instr_I, TagSet)]
-          genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
-          let m = ms ^. fmem
-          t = Map.assocs $ ps ^. pmem
-       *)
       let existingSites :=
           List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
                    (List.filter (fun '(i,t) => callP t)
@@ -391,13 +378,11 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
                       end) existingSites  in
       let newOpts :=
           List.map (fun i => headerSeq i f nextF) newCallSites in
-      (* TODO: re-call *)
-      match (* exOpts ++ *) newOpts with
+      match exOpts ++ newOpts with
       | [] => None
       | x :: xs =>
         Some (elems_ x (x :: xs))
       end.
-
   
   Definition returnSeq (f rf : FunID) :=
     [ (Lw   ra sp 0     , [Tinstr; Tr1], f, normal)
@@ -421,10 +406,9 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
              (l : LayoutInfo) (t : TagInfo)
              (m : MachineState) (p : PolicyState)
              (dataP codeP callP : TagSet -> bool)
-             (cm : CodeMap_Impl) (f nextF : FunID)
-             (genInstrTag : InstructionI -> G TagSet) :=
+             (cm : CodeMap_Impl) (f nextF : FunID) :=
     let fromInstr :=
-        bindGen (genInstr l t m p cm dataP codeP f genInstrTag)
+        bindGen (genInstr l t m p cm dataP codeP f)
                 (fun itf => returnGen ([itf])) in
     match genCall l t m p cm f nextF callP,
           genRetSeq m p cm f with
@@ -453,12 +437,23 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
                   returnGen macc
                 | _ =>
                   bindGen (genImm 40) (fun z =>
-                                         (*               trace ("Trying to set: " ++ show k ++ " to " ++ show z ++ " which was " ++ show (fst c k) ++ nl ++ "Previous value was: " ++ show (proj macc k) ++ nl ++ " Next value will be: " ++ show (proj (jorp macc k z) k) ++ nl ++ "Nearby values are: " ++ show (kplus k) ++ " : " ++ show (proj macc (kplus k)) ++ " and " ++ show (ksub k) ++ " : " ++ show (proj macc (ksub k)) ++ nl)%string *)
+                                         (*               trace ("Trying to set: " ++ show k ++ " to " ++ show z ++ " which was " ++ show (fst c k) ++ nl ++ "Previous value was: " ++ show (proj macc k) ++ nl ++ " Next value will be: " ++ show (proj (jorp macc k z) k) ++ nl ++ nl)%string *)
                                          (returnGen (jorp macc k z)))
                 end)
             )
             (getComponents m) m .
 
+  Definition genVariantByList (ks : list Component) (m : MachineState) : G MachineState :=
+    foldGen (fun macc k =>
+               match List.find (fun k' => keqb k k') ks with
+               | Some _ => bindGen (genImm 40) (fun z => returnGen (jorp macc k z))
+               | None => returnGen macc
+               end)
+          ks m.
+
+  Instance ShowStuff : Show (InstructionI * TagSet * FunID * CodeAnnotation) :=
+    {| show '(i, ts, f, a) := (show i ++ "@" ++ show ts ++ "|" ++ show f)%string |}.
+  
   (*
     -- | Generation by execution receives an initial machine X PIPE state and
     -- | generates instructions until n steps have been executed.
@@ -467,7 +462,6 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
     genByExec :: PolicyPlus -> Int -> Machine_State -> PIPE_State ->
     (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
     (Integer -> [(Instr_I, TagSet)]) -> [(Instr_I, TagSet)] ->
-    (Instr_I -> Gen TagSet) -> 
     Gen (Machine_State, PIPE_State)
    *)
   Fixpoint gen_exec_aux (steps : nat)
@@ -477,10 +471,9 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
            (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
            (its : list (InstructionI * TagSet * FunID * CodeAnnotation))
            (dataP codeP callP : TagSet -> bool)
-           (genInstrTag : InstructionI -> G TagSet)
     (* num calls? *)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
-    (*  trace (show ("GenExec...", steps, its, printPC m p) ++ nl)%string *)
+    (*trace ("GenExec..." ++ show steps ++ " " ++ show its ++ printPC m p ++ nl)%string*)
     (match steps with
      | O =>
        (* Out-of-fuel: End generation. *)
@@ -490,56 +483,56 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
        | Some _ =>
          match its with
          | nil =>
-           (*      trace ("Existing instruction found: " ++ nl)%string *)
+           (*trace ("Existing instruction found." ++ nl)%string*)
            (            
              (* Instruction already exists, step... *)
              match mpstep (m,p) with
              | Some ((m',p'),o) =>
                (* ...and recurse. *)
-               gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP genInstrTag
+               gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP
              | _ =>
-               (* ... something went wrong. Trace something? *)
-               ret (m0, p0, cm)
+               trace "Something went wrong." ret (m0,p0,cm)
              end
            )
          | _ =>
-           (*trace ("Existing instruction mid-sequence" ++ nl)%string*)
+           trace ("Existing instruction mid-sequence" ++ nl)%string
            (ret (m0, p0, cm))
          end
        | _ =>
-         (*      trace ("No instruction found " ++ nl)%string *)
+         (*trace ("No instruction found " ++ nl)%string*)
          (* Check if there is anything left to put *)
-         (bindGen (match its with
-                   | [] =>
-                     (* Generate an instruction sequence. *)
-                     (* TODO: Sequences, calls. *)
-                     bindGen (genInstrSeq i t m p dataP codeP callP cm f nextF genInstrTag)
-                             (fun itfas =>
-                                match itfas with
-                                | (i,t,f',a) :: itfs' =>
-                                  (*                              trace (show (f',ist, ists') ++ nl)%string*)
-                                  (returnGen (a, f', (i,t), itfs'))
-                                | _ => exception "EmptyInstrSeq"
-                                end)
-                   | ((i,t,f',a)::itfs') =>
-                     returnGen (a, f', (i,t), itfs')
-                   end)
-                  (fun '(a, f', (is,it), its) =>
-                     let nextF' := if Nat.eqb f' nextF then
-                                     S nextF else nextF in
-                     let m0' := setInstrI (getPc m) m0 is in
-                     let m'  := setInstrI (getPc m) m  is in
-                     let p0' := setInstrTagI (word.unsigned (getPc m)) p0 it in
-                     let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
-                     let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
-                     match mpstep (m', p') with
-                     | Some ((m'', p''), o) =>
-                       (*            trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string  *)
-                       (gen_exec_aux steps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP genInstrTag)
-                     | _ =>
-                       (*           trace ("Couldn't step" ++ nl ++  printMachine m' p' cm' ++ nl)%string *)
-                       (ret (m0', p0', cm'))
-                     end))
+         (bindGen
+            (match its with
+             | [] =>
+               (* Generate an instruction sequence. *)
+               (* TODO: Sequences, calls. *)
+               bindGen (genInstrSeq i t m p dataP codeP callP cm f nextF)
+                       (fun itfas =>
+                          match itfas with
+                          | (i,t,f',a) :: itfs' =>
+                            trace (show (i,t,f',a) ++ nl)%string
+                            (returnGen (a, f', (i,t), itfs'))
+                          | _ => exception "EmptyInstrSeq"
+                          end)
+             | ((i,t,f',a)::itfs') =>
+               returnGen (a, f', (i,t), itfs')
+             end)
+            (fun '(a, f', (is,it), its) =>
+               let nextF' := if Nat.eqb f' nextF then
+                               S nextF else nextF in
+               let m0' := setInstrI (getPc m) m0 is in
+               let m'  := setInstrI (getPc m) m  is in
+               let p0' := setInstrTagI (word.unsigned (getPc m)) p0 it in
+               let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
+               let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
+               match mpstep (m', p') with
+               | Some ((m'', p''), o) =>
+                 (*            trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string  *)
+                 (gen_exec_aux steps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP)
+               | _ =>
+                 exception ("Couldn't step" ++ nl(* ++  printMachine m' p' cm' ++ nl*))%string
+(*                 (ret (m0', p0', cm'))*)
+               end))
        end
      end).
 
@@ -592,16 +585,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
              (m0 : MachineState) (p0 : PolicyState)
              (cm0 : CodeMap_Impl)
              (dataP codeP callP : TagSet -> bool)
-             (genInstrTag : InstructionI -> G TagSet)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
-    (*  
-        genMachine :: PolicyPlus -> (PolicyPlus -> Gen TagSet) -> (PolicyPlus -> Gen TagSet) ->
-        (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
-        (Integer -> [(Instr_I, TagSet)]) -> [(Instr_I, TagSet)] ->
-        (Instr_I -> Gen TagSet) -> TagSet -> 
-        Gen RichState
-        genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag spTag = do
-     *)
     bindGen (genDataMemory i t m0 p0)
             (fun '(ms,ps) =>
                bindGen (genGPRs t ms ps)
@@ -612,7 +596,7 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
                              let ps'' = ps' & pgpr . at sp ?~ spTag
                            *)
                           (gen_exec_aux defFuel i t ms' ps' ms' ps' cm0 O (S O)
-                                        nil dataP codeP callP genInstrTag))).
+                                        nil dataP codeP callP))).
 
   Definition zeroedRiscvMachine: RiscvMachine := {|
     getRegs :=
@@ -664,8 +648,6 @@ Module GenRISCVTagSimple <: Gen RISCV TagPolicyLazyFixed DefaultLayout TSS.
                                    | Th1 => true
                                    | _ => false
                                    end) tt in  
-  let genInstrTag : InstructionI -> G TagSet :=
-      fun i => returnGen (cons Tinstr nil) in
   genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState map.empty
-             dataP codeP callP genInstrTag.
+             dataP codeP callP.
 End GenRISCVTagSimple.
