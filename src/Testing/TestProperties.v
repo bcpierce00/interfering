@@ -6,6 +6,7 @@ Import QcNotation.
 
 Require Coq.Strings.String. Open Scope string_scope.
 Require Import Coq.Lists.List.
+Require Import Bool.
 
 Require Import ZArith. Open Scope Z.
 Require Import riscv.Utility.Encode.
@@ -52,7 +53,7 @@ Module TestPropsRISCVSimple
   Import GenImp.
   Import PrintImp.
   
-  Definition defFuel := 42%nat.
+  Definition defFuel := 100%nat.
 
   Definition sameDifferenceP (m m' n n' : MachineState) k :=
     if (orb (negb (Z.eqb (proj m k) (proj m' k)))
@@ -99,7 +100,7 @@ Module TestPropsRISCVSimple
         | O => collect "Out-of-Fuel" true
         | S fuel' => 
           match mpcstep (m,p,ctx) cm with
-          | None => collect ("Failstop", fuel) true
+          | None => collect "Failstop" true
           | Some (m', p', c', o) =>
             let traceDiff :=
                 calcTraceDiff cm m m' p p' ctx c' i o in
@@ -122,23 +123,23 @@ Module TestPropsRISCVSimple
          (endP : MPCState -> bool)
     : bool :=
     (* trace (printMachines m n p cm ctx ++ nl)   *)
-    (match fuel with
-     | O => true
-     | S fuel' => 
-       match endP (m,p,ctx), endP (n,p,ctx) with
-       | true, true => (* collect "Both done" *) true
-       | true, _    => (* collect "Main done" *) true
-       | _   , true => (* collect "Vary done" *) true
-       | _, _ =>
-         match mpcstep (m,p,ctx) cm,
-               mpcstep (n,p,ctx) cm with
-         | Some (m',p1,c1,o1), Some (n', p2,c2, o2) =>
-           andb (List.forallb (sameDifferenceP m m' n n') (getComponents m'))
-                (prop_lockstepConfidentiality fuel' m' n' p1 cm c1 endP)
-         | _, _ => true
-         end
-       end
-     end).
+    match fuel with
+    | O => true
+    | S fuel' => 
+      match endP (m,p,ctx), endP (n,p,ctx) with
+      | true, true => (* collect "Both done" *) true
+      | true, _    => (* collect "Main done" *) true
+      | _   , true => (* collect "Vary done" *) true
+      | _, _ =>
+        match mpcstep (m,p,ctx) cm,
+              mpcstep (n,p,ctx) cm with
+        | Some (m',p1,c1,o1), Some (n', p2,c2, o2) =>
+          andb (List.forallb (sameDifferenceP m m' n n') (getComponents m'))
+               (prop_lockstepConfidentiality fuel' m' n' p1 cm c1 endP)
+        | _, _ => true
+        end
+      end
+    end.
 
   Definition prop_stackConfidentiality
              fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx 
@@ -170,55 +171,74 @@ Module TestPropsRISCVSimple
                       (prop_stackConfidentiality defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).        
 
 
-Fixpoint prop_laziestLockstepIntegrity
-           fuel m n p cm ctx (endP : MPCState -> bool)
-  : bool :=
-  match fuel with
-  | O => true
-  | S fuel' =>
-    match endP (m,p,ctx), endP (n,p,ctx) with
-    | true, true => (* collect "Both done" *) true
-    | true, _    => (* collect "Main done" *) true
-    | _   , true => (* collect "Vary done" *) true
-    | _, _ =>
+  Fixpoint prop_laziestLockstepIntegrity
+           fuel m n p cm ctx
+    : Checker.Checker :=
+    match fuel with
+    | O => checker true
+    | S fuel' =>
       match mpcstep (m,p,ctx) cm,
             mpcstep (n,p,ctx) cm with
-      | Some (m',p1,c1,o1), Some (n', p2,c2, o2) =>
-        andb (obs_eqb o1 o2)
-             (prop_laziestLockstepIntegrity fuel' m' n' p1 cm c1 endP)
-      | _, _ => true
-      end
-    end
-  end.
+      | Some (m',p1,c1,o1), Some (n',p2,c2,o2) =>
+        if obs_eqb o1 o2 then
+          prop_laziestLockstepIntegrity fuel' m' n' p1 cm c1
+        else whenFail ("Primary: " ++ show o1 ++ " | Variant: " ++ show o2 ++ nl ++
+                       "Final state: " ++ nl ++ printMachine m p cm ctx)%string false
 
-Fixpoint prop_checkAtReturn
-         fuel (i:LayoutInfo) mcall m p cm (ctx:CtxState)  (d : nat) : Checker.Checker :=
-  match fuel with
-  | O => checker true
-  | S fuel' =>
-    let depth := depthOf ctx in
-    if Nat.ltb depth d then
-      let danger := fun k =>
-                      if integrityComponent ctx k
-                      then  negb (Z.eqb (proj mcall k) (proj m k))
-                      else false in
-      let changed := List.filter danger (getComponents mcall) in
-      trace ("return to depth: " ++ show d ++ "   size of changed: " ++ (show (List.length changed)) ++ nl)
-      forAllShrinkShow (genVariantByList changed m)
-        (fun _ => nil)
-        (fun n => "")
-        (fun n =>
-           prop_laziestLockstepIntegrity defFuel m n p cm ctx (fun '(_,_,_) => false))
-    else
-      match mpcstep (m,p,ctx) cm with 
-      | Some (m',p',ctx',_) => prop_checkAtReturn fuel' i mcall m' p' cm ctx' d
-      | _ => checker true
+      | _, _ => collect "Failstop after return" true
       end
-  end.
+    end.
+
+  Definition calcTraceDiff' cm (m m' : MachineState) (p p' : PolicyState) (c c' : CtxState) (i : LayoutInfo) : unit -> string :=
+    let compsToTrace :=
+        List.filter (fun k => 
+                       (orb (negb (Z.eqb (proj m k) (proj m' k)))
+                            (interestingComponent c c' k)))
+                                  (*(andb (TagSet_eqb (pproj p k) (pproj p k))*)
+                    (getComponents m') in
+    (fun tt => 
+       ("From: " ++ nl ++
+                 concatStr (List.map (fun k => printComponent k m p cm c i ++ nl) compsToTrace) ++ 
+                 "to: " ++ nl ++
+                 concatStr (List.map (fun k => printComponent k m' p' cm c' i ++ nl) compsToTrace) ++ nl)%string).
   
-  Fixpoint prop_laziestStackIntegrity
-           fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx
+  Fixpoint walk' (ks : list Component) (cm : CodeMap_Impl) (m : MachineState) (c : CtxState) (m' : MachineState) (p' : PolicyState) (c' : CtxState) (changed : list Component) : Checker :=
+    match ks with
+    | [] =>
+      match changed with
+      | [] => checker true
+      | _ =>
+        trace (show (List.length changed) ++ nl)
+        (bindGen (genVariantByList changed m')
+                 (fun n =>
+                    prop_laziestLockstepIntegrity defFuel m' n p' cm c'))
+      end
+    | k :: ks' =>
+      if integrityComponent c k then
+        if Z.eqb (proj m k) (proj m' k)
+        then walk' ks' cm m c m' p' c' changed
+        else walk' ks' cm m c m' p' c' (k::changed)
+      else walk' ks' cm m c m' p' c' changed
+    end.
+
+  Definition prop_checkAtReturn fuel mcall pcall cm ctxcall
     : Checker.Checker :=
+    let fix aux fuel m p ctx : Checker.Checker :=
+        match fuel with
+        | O => collect "Out-of-Fuel" true
+        | S fuel' => 
+          match mpcstep (m,p,ctx) cm with
+          | None => collect "Failstop" true
+          | Some (m', p', ctx', o) =>
+            if (depthOf ctx' <? depthOf ctxcall)%nat then
+              walk' (getComponents m') cm mcall ctxcall m' p' ctx' []
+            else aux fuel' m' p' ctx'
+          end
+        end in
+    aux fuel mcall pcall ctxcall.
+
+  Fixpoint prop_laziestStackIntegrity
+           fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx : Checker.Checker :=
     match fuel with
     | O => checker true
     | S fuel' =>
@@ -228,14 +248,13 @@ Fixpoint prop_checkAtReturn
         | Some (m', p', c', o) =>
           let depth := depthOf c' in
           let sealed := fun k =>  integrityComponent ctx k in
-          trace ("callee depth: " ++ show depth ++ "   size of sealed: " ++
-                                  (show (List.length (List.filter sealed (getComponents m'))) ++ nl))
-                (
-                  conjoin
-                    ([prop_checkAtReturn defFuel i m' m' p' cm c' depth] ++
-                     [prop_laziestStackIntegrity fuel' i m' p' cm c']))
+          (*trace ("callee depth: " ++ show depth ++ "   size of sealed: " ++
+                                  (show (List.length (List.filter sealed (getComponents m'))) ++ nl))*)
+          (conjoin
+             ([prop_checkAtReturn defFuel m' p' cm c'] ++
+              [prop_laziestStackIntegrity fuel' i m' p' cm c']))
         | _ =>
-          collect ("Failstop", fuel) true
+          checker true
         end
       | _ =>
         match mpcstep (m,p,ctx) cm with
@@ -247,9 +266,8 @@ Fixpoint prop_checkAtReturn
     end.
 
   Definition prop_laziestIntegrity :=
-    trace (nl ++ nl) (
-            forAll genMach (fun '(m,p,cm) =>
-                              (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initCtx defLayoutInfo)))).
+    forAll genMach (fun '(m,p,cm) =>
+                      (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
 
 End TestPropsRISCVSimple.
 

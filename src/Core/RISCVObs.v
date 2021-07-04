@@ -193,7 +193,7 @@ Extract Constant exception =>
                     (RiscvMachine.getMem m)) in
     pc ++ regs ++ mem.
 
-  Definition ObsType : Type := Word*Value.
+  Definition ObsType : Type := Register*Value.
 
   Inductive Observation : Type := 
   | Out (w:ObsType) 
@@ -218,35 +218,20 @@ Extract Constant exception =>
     | _, _ => false
     end.
 
- (* TODO: We don't have information about which parts of memory to monitor for
-     changes. On a first approximation, monitor all positions (aligned accesses
-     only) outside the code segment (whose limits are here, again for simplicity,
-     hardcoded). *)
-  Definition findDiff (mOld mNew : MachineState) : option (Word*Value) :=
-    let mOld := getMem mOld in
-    let mNew := getMem mNew in
-    let aligned := fun addr =>
-                     andb
-                       (word.eqb (word.modu addr (word.of_Z 4)) (word.of_Z 0))
-                       (word.gtu addr (word.of_Z 499)) in
-    let keys := filter aligned (map.keys mNew) in
-    (* trace ("findDiff: new memory keys " ++ show (map word.unsigned keys))%string *)
-    match find (fun addr => negb (memAddr_eqb mOld mNew addr)) keys with
-    | Some addr =>
-      (*trace ("findDiff: found diff @ " ++ show (word.unsigned addr) ++ nl)%string*)
-      match loadWord mNew addr with
-      | Some w =>
-        (* let w' := match loadWord mOld addr with *)
-        (*           | Some w => w *)
-        (*           | None => trace "Oops!"%string (split 4 0) *)
-        (*           end in *)
-        (* trace ("findDiff: change to " ++ show (combine 4 w) ++ " (from " ++ show (combine 4 w') ++ ")" ++ nl)%string *)
-        Some (word.unsigned addr, combine 4 w)
-      | None => None
-        (* trace ("findDiff: no diff found" ++ nl)%string *)
-      end
+  Definition listify1 {A} (m : Zkeyed_map A)
+    : list (Z * A) :=
+    List.rev (map.fold (fun acc z v => (z,v) :: acc) nil m).
+  
+  (* For now we will only monitor registers for changes. We could monitor
+     some memory, but we can't monitor the stack. *)
+  Definition findDiff (mOld mNew : MachineState) : option (Register*Value) :=
+    match find (fun '(reg,_) => negb (weq (proj mOld (Reg reg)) (proj mNew (Reg reg))))
+               (listify1 (getRegs mNew)) with
+    | Some (r, _) =>
+      Some (r, proj mNew (Reg r))
     | None => None
-    end.
+    end
+    .
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Definition step (m : RiscvMachine) : RiscvMachine * Observation :=

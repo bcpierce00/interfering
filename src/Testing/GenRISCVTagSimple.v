@@ -28,7 +28,8 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
   Import MPC.
   Import PrintRISCVTagSimple.
 
-  Definition defFuel := 42%nat.
+  Definition maxFuel := 100%nat.
+  Definition funMaxFuel := 10%nat.
 
   Definition r0 : Register := 0.
   Definition ra : Register := 1.
@@ -117,9 +118,9 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
     | (z1,a)::l1',(z2,b)::l2' =>
       if Z.eqb z1 z2 then
         (z1, a, b) :: combine_match l1' l2'
-      else combine_match l1' l2' (*exception ("combine_match - not_eq " ++ (show (l1, l2))%string)*)
+      else exception ("combine_match - not_eq " ++ (show (l1, l2))%string)
     | nil, nil => nil
-    | _, _ => nil (*exception ("combine_match: " ++ (show (l1,l2)))%string*)
+    | _, _ => exception ("combine_match: " ++ (show (l1,l2)))%string
     end.
 
   Definition listify2 {A B} `{Show A} `{Show B}
@@ -239,6 +240,36 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
     freq [ (1%nat, ret r0)
          ; (noRegs, choose (minReg, maxReg))
          ].
+
+  Definition if_true_n (b:bool) (n:nat) :=
+    if b then n else O.
+  
+  Definition genStackbasedWrite (i : LayoutInfo) (m : MachineState) : G InstructionI :=
+    let spVal := projw m (Reg SP) in
+    bindGen (genSourceReg m)
+            (fun rs =>
+               freq [ (3%nat, ret (Sw sp rs (-4)))
+                    ; (3%nat, ret (Sw sp rs (-8)))
+                    ; (if_true_n (512 <? spVal) 1%nat, ret (Sw sp rs (-12)))
+                    ; (if_true_n (516 <? spVal) 2%nat, (ret (Sw sp rs (-16))))
+                    ; (if_true_n (520 <? spVal) 2%nat, (ret (Sw sp rs (-20))))
+                    ; (1%nat, bindGen (choose (spVal - 500, spVal))
+                                     (fun off => ret (Sw sp rs (- off))))
+            ]).
+
+    Definition genStackbasedRead (i : LayoutInfo) (m : MachineState) : G InstructionI :=
+      let spVal := projw m (Reg SP) in
+      bindGen (genTargetReg m)
+              (fun rd =>
+                 freq [ (5%nat, ret (Lw rd sp (-4)))
+                      ; (5%nat, ret (Lw rd sp (-8)))
+                      ; (if_true_n (512 <? spVal) 1%nat, ret (Lw rd sp (-12)))
+                      ; (if_true_n (516 <? spVal) 2%nat, ret (Lw rd sp (-16)))
+                      ; (if_true_n (520 <? spVal) 2%nat, ret (Lw rd sp (-20)))
+                      ; (1%nat, bindGen (choose (spVal - 500, spVal))
+                                        (fun off => ret (Lw rd sp (- off))))
+              ]).
+
   (*
     -- TODO: This might need to be further generalized in the future
     genInstr :: PolicyPlus -> Machine_State -> PIPE_State ->
@@ -255,39 +286,43 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
     let c := codePtr groups in
     let l := loadPtr groups in
     (*  trace ("Grouped loads: " ++ show l ++ nl)%string *)
-    (  
-      let def_a := {| aID := 0 |} in
-      let def_dp := {| pID := 0; pVal := 0;
-                       pMinImm := 0; pMaxImm := 0;
-                       pTag := dataTag t
-                    |} in
+    let def_a := {| aID := 0 |} in
+    let def_dp := {| pID := 0; pVal := 0;
+                     pMinImm := 0; pMaxImm := 0;
+                     pTag := dataTag t
+                  |} in
 
       (*  trace (show (l, badPtr groups)%string) *)
-      (
-        let onNonEmpty {A} (l : list A) n :=
-            match l with
-            | [] => O
-            | _  => n
-            end in
-        freq [ (onNonEmpty a 1%nat,
-                bindGen (elems_ def_a a) (fun ai =>
-                bindGen (genTargetReg m) (fun rd =>
-                bindGen (genImm (dataHi i)) (fun imm =>
-                let instr := Addi rd (aID ai) imm in
-                ret (instr, [Tinstr], f, normal)))))
-             ;  (3%nat, match map.get (getRegs m) sp with
-                        | Some spVal' =>
-                          let spVal := word.unsigned spVal' in
-                          let minImm := spVal - stackLo i in
-                          let maxImm := stackHi i - spVal in
-                          bindGen (genImm (maxImm - minImm)) (fun imm' =>
-                          let imm := minImm + imm' in
-                          bindGen (genTargetReg m) (fun rd =>
-                          let instr := Lw rd sp imm in
-                          ret (instr, [Tinstr], f, normal)))
+    let onNonEmpty {A} (l : list A) n :=
+        match l with
+        | [] => O
+        | _  => n
+        end in
+    freq [ (onNonEmpty a 1%nat,
+            bindGen (elems_ def_a a) (fun ai =>
+            bindGen (genTargetReg m) (fun rd =>
+            bindGen (genImm (dataHi i)) (fun imm =>
+            let instr := Addi rd (aID ai) imm in
+            ret (instr, [Tinstr], f, normal)))))
+         ; (4%nat, bindGen (genStackbasedWrite i m)
+                           (fun instr =>
+                              (ret (instr, [Tinstr], f, normal))))
+         ; (4%nat, bindGen (genStackbasedRead i m)
+                           (fun instr =>
+                              ret (instr, [Tinstr], f, normal)))
+(*           ;  (3%nat, match map.get (getRegs m) sp with
+                      | Some spVal' =>
+                        let spVal := word.unsigned spVal' in
+                        let minImm := spVal - stackLo i in
+                        let maxImm := stackHi i - spVal in
+                        bindGen (genImm (maxImm - minImm)) (fun imm' =>
+                        let imm := minImm + imm' in
+                        bindGen (genTargetReg m) (fun rd =>
+                        let instr := Lw rd sp imm in
+                        ret (instr, [Tinstr], f, normal)))
 
-                        | _ => exception "No sp?"
-                        end)
+                      | _ => exception "No sp?"
+                      end)*)
   (*         ; (onNonEmpty l 3%nat,
             trace (show (l, badPtr groups))
          (bindGen (elems_ l ([l; badPtr groups])) (fun l' =>
@@ -299,21 +334,22 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
           bindGen (genInstrTag instr) (fun tag =>
           ret (instr, tag, f, normal))))))))
 *)
-             ;  ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
+(*             ;  ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
                  bindGen (elems_ def_dp d) (fun pi =>
                  bindGen (genSourceReg m) (fun rs =>
                  bindGen (genImm (pMaxImm pi - pMinImm pi)) (fun imm' =>
                  let imm := pMinImm pi + imm' in
                  let instr := Sw (pID pi) rs imm in
-                 ret (instr, [Tinstr], f, normal))))) 
-             ;   (onNonEmpty a 1%nat,
-                  bindGen (elems_ def_a a) (fun ai1 =>
-                  bindGen (elems_ def_a a) (fun ai2 =>
-                  bindGen (genTargetReg m) (fun rd =>
-                  let instr := Add rd (aID ai1) (aID ai2) in
-                  ret (instr, [Tinstr], f, normal)))))
-    ])).
-(*
+                 ret (instr, [Tinstr], f, normal))))) *)
+           ;   (onNonEmpty a 1%nat,
+                bindGen (elems_ def_a a) (fun ai1 =>
+                bindGen (elems_ def_a a) (fun ai2 =>
+                bindGen (genTargetReg m) (fun rd =>
+                let instr := Add rd (aID ai1) (aID ai2) in
+                ret (instr, [Tinstr], f, normal)))))
+    ].
+
+  (*
 -- TODO: Uncomment this and add stack.dpl rule
 --            , (onNonEmpty arithInfo 1,
 --               do -- BLT
@@ -327,21 +363,25 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
 --              )
             ]
  *)
-
-  Definition headerHead offset f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) := [(Jal ra offset , [Tinstr; Tcall], f, call)].
-
-  Definition headerSeq offset f nextF :
+  
+  Definition callHead offset f :
     list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    headerHead offset f ++
-               [
-                 (Sw sp ra 0    , [Tinstr; Th1]  , nextF, normal)
-               ; (Addi sp sp 12 , [Tinstr; Th2]  , nextF, normal)
-               
-(*               ; (Sw sp 8 (-8) , [Tinstr; Th3]  , nextF, normal)
-               ; (Sw sp 9 (-4) , [Tinstr; Th4]  , nextF, normal)*)
-               ].
+    [(Jal ra offset, [Tinstr; Tcall], f, call)].
 
+  Definition headerHead f:
+    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
+    [(Sw sp ra 0, [Tinstr; Th1], f, normal)].
+
+  Definition initSeq f :
+    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
+    [  (Addi sp sp 12 , [Tinstr; Th2], f, normal)
+(*       (Sw sp 8 (-8)  , [Tinstr]     , f, normal);
+       (Sw sp 9 (-4)  , [Tinstr]     , f, normal)*)
+    ].
+  
+  Definition callSeq offset f nextF :=
+    callHead offset f ++ headerHead nextF ++ initSeq nextF.
+  
   (* Based on Rob's 
      (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
      (* 12 *) IInstruction (Addi SP SP 12); (* H2 *)
@@ -373,59 +413,65 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
           List.map (fun i => 
                       match map.get cm (word.unsigned (getPc m) + i) with
                       | Some _ =>
-                        (headerHead i f) 
+                        callHead i f
                       | _ => exception ("genCall - nofid: " ++ show (word.unsigned (getPc m) + i) ++ nl)%string
                       end) existingSites  in
       let newOpts :=
-          List.map (fun i => headerSeq i f nextF) newCallSites in
+          List.map (fun i => callSeq i f nextF) newCallSites in
       match exOpts ++ newOpts with
       | [] => None
       | x :: xs =>
         Some (elems_ x (x :: xs))
       end.
   
-  Definition returnSeq (f rf : FunID) :=
-    [ (Lw   ra sp 0     , [Tinstr; Tr1], f, normal)
-    ; (Addi sp sp (-12) , [Tinstr; Tr2], f, normal)
-    ; (Jalr ra ra 0     , [Tinstr; Tr3], rf, retrn)
+  Definition returnSeq (f : FunID) :=
+    [ (Addi sp sp (-12) , [Tinstr; Tr1], f, normal)
+    ; (Lw   ra sp 0     , [Tinstr; Tr2], f, normal)
+    ; (Jalr ra ra 0     , [Tinstr; Tr3], f, retrn)
     ].
 
   Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
-    match map.get (getRegs m) sp with
-    | Some spv =>
-      (* See if spv - 12 is indeed a pc_depth *)
-      match map.get (memtags p) (word.unsigned spv) with
-      | Some (cons (Tpc depth) nil) =>
-        Some (returnGen (returnSeq f depth))
-      | _ => None
-      end
-    | _ => None
-    end.
-  
+    let spv := projw m (Reg sp) in
+    if (512 <? spv)%Z 
+    then Some (returnGen (returnSeq f))
+    else None.
+
   Definition genInstrSeq
              (l : LayoutInfo) (t : TagInfo)
              (m : MachineState) (p : PolicyState)
              (dataP codeP callP : TagSet -> bool)
-             (cm : CodeMap_Impl) (f nextF : FunID) :=
+             (cm : CodeMap_Impl) (f nextF : FunID)
+             (fSteps : list nat)
+    : G (list (InstructionI * TagSet * FunID * CodeAnnotation) * (list nat)) :=
     let fromInstr :=
         bindGen (genInstr l t m p cm dataP codeP f)
                 (fun itf => returnGen ([itf])) in
+    let '(fFuel, rest) :=
+        match fSteps with
+        | (S fFuel)::rest => (fFuel, rest)
+        | O::rest => (O, rest)
+        | _ => (O, [])
+        end in
+    let returnFreq := (funMaxFuel - fFuel)%nat in
+    let instrFreq := (fFuel - 2)%nat in
+    let callFreq := 1%nat in
+    let instGen := bindGen fromInstr (fun g => ret (g,fFuel::rest)) in
     match genCall l t m p cm f nextF callP,
           genRetSeq m p cm f with
-    | None, None => fromInstr
+    | None, None => instGen
     | None, Some g2 =>
-      freq_ g2 ([ (5, fromInstr)
-                ; (2, g2) ])%nat
+      freq_ instGen ([ (instrFreq, instGen)
+                       ; (returnFreq, bindGen g2 (fun g => ret (g,rest))) ])%nat
     | Some g1, None =>
-      freq_ g1 ([ (5, fromInstr)
-                ; (2, g1) ])%nat
+      freq_ instGen ([ (instrFreq, instGen)
+                       ; (callFreq, bindGen g1 (fun g => ret (g,funMaxFuel::fFuel::rest))) ])%nat
     | Some g1, Some g2 =>
-      freq_ g1 ([ (5, fromInstr)
-                ; (2, g1)
-                ; (1, g2)
-               ])%nat
-  end.
-  
+      freq_ instGen ([ (instrFreq, bindGen fromInstr (fun g => ret (g,fFuel::rest)))
+                       ; (callFreq, bindGen g1 (fun g => ret (g,funMaxFuel::fFuel::rest)))
+                       ; (returnFreq, bindGen g2 (fun g => ret (g,rest)))
+                    ])%nat
+    end.
+
   (* variantOf (fun k => fst c k = Sealed d) m n -> *)
   Definition genVariantOf (d : nat)
              (c : CtxState) (m : MachineState)
@@ -465,6 +511,7 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
     Gen (Machine_State, PIPE_State)
    *)
   Fixpoint gen_exec_aux (steps : nat)
+           (funSteps : list nat)
            (i : LayoutInfo) (t : TagInfo)
            (m0 : MachineState) (p0 : PolicyState)
            (m  : MachineState) (p  : PolicyState)
@@ -474,67 +521,69 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
     (* num calls? *)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
     (*trace ("GenExec..." ++ show steps ++ " " ++ show its ++ printPC m p ++ nl)%string*)
-    (match steps with
-     | O =>
-       (* Out-of-fuel: End generation. *)
-       ret (m0, p0, cm)
-     | S steps' =>
-       match map.get (getMem m) (getPc m) with
-       | Some _ =>
-         match its with
-         | nil =>
-           (*trace ("Existing instruction found." ++ nl)%string*)
-           (            
-             (* Instruction already exists, step... *)
-             match mpstep (m,p) with
-             | Some ((m',p'),o) =>
-               (* ...and recurse. *)
-               gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP
-             | _ =>
-               trace "Something went wrong." ret (m0,p0,cm)
-             end
-           )
-         | _ =>
-           trace ("Existing instruction mid-sequence" ++ nl)%string
-           (ret (m0, p0, cm))
-         end
-       | _ =>
-         (*trace ("No instruction found " ++ nl)%string*)
-         (* Check if there is anything left to put *)
-         (bindGen
-            (match its with
-             | [] =>
-               (* Generate an instruction sequence. *)
-               (* TODO: Sequences, calls. *)
-               bindGen (genInstrSeq i t m p dataP codeP callP cm f nextF)
-                       (fun itfas =>
-                          match itfas with
-                          | (i,t,f',a) :: itfs' =>
-                            trace (show (i,t,f',a) ++ nl)%string
-                            (returnGen (a, f', (i,t), itfs'))
-                          | _ => exception "EmptyInstrSeq"
-                          end)
-             | ((i,t,f',a)::itfs') =>
-               returnGen (a, f', (i,t), itfs')
-             end)
-            (fun '(a, f', (is,it), its) =>
-               let nextF' := if Nat.eqb f' nextF then
-                               S nextF else nextF in
-               let m0' := setInstrI (getPc m) m0 is in
-               let m'  := setInstrI (getPc m) m  is in
-               let p0' := setInstrTagI (word.unsigned (getPc m)) p0 it in
-               let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
-               let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
-               match mpstep (m', p') with
-               | Some ((m'', p''), o) =>
-                 (*            trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string  *)
-                 (gen_exec_aux steps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP)
-               | _ =>
-                 exception ("Couldn't step" ++ nl(* ++  printMachine m' p' cm' ++ nl*))%string
-(*                 (ret (m0', p0', cm'))*)
-               end))
-       end
-     end).
+    match steps with
+    | O =>
+      (* Out-of-fuel: End generation. *)
+      ret (m0, p0, cm)
+    | S steps' =>
+      match map.get (getMem m) (getPc m) with
+      | Some _ =>
+        match its with
+        | nil =>
+          (* Instruction already exists, step... *)
+          match mpstep (m,p), funSteps with
+          | Some ((m',p'),o), (S n)::ns =>
+            (* ...and recurse. *)
+            gen_exec_aux steps' (n::ns) i t m0 p0 m' p' cm f nextF its codeP dataP callP 
+          | Some ((m',p'),o), _ =>
+            gen_exec_aux steps' funSteps i t m0 p0 m' p' cm f nextF its codeP dataP callP 
+          | _, _ =>
+            (*trace "Something went wrong."*) ret (m0,p0,cm)
+          end
+        | _ =>
+          (*trace ("Existing instruction mid-sequence" ++ nl)%string*)
+          ret (m0, p0, cm)
+        end
+      | _ =>
+        (* Check if there is anything left to put *)
+        (bindGen
+           (match its with
+            | [] =>
+              (* Generate an instruction sequence. *)
+              (* TODO: Sequences, calls. *)
+              bindGen (genInstrSeq i t m p dataP codeP callP cm f nextF funSteps)
+                      (fun '(itfas,funSteps') =>
+                         match itfas with
+                         | (i,t,f',a) :: itfs' =>
+                           (*trace (show (i,t,f',a) ++ nl)%string*)
+                           (returnGen (a, f', (i,t), itfs',funSteps'))
+                         | _ => exception "EmptyInstrSeq"
+                         end)
+            | ((i,t,f',a)::itfs') =>
+              match funSteps with
+              | (S n)::rest =>
+                returnGen (a, f', (i,t), itfs', (n::rest))
+              | _ =>
+                returnGen (a, f', (i,t), itfs', funSteps)
+              end
+            end)
+           (fun '(a, f', (is,it), its, funSteps') =>
+              let nextF' := if Nat.eqb f' nextF then
+                              S nextF else nextF in
+              let m0' := setInstrI (getPc m) m0 is in
+              let m'  := setInstrI (getPc m) m  is in
+              let p0' := setInstrTagI (word.unsigned (getPc m)) p0 it in
+              let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
+              let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
+              match mpstep (m', p') with
+              | Some ((m'', p''), o) =>
+                (gen_exec_aux steps' funSteps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP)
+              | _ =>
+                (*trace ("Couldn't step" ++ nl(* ++  printMachine m' p' cm' ++ nl*))%string*)
+                      ret (m0', p0', cm')
+              end))
+      end
+    end.
 
   Definition replicateGen {A} (n : nat) (g : G A) : G (list A) :=
     let fix aux n :=
@@ -595,8 +644,8 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
                              ps' <- genGPRTs pplus ps (genGPRTag pplus)
                              let ps'' = ps' & pgpr . at sp ?~ spTag
                            *)
-                          (gen_exec_aux defFuel i t ms' ps' ms' ps' cm0 O (S O)
-                                        nil dataP codeP callP))).
+                          (gen_exec_aux maxFuel [funMaxFuel] i t ms' ps' ms' ps' cm0 O (S O)
+                                        (initSeq O) dataP codeP callP))).
 
   Definition zeroedRiscvMachine: RiscvMachine := {|
     getRegs :=
@@ -622,7 +671,7 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
   
   Definition zeroedPolicyState : PolicyState :=
     {| nextid := 0
-       ; pctags := [Tpc 0]
+       ; pctags := [Tpc 0; Th2]
        ; regtags :=
            List.fold_right (fun '(i,v) m => map.put m i v)
                            map.empty
@@ -643,11 +692,10 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
   let codeP := fun tt => true in
   let dataP := fun tt => true in
   (* Fix this *)
-  let callP := fun tt =>
-                 existsb (fun t => match t with
-                                   | Th1 => true
-                                   | _ => false
-                                   end) tt in  
+  let callP := fun tt => match tt with
+                         | [Tinstr; Th1] => true
+                         | _ => false
+                         end in  
   genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState map.empty
              dataP codeP callP.
 End GenRISCVTagSimple.
