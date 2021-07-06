@@ -337,7 +337,7 @@ including stack canaries~\citep{Cowan+98},
 bounds checking~\citep{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
 split stacks~\citep{Kuznetsov+14},
 shadow stacks~\citep{Dang+15,Shanbhogue+19},
-capabilities~\citep{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTK,Georges+21},
+capabilities~\citep{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJFP,Georges+21},
 and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \ifaftersubmission\apt{Mostly from
   nick; there could be more}\bcp{Yes, going back to MIT days---we should
   include several more of these, if only to give readers the impression that
@@ -364,7 +364,7 @@ are met by particular implementations.
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
 The most abstract characterization of stack safety that we are aware of is
-recent work by \citet{SkorstengaardSTK}, which defines stack safety as the conjunction of two
+recent work by \citet{SkorstengaardSTKJFP}, which defines stack safety as the conjunction of two
 properties:
 {\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
 Informally, LSE says that the contents of
@@ -1609,7 +1609,7 @@ odd result directly to $A$.
 %
 Thus, a formal definition of safe use of the stack should include the
 condition that calls and returns are {\em well bracketed}, e.g., $C$ should
-only return to $B$.  This is what \citet{SkorstengaardSTK} describe
+only return to $B$.  This is what \citet{SkorstengaardSTKJFP} describe
 as \emph{well-bracketed control flow (WBCF)}.
 
 \section{Machines and Traces}
@@ -1966,7 +1966,7 @@ will contain these calls and returns as well, so its return stack pushes and pop
 in lockstep until it breaks at the final return.
 
 Finally, we formalize a version of WBCF, which captures the same informal idea
-as that of \citet{SkorstengaardSTK} using our context machinery.
+as that of \citet{SkorstengaardSTKJFP} using our context machinery.
 \definition
 A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every reachable state
 \(\mpcstatename\) where \(\pi_\context(\mpcstatename) = (\underscore,\rts))\), and
@@ -3247,24 +3247,24 @@ Their logical
 relation captures capability safety without ``externally observable
 side-effects (like console output or memory access traces)''
 and can be used to reason about individual programs.
-\citet{SkorstengaardSTK} acknowledge the difficulty of defining
-these concepts precisely:
-``while [they] claim that [their] calling
-convention enforces control-flow correctness, [they] do not prove a
+\citet{SkorstengaardLocal} acknowledge the difficulty of defining
+these concepts precisely; they say
+``while we claim that our calling
+convention enforces control-flow correctness, we do not prove a
 general theorem that shows this, because it is not clear what such a
 theorem should look like,'' noting that the correctness property
 enjoyed by their technique ``is not made very explicit.''
 
-StkTokens \citep{SkorstengaardSTK} continues this work by defining a more efficient
+StkTokens \citep{SkorstengaardSTKJFP} continues this work by defining a more efficient
 calling convention that makes use of linear capabilities for stack and return
 pointers.
 %% The convention operates on a single shared stack and requires that
 %% protected components avoid compromising their own security by following certain
 %% simple rules---like not leaking their private capability seals. More
 %% precisely but
-Still informally, local state encapsulation is defined as
+Still informally, local state encapsulation (LSE) is defined as
 restricting accesses to the range of memory allocated to the current stack
-frame, and well-bracketed control flow as only allowing returns from the topmost
+frame, and well-bracketed control flow (WBCF) as only allowing returns from the topmost
 frame to the immediately adjacent frame below. Formally, it improves on
 \citet{SkorstengaardLocal} by building those properties into the semantics of a
 capability machine with a built-in call stack and call and return instructions,
@@ -3276,10 +3276,10 @@ import and export functions through their interfaces.
 %% ; their model of
 %% observations is limited to cotermination.
 
-We improve upon \citet{SkorstengaardSTK} in two ways.
+We improve upon \citet{SkorstengaardSTKJFP} in two ways.
 
-\begin{enumerate}
-\item We capture a desireable security characteristic of dynamically nested
+\begin{enumerate}[label=(\roman*)]
+\item We capture a desirable security characteristic of dynamically nested
       calls: that {\em every} caller should be protected from its callees.
       By contrast, they statically divide the world into
       trusted functions, which feature additional dynamic "reasonableness"
@@ -3287,32 +3287,67 @@ We improve upon \citet{SkorstengaardSTK} in two ways.
       and adversary functions, which may violate those constraints but
       are not guaranteed safety.
 
-      The dynamic nature of this boundary makes it an issue with 
+      Supporting a dynamic notion of adversary is important for 
       functions that cannot be statically proven safe, but whose data
       still need to be protected when they are behaving safely.
-      For a contrived example, consider a function that stores some
-      private state, but takes an argument ``unsafe'' and, if called with
-      ``unsafe'' set to 1, violates the reasonableness constraints. In
-      the StkTokens model, we can never guarantee the safety of the
-      data even if called with "unsafe" set to 0.
-
-      \sna{TODO: expand}
+      For example, consider a function that obeys the reasonableness
+      constraints on most inputs, but can be subverted by malicious inputs
+      in such a way that it violates the reasonableness constraints. In
+      the StkTokens model, we cannot guarantee to protect this function's
+      data from its callees even when it called with non-malicious inputs. 
+      \apt{too abstract now?}
+%      \sna{TODO: expand}
 
 \item Their approach to proving safety via fully abstract overlay
-      semantics relies on the abstract machine being architecturally similar to
-      the concrete one (beyond the specific call and return semantics that
-      distinguish them). This makes it less portable: each architecture it
-      applies to needs its own abstract machine. Our properties should apply
-      directly to a wide range of architectures.
+  semantics relies on the definition of a ``stack-safe-by-construction''
+  abstract machine that is closely tied to the underlying actual
+  machine architecture and and enforcement mechanism.
+  %the the abstract machine being architecturally similar to
+  %      the concrete one (beyond the specific call and return semantics that
+  %      distinguish them).
+  While the fundamental approach can no doubt be ported to other architectures and enforcement
+  schemes, each such port requires a new abstract machine definition whose
+  safe-by-construction character must be (informally) verified afresh.
+  Our properties are more generic, and apply directly to a wide range of architectures,
+  code features, and enforcement mechanisms.
+  \apt{too strong? perhaps should (re-)enumerate what we need to adjust in each setting.}
+
 \end{enumerate}
 
-\citet{SkorstengaardSTK} enumerate a useful list of criteria for judging
-proposed stack safety properties: they should be (1) intuitive; (2)
+\citet{SkorstengaardSTKJFP} propose a useful list of criteria for judging
+candidate stack safety properties: they should be (1) intuitive; (2)
 useful for reasoning; (3) reusable in secure compiler chains; (4)
-arguably ``complete;'' and (5) potentially scalable.  We believe our
-approach competes well with theirs on criteria (1), (4), and (5).
-Their approach is specifically set up to address (3), while
-ours is not. Addressing (2) remains as future work for us.
+arguably ``complete'' with respect to informal notions of stack
+safety; and (5) potentially scalable to richer settings such as
+dynamic code generation or multithreading. 
+
+For criterion (1), we believe our property definitions are at least as intuitive
+as theirs. 
+We use the language of formal security
+properties to apply well-established concepts and formal techniques
+of non-interference. Thus, we define our properties in terms of
+traces of memory and register states, rather than in terms of an
+ad-hoc abstract machine. 
+Which approach is better may be a matter of taste, but we believe that our
+alternative has the merit of explicitly relating stack safety to existing
+notions of security.   	       
+
+With respect to criterion (4), we believe that our support
+for dynamically changing notion of adversaries, as outlined in point (i) above,
+captures a better definition of safety than LSE; moreover, our observational
+properties capture a richer and more intensional notion of stack safety
+that can be applied to a broader range of enforcement mechanisms and code features.
+As to criterion (5), we have demonstrated that our approach extends
+to coroutines, which is a first step towards multithreading.
+Dynamic code generation is more challenging, but StkTokens does not yet
+handle this either.
+StkTokens is specifically set up to address criterion (3), while this is not
+a particular goal of our work. We do agree that criterion (2) is important,
+and this remains as future work for us.
+Finally, we believe that having a generic definition of stack
+safety that abstracts over machine details is also
+an important criterion, and here we do better than StkTokens, as described
+in point (ii) above.
 
 %% Although there are some important differences between
 %% \citeauthor{SkorstengaardSTK}'s properties and our own, the new
