@@ -23,8 +23,8 @@ Import RecordSetNotations.
 
 Import ListNotations.
 
-Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPLazyFixedObs DLObs TSS.
+Module GenRISCVTagSimpleEager <: Gen RISCVObs TPEagerObs DLObs TSS.
+  Module MPC := TestMPC RISCVObs TPEagerObs DLObs TSS.
   Import MPC.
   Import PrintRISCVTagSimple.
 
@@ -374,9 +374,9 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
 
   Definition initSeq f :
     list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [  (Addi sp sp 12 , [Tinstr; Th2], f, normal)
-(*       (Sw sp 8 (-8)  , [Tinstr]     , f, normal);
-       (Sw sp 9 (-4)  , [Tinstr]     , f, normal)*)
+    [  (Addi sp sp 12,   [Tinstr; Th2], f, normal);
+       (Sw   sp 0  (-8), [Tinstr; Th3], f, normal);
+       (Sw   sp 0  (-4), [Tinstr; Th4], f, normal)
     ].
   
   Definition callSeq offset f nextF :=
@@ -423,7 +423,8 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
       | x :: xs =>
         Some (elems_ x (x :: xs))
       end.
-  
+
+  (* TODO: Clear stack frame here? *)
   Definition returnSeq (f : FunID) :=
     [ (Addi sp sp (-12) , [Tinstr; Tr1], f, normal)
     ; (Lw   ra sp 0     , [Tinstr; Tr2], f, normal)
@@ -698,4 +699,4 @@ Module GenRISCVTagSimple <: Gen RISCVObs TPLazyFixedObs DLObs TSS.
                          end in  
   genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState map.empty
              dataP codeP callP.
-End GenRISCVTagSimple.
+End GenRISCVTagSimpleEager.

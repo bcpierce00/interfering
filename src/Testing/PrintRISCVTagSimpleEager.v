@@ -13,8 +13,8 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Map.Interface.
 Require Import Coq.Lists.List. Import ListNotations.
 
-Module PrintRISCVTagSimple : Printing RISCVObs TPLazyFixedObs DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPLazyFixedObs DLObs TSS.
+Module PrintRISCVTagSimpleEager : Printing RISCVObs TPEagerObs DLObs TSS.
+  Module MPC := TestMPC RISCVObs TPEagerObs DLObs TSS.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".
@@ -156,4 +156,4 @@ Module PrintRISCVTagSimple : Printing RISCVObs TPLazyFixedObs DLObs TSS.
   Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl):=
     {| show := fun '(m,p,cm) => printMachine m p cm (initCtx defLayoutInfo) |}.
 
-End PrintRISCVTagSimple.
+End PrintRISCVTagSimpleEager.

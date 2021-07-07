@@ -1,5 +1,5 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     RISCVMachine RISCVObs DefaultLayout TestSubroutineSimple PrintRISCVTagSimple GenRISCVTagSimple.
+     RISCVMachine RISCVObs DefaultLayout TestSubroutineSimple PrintRISCVTagSimpleEager GenRISCVTagSimpleEager.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -271,11 +271,12 @@ Module TestPropsRISCVSimple
 
 End TestPropsRISCVSimple.
 
-Module TestRISCVTagSimple := TestPropsRISCVSimple RISCVObs TPLazyFixedObs DLObs
-                                                  TSS GenRISCVTagSimple
-                                                  PrintRISCVTagSimple.
+Module TestRISCVTagSimple := TestPropsRISCVSimple RISCVObs TPEagerObs DLObs
+                                                  TSS GenRISCVTagSimpleEager
+                                                  PrintRISCVTagSimpleEager.
 
 Import TestRISCVTagSimple.
 
 Extract Constant defNumTests => "500".
-QuickCheck prop_laziestIntegrity.
+QuickChick prop_integrity.
+QuickChick prop_confidentiality.
