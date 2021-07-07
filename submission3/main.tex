@@ -3299,69 +3299,83 @@ general theorem that shows this, because it is not clear what such a
 theorem should look like,'' noting that the correctness property
 enjoyed by their technique ``is not made very explicit.''
 
-StkTokens \citep{SkorstengaardSTKJFP} continues this work by defining a more efficient
-calling convention that makes use of linear capabilities for stack and return
+StkTokens \citep{SkorstengaardSTKJFP} continues this line of work by
+defining a more efficient
+calling convention that uses linear capabilities for stack and return
 pointers.
 %% The convention operates on a single shared stack and requires that
 %% protected components avoid compromising their own security by following certain
 %% simple rules---like not leaking their private capability seals. More
 %% precisely but
-Still informally, local state encapsulation (LSE) is defined as
+Informally, local state encapsulation (LSE) is defined as
 restricting accesses to the range of memory allocated to the current stack
-frame, and well-bracketed control flow (WBCF) as only allowing returns from the topmost
-frame to the immediately adjacent frame below. Formally, it improves on
+frame, and well-bracketed control flow (WBCF) is defined as only allowing
+returns from the topmost
+frame to the immediately adjacent frame below. Formally, this work improves on
 \citet{SkorstengaardLocal} by building those properties into the semantics of a
-capability machine with a built-in call stack and call and return instructions,
-which is proven fully abstract with respect to a more concrete capability
-machine.
+capability machine with a built-in call stack and call and return
+instructions; this machine is proven fully abstract with respect to a more
+concrete capability machine.
 %% that replaces those pseudo-instructions with their calling convention.
-Their proof of full abstraction uses a standard notion of components, which
+The proof of full abstraction uses a standard notion of components, which
 import and export functions through their interfaces.
-%% ; their model of
-%% observations is limited to cotermination.
 
-We improve upon \citet{SkorstengaardSTKJFP} in two ways.
-
+We improve upon \citet{SkorstengaardSTKJFP} in two significant ways:
 \begin{enumerate}[label=(\roman*)]
-\item We capture a desirable security characteristic of dynamically nested
-      calls: that {\em every} caller should be protected from its callees.
-      By contrast, they statically divide the world into
-      trusted functions, which feature additional dynamic "reasonableness"
-      constraints on their behavior and for which their properties hold,
-      and adversary functions, which may violate those constraints but
-      are not guaranteed safety.
+\item Most importantly, our definition captures the intuition that {\em
+  every} caller should be protected from its callees.  By contrast,
+\citet{SkorstengaardSTKJFP}
+statically divide the world into trusted functions, which feature additional
+dynamic ``reasonableness'' constraints on their behavior and for which their
+properties hold, and adversary functions, which may violate those
+constraints but are not guaranteed safety.  \bcp{Readers may wonder: why
+  isn't this reasonable?  after all, if a
+  function is adversarial, why do we care whether it gets any safety
+  guarantees?  This is an opportunity to (re)explain that functions can be
+  wrong without being malicious.  The next paragraph is a step in that
+  direction, but I think the emphasis on proof gives the wrong idea.}
 
-      Supporting a dynamic notion of adversary is important for
-      functions that cannot be statically proven safe, but whose data
-      still need to be protected when they are behaving safely.
-      For example, consider a function that obeys the reasonableness
-      constraints on most inputs, but can be subverted by malicious inputs
-      in such a way that it violates the reasonableness constraints. In
-      the StkTokens model, we cannot guarantee to protect this function's
-      data from its callees even when it called with non-malicious inputs.
-      \apt{too abstract now?}
-      \sna{Maybe, but I'm not sure how much being concrete about it serves us.}
+\vspace{.7\smallskipamount}
 
-\item Their approach to proving safety via fully abstract overlay
+Supporting a dynamic notion of adversary is important for functions that
+cannot be statically proven safe, but whose data still needs to be protected
+when they are behaving safely.  For example, consider a function that obeys
+the reasonableness constraints on most inputs, but can be subverted by
+malicious inputs in such a way that it violates the reasonableness
+constraints. In the StkTokens model, we cannot guarantee to protect this
+function's data from its callees even when it called with non-malicious
+inputs.
+
+      % \apt{too abstract now?}
+      % \sna{Maybe, but I'm not sure how much being concrete about it serves us.}
+      % BCP: reads OK to me
+
+\item \citet{SkorstengaardSTKJFP}'s approach to proving safety via fully
+abstract overlay
   semantics relies on the definition of a ``stack-safe-by-construction''
-  abstract machine that is closely tied to the underlying actual
-  machine architecture and and enforcement mechanism.
+  abstract machine that is closely tied to an underlying enforcement
+  mechanism and actual machine architecture.
   %the the abstract machine being architecturally similar to
   %      the concrete one (beyond the specific call and return semantics that
   %      distinguish them).
   While the fundamental approach can no doubt be ported to other architectures and enforcement
-  schemes, each such port requires a new abstract machine definition whose
-  safe-by-construction character must be (informally) verified afresh.
+  schemes, each such port will require a new abstract machine definition whose
+  safety-by-construction property must be checked afresh.
   Our properties are more generic: since we abstract over most of the machine
   state as well as the sealing and return conventions, they apply directly
   to a range of architectures, code features, and enforcement mechanisms.
 
-  Likewise, it would be possible to extend their abstract machine to pass arguments
-  on the stack, or to support callee-save registers. It might even viable to
-  construct a safe-by-construction abstract coroutine machine, but so far this is
-  hypothetical. We implement these scenarios in fact, with simple modifications to
-  the domain model of each one.
+\vspace{.7\smallskipamount}
 
+  Conversely, it seems possible to extend \citet{SkorstengaardSTKJFP}'s
+  abstract machine to pass
+  arguments on the stack, or to support callee-save registers. It might even
+  viable to construct a safe-by-construction abstract coroutine machine, but
+  so far this is hypothetical. We implement these scenarios in fact, with
+  simple modifications to the domain model of each one.  \bcp{Don't
+    understand the last sentence}
+
+\ifcomments \item \bcp{Should we also mention our testing stuff?} \fi
 \end{enumerate}
 
 \citet{SkorstengaardSTKJFP} propose a useful list of criteria for judging
@@ -3371,33 +3385,34 @@ arguably ``complete'' with respect to informal notions of stack
 safety; and (5) potentially scalable to richer settings such as
 dynamic code generation or multithreading.
 
-For criterion (1), we believe our property definitions are at least as intuitive
-as theirs.
+For criterion (1), we contend that our property definitions are at least as
+intuitive as theirs, while being phrased in interestingly different terms.
 We use the language of formal security
 properties to apply well-established concepts and formal techniques
-of non-interference. Thus, we define our properties in terms of
+of non-interference, and we define our properties in terms of
 traces of memory and register states, rather than in terms of an
 ad-hoc abstract machine.
-Which approach is better may be a matter of taste, but we believe that our
-alternative has the merit of explicitly relating stack safety to existing
+Which approach is ``better'' is probably a matter of taste, but ours
+has at least the merit of explicitly relating stack safety to existing
 notions of security.
 
 With respect to criterion (4), we believe that our support
 for dynamically changing notion of adversaries, as outlined in point (i) above,
 captures a better definition of safety than LSE; moreover, our observational
-properties capture a richer and more intensional notion of stack safety
+properties capture an even richer and more intensional notion of stack safety
 that can be applied to a broader range of enforcement mechanisms and code features.
-As to criterion (5), we have demonstrated that our approach extends
-to coroutines, which is a first step towards multithreading.
+
+As for criterion (5), we have demonstrated that our approach extends
+to coroutines, a first step towards multithreading.
 Dynamic code generation is more challenging, but StkTokens does not yet
 handle this either.
 StkTokens is specifically set up to address criterion (3), while this is not
-a particular goal of our work. We do agree that criterion (2) is important,
-and this remains as future work for us.
-Finally, we believe that having a generic definition of stack
-safety that abstracts over machine details is also
-an important criterion, and here we do better than StkTokens, as described
-in point (ii) above.
+a goal of our work. We do agree that criterion (2) is important;
+demonstrating it for our proposal remains future work.
+
+ Finally, we would propose one more criterion: having a generic definition
+ of stack safety that abstracts over machine details.  Here we do better
+ than StkTokens, as described in point (ii) above.
 
 %% Although there are some important differences between
 %% \citeauthor{SkorstengaardSTK}'s properties and our own, the new
@@ -3433,30 +3448,29 @@ they propose a number of lazy optimizations, notably {\em Lazy Tagging} and
 Clearing}, discussed in \cref{sec:lazy}, with associated improvements in
 performance.
 
-We have evaluated {\em Depth Isolation}, {\em Lazy Tagging}, and {\em Lazy
+We evaluated {\em Depth Isolation}, {\em Lazy Tagging}, and {\em Lazy
   Clearing} against our properties, finding that {\em Depth Isolation} does
 indeed enforce stepwise stack safety and therefore also observable stack
-safety. We also found that neither lazy micro-policy actually does enforce
-stack safety, and proposed a fix.
+safety. We also found that neither lazy micro-policy actually enforces
+stack safety, and we proposed a fix.
 
 \paragraph{Heap Safety as a Security Property}
 
-Heap safety, like stack safety, may be framed as a security property
-in the form of
-noninterference~\citep{DBLP:conf/post/AmorimHP18}\ifaftersubmission\bcp{Should
-be spelled ``Azedevo et al.''  Got to figure out how to make bibtex do that
-(or ask arthur how!).}\fi. Just
-as~\citeauthor{DBLP:conf/post/AmorimHP18} give a rigorous
-characterization of the meaning of (heap) memory safety, in this paper,
-inspired by their work, we aim to do the same for the stack. They are a
-significant inspiration for this work.
+Heap safety, like stack safety, may be framed as a security property using
+the language of
+noninterference~\citep{DBLP:conf/post/AmorimHP18}\iftrue\bcp{Should be
+  spelled ``Azedevo et al.''  We should figure out how to make bibtex do
+  that (or ask arthur how!).}\fi.  Their paper was a significant inspiration
+for the present work, and we believe that the two safety conditions should
+combine smoothly.
 
 \section{Future Work}
 \label{sec:future}
 
-We have introduced a characterization against which stack safety enforcement
+We introduced a characterization against which stack safety enforcement
 mechanisms can be measured and used it to evaluate tag-based enforcement mechanisms.
-Our immediate next step is to implement testing of observational properties,
+
+\bcp{Out of date?}Our immediate next step is to implement testing of observational properties,
 both to validate them and to explore how to effectively test properties that do not
 fail immediately.
 From there there are two natural ways to extend the work. We should thoroughly evaluate
