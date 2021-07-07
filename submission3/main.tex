@@ -364,7 +364,7 @@ are met by particular implementations.
 %defined negatively: through examples of stack-based exploits
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
-%\leo{Examples at a high level}: such as -- does not overwrite return addresses, or ...
+%\leo{Examples at a high level}: such as---does not overwrite return addresses, or ...
 The most abstract characterization of stack safety that we are aware of is
 recent work by \citet{SkorstengaardSTKJFP}, which defines stack safety as the conjunction of two
 properties:
@@ -853,7 +853,7 @@ in this case 0. Sealing is the fundamental integrity contract between the caller
 This gives us our simple, intuitive statement of {\em stepwise integrity}:
 if a component is sealed before a step, it will be unchanged afterward. Stepwise
 refers to the fact that the property must hold on every step. %Later we will
-%loosen this condition in the interest of extensionality -- the caller only
+%loosen this condition in the interest of extensionality---the caller only
 %cares about changes it can see after the return, not changes during execution.
 In this case, after instruction 11, {\tt f} has violated integrity by writing to {\tt x},
 so the final return value produced by {\tt main} is wrong.
@@ -1382,7 +1382,7 @@ assumptions about the concrete machine that instantiates it. Without changing th
 properties, we can support any register
 machine with a program counter (\(\PCname\)) and a stack pointer (\(\rsp\)); other
 details of the machine's ISA are unimportant. We can support any static memory,
-including a heap -- our properties define stack protection regardless of how
+including a heap---our properties define stack protection regardless of how
 non-stack memory is used. Likewise, we can support a range of calling convention
 choices, like whether or not to have a frame pointer.
 
@@ -1392,10 +1392,10 @@ an enhancement that supports argument passing. Other plausible enhancements
 include:
 
 \begin{itemize}
-\item address-taken locals -- similar to argument passing, but
+\item address-taken locals---similar to argument passing, but
       would benefit from more sophisticated, heap-like memory models
-\item exceptions -- needs annotations of throw/catch points
-\item continuations -- would be similar to argument passing
+\item exceptions---needs annotations of throw/catch points
+\item continuations---would be similar to argument passing
 \end{itemize}
 
 Runtime code generation would be much more challenging to support, as
@@ -1666,7 +1666,7 @@ well-formedness predicate, \(\WF \subseteq \MACHS \times \POLS\), describing
 initial states that are properly configured.
 %
 %A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
-%\Cref{sec:enforcement}. -- APT: We just said this.
+%\Cref{sec:enforcement}.---APT: We just said this.
 
 We lift the policy step function to operate on such pairs
 by combining it with the regular step function for machine states.
@@ -2572,7 +2572,7 @@ steps for a long time before producing some output.
 
 \subsection{Observational Stack Safety}
 
-We now can sketch observational versions of both integrity and confidentiality.
+We now sketch observational versions of both integrity and confidentiality.
 Integrity is already straightforward, simply weakening the condition that must hold
 after the return---instead of preventing dangerous writes from being read, we
 prevent them from being leaked.
@@ -2670,12 +2670,14 @@ prime candidate for future testing.
 \section{Extensions}
 \label{sec:ext}
 
-We have shown how our properties apply to an extremely simple
-subroutine model and validated them through randomized testing.
-But what about more realistic systems? We now demonstrate the
+We have seen how our properties apply to an extremely simple
+subroutine model.
+What about more realistic uses of the stack? We now demonstrate the
 flexibility of our core concepts by extending
 them to a system that models the passing of
-parameters on the stack, and then to a very simple coroutine model.
+parameters on the stack (Section~\ref{sec:passing}), to callee-saves
+registers  (\ref{sec:callee}), and to a very simple coroutine model
+(\ref{sec:coroutines}).
 
 \subsection{Parameters Passed on the Stack}
 \label{sec:passing}
@@ -2935,7 +2937,7 @@ void f(int &a) {
 To this point we have ignored function arguments, since our simplest model places them in
 registers. We now show how to implement two kinds of protected
 sharing: passing by value on the stack, and passing by reference. We first explore
-some examples at the same level of detail as our earlier ones, and then move on to
+some examples and then move on to
 extending our formalization.
 
 Example~\ref{fig:passingsimple} shows a sample trace of
@@ -2946,18 +2948,19 @@ to include \(\passed{\depth,\depth'}\), recording two depths. We note the
 current depth of the active function next to the stack pointer in the diagram, for reference.
 The argument {\tt a} has
 its value copied from {\tt x}, and we note that {\tt f} can read it---because it is marked
-as passed between depths 0 and 1, it is not varied. Then at instruction 13 it is even
-modified, and naturally this is permitted as well.
+as passed between depths 0 and 1, it is not varied. At instruction 13 it is
+modified---naturally this is permitted as well.
 
 The same annotation mechanism can be used to pass
 variables by reference, and here there are important stack safety concerns,
 as seen in Figure~\ref{fig:passing}. In this example, written in C++ notation,
-{\tt f} takes a single argument by reference.
-{\tt main} calls {\tt f} passing a reference to {\tt x}, then clears {\tt x} and calls
-{\tt f} again passing a reference to {\tt y}.
-We would expect that the first call to {\tt f} might modify
+{\tt f} takes a single argument by reference.  The function
+{\tt main} calls {\tt f}, passing a reference to {\tt x}, then clears {\tt x} and calls
+{\tt f} again, passing a reference to {\tt y}.
+We would expect that the first call to {\tt f} can modify
 {\tt x}, but not the second. Unfortunately {\tt f} has hidden away our reference and modifies
-{\tt x} in the second call. (Incidentally, this is perfectly compilable C++, although its behavior is undefined.)
+{\tt x} in the second call. (Incidentally, this is perfectly compilable C++,
+although its behavior is officially undefined.)
 
 To avoid cluttering the picture at the assembly level, we revert to assuming that the
 argument {\tt a} is passed in a register, namely {\tt \%ra}.
@@ -2978,18 +2981,19 @@ it to be accessible anywhere between the two.
 
 Our model provides only limited support for handling fully first-class pointers into
 stack frames, e.g., pointers obtained by taking the address of a local variable.
-Unlike the case for pass-by-reference, there is no easy way to model the intended
+Unlike pass-by-reference, there is no easy way to model the intended
 sharing behavior of such pointers in terms of stack frame activation patterns.
 The best approximation we can make is to treat an address-taken variable in the
 same way as a passed argument, with the additional property
 that it remains accessible at \emph{all} stack depths above the caller.
-This prevents most violations of temporal safety, although stale pointers can still be
-used in certain corner cases.
-But more seriously, callees are permitted to access the location without having
+This prevents most violations of temporal safety, although stale pointers
+can still be used in certain corner cases.
+More seriously, callees are permitted to access the location without having
 been explicitly given a pointer to it.  Preventing the latter kind of abuse
-is the provence of a fine-grained memory safety policy, e.g. based on capabilities
-(implemented by tags or otherwise); we argue it is beyond the scope of stack safety
-\emph{per se}.
+is the provence of a fine-grained memory safety policy, e.g., based on
+capabilities
+(implemented by tags or otherwise); we would argue it is beyond the scope of
+stack safety \emph{per se}.
 
 \paragraph{Formalization of variable passing.}
 We add extra information to our call
@@ -3080,13 +3084,18 @@ For both the stepwise and observational versions of stack confidentiality in
 the original model, the passing model equivalents additionally substitute \(\secret_P\).
 
 \subsection{Callee-saves Registers}
+\label{sec:callee}
 
-In some systems, rather than the caller saving the non-argument data from its registers
-and clearing them (and therefore implicitly taking responsibility for protecting those data),
-the callee is responsible for this. Nevertheless we may wish for those registers to be
-protected, just as they would be in a caller-save convention.
+Under some calling conventions, rather than the caller saving the non-argument
+data from its registers
+and clearing them (and therefore implicitly taking responsibility for
+protecting this data),
+the callee is responsible for this. But of course we may still wish for
+those registers to be
+protected, just as they would be in a caller-saves convention.
 
-Intuitively, a caller expects a callee-saved register to be unchanged on return -- but it
+Intuitively, a caller expects a callee-saved register to be unchanged on
+return: it
 may change during the call, as long as it is restored. We similarly expect a callee-saved
 register to be secret from the callee, except when it is copied to the stack! Both scenarios
 reflect not stepwise but observational stack safety.
@@ -3106,7 +3115,7 @@ should never be saved. We then extend the set of domains with these values.
               {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \in \REGS \mapsto S \reg]\)}
               {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
-The remaining rules are as in the simple model.
+The remaining rules are the same as in the simple model.
 
 \definition Let the protected set of a context, \(\prot_S(\domMap,\rts)\),
 be the set of components \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
@@ -3120,16 +3129,16 @@ be the set of components \(\component\) such that
 \definition
 For each of the stepwise, deferred, and observational versions of
 stack integrity in the simple model, the equivalent property in the
-passing model
-
+passing model\bcp{Is something missing here?}
+%
 {\bf Observational stack integrity} with callee-saves registers substitutes the above
 \(\CONTEXTS\) type and update function, and \(\prot_S\), for its equivalent in the simple model.
-
+%
 {\bf Observational stack confidentiality} additionally substitutes \(\secret_S\).
 
 \paragraph{Discussion}
 
-Observational properties are not only for lazy enforcement mechanisms -- they reflect a useful
+Observational properties are not only for lazy enforcement mechanisms---they reflect a useful
 loosening of the stepwise properties. Consider a single register \(\reg\) that is saved.
 It is copied to some stack address \(\addr\), violating stepwise confidentiality, and then
 overwritten, violating stepwise integrity. Then before the return, it is restored to its
@@ -3141,6 +3150,7 @@ leak through the callee-saves mechanism, for instance if the caller allocates bu
 initialize more memory.
 
 \subsection{Coroutines}
+\label{sec:coroutines}
 
 Our final extension to the model adds coroutines. We assume a very simple model with
 a fixed number of coroutines, each with its own stack.
