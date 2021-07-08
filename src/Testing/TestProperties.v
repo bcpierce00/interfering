@@ -55,7 +55,7 @@ Module TestPropsRISCVSimple
   Import GenImp.
   Import PrintImp.
   
-  Definition defFuel := 100%nat.
+  Definition defFuel := 42%nat.
 
   Definition sameDifferenceP (m m' n n' : MachineState) k :=
     if (orb (negb (Z.eqb (proj m k) (proj m' k)))
@@ -333,3 +333,14 @@ Import TestRISCVLazyFixed.
 (*QuickCheck prop_integrity.*)
 (*QuickCheck prop_confidentiality.*)
 (*QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.*)
+
+(* More lazy tests: *)
+
+(* Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality. (* Fails *) *)
+(* Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *) *)
+
+(* Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality. (* Fails *) *)
+(* Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *) *)
+
+(* Time QuickCheck TestRISCVLazyFixed.prop_confidentiality. *)
+(* Time QuickCheck TestRISCVLazyFixed.prop_laziestIntegrity. *)
