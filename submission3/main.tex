@@ -2003,21 +2003,23 @@ $l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s da
 \label{sec:lazy}
 
 The conservative policy described in the previous section, while
-testable and enforceable, is rather slow to be of practical use. What
-we want, instead, is a somewhat more permissive policy that can also
-be efficiently implemented. Most of the performance overhead incurred
+testable\apt{is this important?} and enforceable\apt{?? it is an enforcement
+  mechanism so obviously it is enforceable -- whatever it may enforce!}, is rather slow in
+some important practical cases. \citet{DBLP:conf/sp/RoesslerD18} observe
+that most of the performance overhead incurred
 stems from the need to set stack activation tags as a frame is created
-and reset them as it is destructed, as
-\citet{DBLP:conf/sp/RoesslerD18} confirm in their evaluation. To
-mitigate those costs, they propose a number of optimizations.
+and reset them as it is destructed;  this
+is particularly costly for frames that contain large uninitialized arrays.
+To mitigate those costs, they propose a number of optimizations to the policy
+that make it more permissive but also more efficient to implement.
 
-First, they eliminate the initialization pass. In the {\em Lazy Tagging}
+First, they eliminate the costly frame initialization pass. In the {\em Lazy Tagging}
 system, the stack is again initially tagged as \(\tagNoDepth\).
 A function is permitted
 to overwrite \(\tagNoDepth\) memory, and when it does so its depth tag overwrites
-the clear tag, claiming the memory; the remainder of the policy functions
-as {\em Depth Isolation}. On return, the callee must clear its frame, restoring
-it to \(\tagNoDepth\), which is still a heavy cost.
+the \(\tagNoDepth\) tag, claiming the memory; the remainder of the policy functions
+as in Depth Isolation. However, on return, the callee must clear its frame, restoring
+each tag to \(\tagNoDepth\), which is still a heavy cost.
 
 To eliminate this cost, \citet{DBLP:conf/sp/RoesslerD18} augment Lazy Tagging
 with {\em Lazy Clearing}. Under this combination of optimizations,
@@ -2037,13 +2039,6 @@ protections provided by these policies once stepwise stack safety is broken?
 How does a harmful violation that must be caught later differ from a
 harmless one?
 
-Lazy policies are not the only scenario to call for a weaker property of this kind.
-Some code features may involve moving data, overwriting its original location,
-and ultimately restoring it before the change becomes visible; for example, the
-``callee-saves'' registers in some calling conventions will be stashed and restored.
-Stepwise stack safety can never support such a feature, but in section \ref{calleesave}
-we show how {\em observational properties} can.
-
 \paragraph*{Deferring Integrity Checks}
 
 We first notice that these properties prevent invalid reads, as well as reads
@@ -2062,7 +2057,8 @@ for any \(\MPCT,\brk \in \MPCT^*\) where \(\head(\MPCT) = \mach,\pol,\context\) 
 set of sealed components that changed during the call.
 For any \(\nach'\) and \(\NPCT'\) such that \(\mach' \approx_{\components} \nach'\) and
 \((\nach',\pol',\context') \hookrightarrow \NPCT'\), \(\MPCT' \doteq \NPCT'\).
-
+\apt{Intuitive description of what this means?}
+  
 For example, consider again the integrity violation in
 Figure~\ref{fig:int1}. Under a deferred discipline, the write to {\tt
   x} in instruction 11 taints the variable but does not in itself
@@ -2075,17 +2071,24 @@ Instead of strictly forbidding such dangerous writes, we say,
 
 \subsection{Observability}
 
-%\apt{Given that the deferred property suffices to specifcy the lazy policies,
-%  the case for observable properties is pretty weak.  Should we just cut them?}
-
 While deferred integrity meaningfully captures the intuition
 behind lazy tagging, we are interested in properties that can be used to
 evaluate the broadest possible range of reasonable
-enforcement mechanisms. Consider a hypothetical
-taint-tracking policy that allows high-security to be copied as long as it is
-tagged as such and not exfiltrated, or that allows dangerous writes to be
-copied as long as they don't affect critical operations. This calls for
-an abstract mechanism to characterize behaviors that are externally relevant.
+enforcement mechanisms.
+For example, reading after a dangerous write may be acceptable if the value
+read does not affect the ultimate output of the program; this looser scheme
+could be enforced by tainting the dangerous writes and detecting taint
+at the point of output.
+%For example, consider a hypothetical
+%taint-tracking policy that allows high-security data to be copied as long as it is
+%tagged as such and not exfiltrated, or that allows dangerous writes to be
+%copied as long as they don't affect critical operations. \apt{Not quite sure
+%  how these last connect to stack safety.}
+And some code features may involve moving data, overwriting its original location,
+and ultimately restoring it before the change becomes visible; for example, the
+``callee-saves'' registers in some calling conventions will be stashed and restored.
+These examples call for an abstract mechanism to characterize behaviors that are externally
+\emph{observable}.
 
 So we extend our model with a notion of observations. We abstract over an
 observation type \(\obs \in \OBSS\), containing at minimum the silent observation
@@ -2121,7 +2124,7 @@ then invoked with an initial \(\tau\).
 \paragraph*{Observational Similarity}
 
 We say that two observation traces $\obsT_1$ and $\obsT_2$ are {\em similar}
-as far as an external observer is concerned, written \(\obsT_1 \eqsim
+from the perspetive of an external observer, written \(\obsT_1 \eqsim
 \obsT_2\), if the sequence of non-silent observations is the same. That is, we
 compare up to deletion of \(\tau\) observations, coinductively:
 
@@ -2176,7 +2179,7 @@ Then for any \(\nach\) such that
 Confidentiality is more sophisticated. We must capture the intuition that
 secrets do not escape during a call {\em and} are not leaked during a return.
 This require us to be able to quantify over components that fail to preserve
-our \(\diamond\) relation.
+the change-together relation \(\diamond\).
 
 \definition Let \(\mach,\mach'\) and \(\nach,\nach'\)
 be pairs of states. Their {\em unsafe set}, written
@@ -2212,49 +2215,54 @@ contain leaked information on either side of the first pair of variant traces.
 This becomes the basis for the second variation, because all of these values
 must be protected from leaking for the remainder of the program.
 
-Together with return-after-call, these two properties give us
+Together with return-after-call\apt{??}, these two properties give us
 {\em Observable Stack Safety}. This is a weaker property
 than the stepwise one, and also much more extensional.
 We can think of stepwise, deferred, and observational as
 three points along a spectrum from eager to lazy. The first two
 are useful for understanding particular enforcement mechanisms,
 but if we had to choose a single property to represent stack safety,
-it would be observational state safety.
+it would be the observational one.
 
 \subsection{Connection to Policies}
 
 Observable properties allow us to defer enforcement until a property
 violation would become visible. Now we can identify when lazy policies
-miss violations that can become visible. The {\em Lazy Tagging and Clearing}
+miss such violations. The Lazy Tagging and Clearing
 micro-policy from \citet{DBLP:conf/sp/RoesslerD18} tags each stack slot with the call depth
 at which it was written, and enforces that it must be read from the
 same depth. However, this allows violations of observable stack safety!
 Specifically, a callee might write into the stack and leave tags behind
 for a future callee at the same depth to read. This violates confidentiality and,
-if the writes were in the caller's frame, integrity.
+if the writes were in the caller's frame, integrity. \apt{A more detailed example
+  would be great here, and should not take too much space.}
+\apt{Mention here that this was found by testing.}
 
-{\em Lazy Tagging and Clearing} can be repaired if, instead of tagging each function
+Lazy Tagging and Clearing can be repaired if, instead of tagging each function
 activation with its depth in the stack, we generate a fresh activation
 identifier on each call, which prevents a program from exploiting stale
-tags from previous activations. A related mechanism was explored in the
+tags from previous activations.
+(A related mechanism was explored in the
 Static Authorities policy of \citet{DBLP:conf/sp/RoesslerD18}, which
-associates a unique activation identifier to each function, which is
-however shared by all activations of the same function in order to obtain
-good cacheability of tag rules---but that policy allows leaks between
-instances of the same function.
+associates a unique \emph{static} identifier to each function, which is shared
+by all activations---but that policy allows leaks between
+instances of the same function.)
 
 We test {\em Lazy Per-activation Tagging and Clearing}, in which
 each activation is tagged uniquely, and find that it obeys stepwise
 confidentiality and observational integrity. Our testing catches the
 violation in the original {\em Lazy Tagging and Clearing}, as well as
 an equivalent to {\em LOAD\_NO\_CHECK}, which now also violates observational
-integrity.
+integrity.\apt{Move latter to above.}
 
-Per-activation tagging resolves the issue because tags that persist between
-calls will not become active again.
-Our properties have allowed us to reject an enforcement mechanism as
-not really stack safe, and describe a potential fix that itself is a
-prime candidate for future testing.
+%Per-activation tagging resolves the issue because tags that persist between
+%calls will not become active again.
+Our abstract properties have allowed us to identify an enforcement mechanism as
+not really stack safe, and to validate a possible fix. 
+Unfortunately, Lazy Per-activation Tagging and Clearing
+puts severe pressure on the tag cache, so it may not be usable in practice.
+However, we conjecture that no lazy scheme can be fully stack safe
+without using unique per-activation identifiers. 
 
 \section{Extensions}
 \label{sec:ext}
@@ -2941,7 +2949,7 @@ With respect to criterion (4), capturing programmers' informal
 understanding of stack safety, we believe that our support
 for dynamically changing notion of adversaries, as outlined in point (i) above,
 captures a better definition of safety than LSE; moreover, our observational
-properties capture an even richer and more intensional notion of stack safety
+properties capture an even richer and more extensional notion of stack safety
 that can be applied to a broader range of enforcement mechanisms and code features.
 
 As for criterion (5), broad applicability, we have demonstrated that our approach extends to
