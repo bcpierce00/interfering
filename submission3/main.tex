@@ -349,13 +349,10 @@ The protections offered by such mechanisms are commonly described in terms
 of concrete examples of attacks that they can prevent---corruption
 of return addresses, buffer overflows, use of uninitialized variables,
 etc.---leaving a more abstract characterization to the reader's intuition.
-But these mechanisms can be quite intricate,
-and they often involve trading off protection and performance.\bcp{I'm a
-  little uncomfortable about that point: to the extent that applying these
-  mechanisms involves trading off performance and protection, our properties
-will not apply at all!}
-Thus, it would be useful to have a precise, generic, and formal
-specification for stack
+But these mechanisms can be quite intricate, and the behaviors they prevent
+can vary. Perhaps one conservatively overapproximates the ideal stack safety,
+while another fails to measure up. In order to say for certain,
+we need a precise, generic, and formal specification for stack
 safety, as a basis both for comparing the security claims of different
 enforcement techniques and for validating more rigorously that these claims
 are met by particular implementations.
@@ -830,18 +827,16 @@ At the right of each example, we show the layout of stack memory just before
 the specified instruction is executed; each box represents a memory word
 (the machine is word addressed), and addresses increase to the right.
 
-\bcp{Have we made the diagrams comprehensible when printed in
-  B/W or viewed by a colorblind person?  If so we should say that the colors
-are just extra hints.}%
-Colored boxes indicate an assignment of the address to a
+Labeled boxes indicate an assignment of the address to a
 {\em domain}---a label reflecting a particular set of intended access
-rights.\bcp{should we say here that it is the job of an enforcement mechanism to
-  manage and enforce these access permissions?} Such a domain
+rights. Unless otherwise marked, sequential addresses retain the previous domain,
+as hinted by their colors. Domains are descriptive; it is up to the enforcement
+mechanism to ensure that the system adheres to these permissions. Such a domain
 can be \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), or \(\outside\)
 (outside the stack entirely.) These are abbreviated \(U\) and \(S(\dots)\) in the
-figures\leo{No outside?}. For our purposes, \(\outside\) will apply to global
-variables and code. Domains are part of the {\em context} of a machine state.
+figures. Not shown are global variables and code, which would be labeled \(\outside\).
+Domains are part of the {\em context} of a machine state.
 (We will introduce some other parts of the context as needed.)
 
 Figure~\ref{fig:int1} shows a program with a simple integrity violation. It consists of a {\tt main}
@@ -1366,16 +1361,11 @@ condition that calls and returns are {\em well bracketed}, e.g., $C$ should
 only return to $B$.  This is what \citet{SkorstengaardSTKJFP} describe
 as \emph{well-bracketed control flow (WBCF)}.
 
-\section{Setting}
+\section{Machines, Enforcement, and Threat Model}
 \label{sec:setup}
 
-\bcp{I am having trouble deciding what this section should be called.
-  Probably this means I don't really understand its purpose...}
-\sna{Propose merging it with next section like so.}
-\leo{Machine, Enforcement, and Threat Model?}
-
-\bcp{And: Needs an intro sentence.}
-
+Before introducing the model itself, we must situate it in terms of our
+assumptions about machines, enforcement mechanisms, and threats.
 
 \paragraph*{Machine model}
 Our properties are defined in terms of an abstract machine model that makes very few
@@ -1389,9 +1379,9 @@ choices, like whether or not to have a frame pointer.
 
 Some calling convention choices, such as callee-save registers and argument
 passing on the stack, require natural enhancements to our base properties. We
-present such enhancements in Section~\ref{sec:ext}, after we formalize the
-essence of stack safety. Other plausible enhancements
-include:
+present these enhancements, as well as a simple coroutine model,
+in Section~\ref{sec:ext}, after we formalize the essence of stack safety.
+Other plausible enhancements include:
 
 \begin{itemize}
 \item address-taken locals---similar to argument passing, but
@@ -1401,9 +1391,9 @@ include:
 \end{itemize}
 
 Runtime code generation would be much more challenging to support, as
-it requires dynamic code annotations. Parallelism would require
-fundamental changes to the system model. So, we consider these features
-fully out of scope.\leo{Shouldn't coroutines be mentioned here?}
+it requires dynamic code annotations. Parallelism beyond the current
+coroutine model would require much more substantial changes to the machine
+model. So, we consider these features out of scope.
 
 \paragraph*{What is a ``call''?}  One significant challenge in formulating our
 properties arises from the fact that we want to define stack safety at the
@@ -1455,7 +1445,7 @@ that we are given some way of telling when a given machine state is a
 %point of the call. (This is the point where it wants to be able to access
 %its own local state again and expected to find it unmolested.)}.
 
-\paragraph*{Policies}\leo{Change this to ``enforcement model'' if we go with that title}
+\paragraph*{Enforcement Model}
 We model the base machine's behavior as a step function over machine states,
 and a machine
 enhanced with an enforcement mechanism, or {\em policy} for short, as a
@@ -2513,25 +2503,20 @@ $\mach \stepsto[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS $.
 The ``observations-of'' operator, written \(\obsof\), takes a machine trace and
 gives the trace of observations of each step in
 the trace. It uses a coinductive helper \(\mathit{obsfor}\) that relates an
-initial observation, a machine-trace, and an observation trace:\bcp{This
-  would read better and take less space if all three rules were squished
-  onto one line.}
+initial observation, a machine-trace, and an observation trace; the helper is
+then invoked with an initial \(\tau\).
 
-\begin{minipage}[b]{.6\textwidth}
+\begin{minipage}[b]{.55\textwidth}
   \judgmentthree{\(\mpcstatename \stepstocon[\obs'] \mpcstatename'\)}
                 {\(\mpcstatename' \hookrightarrow \MPCT\)}
                 {\(\mathit{obsfor} ~ \obs' ~ \MPCT = \obsT\)}
                 {\(\mathit{obsfor} ~ \obs ~ \notfinished{\mpcstatename}{\MPCT} = \notfinished{\obs}{\obsT}\)}%
 \end{minipage}
-\begin{minipage}[b]{.35\textwidth}
+\begin{minipage}[b]{.22\textwidth}
   \judgment{}
            {\(\mathit{obsfor} ~ \obs ~ \mpcstatename = \obs\)}
 \end{minipage}
-
-\begin{minipage}{.35\textwidth}
-  Then we start with a \(\tau\) observation:
-\end{minipage}
-\begin{minipage}{.6\textwidth}
+\begin{minipage}[b]{.22\textwidth}
 \judgment{\(\mathit{obsfor} ~ \tau ~ \MPCT = \obsT\)}
          {\(\obsof(\MPCT) = \obsT\)}
 \end{minipage}
@@ -3129,9 +3114,6 @@ be the set of components \(\component\) such that
 \(\domMap ~ \component = \saved\).
 
 \definition
-For each of the stepwise, deferred, and observational versions of
-stack integrity in the simple model, the equivalent property in the
-passing model\bcp{Is something missing here?}
 %
 {\bf Observational stack integrity} with callee-saves registers substitutes the above
 \(\CONTEXTS\) type and update function, and \(\prot_S\), for its equivalent in the simple model.
