@@ -160,6 +160,7 @@ memory, but these mechanisms typically lack precise specifications,
 relying instead on informal descriptions and examples of the bad
 behaviors that they prevent.
 
+<<<<<<< HEAD
 We propose a generic, formal characterization
 of stack safety based on concepts from language-based security: a
 combination of an integrity property (``the private
@@ -178,6 +179,87 @@ simple ``stepwise'' variant of our properties and correctly, and that
 observational property. Meanwhile our testing successfully detects violations
 in several broken variants, including Roessler and Dehon's original lazy policy.
 
+=======
+We propose a generic formal characterization
+of stack safety based on concepts from language-based security: a
+combination of an integrity property (``the private
+state in each caller's stack frame is held invariant by the callee''),
+a confidentiality property (``the callee's behavior is insensitive to the
+caller's private state''), and a well-bracketedness property (``each
+callee returns control to its immediate caller''). \apt{Do we really
+  want to include WBCF in the abstract?}\bcp{I would delete.}
+% These properties are sensible even in the presence of
+% abnormal control flow.\apt{Is this important enough to mention here?}
+% BCP: I think not in the abstract, but maybe in the intro.
+% We further apply\apt{what does this mean? we didn't
+%  invent it} a straightforward notion of
+% ``well-bracketed control flow'' that restricts control flow to the
+% typical pattern of matched calls and returns.
+
+We use these properties to validate \apt{``evaluate'' ?}\bcp{I like
+  ``validate'' here.} the stack-safety {\em micro-policies} proposed
+by~\citet{DBLP:conf/sp/RoesslerD18}.  Specifically, we use property-based
+random testing to check (1) that Roessler and Dehon's ``eager''
+micro-policy, which catches violations as early as possible, enforces a
+simple ``stepwise'' variant of our properties and correctly detects several
+broken variants, and (2) that (a repaired version of) their more performant
+``lazy'' micro-policy enforces a slightly weaker and more extensional
+observational variant of our properties.
+%
+% \BCP{I still don't think the next sentence really nails it.  And (sigh) I am
+%   still not really clear yet on whether our definition applies / might apply
+%   to other enforcement mechanisms or not.  Saying that our attacker model is
+%   stronger does not help---that should make it easier for us to describe
+%   their protections, not harder.  So I don't understand what we're saying
+%   here.}%
+% %
+% While we do not rule out other enforcement mechanisms, our
+% definitions are strongly informed by micropolicy systems, especially
+% our attacker model, which is stronger than other enforcement mechanisms
+% can enable.
+
+% For the sake of concreteness, most of our presentation assumes a standard RISC
+% machine architecture with a basic subroutine calling convention (parameters
+% passed in registers) and a micropolicy-like enforcement mechanism. We
+% also show how to accomodate stack-allocated parameter passing and
+% coroutines.
+
+% \bcp{this is also a
+%   good place to admit that our definitions are tuned for micropolicies, if
+%   we can find a succinct way to say it.}
+% \sna{See above.}
+% \BCP{I added it to the last paragraph (which is pretty close to the preceding
+%   paragraph :-)  We should follow this up with some discussion in the (new)
+%   Assumptions section about how different enforcement mechanisms (us,
+%   StkTokens, maybe others) adopt different perspectives on what the stack is
+% for and how it is organized and so lead to somewhat different notions of
+% low-level safety.}
+
+% We argue \apt{do we?}\bcp{I guess we will not have time to.  Propose
+%   deleting this para.} that our properties are suited to a range of other
+% enforcement mechanisms. The strict stepwise properties can describe
+% mechanisms that catch errors immediately, as is typical. While the
+% observational properties are closely linked to lazy micro-policies they are
+% weak enough to be a lower bound that captures stack safety for any
+% reasonable enforcement mechanism.
+
+% \apt{This is a good story, but does it describe the paper we are able to produce this week?
+%   We were rejected before exactly because we claimed to have
+%   a general criterion, but did not in fact demonstrate its generality (which is not
+%   obvious). What has changed?}\bcp{I agree with these concerns. Deleted the
+%   para about the general story.  Does the rest now avoid making (or
+%   implying) claims that we can't defend?}
+% \bcp{Also, I think we should save
+%   WBCF for the intro---I can't find a way to discuss it here that is brief
+%   and not confusing/distracting.}
+
+  % \iftrue\bcp{should we mention stktokens here?}
+  % \leo{Not sure. We almost never cite stuff in the abstract, do we?}
+  % \bcp{Some people say not to, but I think their argument is weak: I've
+  %   added Nick/Andre above.  But I'm not sure we want to get into stkTokens
+  %   in the abstract.}
+  % \fi
+>>>>>>> fcc6041117dd61fb6851cde5c4fc95ea40dc81b4
 \end{abstract}
 
 
@@ -361,7 +443,7 @@ enough to handle more sophisticated styles of control flow.
 
 In the rest of the paper, we begin with an informal overview of our key ideas via
 examples (\cref{sec:running-example}), followed by a description of our key
-assumptions about the machine environment and threat model (\cref{sec:setup}). 
+assumptions about the machine environment and threat model (\cref{sec:setup}).
 We then offer the following contributions:
 
 \begin{itemize}
@@ -400,6 +482,10 @@ extended to argument passing on the stack, callee-saves registers, and a simple 
 \newcommand{\badc}{lred}
 \newcommand{\goodc}{lblue}
 \newcommand{\retptrc}{black}
+\newcommand{\sealdesc}[1]{Seal(#1)}
+\newcommand{\unsealdesc}{Unseal}
+\newcommand{\retptrdesc}{RetPtr}
+\newcommand{\passdesc}[2]{Pass(#1,#2)}
 
 \begin{figure}
 
@@ -444,7 +530,7 @@ int f() {
 \begin{tabular}{l l}
 {\tt 2} &
 \memoryaddrs{8em}
-\memory{3}{\unsealc}[U]
+\memory{3}{\unsealc}[\unsealdesc]
 ~$\cdots$
 \vspace{.5em}
 \\
@@ -457,9 +543,9 @@ int f() {
 \\
 {\tt 11} &
 \memoryaddrs{16em}
-\memory{1}{\mainsealc}[S(0)]%
-\memory{1}{\retptrc}[RetPtr]%
-\memory{1}{\unsealc}[U]
+\memory{1}{\mainsealc}[\sealdesc{0}]%
+\memory{1}{\retptrc}[\retptrdesc]%
+\memory{1}{\unsealc}[\unsealdesc]
 ~$\cdots$
 \MemoryLabel{-15em}{0.75em}{42}
 \vspace{.5em}
@@ -513,7 +599,7 @@ Domains form part of the {\em context} associated with a machine state.
 Figure~\ref{fig:int1} shows a program with a simple integrity violation. It consists of a {\tt main}
 function that performs a call to a function {\tt f}, which overwrites {\tt main}'s
 variable {\tt x}. (Of course, this is illegal C, because the write in {\tt f} triggers
-undefined behavior, but it is characteristic of what buggy or malicious code might do.) 
+undefined behavior, but it is characteristic of what buggy or malicious code might do.)
 In the initial memory layout the entire stack is {\em unsealed},
 meaning that it is eligible to be written to. At the call from {\tt main} to
 {\tt f}, {\tt main}'s locals are {\em sealed} with {\tt main}'s depth,
@@ -911,8 +997,8 @@ void f() {
       \MemoryLabel{-15em}{0.75em}{1} \\
       {\tt 18} &
       \memoryaddrs{12em}
-      \memory{1}{\mainsealc}[S(0)]%
-      \memory{1}{\unsealc}[RetPtr]%
+      \memory{1}{\mainsealc}[\sealdesc{0}]%
+      \memory{1}{\unsealc}[\retptrdesc]%
       \memory{1}{\unsealc}%
       ~$\cdots$
       \MemoryLabel{-15em}{0.75em}{1}
@@ -1310,7 +1396,7 @@ to protect both stack and heap.
 \section{Machines and Traces}
 \label{sec:prelim}
 
-We now define our machine model precisely. To make our definition of stack safety
+We now define our machine model \apt{and enforcement model?} precisely. To make our definition of stack safety
 as generic as possible, this section proposes an abstract interface to a
 machine model plus some kind of (software- or hardware-enforced) policy monitor.
 In~\cref{sec:enforcement}, we instantiate this model with a concrete dynamic
@@ -1460,7 +1546,7 @@ running \(\mpcstatename\) up to \(f\)''):
 In particular, we wish to formulate properties around consecutive subtraces
 in which the context obeys a given predicate. This will commonly be used to extract
 individual calls from a trace by taking subtraces in which the stack is
-at or below a given depth. If \(f\) is still a predicate on states, then
+at or below\apt{``above''?}  a given depth. If \(f\) is still a predicate on states, then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 ``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
 \ifspace{\bcp{Throughout, we could save space and improve beauty by removing some of the
@@ -1528,8 +1614,8 @@ which relates call states to the states that can be considered valid returns to 
 The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
 and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
 
-Each system component is assigned to a {\em domain}, which may be {\em Outside}
-of the stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed}
+Each system component is assigned to a {\em domain}, which may be {\em outside}
+of the stack entirely, {\em unsealed} and therefore accessible, or {\em sealed}
 at a particular depth. Each caller registers a {\em target}
 condition, \(\target \subseteq \MACHS\), which is a predicate on machine states that means it
 has been returned to.
@@ -1577,15 +1663,19 @@ as a predicate on addresses.
 \judgment[ Default]
          {}
          {\(\underscore,\context \stepsto_C \context\)}
+\apt{typesetting problem above}
 
+\noindent
 When we build machine traces with this step function, we always know how deep in the
-call stack we are and which components are sealed. We now state our properties.
+call stack we are and which components are sealed.
+
+We now state our properties.
 The first is {\em stepwise stack integrity}, where ``stepwise'' means that the property is
 quantified over each step of execution from any initial state. The criterion for integrity
 is simple: sealed components do not change.
 
 \definition
-Let the protected set of a context, \(\prot(\domMap,\rts)\), be the
+The \emph{protected set} of a context, \(\prot(\domMap,\_)\), is the
 set of components \(\component\) such that \(\domMap ~ \component = \sealed{\depth}\)
 for some depth \(\depth\).
 
@@ -1600,13 +1690,14 @@ nested: we will quantify over subtraces that represent whole calls. For each suc
 subtrace, we will quantify over {\em variants} of its initial state. Then we require
 that the original, {\em primary} traces move in {\em lockstep} with the variant.
 
-\definition \(\MPCT^*\) is the \emph{call set}, defined as
+\definition The \emph{call set} \(\MPCT^*\) of a trace \(\MPCT\) \apt{right?} is
 \[\begin{aligned}
 \bigcup_{\depth \in \mathbb{Z}} \{\MPCT, \neg f_\depth | \MPCT\langle f_\depth \rangle
 \text{ is a reachable segment}\} \hspace{1em} &
 \text{where } f_\depth ~ (\mach,\pol,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
 \end{aligned}\]
 
+\apt{intuition for what the call set is?}
 We term \(\neg f_\depth\) the {\em break condition} \(\brk\), a predicate on
 states that holds on \(\MPCT\)'s final state, {\em unless it terminated prematurely due to a failstop}.
 
@@ -1638,7 +1729,7 @@ if their adjacent pairs of states change together.  We define this as a coinduct
 \end{minipage}
 
 \definition
-Let the secret set of a context, \(\secret(\domMap,\rts)\), be the
+The \emph{secret set} of a context, written \(\secret(\domMap,\rts)\), is the
 set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
 
 \definition
@@ -1724,9 +1815,10 @@ In this section we explore how an existing enforcement mechanism called {\em
 the formal stack-safety property described in the previous
 section. In fact, this mechanism enforces a slightly stronger, inductive version
 of that property which checks for integrity and confidentiality violations at
-every step of the callee's execution trace. We validate this claim
+every step of the callee's execution trace. We validate this claim \apt{which claim: that it enforces
+  a \emph{stronger} version?}
 using a property-based random testing framework to uncover
-inconsistencies between the enforcement mechanism and the stack-safety
+inconsistencies \apt{but are there any?} between the enforcement mechanism and the stack-safety
 property.
 
 \subsection{A Conservative Stack-Safety Enforcement Mechanism}
@@ -1773,7 +1865,7 @@ The micro-policy we present here to illustrate enforcement of stack
 safety as defined in \cref{sec:lse} is a small variation
 on the {\em Depth Isolation} policy presented by
 \citet{DBLP:conf/sp/RoesslerD18}. In their policy,  the stack memory is tagged
-with ownership information associated to each stack frame (and to each
+with ownership information \apt{based on depth!} associated to each stack frame (and to each
 separate object inside that frame, a more finely grained access
 control that we do not need to consider here), and tags registers containing
 stack pointers with access permission information. The policy also
@@ -2344,9 +2436,9 @@ void f(int a) {
   } \\
   {\tt 11} &
   \memoryaddrs[(1)]{21.5em}
-  \memory{1}{\mainsealc}[S(0)]%
-  \memory{1}{\mainpassc}[P(0,1)]%
-  \memory{1}{\retptrc}[RetPtr]%
+  \memory{1}{\mainsealc}[\sealdesc{0}]%
+  \memory{1}{\mainpassc}[\passdesc{0}{1}]%
+  \memory{1}{\retptrc}[\retptrdesc]%
   \memory{1}{\unsealc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{5}
@@ -2487,8 +2579,8 @@ void f(int &a) {
     \begin{tabular}{l l}
       {\tt 20} &
       \memoryaddrs[(1)]{17em}
-      \memory{1}{\mainpassc}[{\makebox[0pt]{P(0,1)}}]%
-      \memory{1}{\mainsealc}[{\makebox[0pt]{S(0)}}]%
+      \memory{1}{\mainpassc}[{\makebox[0pt]{\passdesc{0}{1}}}]%
+      \memory{1}{\mainsealc}[{\makebox[0pt]{\sealdesc{0}}}]%
       \memory{1}{\retptrc}
 %      \memory{1}{\unsealc}
       ~$\cdots$ \\
@@ -2509,8 +2601,8 @@ void f(int &a) {
       \\
       {\tt 20} &
       \memoryaddrs[(1)]{17em}
-      \memory{1}{\mainsealc}[{\makebox[0pt]{S(0)}}]%
-      \memory{1}{\mainpassc}[{\makebox[0pt]{P(0-1)}}]%
+      \memory{1}{\mainsealc}[{\makebox[0pt]{\sealdesc{0}}}]%
+      \memory{1}{\mainpassc}[{\makebox[0pt]{\passdesc{0}{1}}}]%
       \memory{1}{\retptrc}
 %      \memory{1}{\unsealc}
       ~$\cdots$
@@ -2941,8 +3033,6 @@ they should be protected.
   coroutine machine in the same style, but this is hypothetical.
   We have implemented these scenarios with
   simple modifications to the domain model.
-
-\ifdraft \item \bcp{Should we also mention our testing stuff?} \fi
 \end{enumerate}
 
 \citet{SkorstengaardSTKJFP} propose a useful list of criteria for judging
@@ -2952,7 +3042,10 @@ arguably ``complete'' with respect to informal notions of stack
 safety; and (5) potentially scalable to richer settings such as
 dynamic code generation or multithreading.
 
-For criterion (1), we contend that our property definitions are at least as
+\bcp{We could squish all these little paragraphs into one if we are short of
+space.}
+
+For criterion (1), intuitiveness, we contend that our property definitions are at least as
 intuitive as theirs, while being phrased in interestingly different terms.
 We use the language of formal security
 properties to apply well-established concepts and formal techniques
@@ -2963,19 +3056,27 @@ Which approach is ``better'' is probably a matter of taste, but ours
 has at least the merit of explicitly relating stack safety to existing
 notions of security.
 
-With respect to criterion (4), we believe that our support
+With respect to criterion (4), capturing programmers' informal
+understanding of stack safety, we believe that our support
 for dynamically changing notion of adversaries, as outlined in point (i) above,
 captures a better definition of safety than LSE; moreover, our observational
 properties capture an even richer and more intensional notion of stack safety
 that can be applied to a broader range of enforcement mechanisms and code features.
 
-As for criterion (5), we have demonstrated that our approach extends
-to coroutines, a first step towards multithreading.
-Dynamic code generation is more challenging, but StkTokens does not yet
-handle this either.
-StkTokens is specifically set up to address criterion (3), while this is not
-a goal of our work. We do agree that criterion (2) is important;
-demonstrating it for our proposal remains future work.
+As for criterion (5), broad applicability, we have demonstrated that our approach extends to
+coroutines, a first step towards multithreading.  Dynamic code generation is
+more challenging, but StkTokens does not yet handle this either.
+
+StkTokens
+is specifically set up to address criterion (3), reusability in secure
+compilation chains, while this is not a goal of
+our work.
+
+We agree that criterion (2), usefulness of the safety criterion
+for carrying out formal proofs (about individual programs), is important;
+demonstrating it for our proposal remains future work.  Instead, we have
+chosen to focus on property-based random testing as a methodology for
+validating enforcement mechanisms.
 
 Finally, we would propose one more criterion: having a generic definition
 of stack safety that abstracts over machine details.  Here we do better
