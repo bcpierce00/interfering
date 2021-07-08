@@ -537,6 +537,7 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
     | [Tinstr; Tr3] =>
       trace ("r3" ++ nl)
       match tpc, ttarget with
+      (* | [Tpc curr; Tr3], [Tpc old] => Some (p <| pctags := [Tpc curr] |> (* ERROR 1: replace match pattern below *) *)
       | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
                                            <| regtags := map.put (regtags p) rd [] |>)
       | _, _ => trace ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
@@ -581,7 +582,7 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
     match tinstr with
 
     | [Tinstr] =>
-      (*    Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR *) *)
+      (* Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR (LOAD_NO_CHECK) [confidentiality]: replace match below with this *) *)
 
       match tpc, taddr with
       | [Tpc pcdepth], [Tpc memdepth] => (* NOTE second tag is now Tpc, not Tstack *)
@@ -673,9 +674,9 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
       | [Tpc memdepth], [], [] =>
         Some (p <| memtags := map.put (memtags p) addr [Tpc memdepth] |>)
       | [Tpc depth], [], [Tpc memdepth] => (* NOTE second tag is currently Tpc instead of Tstack *)
-        if Nat.eqb depth memdepth then
+        if Nat.eqb depth memdepth then (* ERROR (STORE_NO_CHECK) [integrity]: comment out *)
           Some (p <| memtags := map.put (memtags p) addr [Tpc memdepth] |>)
-        else trace ("Failstop on Store (stack): PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl ) None
+        else trace ("Failstop on Store (stack): PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl ) None (* ERROR (STORE_NO_CHECK) [integrity]: comment out *)
       | _, _, _ => trace ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) None
       end
     | [Tinstr; Th1] =>
@@ -686,6 +687,7 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
       end
     | [Tinstr; Th3] =>
       match tpc, trs, trd with
+      (* | [Tpc depth; Th3], _, [Tsp] => Some (p <| pctags := [Tpc depth; Th4] |>) (* ERROR (HEADER_NO_INIT) [integrity]: replace following match with this *) *)
       | [Tpc depth; Th3], _, [Tsp] => Some (p <| pctags := [Tpc depth; Th4] |>
                                               <| memtags := map.put (memtags p) addr [Tpc depth] |>)
       | _, _, _ => trace ("Failstop on h3 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) None
