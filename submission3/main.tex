@@ -2117,8 +2117,8 @@ set of distinct tags.
 The micro-policy we present here to illustrate enforcement of stack
 safety as defined in \cref{sec:lse} is a small variation
 on the {\em Depth Isolation} policy presented by
-\citet{DBLP:conf/sp/RoesslerD18}. In their policy,  the stack memory is tagged
-with ownership information \apt{based on depth!} associated to each stack frame (and to each
+\citet{DBLP:conf/sp/RoesslerD18}. In their policies,  the stack memory is tagged
+with ownership information associated to each stack frame (and to each
 separate object inside that frame, a more finely grained access
 control that we do not need to consider here), and tags registers containing
 stack pointers with access permission information. The policy also
@@ -2130,7 +2130,7 @@ sequences that have permission to manage the stack, say during calls and returns
 %% \rb{Conceivably on alloc
 %%   operations, etc., which we have not yet mentioned.}
 
-The micro-policy maintains tags of the form $\tagStackDepth{n}$ for
+The Depth Isolation micro-policy maintains tags of the form $\tagStackDepth{n}$ for
 each stack location belonging to the stack frame at activation depth
 $n$, or the tag $\tagNoDepth$ for stack locations that are currently
 unused (but could potentially be used in the future).
@@ -2145,25 +2145,24 @@ store operations when the target memory is tagged {\em with the same
   depth} as the current {\PCname} tag, and store operations also when the
 target memory is $\tagNoDepth$.
 
-
-More interesting changes to the tags (from a stack safety perspective)
-happen at exactly the points in the program where we switch from a
-caller to a callee or vice-versa:
+Interesting changes to the tags occur where the program switches from 
+a caller to a callee or vice-versa:
 
 \begin{itemize}
 
-\item From caller to callee, when the machine executes an instruction marked as a call in
-  the call map.
-  At this point, the current
+\item From caller to callee: when the machine executes a call,
+  %, when the machine executes an instruction marked as a call in
+  % the call map.
+  the current
   $\tagPCDepth{n}$ tag is incremented to $\tagPCDepth{(n + 1)}$, and the function
   entry sequence initializes  all locations of the new function frame with
   tag $\tagStackDepth{(n + 1)}$.
 
-\item From callee back to caller, when execution is about to reach a
-  return point.
+\item From callee back to caller: %when execution is about to reach a
+%  return point.
   %The exit sequence retags all locations in the function frame with $\tagNoDepth$.
-  At the actual return instruction,
-  the $\PCname$ tag is decremented.
+  at the actual return instruction,
+  the $\PCname$ tag is decremented. \apt{Doesn't the exit sequence retag to $\tagNoDepth$?}
 %  \leo{Not sure the actual policy
 %    does that now (retag unused). But I don't think it's a
 %    confidentiality or integrity violation.}
@@ -2172,7 +2171,7 @@ caller to a callee or vice-versa:
 
 \end{itemize}
 
-This discipline suffices to enforce local stack encapsulation.
+This discipline suffices to enforce stack safety. 
 To implement it,  we define blessed instruction sequences
 intended to appear at the entry and exit of each function,
 which manipulate tags as just described in addition to performing the
@@ -2188,7 +2187,7 @@ There remains the question of how to ensure that the sequences are
 invoked at the right places from the perspective of the stack-safety
 property. For a program to enjoy stack safety
 (with respect to a particular call map), all we need require is that
-the entry sequence be initiated at any instruction marked as a call
+the entry sequence be initiated at \apt{immediately following?}  any instruction marked as a call
 in the call map. This is achieved by giving these instructions (another) special tag,
 and it is easy to check statically that this has been done correctly.
 If the code fails to initiate an exit
@@ -2200,6 +2199,18 @@ rights than the caller, this is harmless.
 \subsection{Validation through Random Testing}
 \label{sec:testing}
 
+There are several ways to evaluate whether an enforcement mechanism enforces
+stack safety properties. Ideally such validation would be done through formal proof over
+the semantics of the enforcement-augmented machine. 
+However, while there are no fundamental barriers to producing such a proof, 
+it would be considerable work to carry out for a full ISA like RISC-V and
+complex enforcement mechanism like the Depth Isolation micro-policy.
+We therefore choose to validate the micro-policy of the previous section by
+systematically \emph{testing} that it satisfies our properties. 
+This focus on testing is better aligned with our immediate
+goal of evaluating real enforcement mechanisms for real machine architectures.
+Formal proof remains as possible future wrok.
+
 We validate the micro-policy of the previous section by
 systematically testing that it satisfies eager stack integrity and
 confidentiality. We use a Coq specification of the RISC-V
@@ -2209,7 +2220,7 @@ and extend it with a
 runtime monitor implementing the stack-safety
 micro-policy.\footnote{This code is {\em redacted for review}.\bcp{Why??}} We
   chose the Coq proof assistant as the setting for our implementation
-  for two reasons: first, to ensure that our coinductive trace
+  to ensure that our coinductive trace
   definitions are well-formed, and reason about them, and to leverage the power of the
   QuickChick property-based testing framework~\citep{Pierce:SF4}.
 
@@ -2225,7 +2236,7 @@ To use QuickChick, we build random test-case generators that produce
   all potential stack locations as $\tagNoDepth$; and
 % \item
 (3)
- a code map and a stack map, accurately characterizing the behavior
+ a code map and a stack map \apt{what's that ??}, accurately characterizing the behavior
   of callers and callees.
 % \end{enumerate}
 %
@@ -2237,16 +2248,16 @@ by the compiler.
 \paragraph*{Generators}
 
 To write such generators we build on the work of
-\citep{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
-introduced {\em generation by execution} to produce progams leading
-abstract machines towards interesting behaviors. Generation by
+\citet{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
+introduced {\em generation by execution} to produce progams that lead
+machines towards interesting behaviors. Generation by
 execution receives as an input a partially instantiated machine state
 and attempts to generate an instruction (or a sequence of instructions
 such as a blessed sequence) that makes sense locally (e.g., jumps go
-to a potentially valid code location and loads read from from a
+to a potentially valid code location and loads read from a
 potentially valid stack location). Then we step the machine and repeat
 the process until we generate or execute some target number of
-instructions, or we reach a point where the machine can't step
+instructions, or reach a point where the machine can't step
 anymore.
 
 We extend this technique to keep track of the control flow behavior of
@@ -2256,7 +2267,7 @@ annotations are set for the entry or return points. At the same time,
 we allow the generation to sometimes relax those constraints,
 introducing potentially ill-formed flows: this causes our programs
 to failstop when executed in conjunction with the policy monitor,
-but also allows for revealing errors in our setup.
+but also allows for revealing errors in our setup.\apt{??}
 
 In addition, we need to extend this technique to handle the nested
 nature of our confidentiality property: rather than just generating two
@@ -2309,8 +2320,8 @@ and checking mechanism.
 %
 For example, when loading from a stack location, the correct
 micro-policy needs to enforce that the tag on the location being read
-is $\tagStackDepth{n}$ for some number $n$ and that the one of the
-current $\PCname$ is $\tagPCDepth{n}$ for the same depth. We can relax
+is $\tagStackDepth{n}$ for some number $n$ and that the tag of the
+current $\PCname$ is $\tagPCDepth{n}$ for the same depth $n$. We can relax
 that restriction by not checking the depth equality (row {\em
   LOAD\_NO\_CHECK}).
 %
@@ -2343,15 +2354,6 @@ $l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s da
 %\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
 %  and the write from {\tt f} was already a violation.}
 
-\subsection{Why not Proof?}
-
-There are several ways to evaluate whether an enforcement mechanism enforces
-our properties. Ideally such validation would be done through formal proof.
-Our model is certainly amenable to such a proof, with no fundamental barriers,
-but it would be considerable work to carry out for a full ISA like RISC-V.
-We concentrate instead on testing because it is better aligned with our immediate
-goal of evaluating real enforcement mechanisms for real machine architectures.
-\sna{More to say here?}
 
 \section{Stack Safety for Lazy Enforcement}
 \label{sec:lazy}
