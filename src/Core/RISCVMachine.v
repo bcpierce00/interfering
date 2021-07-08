@@ -297,7 +297,7 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
   | Tr2
   | Tr3
   | Tsp
-  | Tstack (n : nat)
+  | Tstack (n : nat) (* NOTE unused in this version, restore later *)
   .
 
   Derive Show for Tag.
@@ -670,9 +670,12 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
     match tinstr with
     | [Tinstr] =>
       match tpc, trs, tmem with
-      | [Tpc memdepth], [], []
-      | [Tpc memdepth], [], [Tstack _]
-        => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth] |>)
+      | [Tpc memdepth], [], [] =>
+        Some (p <| memtags := map.put (memtags p) addr [Tpc memdepth] |>)
+      | [Tpc depth], [], [Tpc memdepth] => (* NOTE second tag is currently Tpc instead of Tstack *)
+        if Nat.eqb depth memdepth then
+          Some (p <| memtags := map.put (memtags p) addr [Tpc memdepth] |>)
+        else trace ("Failstop on Store (stack): PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl ) None
       | _, _, _ => trace ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) None
       end
     | [Tinstr; Th1] =>
