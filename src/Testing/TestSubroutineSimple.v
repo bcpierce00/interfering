@@ -61,6 +61,13 @@ Module TestSimpleDomain (M : Machine) (LI : LayoutInfo M) <: TestCtx M LI.
     | _ => false
     end.
 
+  Definition confidentialityComponent (c : CtxState) (k : Component) :=
+    match fst c k with
+    | Sealed _ => true
+    | Unsealed => true
+    | _ => false
+    end.
+
   Definition depthOf (c : CtxState) := length (snd c).
   
   Definition initCtx (li:LayoutInfo) : CtxState :=

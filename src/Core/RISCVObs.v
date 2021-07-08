@@ -2,7 +2,7 @@ Require Coq.Strings.String. Open Scope string_scope.
 Require Import Coq.Lists.List.
 Import List.ListNotations.
 
-From StackSafety Require Import MachineModule RISCVMachine Lazy PolicyModule.
+From StackSafety Require Import MachineModule RISCVMachine PolicyModule Eager Lazy.
 
 Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.
@@ -295,8 +295,12 @@ Extract Constant exception =>
   Qed.
 End RISCVObs.
 
-Module TPEagerObs := TagPolicyEager RISCVObs.
+Module TPEager := TagPolicyEager RISCVObs.
+Module TPEagerNLC := TagPolicyEagerNoLoadCheck RISCVObs.
+Module TPEagerNSC := TagPolicyEagerNoStoreCheck RISCVObs.
+Module TPEagerNI := TagPolicyEagerNoInit RISCVObs.
+
 Module TPLazyOrig := TagPolicyLazyOrig RISCVObs.
 Module TPLazyNoDepth := TagPolicyLazyNoDepth RISCVObs.
 Module TPLazyNoCheck := TagPolicyLazyNoCheck RISCVObs.
-Module TPLazyFixedObs := TagPolicyLazyFixed RISCVObs.
+Module TPLazyFixed := TagPolicyLazyFixed RISCVObs.

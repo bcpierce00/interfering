@@ -102,7 +102,7 @@ Module TestPropsRISCVSimple
         | O => collect "Out-of-Fuel" true
         | S fuel' => 
           match mpcstep (m,p,ctx) cm with
-          | None => collect "Failstop" true
+          | None => collect ("Failstop", fuel) true
           | Some (m', p', c', o) =>
             let traceDiff :=
                 calcTraceDiff cm m m' p p' ctx c' i o in
@@ -123,31 +123,32 @@ Module TestPropsRISCVSimple
          (m n : MachineState) (p : PolicyState)
          (cm : CodeMap_Impl) (ctx : CtxState)
          (endP : MPCState -> bool)
-    : bool :=
+    : Checker.Checker :=
     (* trace (printMachines m n p cm ctx ++ nl)   *)
     match fuel with
-    | O => true
+    | O => checker true
     | S fuel' => 
       match endP (m,p,ctx), endP (n,p,ctx) with
-      | true, true => (* collect "Both done" *) true
-      | true, _    => (* collect "Main done" *) true
-      | _   , true => (* collect "Vary done" *) true
+      | true, true => (* collect "Both done" *) checker true
+      | true, _    => (* collect "Main done" *) checker false
+      | _   , true => (* collect "Vary done" *) checker false
       | _, _ =>
         match mpcstep (m,p,ctx) cm,
               mpcstep (n,p,ctx) cm with
         | Some (m',p1,c1,o1), Some (n', p2,c2, o2) =>
-          andb (List.forallb (sameDifferenceP m m' n n') (getComponents m'))
-               (prop_lockstepConfidentiality fuel' m' n' p1 cm c1 endP)
-        | _, _ => true
+          if List.forallb (sameDifferenceP m m' n n') (getComponents m')
+          then prop_lockstepConfidentiality fuel' m' n' p1 cm c1 endP
+          else checker false
+        | _, _ => checker true
         end
       end
     end.
 
-  Definition prop_stackConfidentiality
+  Fixpoint prop_stackConfidentiality
              fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx 
     : Checker.Checker :=
     match fuel with
-    | O => checker true
+    | O => collect ("Out of fuel") true
     | S fuel' =>
       match (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
       | Some call =>
@@ -156,14 +157,20 @@ Module TestPropsRISCVSimple
           let depth := depthOf c' in
           let endP  := fun '(_,_,c) =>
                          (Nat.ltb (depthOf c) depth) in
-          forAllShrinkShow (genVariantOf depth c' m')
-                           (fun _ => nil)
-                           (fun n' => "")
-                           (fun n' =>
-                              prop_lockstepConfidentiality defFuel m' n' p' cm c' endP)
-        | _ => checker true
+          let secret := List.filter (fun k => confidentialityComponent c' k) (getComponents m') in
+          bindGen (genVariantByList secret m')
+                   (fun n =>
+                      (conjoin
+                         ([prop_lockstepConfidentiality defFuel m' n p' cm c' endP] ++
+                          [prop_stackConfidentiality fuel' i m' p' cm c'])))
+        | _ => collect ("Failstop",fuel) true
         end
-      | _ => checker true
+      | _ =>
+        match mpcstep (m,p,ctx) cm with
+        | Some (m', p', c', o) =>
+          prop_stackConfidentiality fuel' i m' p' cm c'
+        | _ => collect ("Failstop",fuel) true
+        end
       end
     end.
 
@@ -249,7 +256,6 @@ Module TestPropsRISCVSimple
         match mpcstep (m,p,ctx) cm  with
         | Some (m', p', c', o) =>
           let depth := depthOf c' in
-          let sealed := fun k =>  integrityComponent ctx k in
           (*trace ("callee depth: " ++ show depth ++ "   size of sealed: " ++
                                   (show (List.length (List.filter sealed (getComponents m'))) ++ nl))*)
           (conjoin
@@ -273,23 +279,42 @@ Module TestPropsRISCVSimple
 
 End TestPropsRISCVSimple.
 
-Module TestRISCVEagerSimple := TestPropsRISCVSimple RISCVObs TPEagerObs DLObs
-                                                      TSS GenRISCVTagSimpleEager
-                                                      PrintRISCVTagSimpleEager.
+Module TestRISCVEager := TestPropsRISCVSimple RISCVObs TPEager DLObs
+                                              TSS GenRISCVEager
+                                              PrintRISCVEager.
 
-Module TestRISCVLazySimple := TestPropsRISCVSimple RISCVObs TPLazyFixedObs DLObs
-                                                  TSS GenRISCVTagSimple
-                                                  PrintRISCVTagSimple.
+Module TestRISCVEagerNLC := TestPropsRISCVSimple RISCVObs TPEagerNLC DLObs
+                                              TSS GenRISCVEagerNLC
+                                              PrintRISCVEagerNLC.
+
+Module TestRISCVEagerNSC := TestPropsRISCVSimple RISCVObs TPEagerNSC DLObs
+                                              TSS GenRISCVEagerNSC
+                                              PrintRISCVEagerNSC.
+
+Module TestRISCVEagerNI := TestPropsRISCVSimple RISCVObs TPEagerNI DLObs
+                                              TSS GenRISCVEagerNI
+                                              PrintRISCVEagerNI.
+
+
+Module TestRISCVLazyOrig := TestPropsRISCVSimple RISCVObs TPLazyOrig DLObs
+                                                   TSS GenRISCVLazyOrig
+                                                   PrintRISCVLazyOrig.
 
 Extract Constant defNumTests => "500".
   
-Import TestRISCVEagerSimple.
-  
-QuickCheck prop_integrity.
-QuickCheck prop_confidentiality.
-  
-Import TestRISCVLazySimple.
+Import TestRISCVEager.
+Import TestRISCVEagerNLC.
+Import TestRISCVEagerNSC.
+Import TestRISCVEagerNI.
 
-QuickCheck prop_integrity.
-QuickCheck prop_confidentiality.
-QuickCheck prop_laziestIntegrity.
+QuickCheck TestRISCVEagerNLC.prop_confidentiality.
+QuickCheck TestRISCVEagerNSC.prop_integrity.
+QuickCheck TestRISCVEagerNI.prop_integrity.
+
+(*QuickCheck prop_confidentiality.*)
+
+Import TestRISCVLazyOrig.
+
+(*QuickCheck prop_integrity.*)
+(*QuickCheck prop_confidentiality.*)
+(*QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.*)

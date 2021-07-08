@@ -22,6 +22,7 @@ Module Type TestCtx (M:Machine) (LI:LayoutInfo M).
 
   Parameter interestingComponent : CtxState -> CtxState -> Component -> bool.
   Parameter integrityComponent : CtxState -> Component -> bool.
+  Parameter confidentialityComponent : CtxState -> Component -> bool.
   Parameter depthOf : CtxState -> nat.
 End TestCtx.
 
