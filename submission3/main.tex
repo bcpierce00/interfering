@@ -152,9 +152,7 @@
 %% Note: \begin{abstract}...\end{abstract} environment must come
 %% before \maketitle command
 \begin{abstract}
-%\apt{maybe: ``Stack safety is a testable security property''?}\bcp{That
-%  would sacrifice a lot of oomph for a little bit of precision, IMO.  Prefer
-%  to leave it out of the title but hit it strongly in the abstract.}%
+
 What does ``stack safety'' mean, exactly? The phrase is associated with a
 variety of compiler,
 run-time, and hardware mechanisms for protecting stack
@@ -162,6 +160,26 @@ memory, but these mechanisms typically lack precise specifications,
 relying instead on informal descriptions and examples of the bad
 behaviors that they prevent.
 
+<<<<<<< HEAD
+We propose a generic, formal characterization
+of stack safety based on concepts from language-based security: a
+combination of an integrity property (``the private
+state in each caller's stack frame is held invariant by the callee''),
+and a confidentiality property (``the callee's behavior is insensitive to the
+caller's private state''), which can optionally be extended with a control
+flow property.
+
+We use these properties to evaluate the stack-safety {\em micro-policies}
+proposed by~\citet{DBLP:conf/sp/RoesslerD18}.  Specifically, we check (with
+property-based random testing) that Roessler and Dehon's ``eager''
+micro-policy, which catches violations as early as possible, enforces a
+simple ``stepwise'' variant of our properties and correctly, and that
+(a repaired version of) their more performant
+``lazy'' micro-policy enforces a slightly weaker and more extensional
+observational property. Meanwhile our testing successfully detects violations
+in several broken variants, including Roessler and Dehon's original lazy policy.
+
+=======
 We propose a generic formal characterization
 of stack safety based on concepts from language-based security: a
 combination of an integrity property (``the private
@@ -241,6 +259,7 @@ observational variant of our properties.
   %   added Nick/Andre above.  But I'm not sure we want to get into stkTokens
   %   in the abstract.}
   % \fi
+>>>>>>> fcc6041117dd61fb6851cde5c4fc95ea40dc81b4
 \end{abstract}
 
 
@@ -281,55 +300,6 @@ observational variant of our properties.
 
 \section{Introduction}
 
-%\begin{figure}
-%  \begin{minipage}{\textwidth}
-%    \begin{center}
-%\MemoryLabel{10em}{1.5em}{40}
-%\MemoryLabel{16em}{1.5em}{60}
-%\MemoryLabel{22em}{1.5em}{80}
-%$\cdots$
-%\memory{4}{gray}%
-%\memory{5}{green}[{\makebox[0pt]{Caller}}]%
-%\memory{5}{yellow}[{\makebox[0pt]{Args}}]%
-%\memory{8}{red}[{\makebox[0pt]{Callee}}]%
-%\memory{4}{\unusedc}%
-%~$\cdots$\\
-%  \end{center}
-%  \end{minipage}\\
-%~\\
-%~\\
-%  \begin{minipage}{0.45\textwidth}
-%    \begin{center}
-%\begin{verbatim}
-%jal ...
-%lw r1 r0 40
-%\end{verbatim}
-%    \end{center}
-%  \end{minipage}~
-%  \begin{minipage}{0.45\textwidth}
-%    \begin{center}
-%\begin{verbatim}
-%jal ...
-%sw r0 r0 40
-%\end{verbatim}
-%    \end{center}
-%  \end{minipage}
-%  \caption{Examples of Unsafe Programs\bcp{The numbers don't line up with
-%      the boxes; the program fragments need comments explaining what each
-%      line does.}}
-%  \label{fig:stackunsafety}
-%\end{figure}
-%
-%\leo{I hate the writing here, but I wanted to make a start.}
-
-%\bcp{We don't actually say very clearly anywhere that we are interested in
-%  low-level enforcement mechanisms for machine-code programs (because this
-%  is where stack attacks occur, and because at higher levels of abstraction
-%  the stack is a built-in concept, not something that can be attacked even
-%  in principle).  This could cause confusion.\apt{not so worried}}
-%\leo{I agree. I've clarified the writing in the top of the running example
-%  a bit to make sure though}
-
 The call stack is a perennial target for low-level attacks, leading to a
 range of dire consequences, from leakage or corruption of private stack data
 to control-flow hijacking. To prevent or detect such attacks, a profusion of
@@ -362,75 +332,46 @@ safety, as a basis both for comparing the security claims of different
 enforcement techniques and for validating that these claims
 are met by particular implementations.
 
-%\bcp{Does use of unitialized variables lead to stack safety attacks?\apt{sure, via buffer overflow}}
-%with the notion usually being
-%defined negatively: through examples of stack-based exploits
-%\rb{usually though not always; as noted below there are other
-%  approaches}\bcp{Yes, we have to be very careful about this}.
-%\leo{Examples at a high level}: such as---does not overwrite return addresses, or ...
-\apt{This makes us seem very reactive to Skst.  Can we reorder things to give our story first, and
-  compare to Skst afterwards?}\bcp{+1}
-The most abstract characterization of stack safety that we are aware of is
-recent work by \citet{SkorstengaardSTKJFP}, which defines stack safety as the conjunction of two
-properties:
-{\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
-Informally, LSE says that the contents of
-a caller's stack frame are not read or written while its callees (and their callees, etc.) are
-executing, and WBCF says that callees always
-return to the instruction following their call (if they return at all).
-Skorstengaard et al.{} formalize these properties by defining an idealized
-machine in which they hold {\em by construction};
-they then show that an enforcement
-mechanism (in their case, hardware capabilities) guarantees these properties, by
-proving that an ordinary machine with enforcement simulates the idealized
-machine.
-%an enforcement mechanism (in their case, hardware
-%capabilities)
-%can then be shown to guarantee stack safety by exhibiting a fully abstract
-%embedding function
-%from the idealized machine to an ordinary machine equipped with this
-%enforcement mechanism.  \bcp{Many OOPSLA readers/reviewers will not
-%  understand that sentence.}
-%%
-%% While this work represents an important step in the right direction, we believe
-%% there is still room to craft an operational characterization
-%% of stack safety. \apt{Perhaps our rhetoric should be more micro-policy-specific here?}
-%% In other words, we seek formal criteria that can be applied
-%% to a mechanism for protecting stack-based low-level programs to judge
-%% whether or not it actually ``guarantees stack safety.''
-%% \rb{The remainder of this paragraph may be diving too quickly, would a reader be
-%% confused by the references to these types of properties, yet to be introduced?}
-%% We begin with a strong
-%% local state encapsulation property that closely models the behavior of eager
-%% micro-policies from \citet{DBLP:conf/sp/RoesslerD18}. This ``eager'' property
-%% is too strong to characterize stack safety; reasonable enforcement mechanisms
-%% exist that violate it. One such mechanism is a ``lazy'' tag policy, similar to
-%% the one in \citet{DBLP:conf/sp/RoesslerD18}. We weaken local state encapsulation
-%% to support this technique and argue that the new property, defined relative to an
-%% arbitrary notion of observation. This property is still strong enough to prevent
-%% the bad behaviors we associate with unsafe stack behavior, but weak enough that
-%% other reasonable enforcement mechanisms can enforce it.
+We propose such a characterization using the tools of language-
+based security~\citep{sabelfeld2003language}. The informal claim that
+“stack safety protects a caller
+from its callee” amounts to saying that it guarantees the {\em integrity} and
+{\em confidentiality} of the caller’s local state until it regains control.
 
-In the present work, we also describe the protection of both stack data (like LSE) and
-control flow (like WBCF).  Our technical formulation of WBCF is similar to that of
-Skorstengaard et al., but our treatment of stack data protection is rather different,
-as is our approach to the definition itself. Instead of defining stack safety implicitly,
-as ``what a certain idealized machine does,'' we give an
-\emph{explicit} definition using the technical framework of language-based
-security~\citep{sabelfeld2003language}, phrased as the conjunction of
-\emph{stack integrity} and \emph{stack confidentiality}.
-%
 A key technical novelty in these definitions,
 compared to standard formulations of confidentiality and integrity from the
 security literature, is that they
 are ``nested'': {\em each} caller is guaranteed protection from its
 immediate callees (which, in turn, need protection from their immediate
-callees, etc.). They are also stronger than LSE; even in the absence of the
-control flow guarantees of WBCF, they guarantee callers'
-data safety in the face of control-flow attacks (see \cref{sec:controlflow}).
-%\rb{Reference to \cref{sec:running-example}, where this is discussed now?}
-This reflects an arguably cleaner division between data protection and
-control-flow protection than LSE / WBCF.
+callees, etc.).
+Confidentiality is especially interesting. It is based on a traditional
+notion of noninterference, but whereas ordinary noninterference
+is an end-to-end hyper-property on whole program runs, stack
+confidentiality is a nested form of noninterference applied to
+subtraces of the whole program trace delimited by call instructions
+and corresponding returns, requiring that the callee’s behavior is
+invariant under hypothetical scrambling of the caller’s stack frame.
+
+Our threat model is very strong, allowing the attacker (i.e., the
+callee) to execute arbitrary code, including attempting to smash
+the stack to disrupt the program’s control flow. Our stack safety
+properties demand that, even in the presence of such attackers, confi-
+dentiality and integrity still apply to data in suspended stack frames
+until the callee returns.
+
+We can also, optionally, include a notion of well-bracketed con-
+trol flow as in \citet{SkorstengaardSTKJFP} --- a global requirement that
+callees must always return to their immediate caller, if they return
+at all. Skostengaard et al. define stack safety as the conjunction of two properties:
+{\em local state encapsulation (LSE)} and {\em well-bracketed control flow (WBCF)}.
+Informally, LSE says that the contents of
+a caller's stack frame are not read or written while its callees (and their callees, etc.) are
+executing, and WBCF says that callees always
+return to the instruction following their call (if they return at all).
+Skorstengaard et al. formalize these properties by defining an idealized
+machine in which they hold {\em by construction}. Our confidentiality and
+integrity properties are together stronger than LSE, guaranteeing protection even
+in the presence of control-flow violations, and can be seen as orthogonal to WBCF.
 
 For confidentiality and integrity, we consider both {\em stepwise}
 and {\em observational} variants.  The simpler stepwise
@@ -440,36 +381,8 @@ allow a callee to read from and write to their caller's stack frame, as
 long as nothing that they read affects their observable behavior and nothing
 they write affects the observable behavior of the caller after they return.
 The observational properties are more extensional, and represent a baseline
-% meant to capture the same sense of security, extensionally enough
 that any reasonable protection mechanism ought to enforce,
 even if it does not prevent every single dangerous read or write.
-
-% {\em Confidentiality} says that a caller's
-% data is not leaked into its callee, and  that the callee cannot see uninitialized data.
-% As a reasoning principle, confidentiality guarantees that the callee's
-% behavior is determined only by a predictable interface (function arguments and
-% register contents) that does not include the caller's
-% local state or the uninitialized portion of the stack. This is formalized as a
-% {\em noninterference}-style property that, rather than comparing pairs of whole program traces,
-% compares a pair of sub-traces for each call, within other calls\bcp{?}. Once
-% again
-% {\em stepwise} describes the granularity of enforcement\bcp{?}: at every step of a call,
-% changes in the state are independent of the caller's data.
-
-% Together, these properties capture roughly the same intuition as LSE, but
-% they are somewhat stronger.
-% First, we model returns as returns to a valid return target\bcp{that will
-%   make no sense to the reader at this point}; an invalid return
-% is treated as a mere jump within the callee, and does not grant access to the caller's
-% data. So, even without WBCF, our stack safety properties rule out many control-flow attacks.
-% The attacker in such an instance is permitted to ``return'' so long as it avoids
-% violating the integrity and confidentiality of the caller.\bcp{ditto} Second, confidentiality
-% contains\bcp{?} temporal protections that LSE does not necessarily address\bcp{?}. The intuition
-% for LSE is that it protects the caller's stack frame, not necessarily memory that was
-% previously allocated but now outside of the caller's frame. (Cheri-capability-based
-% implementations of LSE {\em do} protect previously allocated data, typically by clearing
-% it, but because it is a potential vector for leaking capabilities into the caller's frame,
-% not as a goal of the property.\bcp{Oof.  We need to do better than that!})
 
 To demonstrate the utility of our formal characterization, we use these
 properties to validate and improve an existing enforcement mechanism, the
@@ -486,25 +399,17 @@ enforcement variants---both variants that we accidentally created
 during our re-implementation of the micro-policy and ones that we
 intentionally crafted to be broken in order to increase our confidence
 in testing and the enforcement mechanism itself.
-%introduce several
-%intentionally broken micro-policies and check that the testing framework is
-%able to generate counterexamples that violate our properties but are not
-%halted by the incorrect enforcement variants.  (Showing that the testing
-%framework detects intentional bugs in enforcement mechanisms increases our
-%confidence that it can also catch unknown ones, strengthening our confidence
-%in the enforcement mechanism itself.\ifaftersubmission\bcp{Maybe that
-%  sentence belongs in the testing section?}\fi)
 
 We find that Roessler and Dehon's {\em Depth Isolation} micro-policy, in
-which memory cells within each stack frame are tagged with the identity\apt{``depth''?} of
+which memory cells within each stack frame are tagged with the depth of
 the function activation that owns the frame and access to those locations is
-then permitted only when that activation\apt{``an actiation at that depth''?} is currently executing, validates our
-stepwise properties. On the other hand, we reason\apt{but now we test?}  that \emph{Lazy Tagging and Clearing}
+then permitted only when that an actiation at that depth is currently executing, validates our
+stepwise properties. On the other hand, our testing reveals that \emph{Lazy Tagging and Clearing}
 violates the temporal aspect of confidentiality in
 corner cases where data can leak across repeated calls to the same callee,
 and also violates integrity if the leak happens to use the caller's frame. We
-propose a variant of {\em Lazy Tagging and Clearing} that \emph{should} enforce
-confidentiality, albeit at some performance cost.\apt{Do we test?}
+propose a variant of {\em Lazy Tagging and Clearing} that testably enforces
+confidentiality, albeit at some performance cost.
 %
 \ifaftersubmission
 \bcp{Did Nick and Andre know about this deficiency?  Did they mention
@@ -523,56 +428,6 @@ confidentiality, albeit at some performance cost.\apt{Do we test?}
 are not saying anything incorrect at the moment.}
 \fi
 
-% A second challenge is that enforcement mechanisms may weaken their
-% protections\bcp{``weaken their protections'' doesn't convey what we mean
-%   very well}
-% in the name of efficiency, while arguing that they still capture stack safety in a meaningful sense.
-% \citet{DBLP:conf/sp/RoesslerD18} explore alternative micro-policies, with different
-% ways of identifying functions and deciding exactly which accesses are allowed.
-% These vary in their efficiency and in the spatial and temporal precision of their
-% security guarantees.
-% The Depth Isolation policy prevents a callee from writing outside its frame
-% at all, which is simple and intuitively correct, but it must manually clear the tags
-% on the frame on each return, which is very expensive. Conversely, their
-% \emph{Lazy Tagging and Clearing} policy improves
-% performance by assigning locations to the active function when they are written, which
-% permits  ``illicit'' writes to inaccessible stack frames so long as the
-% written locations are not subsequently read by their ``real'' owners. This violates our
-% straightforward properties, but ntuitively,
-% this form of laziness is justified if any dangerous writes will
-% ultimately be detected before they can affect program behavior.
-
-% \bcp{This discussion is getting too long for the intro.  Could it be trimmed.}
-% What does ``affecting program behavior'' really mean? This micro-policy
-% calls for a second characterization of stack safety in terms of the externally
-% observable behavior of a stack-safe system. Such a characterization will have the
-% additional benefit of being more {\em extensional}, concerned primarily with the
-% external behavior of the system. In contract, our stepwise properties are {\em intensional},
-% focusing on internal details that may not actually matter to overall security.
-
-% \bcp{Ditto, even moreso.}
-% To formalize this intuition, we develop an \emph{observational integrity} property which
-% characterizes enforcement mechanisms that detect violations between the point when
-% they occur and the point when they make an observable impact. Intuitively this property
-% can be phrased as ``no visible reads after dangerous writes.''  We prove (in Coq) that stepwise
-% integrity implies observational integrity. \sna{TODO: check this.}
-
-% We additionally sketch an associated {\em observational confidentiality} property
-% makes confidentiality extensional in the same way, in order to form an
-% {\em observational stack safety} that is highly extensional.
-% We argue that, despite its somewhat greater complexity,
-% it may be a better specification for
-% stack safety enforcement mechanisms in general.
-
-%\apt{more to say?}\bcp{Yes---partly to underscore our claim that this is a
-%  significant contribution, and partly to give the reader some context for
-%  why this is part of our story.  E.g., ``One nice thing we can do with our
-%  spec is to use it to evaluate the claims of existing or future proposals
-%  for enforcement mechanisms.  One relatively inexpensive way to carry out
-%  such an evaluation is to see whether property-based testing against this
-%  spec can distinguish correct implementations of the mechanism from buggy
-%  ones...''}
-
 For ease of exposition, our development initially assumes a single simple
 stack with no sharing between callers and callees: all parameters and return
 values are passed in registers.  Later, we show how to refine the properties
@@ -586,113 +441,6 @@ to a fixed region of memory.  Though simplistic, this extension is a step
 toward full-blown multithreading and demonstrates that our approach is flexible
 enough to handle more sophisticated styles of control flow.
 
-%% \paragraph*{The Use of Stack Safety}
-
-%% How does the programmer rely on stack safety? The stack makes implicit promises about
-%% the behavior of function calls. First, that when a call is finished, the caller can continue
-%% from where it left off with its local state unchanged. And second, that the call's
-%% behavior is determined only by a predictable interface that does not include the caller's
-%% local state.
-
-%% %The most natural example is the first
-%% %in figure \ref{fig:examples1}, in which {\tt main} calls stores 42 to a local variable {\tt x},
-%% %calls {\tt f}, and then prints {\tt x}. Here the programmer should be able to expect that
-%% %{\tt main} will print 42, but in C such an assumption may be wrong, if {\tt f} should
-%% %overwrite {\tt main}'s stack data.
-
-%% Both expectations imply predictable control flow, termed {\em well-bracketed
-%% control flow} (WBCF) by \citeauthor{Skorstengaard+19}. Calls always jump to valid entry
-%% points and return to their call sites. Then the data portion of the first expectation is for
-%% {\em integrity}: that a caller's local data is protected from modification by its callee.
-%% This is vital for local reasoning about the behavior of the caller. The security implications
-%% are significant: without integrity, a caller that branches on a local variable could be
-%% manipulated by its callee into unexpected behavior.
-
-%% Alongside integrity, we have {\em confidentiality}, in which a caller's data is protected
-%% from leakage by its callee. As a reasoning principle, confidentiality tells us that to
-%% predict the behavior of a call we need only consider a subset of the machine state.
-%% And in security terms, we can guarantee the secrecy of local data that we haven't passed
-%% even when calling a badly behaved function. Together, integrity and confidentiality
-%% comprise \citeauthor{Skorstengaard+19}'s {\em local state encapsulation} (LSE) property.
-
-%% It must be reiterated that LSE is of little use without WBCF: without WBCF, a callee
-%% could subvert LSE by ``returning'' to arbitrary code; after the return LSE should permit
-%% accessing the caller's state, but the execution would remain under the callee's control.
-
-%% To phrase LSE and WBCF as security properties requires an explicit attacker model:
-%% a clear understanding of who is being protected and from what. Most existing
-%% stack protection mechanisms envisage scenarios where a callee is
-%% influenced by external inputs to corrupt the stack in some way. To
-%% avoid getting into the details of exactly how this happens when
-%% formalizing our properties, we use an even stronger model: when we
-%% state the protections that a function can rely on when it makes a
-%% call, we assume that the callee can execute arbitrary instructions
-%% until it returns. Thus we have no need to differentiate safe code
-%% from adversarial --- all functions, and indeed all activations of the same function,
-%% are mutually distrusting.
-%% %
-%% For this model to make sense, we need to know when a call or a return is taking
-%% place. We assume that calls and returns are annotated in the code, so that
-%% we can track the point at which control transfers from the protected caller
-%% to the attacking callee --- and when that callee in turn becomes a protected
-%% caller in its own right.
-
-%% This ``nesting'' of properties is a key challenge in adapting the concepts
-%% of language-based security to the stack setting. We address this issue by
-%% turning any set of annotations into a dynamic model of {\em domains},
-%% in which some stack locations are sealed by the caller that needs to preserve
-%% them while the rest are unsealed and available for use by the active, attacking
-%% callee.
-
-%% First we introduce this model for a single simple stack with no sharing between callers and
-%% callees. Then we expand it to allow passing of stack data, granting a callee one-time
-%% access to the caller's data. We do not model more sophisticated sharing, because to do
-%% so realistically would require a separate protection scheme, such as a capability
-%% model. While this is quite feasible in a tag-based enforcement mechanism, it is properly
-%% a separate policy outside the scope of stack safety. (A tag-based approach can easily
-%% compose multiple such policies.)
-
-%% Finally, we extend the model to a coroutine system featuring finitely-bounded stacks.
-%% Though simplistic, this extension is a step toward concurrency and demonstrates that
-%% the model is flexible enough to handle more sophisticated styles of control-flow.
-
-%% After formally defining stack safety, we show that the definition is
-%% enforceable using an existing tag-based enforcement
-%% mechanism~\citep{DBLP:conf/sp/RoesslerD18}. We first consider
-%% \citeauthor{DBLP:conf/sp/RoesslerD18}'s conservative Depth Isolation policy.
-%% This policy testably enforces our {\em eager} properties, in which integrity is respected
-%% at every step of a program, and each call respects integrity at each of its internal steps.
-%% These properties are very strong, and our policies enforce them; this also makes them very
-%% intensional, in that they do not distinguish internal behavior from external.
-%% They also have the advantage that they are suitable for efficient testing, as they
-%% fail immediately when a violation occurs.
-
-%% The downside of the Depth Isolation policy is that it is rather expensive to implement.
-%% In the same work, \citeauthor{DBLP:conf/sp/RoesslerD18} propose a different mechanism
-%% that is more efficient by virtue of being lazy in its enforcement.
-%% Instead of enforcing the integrity and confidentiality of the stack at the
-%% exact moment when a callee returns, this policy signals violations when the
-%% caller actually accesses data that the callee has written into its stack
-%% frame. \iftrue\bcp{We could also hint at the lazy confidentiality
-%%   property in the same way...}\fi
-%% The lazy policy does not enforce our eager integrity property, and to our
-%% knowledge there is no formal statement of the properties that it ought to enforce.
-%% We propose {\em lazy} stack-safety properties, which capture the desired behavior of a
-%% policy that detects integrity violations between when they occur and when they make
-%% a visible impact. Intuitively this can be phrased as ``no visible reads after dangerous
-%% writes.'' Unfortunately \citeauthor{DBLP:conf/sp/RoesslerD18}'s existing
-%% ``Lazy Tagging and Clearing'' policy does not quite enforce this property, as we show in
-%% testing, but formalizing the ideal property allows us to see how it falls short.
-%% We provide a variant of ``Lazy Tagging and Clearing'' that does enforce lazy integrity
-%% at some performance cost.
-%% %We prove (in Coq) that the eager property implies the lazy one.\apt{do we?
-%% %  and is it so interesting anyhow?}
-%% We argue that any system purporting to enforce stack safety ought to obey at least lazy
-%% stack safety, making it a plausible extensional characterization.
-
-%% %\bcp{I worry that we are being a little
-%% %  dishonest here: the stated advantage of the lazy policy is that it is more
-%% %efficient, but our variant is {\em not} efficient!}
 In the rest of the paper, we begin with an informal overview of our key ideas via
 examples (\cref{sec:running-example}), followed by a description of our key
 assumptions about the machine environment and threat model (\cref{sec:setup}).
@@ -703,18 +451,17 @@ We then offer the following contributions:
 security, combine these with an existing notion of well-bracketed
 control flow to formalize a {\em stepwise stack-safety}
 property, and argue that this property captures the intuitive concept of
-strict stack
+strict stack.
 safety~(\cref{sec:prelim,sec:lse}).
 \item We use property-based random testing to check that this stepwise
 property is actually enforced by the {\em Depth Isolation} policy
 of~\citet{DBLP:conf/sp/RoesslerD18}; in the process, we extend the generation by
 execution techniques of \citet{TestingNI:ICFP} to handle nested
 properties (\cref{sec:enforcement}).
-%% \bcp{mention that we extend the ICFP 13 gen-by-exec idea with nested stuff...}
-\item We formalize a
-weaker but more extensional \emph{observational} variant of the stack safety
-property that characterizes a refinement of Roessler and DeHon's more
-performant {\em Lazy Tagging and  Clearing} policy (\cref{sec:lazy}).\apt{can this be more precise?}
+\item We formalize weaker but more extensional \emph{observational} variants of
+  confidentiality and integrity. Both are parameterized over a notion of external
+  observation, and are violated only if the accessing of secrets or overwriting of
+  data later causes a visible change in the system behavior (\cref{sec:lazy}).
 \item We show that the definition can be
 extended to argument passing on the stack, callee-saves registers, and a simple coroutine system (\cref{sec:ext}).
 \end{itemize}
