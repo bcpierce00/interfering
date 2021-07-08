@@ -2167,99 +2167,6 @@ the micro-policy will incorrectly behave as if execution
 is continuing in the callee, but since the callee never has stronger access
 rights than the caller, this is harmless.
 
-%% APT: removed because the tag part is too mysterious and the instruction part
-%% is standard.
-%% This is the entry
-%% sequence:
-%% %
-%% \setcounter{pcctr}{1}
-%% \[
-%%   \begin{array}{l|l|l|l}
-%%      & \mathit{Instruction} & \mathit{Tags} & \\
-%%     \hline
-%%     \row{\sw ~ \rsp ~ \tta ~ 1}{[\rsp+1] \leftarrow \rra}{\tagHa, \tagInstr}
-%%         {Store return address in stack}
-%%     \row{\addi ~ \rsp ~ \rsp ~ 2}{\rsp \leftarrow \rsp + 2}{\tagHb, \tagInstr}
-%%         {Increment stack pointer by frame size}
-%%   \end{array}
-%% \]
-%% %
-%% And the exit sequence:
-%% %
-%% \setcounter{pcctr}{1}
-%% \[
-%%   \begin{array}{l|l|l|l}
-%%      & \mathit{Instruction} & \mathit{Tags} & \\
-%%     \hline
-%%     \row{\lw ~ \rra ~ \rsp ~ \negate 1}{\rra \leftarrow [\rsp - 1]}{\tagRa, \tagInstr}
-%%         {Load return address}
-%%     \row{\addi ~ \rsp ~ \rsp ~ \negate 2}{\rsp \leftarrow \rsp - 2}{\tagRb, \tagInstr}
-%%         {Decrement stack pointer by frame size}
-%%     \row{\jalr ~ \rra ~ \rra ~ 0\apt{wrong}}{\PCname \leftarrow \rra}{\tagRc, \tagInstr}
-%%         {Return to caller ($\jalr$)}
-%%   \end{array}
-%% \]
-
-%% \rb{Positioning of the above sequences, relation to running example. The tagging
-%%   of stack frames would be considered part of these sequences.}
-
-%% These sequences also enforce the $\SP$ discipline. When stack frames
-%% are of fixed size, it suffices to increment $\SP$ and tag it with a
-%% dedicated tag in the header sequence, which is later checked after
-%% decrementing $\SP$ during the exit sequence to authorize the
-%% return. The well-formedness of the blessed sequences can be checked
-%% statically.
-
-%% Only programs whose sequences are well-formed are
-%% protected by the micro-policy, although programs are still protected
-%% (by fail-stopping) even if the intended sequences are missing. By
-%% tracking the execution of the blessed sequences in the tag state of
-%% the {\PCname} register, the micro-policy ensures that the entry
-%% sequences of calls declared in the call map are executed correctly.
-
-% \leo{I'm not a fan of the next paragraph.}\bcp{Yes, it's pretty far down in
-%   the weeds.  I don't think this level of detail is needed, in the context
-%   of a paper that is mostly about our definitions, not theirs.}
-% Note that in this policy both the entry and exit sequences
-% must write to each element of
-% the frame, which can be quite expensive, especially for programs that
-% allocate large but sparsely populated frames; we return to this point
-% in \cref{sec:lazy}.
-% %
-% For example, the program in \cref{fig:passingsimple} manages the stack
-% in this way. Here, the call pseudo-instruction to {\tt f} in line 5
-% hides a blessed sequence of instructions that allocate space to save
-% its return address to {\tt main} and seal the protected part of the
-% stack before {\tt f}'s body starts executing at 10. Conversely, the
-% return instruction in line 15 restores and jumps to the return address
-% and deallocates its frame space, and unseals the corresponding parts
-% of the stack. The function itself allocates and deallocates its own
-% private frame space in instructions 10 and 14. Additionally, unlike in
-% the simplified presentation of the policy, the caller shares the
-% arguments passed to the callee through the stack, and for this creates
-% and initializes (3--4) and destructs (6) the argument part of the
-% callee's stack frame.
-
-
-%\rb{Note that we have also considered and implemented more flexible schemes
-%  based on allowing operations above the current activation depth. How do we put
-%  these together?}
-%\rb{Do we want to discuss variations involving frame pointers or more implicit
-%  return addresses, argument passing on the stack, alloc/dealloc, etc.?}
-%\rb{Where to talk about the role of the compiler?}
-
-%% Because the access rights of callers subsume those of callees, it is essential
-%% that the micro-policy change tags when the property thinks that a call occurs,
-%% but it is safe for the micro-policy to fail to reset to the caller's tag when the
-%% property thinks a return occurs. (Dually, it is safe for the micro-policy to
-%% change tags even without executing a call point, but not for it to reset tags to
-%% the caller when the property thinks execution is still in the caller).
-
-%% Because the property does not identify return sites, we have no way to require
-%% that ``intended returns'' are tagged correspondingly. Some unintended results
-%% might also be so tagged, but as long as the jump has the effect of a legal
-%% return, it is OK.
-
 \subsection{Validation through Random Testing}
 \label{sec:testing}
 
@@ -2341,29 +2248,33 @@ by us (deliberately weakening the micro-policy in ways that we expect
 should break its guarantees), or actual bugs that we discovered through
 testing our implementation. We elaborate on some such bugs below.
 
-\begin{table}[]
-\centering
-\begin{tabular}{c|c|c}
-  Bug & Property Violated & MTTF (ms) \\
-  \hline
-      {\em LOAD\_NO\_CHECK}  & Confidentiality & 1670 \\
-      {\em STORE\_NO\_CHECK} & Integrity & 638 \\
-      {\em HEADER\_NO\_INIT} & Integrity & 1488 \\
-\end{tabular}
-\vspace*{1em}
-\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
-\vspace*{-2em}
-\label{tab:bug-table}
-\end{table}
+\sna{I am not sure about the MTTF table. Is it as
+  valuable at POPL? Do we need to go into more detail
+  about metholodology if we use it?}
 
-The mean-time-to-failure (MTTF) for various bugs can be found in
-Table~\ref{tab:bug-table}. All experiments were run in a desktop
-machine equipped with i7-8700 CPU @ 3.20GHz with 32GB
-RAM.
+%\begin{table}[]
+%\centering
+%\begin{tabular}{c|c|c}
+%  Bug & Property Violated & MTTF (ms) \\
+%  \hline
+%      {\em LOAD\_NO\_CHECK}  & Confidentiality & 1670 \\
+%      {\em STORE\_NO\_CHECK} & Integrity & 638 \\
+%      {\em HEADER\_NO\_INIT} & Integrity & 1488 \\
+%\end{tabular}
+%\vspace*{1em}
+%\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
+%\vspace*{-2em}
+%\label{tab:bug-table}
+%\end{table}
+
+%The mean-time-to-failure (MTTF) for various bugs can be found in
+%Table~\ref{tab:bug-table}. All experiments were run in a desktop
+%machine equipped with i7-8700 CPU @ 3.20GHz with 32GB
+%RAM.
 % \leo{Something like: There is really no baseline to compare this
   %against, but include it here for the future/reasons?}
 %
-The artificially injected bugs focus on weakening the tag propagation
+The artificially injected bugs weaken the tag propagation
 and checking mechanism.
 %
 For example, when loading from a stack location, the correct
@@ -2401,6 +2312,16 @@ which is allowed because the enforcement mechanism still has
 $l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s data.
 %\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
 %  and the write from {\tt f} was already a violation.}
+
+\subsection{Why not Proof?}
+
+There are several ways to evaluate whether an enforcement mechanism enforces
+our properties. Ideally such validation would be done through formal proof.
+Our model is certainly amenable to such a proof, with no fundamental barriers,
+but it would be considerable work to carry out for a full ISA like RISC-V.
+We concentrate instead on testing because it is better aligned with our immediate
+goal of evaluating real enforcement mechanisms for real machine architectures.
+\sna{More to say here?}
 
 \section{Stack Safety for Lazy Enforcement}
 \label{sec:lazy}
@@ -2646,10 +2567,15 @@ however shared by all activations of the same function in order to obtain
 good cacheability of tag rules---but that policy allows leaks between
 instances of the same function.
 
-We believe that {\em Lazy Per-activation Tagging and Clearing}, in which
-each activation is tagged uniquely, ends up enforcing the combination
-of deferred stepwise stack integrity and stepwise confidentiality.
-This is because tags that persist between calls will not become active again.
+We test {\em Lazy Per-activation Tagging and Clearing}, in which
+each activation is tagged uniquely, and find that it obeys stepwise
+confidentiality and observational integrity. Our testing catches the
+violation in the original {\em Lazy Tagging and Clearing}, as well as
+an equivalent to {\em LOAD\_NO\_CHECK}, which now also violates observational
+integrity.
+
+Per-activation tagging resolves the issue because tags that persist between
+calls will not become active again.
 Our properties have allowed us to reject an enforcement mechanism as
 not really stack safe, and describe a potential fix that itself is a
 prime candidate for future testing.
@@ -3272,24 +3198,11 @@ Their logical
 relation captures capability safety without ``externally observable
 side-effects (like console output or memory access traces)''
 and can be used to reason about individual programs.
-\citet{SkorstengaardLocal} acknowledge the difficulty of defining
-these concepts precisely\bcp{since  their later papers do include precise
-  definitions, maybe there's no point in emphasizing what they said at the
-  beginning?}; they say
-``while we claim that our calling
-convention enforces control-flow correctness, we do not prove a
-general theorem that shows this, because it is not clear what such a
-theorem should look like,'' noting that the correctness property
-enjoyed by their technique ``is not made very explicit.''
 
 StkTokens \citep{SkorstengaardSTKJFP} continues this line of work by
 defining a more efficient
 calling convention that uses linear capabilities for stack and return
 pointers.
-%% The convention operates on a single shared stack and requires that
-%% protected components avoid compromising their own security by following certain
-%% simple rules---like not leaking their private capability seals. More
-%% precisely but
 Informally, local state encapsulation (LSE) is defined as
 restricting accesses to the range of memory allocated to the current stack
 frame, and well-bracketed control flow (WBCF) is defined as only allowing
@@ -3311,30 +3224,17 @@ We improve upon \citet{SkorstengaardSTKJFP} in two significant ways:
 statically divide the world into trusted functions, which feature additional
 dynamic ``reasonableness'' constraints on their behavior and for which their
 properties hold, and adversary functions, which may violate those
-constraints but are not guaranteed safety.  \bcp{Readers may wonder: why
-  isn't this reasonable?  after all, if a
-  function is adversarial, why do we care whether it gets any safety
-  guarantees?  This is an opportunity to (re)explain that functions can be
-  wrong without being malicious.  The next paragraph is a step in that
-  direction, but I think the emphasis on proof gives the wrong idea.}
-
-\vspace{.7\smallskipamount}
-
-Supporting a dynamic notion of adversary is important for functions that
-cannot be statically proven safe, but whose data still needs to be protected
-when they are behaving safely.  For example, consider a function that obeys
-the reasonableness constraints on most inputs, but can be subverted by
-malicious inputs in such a way that it violates the reasonableness
-constraints. In the StkTokens model, we cannot guarantee to protect this
-function's data from its callees even when it called with non-malicious
-inputs.
-
-      % \apt{too abstract now?}
-      % \sna{Maybe, but I'm not sure how much being concrete about it serves us.}
-      % BCP: reads OK to me
+constraints but are not guaranteed safety. This static division
+is insufficient when we consider buggy, but not inherently adversarial,
+code --- one can imagine a function that, when called with the wrong
+inputs, behaves unreasonably, but under most circumstances can be
+considered reasonable. \citet{SkirstengaardSTKJFP} would be forced
+to classify such a function as an adversary, and would not guarantee it
+protection. We argue that if individual function activations are well-behaved,
+they should be protected.
 
 \item \citet{SkorstengaardSTKJFP}'s approach to proving safety via fully
-abstract overlay
+  abstract overlay
   semantics relies on the definition of a ``stack-safe-by-construction''
   abstract machine that is closely tied to an underlying enforcement
   mechanism and actual machine architecture.
@@ -3351,12 +3251,11 @@ abstract overlay
 \vspace{.7\smallskipamount}
 
   Conversely, it seems possible to extend \citet{SkorstengaardSTKJFP}'s
-  abstract machine to pass
-  arguments on the stack, or to support callee-save registers. It might even
-  viable to construct a safe-by-construction abstract coroutine machine, but
-  so far this is hypothetical. We implement these scenarios in fact, with
-  simple modifications to the domain model of each one.  \bcp{Don't
-    understand the last sentence}
+  abstract machine to pass arguments on the stack, or to support callee-save
+  registers. It might even be viable to construct a safe-by-construction abstract
+  coroutine machine in the same style, but this is hypothetical.
+  We have implemented these scenarios with
+  simple modifications to the domain model.
 
 \ifdraft \item \bcp{Should we also mention our testing stuff?} \fi
 \end{enumerate}
@@ -3393,9 +3292,9 @@ StkTokens is specifically set up to address criterion (3), while this is not
 a goal of our work. We do agree that criterion (2) is important;
 demonstrating it for our proposal remains future work.
 
- Finally, we would propose one more criterion: having a generic definition
- of stack safety that abstracts over machine details.  Here we do better
- than StkTokens, as described in point (ii) above.
+Finally, we would propose one more criterion: having a generic definition
+of stack safety that abstracts over machine details.  Here we do better
+than StkTokens, as described in point (ii) above.
 
 %% Although there are some important differences between
 %% \citeauthor{SkorstengaardSTK}'s properties and our own, the new
@@ -3451,11 +3350,7 @@ combine smoothly.
 We introduced a characterization against which stack safety enforcement
 mechanisms can be measured and used it to evaluate tag-based enforcement mechanisms.
 
-\bcp{Out of date?}Our immediate next step is to implement testing of observational properties,
-both to validate them and to explore how to effectively test properties that do not
-fail immediately.
-
-From there, we see two natural ways to extend the work. First, we should thoroughly evaluate
+From here, we see two natural ways to extend the work. First, we should thoroughly evaluate
 other enforcement mechanisms, especially Cheri-based capability
 systems. Second, we can further demonstrate
 the functionality of our definitions by showing that they can be used to prove
