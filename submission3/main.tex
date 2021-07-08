@@ -1047,6 +1047,7 @@ as \emph{well-bracketed control flow (WBCF)}.
 
 \section{Threat Model, Machines, and Enforcement }
 \label{sec:setup}
+\label{sec:threat}
 
 We will introduce a formal model of stack safety that abstracts over
 machine details. But first we must discuss the bounds of our assumptions ---
@@ -1316,7 +1317,7 @@ A {\em machine state} is a map from components to values.
 %
 We have a total step function between machine states, written \(\mach \stepsto \mach'\).
 
-We now formalize the model of enforcement that we introduced in \Cref{sec:threat}.
+We now formalize the model of enforcement that we introduced in Section~\ref{sec:threat}.
 A {\em policy} consists of a set of policy
 states \(\pol \in \POLS\) and a policy step function \((\mach, \pol) \polstep \pol' \in
 \MACHS \times \POLS \rightharpoonup \POLS\). This step function is partial;
@@ -1533,7 +1534,8 @@ seal all components with the depth of the previous return stack. If we aren't ma
 we identify a return by looking ahead and checking if we're about to step to a state
 that matches the topmost return target. If neither is true, the context remains unchanged.
 Recall that a ``code map'' \(\codemap\) is a partial function, and we can use its domain
-as a predicate on addresses.
+as a predicate on addresses.\apt{We never explain what $\ANNS$ is for the code maps in
+  this section.}
 
 \judgmentthree[ Call]
               {\(\codemap ~ (\mach ~ \PCname)\)}
@@ -2165,7 +2167,7 @@ after the return---instead of preventing dangerous writes from being read, we
 prevent them from being leaked.
 
 \definition
-{\em Observational integrity} means that for any \(\MPCT,\brk \in \MPCT^*\)
+\textbf{\em Observational integrity} means that for any \(\MPCT,\brk \in \MPCT^*\)
 where \(\head(\MPCT) = \mach,\pol,\context\) and \(\last(\MPCT) = \mach',\pol',\context'\),
 the following holds. Let \(\components\) be the set of protected components that changed during
 the call, \(\components = \prot(\context) \cap \Delta(\mach, \mach')\),
@@ -2188,7 +2190,7 @@ be pairs of states. Their {\em unsafe set}, written
 \(\mach' ~ \component \not = \nach' ~ \component\).
 
 \definition
-A system enjoys {\em observational confidentiality} if for all
+A system enjoys \textbf{\em observational confidentiality} if for all
 \(\MPCT,\brk \in \MPCT^*\), with \(\head(\MPCT) = \mach,\pol,\context\) and
 \(\components = \secret(\context)\), the following holds.
 %
@@ -2599,9 +2601,7 @@ annotations to reflect that they may now pass variables on the stack, and that t
 of those variables may be dynamic (as in the case of pass-by-reference).
 A call annotation now includes a predicate relating machine states to the components
 that should be passed, expressed as offsets from the stack pointer.
-%
-\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P \subseteq \WORDS)\]
-
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P)~\mbox{\rm where}~P \subseteq \WORDS\]
 We extend the set of domains to include passed components,
 which are labeled with the range of depths of the caller that has passed them.
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \passed{\depth,\depth'}\]
@@ -2661,24 +2661,24 @@ presented. \ifspace\bcp{Too much space between the second and third.}\fi
          {}
          {\(\underscore,\context \stepsto_C \context\)}
 
-\definition Let the protected set of a context, \(\prot_P(\domMap,\rts)\),
-be the set of components \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
+\definition The \emph{protected set} of a context, \(\prot_P(\domMap,\rts)\),
+is the set of components \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
 or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
 \(|\rts| > \depth'\).
 
-\definition Let the \emph{secret set} of a context, written \(\secret_P(\domMap,\rts)\),
-be the set of components \(\component\) such that
+\definition The \emph{secret set} of a context, written \(\secret_P(\domMap,\rts)\),
+is the set of components \(\component\) such that
 \(\domMap ~ \component = \sealed{\underscore}\), \(\domMap ~ \component = \unsealed\), or
 \(\domMap ~ \component = \passed{\depth,\depth'}\)
 where \(|\rts| < \depth\) or \(|\rts| > \depth'\).
 
 \definition
-For each of the stepwise, deferred, and observational versions of
-stack integrity in the simple model, the equivalent property in the
+For each of the \textbf{\em stepwise}, \textbf{\em deferred}, and \textbf{\em observational} versions of
+\textbf{\em stack integrity} in the simple model, the equivalent property in the
 passing model substitutes the above \(\CONTEXTS\) type and update
 function, and \(\prot_P\), for their equivalents in the simple model.
 
-For both the stepwise and observational versions of stack confidentiality in
+For both the \textbf{\em stepwise} and \textbf{\em observational} versions of \textbf{\em stack confidentiality} in
 the original model, the passing model equivalents additionally substitute \(\secret_P\).
 
 \subsection{Callee-saves Registers}
@@ -2696,13 +2696,14 @@ Intuitively, a caller expects a callee-saves register to be unchanged on
 return: it
 may change during the call, as long as it is restored. We similarly expect a callee-saves
 register to be secret from the callee, except when it is copied to the stack! Both scenarios
-reflect not stepwise but observational stack safety.
+reflect observational rather than stepwise stack safety.
 
+\apt{Mention that now for the first time we are putting register components into something other than the outside domain.}
 We begin by adding information to Call annotations defining which registers will be {\em saved}
 and which are {\em unsaved}. The stack pointer and the register containing the return address
 should never be saved. We then extend the set of domains with these values.
 %
-\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(S \in \REGS \rightarrow (\unsaved + \saved))\]
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(S) ~ \mbox{\rm{where}} ~ S \in \REGS \rightarrow (\unsaved + \saved)\]
 %
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \unsaved + \saved\]
 
@@ -2710,7 +2711,7 @@ should never be saved. We then extend the set of domains with these values.
               {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
 %              {\(\components = \sealcon ~ \mach\)}
               {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
-              {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \in \REGS \mapsto S \reg]\)}
+              {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
               {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
 The remaining rules are the same as in the simple model.
@@ -2726,10 +2727,10 @@ be the set of components \(\component\) such that
 
 \definition
 %
-{\bf Observational stack integrity} with callee-saves registers substitutes the above
+\textbf{\em Observational stack integrity} with callee-saves registers substitutes the above
 \(\CONTEXTS\) type and update function, and \(\prot_S\), for its equivalent in the simple model.
 %
-{\bf Observational stack confidentiality} additionally substitutes \(\secret_S\).
+\textbf{\em Observational stack confidentiality} additionally substitutes \(\secret_S\).
 
 \paragraph{Discussion}
 
@@ -2739,7 +2740,7 @@ It is copied to some stack address \(\addr\), violating stepwise confidentiality
 overwritten, violating stepwise integrity. Then before the return, it is restored to its
 original value. In observational integrity terms, \(\reg\) is unchanged between call and return,
 and in observational confidentiality terms, both the original and variant values are unchanged
-from their originals, so that \(\reg\) is not in the \(\delta\) set. But \(\addr\) is in the
+from their originals, so that \(\reg\) is not in the \(\delta\) set.\apt{?? what's that?}  But \(\addr\) is in the
 \(\delta\) set, so confidentiality additionally requires that the value of \(\reg\) does not
 leak through the callee-saves mechanism, for instance if the caller allocates but fails to
 initialize more memory.
@@ -2773,6 +2774,9 @@ coroutine.
  (\COMPONENTS \rightarrow \STKDOMS) \times
 (\STACKS \rightarrow \listT(\target)) \times (\STACKS \rightarrow \target) \times \STACKS\]
 
+\apt{Should that be $\passed{\depth,\depth'}$ ?.  And why do we need to be precise about $\STKDOMS$ anyhow?
+  And shouldn't the first component of $\context$ be of type $\COMPONENTS \rightarrow \TOPDOMS$? }
+
 The initial domain map maps each stack address in stack \(\stackid\) to
 \(\instack{\stackid}{\unsealed}\), the initial return map maps all stack identifiers to empty
 return stacks, the initial yield targets are defined above, and the initial stack id matches the initial
@@ -2790,7 +2794,7 @@ and likewise using the return target stacks. We will omit these rules and focus 
              {\(\mach,(\domMap,\rts,\yts,\stackid) \stepsto_C \domMap,\rts,\yts',\stackid'\)}
 
 This calls for some explanation. First, we determine which coroutine we are yielding to by
-kchecking which stack the stack pointer of the next state is pointing to. Then we can only yield
+checking which stack the stack pointer of the next state is pointing to. Then we can only yield
 if the next state is a valid yield target for that stack, and we update the yield target for
 the current stack, ensuring that when the system yields back we expect the current coroutine
 to continue from where it left off. So, it is possible for a coroutine to claim to yield
@@ -2801,24 +2805,25 @@ Stack integrity and confidentiality apply in the coroutine model, based on strai
 projections of each stack's domains, etc. and the machinery of the passing model. We will give
 the coroutine-specific properties.
 
-\definition \(\MPCT^\wedge\) is the \emph{yield set}, defined as
+\definition The \emph{yield set} \(\MPCT^\wedge\) of a trace \(\MPCT\) \apt{right?} is
 \[\begin{aligned}
 \bigcup_{\stackid \in \STACKS} \hspace{-.5em} \{\MPCT, \neg f_\stackid | \MPCT\langle f_\stackid \rangle
 \text{ is a reachable segment}\} \hspace{1em} &
 \text{where } f_\stackid ~ (\underscore,\underscore,(\underscore,\underscore,\underscore,\stackid')) \triangleq \stackid \not = \stackid' \\
 \end{aligned}\]
 
+\noindent
 Here, we are capturing the entire span that the system spends {\em away} from a given
 coroutine.
 
 \definition
-Let the protected set of a context, \(\prot_Y(\domMap,\rtm,\yts,\stackid)\),
-be the set of components \(\component\) such that
+The \emph{protected set} of a context, \(\prot_Y(\domMap,\rtm,\yts,\stackid)\),
+is the set of components \(\component\) such that
 \(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\).
 
 \definition
-Let the secret set of a context, \(\secret_Y(\domMap,\rtm,\yts,\stackid)\),
-be the set of components \(\component\) such that
+The \emph{secret set} of a context, \(\secret_Y(\domMap,\rtm,\yts,\stackid)\),
+is the set of components \(\component\) such that
 \(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\).
 
 \definition
