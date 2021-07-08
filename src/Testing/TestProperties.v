@@ -300,6 +300,18 @@ Module TestRISCVLazyOrig := TestPropsRISCVSimple RISCVObs TPLazyOrig DLObs
                                                    TSS GenRISCVLazyOrig
                                                    PrintRISCVLazyOrig.
 
+Module TestRISCVLazyNoDepth := TestPropsRISCVSimple RISCVObs TPLazyNoDepth DLObs
+                                                    TSS GenRISCVLazyNoDepth
+                                                    PrintRISCVLazyNoDepth.
+
+Module TestRISCVLazyNoCheck := TestPropsRISCVSimple RISCVObs TPLazyNoCheck DLObs
+                                                    TSS GenRISCVLazyNoCheck
+                                                    PrintRISCVLazyNoCheck.
+
+Module TestRISCVLazyFixed := TestPropsRISCVSimple RISCVObs TPLazyFixed DLObs
+                                                  TSS GenRISCVLazyFixed
+                                                  PrintRISCVLazyFixed.
+
 Extract Constant defNumTests => "500".
   
 Import TestRISCVEager.
@@ -314,6 +326,9 @@ QuickCheck TestRISCVEagerNI.prop_integrity.
 (*QuickCheck prop_confidentiality.*)
 
 Import TestRISCVLazyOrig.
+Import TestRISCVLazyNoDepth.
+Import TestRISCVLazyNoCheck.
+Import TestRISCVLazyFixed.
 
 (*QuickCheck prop_integrity.*)
 (*QuickCheck prop_confidentiality.*)
