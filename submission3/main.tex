@@ -159,16 +159,17 @@ What does ``stack safety'' mean, exactly? The phrase is associated with a
 variety of compiler,
 run-time, and hardware mechanisms for protecting stack
 memory, but these mechanisms typically lack precise specifications,
-relying instead on informal descriptions and examples of bad
+relying instead on informal descriptions and examples of the bad
 behaviors that they prevent.
 
-We propose a formal characterization
-of stack safety, formulated with concepts from language-based security: a
+We propose a \apt{``generic''?} formal characterization
+of stack safety based on concepts from language-based security: a
 combination of an integrity property (``the private
 state in each caller's stack frame is held invariant by the callee''),
 a confidentiality property (``the callee's behavior is insensitive to the
 caller's private state''), and a well-bracketedness property (``each
-callee returns control to its immediate caller'').
+callee returns control to its immediate caller''). \apt{Do we really
+  want to include WBCF in the abstract?} 
 % These properties are sensible even in the presence of
 % abnormal control flow.\apt{Is this important enough to mention here?}
 % BCP: I think not in the abstract, but maybe in the intro.
@@ -177,13 +178,13 @@ callee returns control to its immediate caller'').
 % ``well-bracketed control flow'' that restricts control flow to the
 % typical pattern of matched calls and returns.
 
-We use these properties to validate the stack-safety {\em micro-policies}
+We use these properties to validate \apt{``evaluate'' ?} the stack-safety {\em micro-policies}
 proposed by~\citet{DBLP:conf/sp/RoesslerD18}.  Specifically, we check (with
 property-based random testing) that Roessler and Dehon's ``eager''
 micro-policy, which catches violations as early as possible, enforces a
 simple ``stepwise'' variant of our properties and correctly detects several
-broken variants, and that (a repaired version of) their more performant
-``lazy'' micro-policy corresponds to a slightly weaker and more extensional
+broken variants\apt{last phrase is grammatically disconnected}, and that (a repaired version of) their more performant
+``lazy'' micro-policy corresponds to\apt{``enforces''?} a slightly weaker and more extensional
 observational variant of our properties.
 %
 % \BCP{I still don't think the next sentence really nails it.  And (sigh) I am
@@ -366,6 +367,8 @@ are met by particular implementations.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as---does not overwrite return addresses, or ...
+\apt{This makes us seem very reactive to Skst.  Can we reorder things to give our story first, and
+  compare to Skst afterwards?}
 The most abstract characterization of stack safety that we are aware of is
 recent work by \citet{SkorstengaardSTKJFP}, which defines stack safety as the conjunction of two
 properties:
@@ -408,13 +411,12 @@ machine.
 %% other reasonable enforcement mechanisms can enforce it.
 
 In the present work, we also describe the protection of both stack data (like LSE) and
-control flow (like WBCF).  Our technical formulation of WBCF is similar to
-theirs, but our treatment of stack data protection is rather different,
+control flow (like WBCF).  Our technical formulation of WBCF is similar to that of
+Skorstengaard et al., but our treatment of stack data protection is rather different,
 as is our approach to the definition itself. Instead of defining stack safety implicitly,
 as ``what a certain idealized machine does,'' we give an
 \emph{explicit} definition using the technical framework of language-based
-security\ifaftersubmission~\citep{??}\bcp{Maybe the Sabelfeld and Myers
-  survey?}\fi, phrased as the conjunction of
+security~\citep{sabelfeld2003language}, phrased as the conjunction of
 \emph{stack integrity} and \emph{stack confidentiality}.
 %
 A key technical novelty in these definitions,
@@ -475,14 +477,14 @@ in the Coq proof assistant on top of a RISC-V specification.  We
 use QuickChick~\citep{Denes:VSL2014,Pierce:SF4}, a property-based testing
 tool for Coq, to generate random programs and check
 that Roessler and Dehon's micro-policies correctly abort the ones that
-attempt to violate one of our properties; furthermore, we
+attempt to violate one of our properties. Furthermore, we
 %
 check that the testing framework is able to generate counterexamples
-that violate our properties but are not halted by incorrect
-enforcement variants (both variants that we accidentally created
+that violate our properties but are \emph{not} halted by incorrect
+enforcement variants---both variants that we accidentally created
 during our re-implementation of the micro-policy and ones that we
 intentionally crafted to be broken in order to increase our confidence
-in testing and the enforcement mechanism itself).
+in testing and the enforcement mechanism itself.
 %introduce several
 %intentionally broken micro-policies and check that the testing framework is
 %able to generate counterexamples that violate our properties but are not
@@ -493,15 +495,15 @@ in testing and the enforcement mechanism itself).
 %  sentence belongs in the testing section?}\fi)
 
 We find that Roessler and Dehon's {\em Depth Isolation} micro-policy, in
-which memory cells within each stack frame are tagged with the identity of
+which memory cells within each stack frame are tagged with the identity\apt{``depth''?} of
 the function activation that owns the frame and access to those locations is
-then permitted only when that activation is currently executing, validates our
-stepwise properties. On the other hand, we reason that \emph{Lazy Tagging and Clearing}
+then permitted only when that activation\apt{``an actiation at that depth''?} is currently executing, validates our
+stepwise properties. On the other hand, we reason\apt{but now we test?}  that \emph{Lazy Tagging and Clearing}
 violates the temporal aspect of confidentiality in
 corner cases where data can leak across repeated calls to the same callee,
 and also violates integrity if the leak happens to use the caller's frame. We
 propose a variant of {\em Lazy Tagging and Clearing} that \emph{should} enforce
-confidentiality, albeit at some performance cost.
+confidentiality, albeit at some performance cost.\apt{Do we test?}
 %
 \ifaftersubmission
 \bcp{Did Nick and Andre know about this deficiency?  Did they mention
@@ -580,7 +582,7 @@ to apply to enforcement mechanisms beyond micro-policies.
 Lastly, we define integrity and confidentiality properties for a coroutine
 system with a static layout, in which each coroutine's stack is constrained
 to a fixed region of memory.  Though simplistic, this extension is a step
-toward full-blown concurrency and demonstrates that our approach is flexible
+toward full-blown multithreading and demonstrates that our approach is flexible
 enough to handle more sophisticated styles of control flow.
 
 %% \paragraph*{The Use of Stack Safety}
@@ -691,9 +693,9 @@ enough to handle more sophisticated styles of control flow.
 %% %  dishonest here: the stated advantage of the lazy policy is that it is more
 %% %efficient, but our variant is {\em not} efficient!}
 In the rest of the paper, we begin with an informal overview of our key ideas via
-examples (\cref{sec:running-example}), followed by definitions of some key
-concepts (\cref{sec:setup}) and a discussion of the threat
-model we consider (\cref{sec:threat}). We then offer the following contributions:
+examples (\cref{sec:running-example}), followed by a description of our key
+assumptions about the machine environment and threat model (\cref{sec:setup}). 
+We then offer the following contributions:
 
 \begin{itemize}
 \item We adapt concepts of integrity and confidentiality from language-based
@@ -704,16 +706,16 @@ strict stack
 safety~(\cref{sec:prelim,sec:lse}).
 \item We use property-based random testing to check that this stepwise
 property is actually enforced by the {\em Depth Isolation} policy
-of~\citet{DBLP:conf/sp/RoesslerD18}, and extend the generation by
+of~\citet{DBLP:conf/sp/RoesslerD18}; in the process, we extend the generation by
 execution techniques of \citet{TestingNI:ICFP} to handle nested
 properties (\cref{sec:enforcement}).
 %% \bcp{mention that we extend the ICFP 13 gen-by-exec idea with nested stuff...}
 \item We formalize a
 weaker but more extensional \emph{observational} variant of the stack safety
 property that characterizes a refinement of Roessler and DeHon's more
-performant {\em Lazy Tagging and  Clearing} policy (\cref{sec:lazy}).
+performant {\em Lazy Tagging and  Clearing} policy (\cref{sec:lazy}).\apt{can this be more precise?}
 \item We show that the definition can be
-extended to argument passing on the stack and to a simple coroutine system (\cref{sec:ext}).
+extended to argument passing on the stack, callee-saves registers, and a simple coroutine system (\cref{sec:ext}).
 \end{itemize}
 
 \Cref{sec:relwork,sec:future} discuss related and future work.
@@ -1381,7 +1383,7 @@ including a heap---our properties define stack protection regardless of how
 non-stack memory is used. Likewise, we can support a range of calling convention
 choices, like whether or not to have a frame pointer.
 
-Some calling convention choices, such as callee-save registers and argument
+Some calling convention choices, such as callee-saves registers and argument
 passing on the stack, require natural enhancements to our base properties. We
 present these enhancements, as well as a simple coroutine model,
 in Section~\ref{sec:ext}, after we formalize the essence of stack safety.
@@ -3011,9 +3013,9 @@ the callee is responsible for this. But of course we may still wish for
 those registers to be
 protected, just as they would be in a caller-saves convention.
 
-Intuitively, a caller expects a callee-saved register to be unchanged on
+Intuitively, a caller expects a callee-saves register to be unchanged on
 return: it
-may change during the call, as long as it is restored. We similarly expect a callee-saved
+may change during the call, as long as it is restored. We similarly expect a callee-saves
 register to be secret from the callee, except when it is copied to the stack! Both scenarios
 reflect not stepwise but observational stack safety.
 
@@ -3255,7 +3257,7 @@ they should be protected.
 \vspace{.7\smallskipamount}
 
   Conversely, it seems possible to extend \citet{SkorstengaardSTKJFP}'s
-  abstract machine to pass arguments on the stack, or to support callee-save
+  abstract machine to pass arguments on the stack, or to support callee-saves
   registers. It might even be viable to construct a safe-by-construction abstract
   coroutine machine in the same style, but this is hypothetical.
   We have implemented these scenarios with
