@@ -235,6 +235,13 @@ this is a well-studied mechanism (so formalizing its protections is
 useful).}
 \fi
 
+Intuitively, stack safety means that the stack frame of each caller is protected
+from attempts by a confused or malicious callee (including all its
+descendant callees) to read or write its private data.
+That is, the attacker model treats every caller as a defender and its callee as
+an attacker, meaning that with nested calls, a single function invocation
+may be viewed in both ways.
+
 The protections offered by such mechanisms are commonly described in terms
 of concrete examples of attacks that they can prevent---corruption of return
 addresses, buffer overflows, use of uninitialized variables, etc.---leaving
@@ -1038,43 +1045,45 @@ condition that calls and returns are {\em well bracketed}, e.g., $C$ should
 only return to $B$.  This is what \citet{SkorstengaardSTKJFP} describe
 as \emph{well-bracketed control flow (WBCF)}.
 
-\section{Machines, Enforcement, and Threat Model}
+\section{Threat Model, Machines, and Enforcement }
 \label{sec:setup}
 
-Before introducing the model\apt{what does this really mean?}  itself, we set the context by stating some
-assumptions we are making about machines, enforcement mechanisms, and
-potential threats.
+We will introduce a formal model of stack safety that abstracts over
+machine details. But first we must discuss the bounds of our assumptions ---
+how broadly we can abstract over machines, how we represent enforcement, and
+our threat model.
+
+We adopt a strong threat model in which both caller and callee may execute
+arbitrary machine code. But hardware and timing attacks are out of scope, as are
+are attacks on the heap---though we believe that the work of
+\citet{DBLP:conf/post/AmorimHP18} can be combined smoothly with ours
+to protect both stack and heap.
 
 \paragraph*{Machine model}
 Our properties are defined in terms of an abstract machine model that makes very few
-assumptions about the concrete machine that instantiates it. Without changing the
-properties, we can support\apt{what does this really mean?} any register
-machine with a program counter (\(\PCname\)) and a stack pointer (\(\rsp\)); other
-details of the machine's ISA are unimportant. We can support any static memory,
-including a heap---our properties define stack protection regardless of how
-non-stack memory is used. Likewise, we can support a range of calling convention
-choices, like whether or not to have a frame pointer.
+assumptions about the concrete machine that instantiates it. Each formal property
+may be instantiated with any machine that meets the following criteria, and it
+will be a meaningful defition of stack safety for that machine. It must at least be a
+register machine with a program counter (\(\PCname\)), and there must be a well-defined
+mechanism for determining the bounds of a stack frame, and for recognizing when a call
+has returned. In this paper we discuss those machines with a stack pointer (\(\rsp\)),
+in which the current stack frame is everything below the stack pointer and above the
+previous frame, and a call from instruction \(\addr_\PCname\) with stack pointer \(\addr_\rsp\)
+is said to have returned when the pc is at \(\addr_\PCname + 4\) and the stack pointer
+is again at \(\addr_\rsp\). But, other configurations, such as those involving frame pointers,
+are equally feasible. A machine may use its non-stack memory in any way, including
+as a heap, as long as the stack has static bounds.
 
+Our core property assumes that all register values passed to the callee are public,
+and that all data in a stack frame is private.
 Some calling convention choices, such as callee-saves registers and argument
-passing on the stack, require natural enhancements to our base properties.\apt{
-  At this point it is unclear what these ``enhancements'' might be.}
-We
-present these enhancements, as well as a simple coroutine model,
-in Section~\ref{sec:ext}, after we formalize the essence of stack safety.
-Other plausible enhancements include:\apt{Better to move the ``what would
-  be needed'' parts to the future work section -- they are mysterious here.}
+passing on the stack, are not supported directly by this property; we introduce
+secondary properties that use the same underlying formalism to handle these cases,
+as well as a simple coroutine model, in Section~\ref{sec:ext}.
 
-\begin{itemize}
-\item address-taken locals---similar to argument passing, but
-      would benefit from more sophisticated, heap-like memory models
-\item exceptions---needs annotations of throw/catch points
-\item continuations---would be similar to argument passing
-\end{itemize}
-
-Runtime code generation would be much more challenging to support, as
-it requires dynamic generation of code annotations. Similarly, true concurrency
-would require more substantial changes to the machine
-model. We consider these features out of scope for now.
+Other enhancements, such as runtime code generation and true concurrency,
+would be much more challenging to support, and we consider these features
+out of scope for now.
 
 \paragraph*{What is a ``call''?}  One significant challenge in formulating our
 properties arises from the fact that we want to define stack safety at the
@@ -1141,49 +1150,28 @@ This model will be made more precise in \cref{sec:prelim}.
 
 Dividing policy state from machine state helps us reason about
 enforcement mechanisms that keep a significant amount of data separate from the
-primary execution data to inform security. Obviously tag-based systems do this\apt{At this
-  point, we barely know what tags are},
-with tags and extra policy state separated from, and untouchable by, application code.
-Another significant example is the shadow stack\apt{citations? what enforcement systems do we actually have in mind?}, where a second stack
-mirrors the real one, and a return may only occur if both stacks agree on the
-target address. Typically the shadow stack is isolated using a separate protection
-mechanism.
+primary execution data to inform security. Tag-based systems, in which a hardware
+monitor tracks metadata tags associated with a software-defined ``micro-policy,'' are
+the motivating application. The tags, and any extra policy state, are separated from
+and untouchable by application code.
+%Another significant example is the shadow stack\apt{citations? what enforcement systems do we actually have in mind?}, where a second stack
+%mirrors the real one, and a return may only occur if both stacks agree on the
+%target address. Typically the shadow stack is isolated using a separate protection
+%mechanism.
+\sna{Commented out shadow stacks until I can find a citation. May just skip it.}
 
-The separation is smaller in protection mechanisms that interact more directly
-with application code.\apt{Vague. Mention capabilities?}  Some mechanisms might exhibit failstop behavior, but have
-no protected policy state; others might never even failstop. Then the policy-enhanced
-machine is simply identical to the original. This is the case for software-based
-techniques.\apt{Even if they use a shadow stack?}
+That said, our model is meant to apply generically to any enforcement mechanism,
+including those that do not take advantage of this separate.
+Some mechanisms, like hardware capability systems, might exhibit failstop behavior,
+but have no protected policy state --- this is represented by a ``unit'' policy
+that failstops when the hardware fault. Others might never even failstop, such as
+code rewriting techniques that turn stack safety violations into other (erroneous, but not
+stack-unsafe) behaviors. Then the policy-enhanced machine is identical to the original.
+\sna{I'm thinking of SFI here, but that's not stacks, right? Does Softbound work like
+  this.}
 
-\paragraph*{Threat Model}
-\label{sec:threat}
-
-Consider a common scenario: a developer wants to link against an existing
-code-base, which will then occupy the same address space as their own code.
-But perhaps the external code is buggy, or even malicious, and contains
-exploits that can be used to cause it to modify the developer's data or
-exfiltrate secrets. For that matter, the developer may not experienced at
-secure programming and so may not be able to rely on their own skill
-to keep their secrets safe.
-
-The developer likely relies instead on simple reasoning principles about how
-their code should work. Local variables do not change across function calls,
-and the callees generally do the same thing regardless of when and where they
-are called (up to a reasonable interface, such as their parameters and global
-variables.) If these intuitions prove false, then the programmer will reason
-incorrectly about their program and especially about its security, and
-be exposed to attack.
-
-Intuitively, stack safety means that the stack frame of each caller is protected
-from attempts by a confused or malicious callee (including all its
-descendant callees) to read or write its private data.
-That is, the attacker model treats every caller as a defender and its callee as
-an attacker, meaning that with nested calls, a single function invocation
-may be viewed in both ways.
-\apt{everything down to here seems like it should go earlier -- in informal section
-  or even intro.}
-We do rule out some
-scenarios with a ``well-formedness'' criterion on initial states, ensuring that
+An enforcement model may additionally
+apply a ``well-formedness'' criterion on initial states, ensuring that
 they are set up properly for the enforcement mechanism in question.
 When validating \citeauthor{DBLP:conf/sp/RoesslerD18}'s micro-policies,
 well-behaved calls and returns are implemented by fixed sequences of instructions
@@ -1192,15 +1180,6 @@ termed {\em blessed sequences}. Well-formedness requires that all annotated
 instructions will be situated at the appropriate instruction of a {\em blessed sequence}.
 This is all we need for the policy to protect itself: it can then failstop if it would
 execute the blessed sequence out of order.
-
-We adopt a strong threat model in which both caller and callee may execute
-arbitrary machine code. \apt{This should be the lead sentence. But how does is
-  it consistent with the previous para on well-formedness?}
-  Hardware and timing attacks are out of scope, as are
-are attacks on the heap---though we believe that the work of
-\citet{DBLP:conf/post/AmorimHP18} can be combined smoothly with ours
-to protect both stack and heap.
-
 
 %We model ordinary program state and policy-enforcement state separately to make it
 %easier to use well-established concepts from language-based security.
