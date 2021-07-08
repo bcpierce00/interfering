@@ -121,27 +121,29 @@ Module TestPropsRISCVSimple
          (m n : MachineState) (p : PolicyState)
          (cm : CodeMap_Impl) (ctx : CtxState)
          (endP : MPCState -> bool)
-    : bool :=
+    : Checker.Checker :=
     (* trace (printMachines m n p cm ctx ++ nl)   *)
     match fuel with
-    | O => true
+    | O => checker true
     | S fuel' => 
       match endP (m,p,ctx), endP (n,p,ctx) with
-      | true, true => (* collect "Both done" *) true
-      | true, _    => (* collect "Main done" *) true
-      | _   , true => (* collect "Vary done" *) true
+      | true, true => (* collect "Both done" *) checker true
+      | true, _    => (* collect "Main done" *) checker true
+      | _   , true => (* collect "Vary done" *) checker true
       | _, _ =>
         match mpcstep (m,p,ctx) cm,
               mpcstep (n,p,ctx) cm with
         | Some (m',p1,c1,o1), Some (n', p2,c2, o2) =>
-          andb (List.forallb (sameDifferenceP m m' n n') (getComponents m'))
-               (prop_lockstepConfidentiality fuel' m' n' p1 cm c1 endP)
-        | _, _ => true
+          (* andb (List.forallb (sameDifferenceP m m' n n') (getComponents m')) *)
+          (*      (prop_lockstepConfidentiality fuel' m' n' p1 cm c1 endP) *)
+          conjoin [checker (List.forallb (sameDifferenceP m m' n n') (getComponents m'));
+                   (prop_lockstepConfidentiality fuel' m' n' p1 cm c1 endP)]
+        | _, _ => checker true
         end
       end
     end.
 
-  Definition prop_stackConfidentiality
+  Fixpoint prop_stackConfidentiality
              fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx 
     : Checker.Checker :=
     match fuel with
@@ -161,7 +163,12 @@ Module TestPropsRISCVSimple
                               prop_lockstepConfidentiality defFuel m' n' p' cm c' endP)
         | _ => checker true
         end
-      | _ => checker true
+      | _ =>
+        match mpcstep (m,p,ctx) cm with
+        | Some (m', p', c', o) =>
+          prop_stackConfidentiality fuel' i m' p' cm c'
+        | _ => checker true
+        end
       end
     end.
 

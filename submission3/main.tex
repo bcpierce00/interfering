@@ -159,16 +159,17 @@ What does ``stack safety'' mean, exactly? The phrase is associated with a
 variety of compiler,
 run-time, and hardware mechanisms for protecting stack
 memory, but these mechanisms typically lack precise specifications,
-relying instead on informal descriptions and examples of bad
+relying instead on informal descriptions and examples of the bad
 behaviors that they prevent.
 
-We propose a formal characterization
-of stack safety, formulated with concepts from language-based security: a
+We propose a \apt{``generic''?} formal characterization
+of stack safety based on concepts from language-based security: a
 combination of an integrity property (``the private
 state in each caller's stack frame is held invariant by the callee''),
 a confidentiality property (``the callee's behavior is insensitive to the
 caller's private state''), and a well-bracketedness property (``each
-callee returns control to its immediate caller'').
+callee returns control to its immediate caller''). \apt{Do we really
+  want to include WBCF in the abstract?} 
 % These properties are sensible even in the presence of
 % abnormal control flow.\apt{Is this important enough to mention here?}
 % BCP: I think not in the abstract, but maybe in the intro.
@@ -177,13 +178,13 @@ callee returns control to its immediate caller'').
 % ``well-bracketed control flow'' that restricts control flow to the
 % typical pattern of matched calls and returns.
 
-We use these properties to validate the stack-safety {\em micro-policies}
+We use these properties to validate \apt{``evaluate'' ?} the stack-safety {\em micro-policies}
 proposed by~\citet{DBLP:conf/sp/RoesslerD18}.  Specifically, we check (with
 property-based random testing) that Roessler and Dehon's ``eager''
 micro-policy, which catches violations as early as possible, enforces a
 simple ``stepwise'' variant of our properties and correctly detects several
-broken variants, and that (a repaired version of) their more performant
-``lazy'' micro-policy corresponds to a slightly weaker and more extensional
+broken variants\apt{last phrase is grammatically disconnected}, and that (a repaired version of) their more performant
+``lazy'' micro-policy corresponds to\apt{``enforces''?} a slightly weaker and more extensional
 observational variant of our properties.
 %
 % \BCP{I still don't think the next sentence really nails it.  And (sigh) I am
@@ -366,6 +367,8 @@ are met by particular implementations.
 %\rb{usually though not always; as noted below there are other
 %  approaches}\bcp{Yes, we have to be very careful about this}.
 %\leo{Examples at a high level}: such as---does not overwrite return addresses, or ...
+\apt{This makes us seem very reactive to Skst.  Can we reorder things to give our story first, and
+  compare to Skst afterwards?}
 The most abstract characterization of stack safety that we are aware of is
 recent work by \citet{SkorstengaardSTKJFP}, which defines stack safety as the conjunction of two
 properties:
@@ -408,13 +411,12 @@ machine.
 %% other reasonable enforcement mechanisms can enforce it.
 
 In the present work, we also describe the protection of both stack data (like LSE) and
-control flow (like WBCF).  Our technical formulation of WBCF is similar to
-theirs, but our treatment of stack data protection is rather different,
+control flow (like WBCF).  Our technical formulation of WBCF is similar to that of
+Skorstengaard et al., but our treatment of stack data protection is rather different,
 as is our approach to the definition itself. Instead of defining stack safety implicitly,
 as ``what a certain idealized machine does,'' we give an
 \emph{explicit} definition using the technical framework of language-based
-security\ifaftersubmission~\citep{??}\bcp{Maybe the Sabelfeld and Myers
-  survey?}\fi, phrased as the conjunction of
+security~\citep{sabelfeld2003language}, phrased as the conjunction of
 \emph{stack integrity} and \emph{stack confidentiality}.
 %
 A key technical novelty in these definitions,
@@ -475,14 +477,14 @@ in the Coq proof assistant on top of a RISC-V specification.  We
 use QuickChick~\citep{Denes:VSL2014,Pierce:SF4}, a property-based testing
 tool for Coq, to generate random programs and check
 that Roessler and Dehon's micro-policies correctly abort the ones that
-attempt to violate one of our properties; furthermore, we
+attempt to violate one of our properties. Furthermore, we
 %
 check that the testing framework is able to generate counterexamples
-that violate our properties but are not halted by incorrect
-enforcement variants (both variants that we accidentally created
+that violate our properties but are \emph{not} halted by incorrect
+enforcement variants---both variants that we accidentally created
 during our re-implementation of the micro-policy and ones that we
 intentionally crafted to be broken in order to increase our confidence
-in testing and the enforcement mechanism itself).
+in testing and the enforcement mechanism itself.
 %introduce several
 %intentionally broken micro-policies and check that the testing framework is
 %able to generate counterexamples that violate our properties but are not
@@ -493,15 +495,15 @@ in testing and the enforcement mechanism itself).
 %  sentence belongs in the testing section?}\fi)
 
 We find that Roessler and Dehon's {\em Depth Isolation} micro-policy, in
-which memory cells within each stack frame are tagged with the identity of
+which memory cells within each stack frame are tagged with the identity\apt{``depth''?} of
 the function activation that owns the frame and access to those locations is
-then permitted only when that activation is currently executing, validates our
-stepwise properties. On the other hand, we reason that \emph{Lazy Tagging and Clearing}
+then permitted only when that activation\apt{``an actiation at that depth''?} is currently executing, validates our
+stepwise properties. On the other hand, we reason\apt{but now we test?}  that \emph{Lazy Tagging and Clearing}
 violates the temporal aspect of confidentiality in
 corner cases where data can leak across repeated calls to the same callee,
 and also violates integrity if the leak happens to use the caller's frame. We
 propose a variant of {\em Lazy Tagging and Clearing} that \emph{should} enforce
-confidentiality, albeit at some performance cost.
+confidentiality, albeit at some performance cost.\apt{Do we test?}
 %
 \ifaftersubmission
 \bcp{Did Nick and Andre know about this deficiency?  Did they mention
@@ -580,7 +582,7 @@ to apply to enforcement mechanisms beyond micro-policies.
 Lastly, we define integrity and confidentiality properties for a coroutine
 system with a static layout, in which each coroutine's stack is constrained
 to a fixed region of memory.  Though simplistic, this extension is a step
-toward full-blown concurrency and demonstrates that our approach is flexible
+toward full-blown multithreading and demonstrates that our approach is flexible
 enough to handle more sophisticated styles of control flow.
 
 %% \paragraph*{The Use of Stack Safety}
@@ -691,9 +693,9 @@ enough to handle more sophisticated styles of control flow.
 %% %  dishonest here: the stated advantage of the lazy policy is that it is more
 %% %efficient, but our variant is {\em not} efficient!}
 In the rest of the paper, we begin with an informal overview of our key ideas via
-examples (\cref{sec:running-example}), followed by definitions of some key
-concepts (\cref{sec:setup}) and a discussion of the threat
-model we consider (\cref{sec:threat}). We then offer the following contributions:
+examples (\cref{sec:running-example}), followed by a description of our key
+assumptions about the machine environment and threat model (\cref{sec:setup}). 
+We then offer the following contributions:
 
 \begin{itemize}
 \item We adapt concepts of integrity and confidentiality from language-based
@@ -704,16 +706,16 @@ strict stack
 safety~(\cref{sec:prelim,sec:lse}).
 \item We use property-based random testing to check that this stepwise
 property is actually enforced by the {\em Depth Isolation} policy
-of~\citet{DBLP:conf/sp/RoesslerD18}, and extend the generation by
+of~\citet{DBLP:conf/sp/RoesslerD18}; in the process, we extend the generation by
 execution techniques of \citet{TestingNI:ICFP} to handle nested
 properties (\cref{sec:enforcement}).
 %% \bcp{mention that we extend the ICFP 13 gen-by-exec idea with nested stuff...}
 \item We formalize a
 weaker but more extensional \emph{observational} variant of the stack safety
 property that characterizes a refinement of Roessler and DeHon's more
-performant {\em Lazy Tagging and  Clearing} policy (\cref{sec:lazy}).
+performant {\em Lazy Tagging and  Clearing} policy (\cref{sec:lazy}).\apt{can this be more precise?}
 \item We show that the definition can be
-extended to argument passing on the stack and to a simple coroutine system (\cref{sec:ext}).
+extended to argument passing on the stack, callee-saves registers, and a simple coroutine system (\cref{sec:ext}).
 \end{itemize}
 
 \Cref{sec:relwork,sec:future} discuss related and future work.
@@ -844,7 +846,9 @@ Domains form part of the {\em context} associated with a machine state.
 
 Figure~\ref{fig:int1} shows a program with a simple integrity violation. It consists of a {\tt main}
 function that performs a call to a function {\tt f}, which overwrites {\tt main}'s
-variable {\tt x}. In the initial memory layout the entire stack is {\em unsealed},
+variable {\tt x}. (Of course, this is illegal C, because the write in {\tt f} triggers
+undefined behavior, but it is characteristic of what buggy or malicious code might do.) 
+In the initial memory layout the entire stack is {\em unsealed},
 meaning that it is eligible to be written to. At the call from {\tt main} to
 {\tt f}, {\tt main}'s locals are {\em sealed} with {\tt main}'s depth,
 in this case 0. Sealing is the fundamental integrity contract between the caller and callee:
@@ -983,7 +987,7 @@ int f() {
 \label{fig:conf1}
 \end{figure}
 
-Meanwhile, confidentiality intuitively states that a callee is insensitive to
+Dually, confidentiality intuitively states that a callee is insensitive to
 the context of its call (except for its arguments and any global
 variables).
 We state this as a kind of {\em noninterference} property~\citep{Goguen1982SecurityPA}.
@@ -998,7 +1002,7 @@ by reading {\tt main}'s variable {\tt x}. The trace
 shows how noninterference applies to this scenario. At instruction 10, we create a {\em variant}
 state with arbitrary values\ifaftersubmission\bcp{IMO, it would be easier to
 understand if we chose concrete values for the examples}\fi~\(v_0\), etc., in place of the values that should
-be hidden from {\tt f}. At instruction 12, we note that the callee's first variable, {\tt y}, has
+be hidden from {\tt f}. (We show the evolving stack memory  of the variant in a second parallel column.) At instruction 12, we note that the callee's first variable, {\tt y}, has
 changed to 5 in both the primary trace and the variant. The primary and variant agree on
 the value in the changed location, so confidentiality was not violated. But at instruction 13,
 the other variable, {\tt z}, has changed. In the primary trace it changed to 42, but
@@ -1319,7 +1323,7 @@ Consider Figure~\ref{fig:controlflow}.
 Function {\tt f} is called twice, at instructions 2 and 4; it should therefore return to instructions
 3 and 5, respectively. But the first time, before returning, it stashes its
 return pointer away, and the second time it returns to instruction 3 instead of 5; then it ends
-up being called a third time, at which point it finally returns to instruction 5.
+up being called a third time, at which point it finally returns to instruction 5.\apt{The line numbers are wrong.}
 
 Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that {\tt main} returns
 $-1$. But because of {\tt f}'s interference, {\tt x} is negated twice, and {\tt main} returns 1.
@@ -1338,7 +1342,7 @@ In the example, on its first return, {\tt f} reaches its return target, because 
 \(\PCname\) is 3 after its return. But {\tt f}'s second return is to the wrong instruction
 (3 rather than 5) because the stack pointer has been overwritten (shown in light red).
 Thus {\tt x} is still sealed and {\tt f}'s attempt to overwrite it at instruction 4
-violates the integrity property.
+violates the integrity property.\apt{Ditto}
 
 
 \paragraph{Well-bracketed control flow.} Together,
@@ -1367,25 +1371,28 @@ as \emph{well-bracketed control flow (WBCF)}.
 \section{Machines, Enforcement, and Threat Model}
 \label{sec:setup}
 
-Before introducing the model itself, let us set the context by stating some
+Before introducing the model\apt{what does this really mean?}  itself, we set the context by stating some
 assumptions we are making about machines, enforcement mechanisms, and
 potential threats.
 
 \paragraph*{Machine model}
 Our properties are defined in terms of an abstract machine model that makes very few
 assumptions about the concrete machine that instantiates it. Without changing the
-properties, we can support any register
+properties, we can support\apt{what does this really mean?} any register
 machine with a program counter (\(\PCname\)) and a stack pointer (\(\rsp\)); other
 details of the machine's ISA are unimportant. We can support any static memory,
 including a heap---our properties define stack protection regardless of how
 non-stack memory is used. Likewise, we can support a range of calling convention
 choices, like whether or not to have a frame pointer.
 
-Some calling convention choices, such as callee-save registers and argument
-passing on the stack, require natural enhancements to our base properties. We
+Some calling convention choices, such as callee-saves registers and argument
+passing on the stack, require natural enhancements to our base properties.\apt{
+  At this point it is unclear what these ``enhancements'' might be.}
+We
 present these enhancements, as well as a simple coroutine model,
 in Section~\ref{sec:ext}, after we formalize the essence of stack safety.
-Other plausible enhancements include:
+Other plausible enhancements include:\apt{Better to move the ``what would
+  be needed'' parts to the future work section -- they are mysterious here.}
 
 \begin{itemize}
 \item address-taken locals---similar to argument passing, but
@@ -1395,8 +1402,8 @@ Other plausible enhancements include:
 \end{itemize}
 
 Runtime code generation would be much more challenging to support, as
-it requires dynamic code annotations. Similarly, parallelism beyond the current
-coroutine model would require more substantial changes to the machine
+it requires dynamic generation of code annotations. Similarly, true concurrency
+would require more substantial changes to the machine
 model. We consider these features out of scope for now.
 
 \paragraph*{What is a ``call''?}  One significant challenge in formulating our
@@ -1408,7 +1415,7 @@ required manipulation of the \(\PCname\) and stack pointer. Instead, there
 might be just a simple branch instruction that stores the old \(\PCname\) in
 a register, with the rest of the call sequence performed by other
 instructions either before or after the jump.  Similarly, there may be no
-``return'' macro-instruction, but rather a ``return sequence'' involving an
+``return'' instruction, but rather a ``return sequence'' involving an
 indirect branch at some point.  Thus, the same instruction opcode may be
 used in some places as part of a call or return sequence and in other places
 for other purposes.
@@ -1423,11 +1430,11 @@ has just executed an instruction marked as a call.
 These call annotations would typically come from a compiler together with
 the machine code, but we do not assume anything about their provenance.
 Annotations connect the enforcement mechanism to the property: we don't
-protect unmarked calls, because a mechanism's starting conditions might
+protect unmarked calls, because a mechanism's correct functioning might
 depend on knowing where calls are.
 
 Returns, on the other hand, need not be annotated: we can tell when a callee
-has returned control to the caller when... we see control return to the
+has returned control to the caller when...we see control return to the
 caller! We don't require the callee's cooperation at all.
 For example, under a standard calling convention, we can see that a
 return has occurred when state of the machine reaches a state where
@@ -1450,6 +1457,8 @@ that we are given some way of telling when a given machine state is a
 %its own local state again and expected to find it unmolested.)}.
 
 \paragraph*{Enforcement Model}
+\apt{What are our ambititions for genericity over enforcement?}
+
 We model the base machine's behavior as a step function over machine states,
 and a machine
 enhanced with an enforcement mechanism, or {\em policy} for short, as a
@@ -1462,18 +1471,19 @@ This model will be made more precise in \cref{sec:prelim}.
 
 Dividing policy state from machine state helps us reason about
 enforcement mechanisms that keep a significant amount of data separate from the
-primary execution data to inform security. Obviously tag-based systems do this,
-with tags and extra policy state separated from and untouchable by application code.
-Another significant example is the shadow stack, where a second stack
+primary execution data to inform security. Obviously tag-based systems do this\apt{At this
+  point, we barely know what tags are},
+with tags and extra policy state separated from, and untouchable by, application code.
+Another significant example is the shadow stack\apt{citations? what enforcement systems do we actually have in mind?}, where a second stack
 mirrors the real one, and a return may only occur if both stacks agree on the
 target address. Typically the shadow stack is isolated using a separate protection
 mechanism.
 
 The separation is smaller in protection mechanisms that interact more directly
-with application code. Some mechanisms might exhibit failstop behavior, but have
+with application code.\apt{Vague. Mention capabilities?}  Some mechanisms might exhibit failstop behavior, but have
 no protected policy state; others might never even failstop. Then the policy-enhanced
 machine is simply identical to the original. This is the case for software-based
-techniques.
+techniques.\apt{Even if they use a shadow stack?}
 
 \paragraph*{Threat Model}
 \label{sec:threat}
@@ -1499,7 +1509,10 @@ from attempts by a confused or malicious callee (including all its
 descendant callees) to read or write its private data.
 That is, the attacker model treats every caller as a defender and its callee as
 an attacker, meaning that with nested calls, a single function invocation
-may be viewed in both ways. We do rule out some
+may be viewed in both ways.
+\apt{everything down to here seems like it should go earlier -- in informal section
+  or even intro.}
+We do rule out some
 scenarios with a ``well-formedness'' criterion on initial states, ensuring that
 they are set up properly for the enforcement mechanism in question.
 When validating \citeauthor{DBLP:conf/sp/RoesslerD18}'s micro-policies,
@@ -1511,7 +1524,9 @@ This is all we need for the policy to protect itself: it can then failstop if it
 execute the blessed sequence out of order.
 
 We adopt a strong threat model in which both caller and callee may execute
-arbitrary machine code. Hardware and timing attacks are out of scope, as are
+arbitrary machine code. \apt{This should be the lead sentence. But how does is
+  it consistent with the previous para on well-formedness?}
+  Hardware and timing attacks are out of scope, as are
 are attacks on the heap---though we believe that the work of
 \citet{DBLP:conf/post/AmorimHP18} can be combined smoothly with ours
 to protect both stack and heap.
@@ -1629,7 +1644,7 @@ to protect both stack and heap.
 \section{Machines and Traces}
 \label{sec:prelim}
 
-We now define our machine model precisely. To make our definition of stack safety
+We now define our machine model \apt{and enforcement model?} precisely. To make our definition of stack safety
 as generic as possible, this section proposes an abstract interface to a
 machine model plus some kind of (software- or hardware-enforced) policy monitor.
 In~\cref{sec:enforcement}, we instantiate this model with a concrete dynamic
@@ -1779,7 +1794,7 @@ running \(\mpcstatename\) up to \(f\)''):
 In particular, we wish to formulate properties around consecutive subtraces
 in which the context obeys a given predicate. This will commonly be used to extract
 individual calls from a trace by taking subtraces in which the stack is
-at or below a given depth. If \(f\) is still a predicate on states, then
+at or below\apt{``above''?}  a given depth. If \(f\) is still a predicate on states, then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 ``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
 \ifspace{\bcp{Throughout, we could save space and improve beauty by removing some of the
@@ -1847,8 +1862,8 @@ which relates call states to the states that can be considered valid returns to 
 The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
 and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
 
-Each system component is assigned to a {\em domain}, which may be {\em Outside}
-of the stack entirely, {\em Unsealed} and therefore accessible, or {\em Sealed}
+Each system component is assigned to a {\em domain}, which may be {\em outside}
+of the stack entirely, {\em unsealed} and therefore accessible, or {\em sealed}
 at a particular depth. Each caller registers a {\em target}
 condition, \(\target \subseteq \MACHS\), which is a predicate on machine states that means it
 has been returned to.
@@ -1896,15 +1911,19 @@ as a predicate on addresses.
 \judgment[ Default]
          {}
          {\(\underscore,\context \stepsto_C \context\)}
+\apt{typesetting problem above}
 
+\noindent
 When we build machine traces with this step function, we always know how deep in the
-call stack we are and which components are sealed. We now state our properties.
+call stack we are and which components are sealed.
+
+We now state our properties.
 The first is {\em stepwise stack integrity}, where ``stepwise'' means that the property is
 quantified over each step of execution from any initial state. The criterion for integrity
 is simple: sealed components do not change.
 
 \definition
-Let the protected set of a context, \(\prot(\domMap,\rts)\), be the
+The \emph{protected set} of a context, \(\prot(\domMap,\_)\), is the
 set of components \(\component\) such that \(\domMap ~ \component = \sealed{\depth}\)
 for some depth \(\depth\).
 
@@ -1919,13 +1938,14 @@ nested: we will quantify over subtraces that represent whole calls. For each suc
 subtrace, we will quantify over {\em variants} of its initial state. Then we require
 that the original, {\em primary} traces move in {\em lockstep} with the variant.
 
-\definition \(\MPCT^*\) is the \emph{call set}, defined as
+\definition The \emph{call set} \(\MPCT^*\) of a trace \(\MPCT\) \apt{right?} is
 \[\begin{aligned}
 \bigcup_{\depth \in \mathbb{Z}} \{\MPCT, \neg f_\depth | \MPCT\langle f_\depth \rangle
 \text{ is a reachable segment}\} \hspace{1em} &
 \text{where } f_\depth ~ (\mach,\pol,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
 \end{aligned}\]
 
+\apt{intuition for what the call set is?}
 We term \(\neg f_\depth\) the {\em break condition} \(\brk\), a predicate on
 states that holds on \(\MPCT\)'s final state, {\em unless it terminated prematurely due to a failstop}.
 
@@ -1957,7 +1977,7 @@ if their adjacent pairs of states change together.  We define this as a coinduct
 \end{minipage}
 
 \definition
-Let the secret set of a context, \(\secret(\domMap,\rts)\), be the
+The \emph{secret set} of a context, written \(\secret(\domMap,\rts)\), is the
 set of components \(\component\) such that \(\domMap ~ \component \not = \outside\).
 
 \definition
@@ -3011,9 +3031,9 @@ the callee is responsible for this. But of course we may still wish for
 those registers to be
 protected, just as they would be in a caller-saves convention.
 
-Intuitively, a caller expects a callee-saved register to be unchanged on
+Intuitively, a caller expects a callee-saves register to be unchanged on
 return: it
-may change during the call, as long as it is restored. We similarly expect a callee-saved
+may change during the call, as long as it is restored. We similarly expect a callee-saves
 register to be secret from the callee, except when it is copied to the stack! Both scenarios
 reflect not stepwise but observational stack safety.
 
@@ -3255,7 +3275,7 @@ they should be protected.
 \vspace{.7\smallskipamount}
 
   Conversely, it seems possible to extend \citet{SkorstengaardSTKJFP}'s
-  abstract machine to pass arguments on the stack, or to support callee-save
+  abstract machine to pass arguments on the stack, or to support callee-saves
   registers. It might even be viable to construct a safe-by-construction abstract
   coroutine machine in the same style, but this is hypothetical.
   We have implemented these scenarios with

@@ -253,8 +253,8 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
     match tinstr with
     | [Tinstr] =>
       match tpc, trs, tmem with
-      | _, [], [] => Some p
-      | [Tpc pcdepth], [], [Tpc memdepth] =>
+      | _, [], [] => Some p (* No tagging or failstops outside the stack *)
+      | [Tpc pcdepth], [], [Tpc memdepth] => (* Restore use of Tstack? *)
         if Nat.eqb pcdepth memdepth then Some p
         else (*trace ("Failstop on Load (level): PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
       | _, _, _ => (*trace ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
@@ -544,7 +544,7 @@ Module TagPolicyEagerNoLoadCheck (M: RISCV) <: Policy M.
     trs <- map.get (regtags p) rs;
     match tinstr with
     | [Tinstr] =>
-      Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR *)
+      Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR (LOAD_NO_CHECK, confidentiality) *)
     | [Tinstr; Tr2] =>
       (*trace ("r2" ++ nl)*)
       match tpc, trs, taddr with
@@ -882,7 +882,18 @@ Module TagPolicyEagerNoStoreCheck (M: RISCV) <: Policy M.
     trd <- map.get (regtags p) rd;
     match tinstr with
     | [Tinstr] =>
-      Some p        
+      Some p
+      (* ERROR (STORE_NO_CHECK, integrity)
+         Alternative: Keep distinction between untagged memory (outside of
+         stack, always allowed) and writes to stack memory (TPc on both tpc
+         and tmem), and UPDATE the memory tags in the latter. *)
+      (* match tpc, trs, tmem with *)
+      (* | _, [], [] => Some p (* No tagging or failstops outside the stack *) *)
+      (* | [Tpc pcdepth], [], [Tpc memdepth] => (* Restore use of Tstack? *) *)
+      (*   (* if Nat.eqb pcdepth memdepth then *) *)
+      (*     Some (p <| memtags := map.put (memtags p) addr [Tpc pcdepth] |>) *)
+      (*   (* else (*trace ("Failstop on Load (level): PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None *) *)
+      (* end *)
     | [Tinstr; Th1] =>
       match tpc, trs, trd with
       | [Tpc depth; Th1], [Tpc od], [Tsp] => Some (p <| pctags := [Tpc depth; Th2] |>
@@ -1210,7 +1221,7 @@ Module TagPolicyEagerNoInit (M: RISCV) <: Policy M.
       end
     | [Tinstr; Th3] =>
       match tpc, trs, trd with
-      | [Tpc depth; Th3], _, [Tsp] => Some (p <| pctags := [Tpc depth; Th4] |> )
+      | [Tpc depth; Th3], _, [Tsp] => Some (p <| pctags := [Tpc depth; Th4] |>) (* ERROR (HEADER_NO_INIT, integrity) *)
       | _, _, _ => (*trace ("Failstop on h3 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
       end
     | [Tinstr; Th4] =>
