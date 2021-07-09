@@ -1457,7 +1457,8 @@ seal all components with the depth of the previous return stack. If we aren't ma
 we identify a return by looking ahead and checking if we're about to step to a state
 that matches the topmost return target. If neither is true, the context remains unchanged.
 Recall that a ``code map'' \(\codemap\) is a partial function, and we can use its domain
-as a predicate on addresses.
+as a predicate on addresses. If a target is reached anywhere in the return stack, {\sc ReturnRec}
+unseals each frame down to the level that was returned to.
 
 \judgmentthree[ Call]
               {\(\codemap ~ (\mach ~ \PCname)\)}
@@ -1467,23 +1468,20 @@ as a predicate on addresses.
                 {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
 \vspace*{-1ex}
-\judgmentthree[ ReturnFound]
+\judgmenttwo[ ReturnFound]
               {\(\mach \stepsto \mach' \in \target\)}
               {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
-              {\(\domMap' = \domMap[\components \mapsto \unsealed]\)}
-              {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
+              {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap[\components \mapsto \unsealed],\rts\)}
 
 \vspace*{-1ex}
-\judgmentthree[ ReturnRec]
-              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
-              {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
-              {\(\domMap'' = \domMap'[\components \mapsto \unsealed]\)}
-              {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'',\rts'\)}
+\judgmenttwo[ ReturnRec]
+            {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
+            {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
+            {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'[\components \mapsto \unsealed],\rts'\)}
 \vspace*{-3.5ex}
 \judgment[ Default]
          {}
          {\(\underscore,\context \stepsto_C \context\)}
-\apt{typesetting problem above. Also, I don't understand what ReturnRec is for!}
 
 \noindent
 When we build machine traces with this step function, we always know how deep in the
