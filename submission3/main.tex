@@ -866,13 +866,13 @@ int g() {
 
 It may be unclear in Figure~\ref{fig:conf1} why we vary the initial values of {\tt y}
 and {\tt z} as well as that of {\tt x}. This is to detect violations of so-called
-temporal stack safety.
+{\em temporal stack safety}.
 In Figure~\ref{fig:conf2}, we watch as {\tt f} leaves behind a value in {\tt y}
 that later becomes the value of {\tt main}'s variable {\tt x}. Then {\tt g} is able to access
 {\tt y} and hence {\tt x} without even directly reading the stack pointer.
 In the primary trace, {\tt z} will have the value 5, but in the variant it can have
-an arbitrary value $v_4$; since the variant can behave different from the primary,
-the policy again signals a confidentiality violation.
+an arbitrary value $v_4$.  Since the variant can behave different from the primary,
+this again represents a violation of confidentiality.
 
 \paragraph*{Control-Flow Attacks}
 \begin{figure}
@@ -1011,10 +1011,12 @@ void f() {
 %From the classic stack smashing attack to return oriented programming,
 One of the most pernicious ways to attack the stack is by hijacking control flow.
 Our stack safety properties do not assume that control flow follows a typical structure
-of matching sets of calls and returns nested within on another.
+of matching sets of calls and returns nested within one another.
 Rather, they aim to capture what it means to protect data even in the presence of control-flow attacks.
 Consider Figure~\ref{fig:controlflow}.
-(Here the diagram shows return addresses explicitly as line numbers, in the form $\#n$.)
+(Here the diagram shows return addresses explicitly as line numbers, in the
+form $\#n$.\bcp{But the return address boxes are not black... should they
+  be, really?})
 Function {\tt f} is called twice, at instructions 2 and 4; it should therefore return to instructions
 3 and 5, respectively. But the first time, before returning, it stashes its
 return pointer away, and the second time it returns to instruction 3 instead of 5; then it ends
@@ -1022,16 +1024,18 @@ up being called a third time, at which point it finally returns to instruction 5
 
 Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that {\tt main} returns
 $-1$. But because of {\tt f}'s interference, {\tt x} is negated twice, and {\tt main} returns 1.
-This has the appearance of an integrity violation.  How do we capture this in our
+This has the appearance of an integrity violation, so how do we capture it in our
 integrity property?
 
-The key intuition is that to be considered as having returned to {\tt main}, {\tt f} needs
+The key intuition is that, to be considered as having returned to {\tt main}, {\tt f} needs
 to do more than just execute a return-labeled instruction: it must actually reach the
 appropriate return target in {\tt main}.
-We add a new piece of context to our diagram: we keep a stack of return targets, and a callee is
+To capture this intuition, we add a new piece of context to our diagram:
+a stack of return targets.  Now a callee is
 only considered to have returned when it reaches a state that matches the caller's target.
 A return target is associated with a set of sealed locations that will become unsealed
-when it is reached, represented here by sharing a color with the sealed data.
+when it is reached, represented here by sharing a color with the sealed
+data.  \bcp{Don't understand that last sentence.}
 
 In the example, on its first return, {\tt f} reaches its return target, because the
 \(\PCname\) is 3 after its return. But {\tt f}'s second return is to the wrong instruction
@@ -1059,9 +1063,9 @@ cause it to behave incorrectly, possibly even insecurely, by returning an
 odd result directly to $A$.
 %
 Thus, a formal definition of safe use of the stack should include the
-condition that calls and returns are {\em well bracketed}, e.g., $C$ should
-only return to $B$.  This is what \citet{SkorstengaardSTKJFP} describe
-as \emph{well-bracketed control flow (WBCF)}.
+condition that calls and returns should be correctly nested---e.g., $C$ should
+only return to $B$.  This is what \citet{SkorstengaardSTKJFP}
+call \emph{well-bracketed control flow (WBCF)}.
 
 \section{Threat Model, Machines, and Enforcement }
 \label{sec:setup}
@@ -2892,16 +2896,16 @@ a positive and formal characterization of stack safety
 %relation captures capability safety without ``externally observable
 %side-effects (like console output or memory access traces)''
 %and can be used to reason about individual programs.
-is that of \citet{SkorstengaardSTKJFP}. Their 
+is that of \citet{SkorstengaardSTKJFP}. Their
 StkTokens system enforces stack safety on hardware equipped with
 memory capabilities, similar to those used in the CHERI system~\citep{Woodruff+14,Chisnall+15}, but
 with additional support for linear capabilities.
 Stack safety is defined as the conjuncton of local state encapsulation (LSE) and
-well-bracketed control flow (WBCF). 
-Informally, LSE means that the current activiation can only access its own frame, 
-and WBCF means that the topmost frame can only return to 
+well-bracketed control flow (WBCF).
+Informally, LSE means that the current activiation can only access its own frame,
+and WBCF means that the topmost frame can only return to
 the immediately adjacent frame below. Formally, these properties are defined
-with reference to the semantics of a 
+with reference to the semantics of a
 capability machine with a built-in call stack and call and return
 instructions; this machine is proven fully abstract with respect to a more
 concrete capability machine.  They call this approach a ``fully abstract overlay semantics.''
@@ -2945,8 +2949,8 @@ they should be protected.
   Moreover, we have implemented extensions such as passing arguments on the stack,
   describing callee-saves registers, and coroutines by making simple modifications
   to our base domain model.
-  %% While it may well be possible to extend 
-  %% \citet{SkorstengaardSTKJFP}'s approach to cover these features.  
+  %% While it may well be possible to extend
+  %% \citet{SkorstengaardSTKJFP}'s approach to cover these features.
   %% abstract machine to pass arguments on the stack, or to support callee-saves
   %% registers. It might even be viable to construct a safe-by-construction abstract
   %% coroutine machine in the same style, but this is hypothetical.
