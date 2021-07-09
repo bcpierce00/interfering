@@ -1457,7 +1457,8 @@ seal all components with the depth of the previous return stack. If we aren't ma
 we identify a return by looking ahead and checking if we're about to step to a state
 that matches the topmost return target. If neither is true, the context remains unchanged.
 Recall that a ``code map'' \(\codemap\) is a partial function, and we can use its domain
-as a predicate on addresses.
+as a predicate on addresses. If a target is reached anywhere in the return stack, {\sc ReturnRec}
+unseals each frame down to the level that was returned to.
 
 \judgmentthree[ Call]
               {\(\codemap ~ (\mach ~ \PCname)\)}
@@ -1467,23 +1468,20 @@ as a predicate on addresses.
                 {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 
 \vspace*{-1ex}
-\judgmentthree[ ReturnFound]
+\judgmenttwo[ ReturnFound]
               {\(\mach \stepsto \mach' \in \target\)}
               {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
-              {\(\domMap' = \domMap[\components \mapsto \unsealed]\)}
-              {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
+              {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap[\components \mapsto \unsealed],\rts\)}
 
 \vspace*{-1ex}
-\judgmentthree[ ReturnRec]
-              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
-              {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
-              {\(\domMap'' = \domMap'[\components \mapsto \unsealed]\)}
-              {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'',\rts'\)}
+\judgmenttwo[ ReturnRec]
+            {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
+            {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
+            {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'[\components \mapsto \unsealed],\rts'\)}
 \vspace*{-3.5ex}
 \judgment[ Default]
          {}
          {\(\underscore,\context \stepsto_C \context\)}
-\apt{typesetting problem above. Also, I don't understand what ReturnRec is for!}
 
 \noindent
 When we build machine traces with this step function, we always know how deep in the
@@ -1802,7 +1800,7 @@ testing our implementation. We elaborate on some such bugs below.
 
 \begin{table}[]
 \centering
-\begin{tabular}{c|c|c}
+\begin{tabular}{c|c|c|c}
   Bug & Property Violated & MTTF (ms) & Tests \\
   \hline
       {\em LOAD\_NO\_CHECK}  & Confidentiality &  \\
@@ -2587,13 +2585,12 @@ should never be saved. We then extend the set of domains with these values, for 
 %
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \unsaved + \saved\]
 
-\judgmentthree[ Call]
-              {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
+\judgmenttwobrlong[ Call]
+                  {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
 %              {\(\components = \sealcon ~ \mach\)}
-              {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
-              {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
-              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
-\apt{Typesetting problem above}
+                  {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
+                  {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
+                  {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
 The remaining rules are the same as in the simple model.
 
 \definition Let the protected set of a context, \(\prot_S(\domMap,\rts)\),
@@ -2620,8 +2617,8 @@ It is copied to some stack address \(\addr\), violating stepwise confidentiality
 overwritten, violating stepwise integrity. Then before the return, it is restored to its
 original value. In observational integrity terms, \(\reg\) is unchanged between call and return,
 and in observational confidentiality terms, both the original and variant values are unchanged
-from their originals, so that \(\reg\) is not in the \(\delta\) set.\apt{?? what's that?}  But \(\addr\) is in the
-\(\delta\) set, so confidentiality additionally requires that the value of \(\reg\) does not
+from their originals, so that \(\reg\) is not in the \(\Delta\) set.  But \(\addr\) is in the
+\(\Delta\) set, so confidentiality additionally requires that the value of \(\reg\) does not
 leak through the callee-saves mechanism, for instance if the caller allocates but fails to
 initialize more memory.
 
@@ -2648,14 +2645,10 @@ target tells us that we have really yielded. When yielding from state \(\mach\),
 \(\ycon ~ \mach \in \MACHS\) gives us the yield target for coming back to the yielding
 coroutine.
 %
-\[\stackDom \in \STKDOMS ::= \unsealed + \sealed{\depth} + \passed{\depth-\depth'}\]
 \[\topDom \in \TOPDOMS ::= \outside + \instack{\stackid}{\stackDom}\]
 \[(\domMap,\rtm,\yts,\stackid) = \context \in \CONTEXTS ::=
- (\COMPONENTS \rightarrow \STKDOMS) \times
+ (\COMPONENTS \rightarrow \TOPDOMS) \times
 (\STACKS \rightarrow \listT(\target)) \times (\STACKS \rightarrow \target) \times \STACKS\]
-
-\apt{Should that be $\passed{\depth,\depth'}$ ?.  And why do we need to be precise about $\STKDOMS$ anyhow?
-  And shouldn't the first component of $\context$ be of type $\COMPONENTS \rightarrow \TOPDOMS$? }
 
 The initial domain map maps each stack address in stack \(\stackid\) to
 \(\instack{\stackid}{\unsealed}\), the initial return map maps all stack identifiers to empty
