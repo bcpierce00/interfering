@@ -44,12 +44,14 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
   | Th1
   | Th2
   | Th3
-  | Th4    
+  | Th4
   | Tinstr
   | Tpc (n : nat)
   | Tr1
   | Tr2
   | Tr3
+  | Tr4
+  | Tr5
   | Tsp
   | Tstack (n : nat)
   .
@@ -68,6 +70,8 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
     | Tr1, Tr1
     | Tr2, Tr2
     | Tr3, Tr3
+    | Tr4, Tr4
+    | Tr5, Tr5
     | Tsp, Tsp => true
     | Tpc n1, Tpc n2
     | Tstack n1, Tstack n2 => Nat.eqb n1 n2
@@ -176,11 +180,11 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
       | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Th3] |>)
       | _, _, _ => (*trace ("Failstop in ImmArith: Th2" ++ nl)*) None
       end
-    | [Tinstr; Tr1] =>
+    | [Tinstr; Tr3] =>
       (*trace ("r1" ++ nl)*)
       match tpc, trs, trd with
-      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Tr1" ++ nl)*) None
+      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr4] |>)
+      | _, _, _ => (*trace ("Failstop in ImmArith: Tr3" ++ nl)*) None
       end
     | _ => (*trace ("Failstop in ImmArith: no tag" ++ nl)*) None
     end.
@@ -206,11 +210,12 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
       | [Tpc _], [], [] => Some p
       | _, _, _ => trace ("Failstop on Jalr" ++ nl) None
       end
-    | [Tinstr; Tr3] =>
+    | [Tinstr; Tr5] =>
       (*trace ("r3" ++ nl)*)
       match tpc, ttarget with
-      | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
-                                           <| regtags := map.put (regtags p) rd [] |>)
+      | [Tpc _; Tr5], [Tpc old] => Some (p <| pctags := [Tpc old] |>
+                                           <| regtags := map.put (regtags p) rd [] |>
+                                           <| nextid := old |>)
       | _, _ => (*trace ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
                                                ++ " rd@" ++ show treturn ++ nl)*) None
       end
@@ -233,10 +238,10 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
       | _, _ =>
         (*trace ("Failstop on Load (other): PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
       end
-    | [Tinstr; Tr2] =>
+    | [Tinstr; Tr4] =>
       (*trace ("r2" ++ nl)*)
       match tpc, trs, taddr with
-      | [Tpc depth; Tr2], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr3] |>
+      | [Tpc depth; Tr4], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr5] |>
                                                     <| regtags := map.put (regtags p) rd taddr |>)
       | _, _, _ => (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
       end
@@ -275,6 +280,18 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
       match tpc, trs, trd with
       | [Tpc depth; Th4], _, [Tsp] => Some (p <| pctags := [Tpc depth] |>
                                               <| memtags := map.put (memtags p) addr [Tpc depth] |>)
+      | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      end
+    | [Tinstr; Tr1] =>
+      match tpc, trs, trd with
+      | [Tpc depth; Tr1], _, [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>
+                                              <| memtags := map.put (memtags p) addr [] |>)
+      | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      end
+    | [Tinstr; Tr2] =>
+      match tpc, trs, trd with
+      | [Tpc depth; Tr2], _, [Tsp] => Some (p <| pctags := [Tpc depth; Tr3] |>
+                                              <| memtags := map.put (memtags p) addr [] |>)
       | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
       end
     | _ => (*trace ("Failstop on Store" ++ nl)*) None
@@ -356,19 +373,21 @@ End TagPolicyEager.
 
 Module TagPolicyEagerNoLoadCheck (M: RISCV) <: Policy M.
   Import M.
-  
+
   (* TODO: More interesting state/abstract *)
   Inductive Tag : Type :=
   | Tcall
   | Th1
   | Th2
   | Th3
-  | Th4    
+  | Th4
   | Tinstr
   | Tpc (n : nat)
   | Tr1
   | Tr2
   | Tr3
+  | Tr4
+  | Tr5
   | Tsp
   | Tstack (n : nat)
   .
@@ -387,6 +406,8 @@ Module TagPolicyEagerNoLoadCheck (M: RISCV) <: Policy M.
     | Tr1, Tr1
     | Tr2, Tr2
     | Tr3, Tr3
+    | Tr4, Tr4
+    | Tr5, Tr5
     | Tsp, Tsp => true
     | Tpc n1, Tpc n2
     | Tstack n1, Tstack n2 => Nat.eqb n1 n2
@@ -495,11 +516,11 @@ Module TagPolicyEagerNoLoadCheck (M: RISCV) <: Policy M.
       | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Th3] |>)
       | _, _, _ => (*trace ("Failstop in ImmArith: Th2" ++ nl)*) None
       end
-    | [Tinstr; Tr1] =>
+    | [Tinstr; Tr3] =>
       (*trace ("r1" ++ nl)*)
       match tpc, trs, trd with
-      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Tr1" ++ nl)*) None
+      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr4] |>)
+      | _, _, _ => (*trace ("Failstop in ImmArith: Tr3" ++ nl)*) None
       end
     | _ => (*trace ("Failstop in ImmArith: no tag" ++ nl)*) None
     end.
@@ -525,11 +546,12 @@ Module TagPolicyEagerNoLoadCheck (M: RISCV) <: Policy M.
       | [Tpc _], [], [] => Some p
       | _, _, _ => trace ("Failstop on Jalr" ++ nl) None
       end
-    | [Tinstr; Tr3] =>
+    | [Tinstr; Tr5] =>
       (*trace ("r3" ++ nl)*)
       match tpc, ttarget with
-      | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
-                                           <| regtags := map.put (regtags p) rd [] |>)
+      | [Tpc _; Tr5], [Tpc old] => Some (p <| pctags := [Tpc old] |>
+                                           <| regtags := map.put (regtags p) rd [] |>
+                                           <| nextid := old |> )
       | _, _ => (*trace ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
                                                ++ " rd@" ++ show treturn ++ nl)*) None
       end
@@ -545,10 +567,10 @@ Module TagPolicyEagerNoLoadCheck (M: RISCV) <: Policy M.
     match tinstr with
     | [Tinstr] =>
       Some (p <| regtags := map.put (regtags p) rd [] |>) (* ERROR (LOAD_NO_CHECK, confidentiality) *)
-    | [Tinstr; Tr2] =>
+    | [Tinstr; Tr4] =>
       (*trace ("r2" ++ nl)*)
       match tpc, trs, taddr with
-      | [Tpc depth; Tr2], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr3] |>
+      | [Tpc depth; Tr4], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr5] |>
                                                     <| regtags := map.put (regtags p) rd taddr |>)
       | _, _, _ => (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
       end
@@ -587,6 +609,18 @@ Module TagPolicyEagerNoLoadCheck (M: RISCV) <: Policy M.
       match tpc, trs, trd with
       | [Tpc depth; Th4], _, [Tsp] => Some (p <| pctags := [Tpc depth] |>
                                               <| memtags := map.put (memtags p) addr [Tpc depth] |>)
+      | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      end
+    | [Tinstr; Tr1] =>
+      match tpc, trs, trd with
+      | [Tpc depth; Tr1], _, [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>
+                                              <| memtags := map.put (memtags p) addr [] |>)
+      | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      end
+    | [Tinstr; Tr2] =>
+      match tpc, trs, trd with
+      | [Tpc depth; Tr2], _, [Tsp] => Some (p <| pctags := [Tpc depth; Tr3] |>
+                                              <| memtags := map.put (memtags p) addr [] |>)
       | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
       end
     | _ => (*trace ("Failstop on Store" ++ nl)*) None
@@ -667,19 +701,21 @@ End TagPolicyEagerNoLoadCheck.
 
 Module TagPolicyEagerNoStoreCheck (M: RISCV) <: Policy M.
   Import M.
-  
-  (* TODO: More interesting state/abstract *)
+
+    (* TODO: More interesting state/abstract *)
   Inductive Tag : Type :=
   | Tcall
   | Th1
   | Th2
   | Th3
-  | Th4    
+  | Th4
   | Tinstr
   | Tpc (n : nat)
   | Tr1
   | Tr2
   | Tr3
+  | Tr4
+  | Tr5
   | Tsp
   | Tstack (n : nat)
   .
@@ -698,6 +734,8 @@ Module TagPolicyEagerNoStoreCheck (M: RISCV) <: Policy M.
     | Tr1, Tr1
     | Tr2, Tr2
     | Tr3, Tr3
+    | Tr4, Tr4
+    | Tr5, Tr5
     | Tsp, Tsp => true
     | Tpc n1, Tpc n2
     | Tstack n1, Tstack n2 => Nat.eqb n1 n2
@@ -806,11 +844,11 @@ Module TagPolicyEagerNoStoreCheck (M: RISCV) <: Policy M.
       | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Th3] |>)
       | _, _, _ => (*trace ("Failstop in ImmArith: Th2" ++ nl)*) None
       end
-    | [Tinstr; Tr1] =>
+    | [Tinstr; Tr3] =>
       (*trace ("r1" ++ nl)*)
       match tpc, trs, trd with
-      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Tr1" ++ nl)*) None
+      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr4] |>)
+      | _, _, _ => (*trace ("Failstop in ImmArith: Tr3" ++ nl)*) None
       end
     | _ => (*trace ("Failstop in ImmArith: no tag" ++ nl)*) None
     end.
@@ -836,11 +874,12 @@ Module TagPolicyEagerNoStoreCheck (M: RISCV) <: Policy M.
       | [Tpc _], [], [] => Some p
       | _, _, _ => trace ("Failstop on Jalr" ++ nl) None
       end
-    | [Tinstr; Tr3] =>
+    | [Tinstr; Tr5] =>
       (*trace ("r3" ++ nl)*)
       match tpc, ttarget with
-      | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
-                                           <| regtags := map.put (regtags p) rd [] |>)
+      | [Tpc _; Tr5], [Tpc old] => Some (p <| pctags := [Tpc old] |>
+                                           <| regtags := map.put (regtags p) rd [] |>
+                                           <| nextid := old |> )
       | _, _ => (*trace ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
                                                ++ " rd@" ++ show treturn ++ nl)*) None
       end
@@ -863,10 +902,10 @@ Module TagPolicyEagerNoStoreCheck (M: RISCV) <: Policy M.
       | _, _ =>
         (*trace ("Failstop on Load (other): PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
       end
-    | [Tinstr; Tr2] =>
+    | [Tinstr; Tr4] =>
       (*trace ("r2" ++ nl)*)
       match tpc, trs, taddr with
-      | [Tpc depth; Tr2], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr3] |>
+      | [Tpc depth; Tr4], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr5] |>
                                                     <| regtags := map.put (regtags p) rd taddr |>)
       | _, _, _ => (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
       end
@@ -912,7 +951,19 @@ Module TagPolicyEagerNoStoreCheck (M: RISCV) <: Policy M.
                                               <| memtags := map.put (memtags p) addr [Tpc depth] |>)
       | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
       end
-    | _ => (*trace ("Failstop on Store" ++ nl)*) None
+    | [Tinstr; Tr1] =>
+      match tpc, trs, trd with
+      | [Tpc depth; Tr1], _, [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>
+                                              <| memtags := map.put (memtags p) addr [] |>)
+      | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      end
+    | [Tinstr; Tr2] =>
+      match tpc, trs, trd with
+      | [Tpc depth; Tr2], _, [Tsp] => Some (p <| pctags := [Tpc depth; Tr3] |>
+                                              <| memtags := map.put (memtags p) addr [] |>)
+      | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      end
+    | _ => (*trace ("Failstop on Store" ++ nl)*) None    
   end.
 
   Definition decodeI (w : w32) : option InstructionI :=
@@ -991,19 +1042,21 @@ End TagPolicyEagerNoStoreCheck.
 
 Module TagPolicyEagerNoInit (M: RISCV) <: Policy M.
   Import M.
-  
-  (* TODO: More interesting state/abstract *)
+
+    (* TODO: More interesting state/abstract *)
   Inductive Tag : Type :=
   | Tcall
   | Th1
   | Th2
   | Th3
-  | Th4    
+  | Th4
   | Tinstr
   | Tpc (n : nat)
   | Tr1
   | Tr2
   | Tr3
+  | Tr4
+  | Tr5
   | Tsp
   | Tstack (n : nat)
   .
@@ -1022,6 +1075,8 @@ Module TagPolicyEagerNoInit (M: RISCV) <: Policy M.
     | Tr1, Tr1
     | Tr2, Tr2
     | Tr3, Tr3
+    | Tr4, Tr4
+    | Tr5, Tr5
     | Tsp, Tsp => true
     | Tpc n1, Tpc n2
     | Tstack n1, Tstack n2 => Nat.eqb n1 n2
@@ -1130,11 +1185,11 @@ Module TagPolicyEagerNoInit (M: RISCV) <: Policy M.
       | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Th3] |>)
       | _, _, _ => (*trace ("Failstop in ImmArith: Th2" ++ nl)*) None
       end
-    | [Tinstr; Tr1] =>
+    | [Tinstr; Tr3] =>
       (*trace ("r1" ++ nl)*)
       match tpc, trs, trd with
-      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Tr1" ++ nl)*) None
+      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr4] |>)
+      | _, _, _ => (*trace ("Failstop in ImmArith: Tr3" ++ nl)*) None
       end
     | _ => (*trace ("Failstop in ImmArith: no tag" ++ nl)*) None
     end.
@@ -1160,10 +1215,10 @@ Module TagPolicyEagerNoInit (M: RISCV) <: Policy M.
       | [Tpc _], [], [] => Some p
       | _, _, _ => trace ("Failstop on Jalr" ++ nl) None
       end
-    | [Tinstr; Tr3] =>
+    | [Tinstr; Tr5] =>
       (*trace ("r3" ++ nl)*)
       match tpc, ttarget with
-      | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
+      | [Tpc _; Tr5], [Tpc old] => Some (p <| pctags := [Tpc old] |>
                                            <| regtags := map.put (regtags p) rd [] |>)
       | _, _ => (*trace ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
                                                ++ " rd@" ++ show treturn ++ nl)*) None
@@ -1187,10 +1242,10 @@ Module TagPolicyEagerNoInit (M: RISCV) <: Policy M.
       | _, _ =>
         (*trace ("Failstop on Load (other): PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
       end
-    | [Tinstr; Tr2] =>
+    | [Tinstr; Tr4] =>
       (*trace ("r2" ++ nl)*)
       match tpc, trs, taddr with
-      | [Tpc depth; Tr2], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr3] |>
+      | [Tpc depth; Tr4], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr5] |>
                                                     <| regtags := map.put (regtags p) rd taddr |>)
       | _, _, _ => (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
       end
@@ -1228,6 +1283,18 @@ Module TagPolicyEagerNoInit (M: RISCV) <: Policy M.
       match tpc, trs, trd with
       | [Tpc depth; Th4], _, [Tsp] => Some (p <| pctags := [Tpc depth] |>
                                               <| memtags := map.put (memtags p) addr [Tpc depth] |>)
+      | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      end
+    | [Tinstr; Tr1] =>
+      match tpc, trs, trd with
+      | [Tpc depth; Tr1], _, [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>
+                                              <| memtags := map.put (memtags p) addr [] |>)
+      | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      end
+    | [Tinstr; Tr2] =>
+      match tpc, trs, trd with
+      | [Tpc depth; Tr2], _, [Tsp] => Some (p <| pctags := [Tpc depth; Tr3] |>
+                                              <| memtags := map.put (memtags p) addr [] |>)
       | _, _, _ => (*trace ("Failstop on h4 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
       end
     | _ => (*trace ("Failstop on Store" ++ nl)*) None

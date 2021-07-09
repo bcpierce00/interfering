@@ -424,13 +424,14 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSS.
         Some (elems_ x (x :: xs))
       end.
 
-  (* TODO: Clear stack frame here? *)
   Definition returnSeq (f : FunID) :=
-    [ (Addi sp sp (-12) , [Tinstr; Tr1], f, normal)
-    ; (Lw   ra sp 0     , [Tinstr; Tr2], f, normal)
-    ; (Jalr ra ra 0     , [Tinstr; Tr3], f, retrn)
+    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, normal)
+    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, normal)
+    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, normal)
+    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, normal)
+    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, retrn)
     ].
-
+  
   Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
     let spv := projw m (Reg sp) in
     if (512 <? spv)%Z 
@@ -1102,13 +1103,14 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSS.
         Some (elems_ x (x :: xs))
       end.
 
-  (* TODO: Clear stack frame here? *)
   Definition returnSeq (f : FunID) :=
-    [ (Addi sp sp (-12) , [Tinstr; Tr1], f, normal)
-    ; (Lw   ra sp 0     , [Tinstr; Tr2], f, normal)
-    ; (Jalr ra ra 0     , [Tinstr; Tr3], f, retrn)
+    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, normal)
+    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, normal)
+    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, normal)
+    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, normal)
+    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, retrn)
     ].
-
+  
   Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
     let spv := projw m (Reg sp) in
     if (512 <? spv)%Z 
@@ -1780,11 +1782,12 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSS.
         Some (elems_ x (x :: xs))
       end.
 
-  (* TODO: Clear stack frame here? *)
   Definition returnSeq (f : FunID) :=
-    [ (Addi sp sp (-12) , [Tinstr; Tr1], f, normal)
-    ; (Lw   ra sp 0     , [Tinstr; Tr2], f, normal)
-    ; (Jalr ra ra 0     , [Tinstr; Tr3], f, retrn)
+    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, normal)
+    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, normal)
+    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, normal)
+    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, normal)
+    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, retrn)
     ].
 
   Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
@@ -2458,11 +2461,12 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSS.
         Some (elems_ x (x :: xs))
       end.
 
-  (* TODO: Clear stack frame here? *)
-  Definition returnSeq (f : FunID) :=
-    [ (Addi sp sp (-12) , [Tinstr; Tr1], f, normal)
-    ; (Lw   ra sp 0     , [Tinstr; Tr2], f, normal)
-    ; (Jalr ra ra 0     , [Tinstr; Tr3], f, retrn)
+    Definition returnSeq (f : FunID) :=
+    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, normal)
+    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, normal)
+    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, normal)
+    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, normal)
+    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, retrn)
     ].
 
   Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
