@@ -390,7 +390,6 @@ properties (\cref{sec:enforcement}).
 \item We show that the definition can be
 extended to argument passing on the stack, callee-saves registers, and a simple coroutine system (\cref{sec:ext}).
 \end{itemize}
-
 \Cref{sec:relwork,sec:future} discuss related and future work.
 
 \section{Key Ideas by Example}
@@ -494,10 +493,9 @@ int f() {
 \label{fig:int1}
 \end{figure}
 
-This section introduces the intuition behind our formal stack safety properties through a series
+This section explains our formal stack safety properties through a series
 of examples, each presented both in C syntax and in corresponding assembly code for a
-simple two-address machine (see Figure~\ref{fig:int1}). The address of each
-instruction is shown to its left.
+simple two-address machine (see Figure~\ref{fig:int1}).
 The assembly code reflects a simple compilation model in which
 local variables are stored in the stack frame.
 For the moment, arguments and return values are passed in registers.
@@ -508,16 +506,23 @@ implicitly adjusting the stack pointer.
 At the right of each example, we show the layout of stack memory just before
 the specified instruction is executed; each box represents a memory word
 (the machine is word addressed), and addresses increase to the right.
+The address of each instruction is shown to its left.  \bcp{Most of the
+  figure is kind of self-explanatory with this help, but the rightmost part
+  is a little opaque: what do 2, 3, 11, 12 mean?  What is SP?  What are the
+  numbers in the boxes?  What are these brackets under the boxes, ...}
 
 Labeled boxes indicate an assignment of the address to a
 {\em domain}---a label reflecting a particular set of intended access
 rights. Unless otherwise marked, sequential addresses retain the previous domain,
-as hinted by their colors. Domains are descriptive\bcp{??}; it is up to the enforcement
-mechanism to ensure that the system adheres to these permissions. Such a domain
+as hinted by their colors \bcp{where do we see this happening?  Is it
+  important?}. Domains are not part of the machine state; rather, they
+describe the intended security role of the address 
+that the enforcement mechanism must adhere to. Such a domain
 can be \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), or \(\outside\)
-(outside the stack entirely.) These are abbreviated \(U\) and \(S(\dots)\) in the
-figures. Not shown are global variables and code, which would be labeled \(\outside\).
+(outside the stack entirely.) These are abbreviated \(U\) and \(S(\dots)\)\bcp{Nope} in the
+figures. Global variables and code, which are not shown in the figures, would
+also be labeled \(\outside\).  \bcp{what about RetPtr?}
 Domains form part of the {\em context} associated with a machine state.
 (We will introduce some other parts of the context as needed.)
 
@@ -530,7 +535,7 @@ meaning that it is eligible to be written to. At the call from {\tt main} to
 {\tt f}, {\tt main}'s locals are {\em sealed} with {\tt main}'s depth,
 in this case 0. Sealing is the fundamental integrity contract between the caller and callee:
 {\tt main} expects that {\tt x} will be unchanged when it gets control back.
-This gives us our simple, intuitive statement of {\em stepwise integrity}:
+This leads to a simple, intuitive statement of {\em stepwise integrity}:
 if a component is sealed before a step, it will be unchanged afterward. Stepwise
 refers to the fact that the property must hold on every step. %Later we will
 %loosen this condition in the interest of extensionality---the caller only
@@ -664,10 +669,10 @@ int f() {
 \label{fig:conf1}
 \end{figure}
 
-Dually, confidentiality intuitively states that a callee is insensitive to
+Dually, confidentiality states intuitively that a callee is insensitive to
 the context of its call (except for its arguments and any global
 variables).
-We state this as a kind of {\em noninterference} property~\citep{Goguen1982SecurityPA}.
+We state this as a form of {\em noninterference}~\citep{Goguen1982SecurityPA}.
 Noninterference describes knowledge: it states that for system components
 containing secret values, we can substitute any values whatsoever without changing the results
 of our computation. If there exists some value for which we see different results, then
@@ -1294,7 +1299,7 @@ execute the blessed sequence out of order.
 \section{Machines and Traces}
 \label{sec:prelim}
 
-We now define our machine model \apt{and enforcement model?} precisely. To make our definition of stack safety
+We now define our machine and enforcement model precisely. To make our definition of stack safety
 as generic as possible, this section proposes an abstract interface to a
 machine model plus some kind of (software- or hardware-enforced) policy monitor.
 In~\cref{sec:enforcement}, we instantiate this model with a concrete dynamic
@@ -1444,7 +1449,7 @@ running \(\mpcstatename\) up to \(f\)''):
 In particular, we wish to formulate properties around consecutive subtraces
 in which the context obeys a given predicate. This will commonly be used to extract
 individual calls from a trace by taking subtraces in which the stack is
-at or below\apt{``above''?}  a given depth. If \(f\) is still a predicate on states, then
+at or above a given depth. If \(f\) is still a predicate on states, then
 we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
 ``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
 \ifspace{\bcp{Throughout, we could save space and improve beauty by removing some of the
@@ -1589,14 +1594,15 @@ nested: we will quantify over subtraces that represent whole calls. For each suc
 subtrace, we will quantify over {\em variants} of its initial state. Then we require
 that the original, {\em primary} traces move in {\em lockstep} with the variant.
 
-\definition The \emph{call set} \(\MPCT^*\) of a trace \(\MPCT\) \apt{right?} is
+\definition The \emph{call set} \(\MPCT^*\) of a machine is
 \[\begin{aligned}
 \bigcup_{\depth \in \mathbb{Z}} \{\MPCT, \neg f_\depth | \MPCT\langle f_\depth \rangle
 \text{ is a reachable segment}\} \hspace{1em} &
 \text{where } f_\depth ~ (\mach,\pol,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
 \end{aligned}\]
 
-\apt{intuition for what the call set is?}
+This is the set of all possible calls that be reached from any well-formed initial state.
+
 We term \(\neg f_\depth\) the {\em break condition} \(\brk\), a predicate on
 states that holds on \(\MPCT\)'s final state, {\em unless it terminated prematurely due to a failstop}.
 
@@ -1646,7 +1652,7 @@ we vary all stack locations that are supposed to be secret from the callee
 (which in our simple setting is the entirety of the stack),
 the resulting trace remains in lockstep with the original trace
 until either both return together or one failstops. This implies that
-if the callee reads a secret location, it must failstop. %\apt{right?}\leo{yes}
+if the callee reads a secret location, it must failstop.
 %
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the components in \(\components\), and in addition their subtraces are also in
@@ -1712,13 +1718,8 @@ if \(|\rts'| < |\rts|\), then \(|\rts'| = |\rts|-1\).
 In this section we explore how an existing enforcement mechanism called {\em
   Depth Isolation}~\citep{DBLP:conf/sp/RoesslerD18} implements
 the formal stack-safety property described in the previous
-section. In fact, this mechanism enforces a slightly stronger, inductive version
-of that property which checks for integrity and confidentiality violations at
-every step of the callee's execution trace. We validate this claim \apt{which claim: that it enforces
-  a \emph{stronger} version?}
-using a property-based random testing framework to uncover
-inconsistencies \apt{but are there any?} between the enforcement mechanism and the stack-safety
-property.
+section. We validate this claim 
+using a property-based random testing framework.
 
 \subsection{A Conservative Stack-Safety Enforcement Mechanism}
 %
@@ -1808,7 +1809,10 @@ a caller to a callee or vice-versa:
 %  return point.
   %The exit sequence retags all locations in the function frame with $\tagNoDepth$.
   at the actual return instruction,
-  the $\PCname$ tag is decremented. \apt{Doesn't the exit sequence retag to $\tagNoDepth$?}
+  the $\PCname$ tag is decremented.
+		\apt{Doesn't the exit sequence retag to $\tagNoDepth$?}
+		\sna{On inspection, what's actually going on here is a sort of per-activation eager tagging.
+		Need to fix that to actually match the paper.}
 %  \leo{Not sure the actual policy
 %    does that now (retag unused). But I don't think it's a
 %    confidentiality or integrity violation.}
@@ -1833,7 +1837,7 @@ There remains the question of how to ensure that the sequences are
 invoked at the right places from the perspective of the stack-safety
 property. For a program to enjoy stack safety
 (with respect to a particular call map), all we need require is that
-the entry sequence be initiated at \apt{immediately following?}  any instruction marked as a call
+the entry sequence immediately follow  any instruction marked as a call
 in the call map. This is achieved by giving these instructions (another) special tag,
 and it is easy to check statically that this has been done correctly.
 If the code fails to initiate an exit
@@ -1864,7 +1868,7 @@ architecture\footnote{Available at \url{https://github.com/mit-plv/riscv-coq}.}
 %\leo{translated from Haskell via hs-2-coq?\apt{not worth saying since the MIT people did it}}
 and extend it with a
 runtime monitor implementing the stack-safety
-micro-policy.\footnote{This code is {\em redacted for review}.\bcp{Why??}} We
+micro-policy. We
   chose the Coq proof assistant as the setting for our implementation
   to ensure that our coinductive trace
   definitions are well-formed, and reason about them, and to leverage the power of the
@@ -1882,8 +1886,7 @@ To use QuickChick, we build random test-case generators that produce
   all potential stack locations as $\tagNoDepth$; and
 % \item
 (3)
- a code map and a stack map \apt{what's that ??}, accurately characterizing the behavior
-  of callers and callees.
+ a code map identifying the locations of calls
 % \end{enumerate}
 %
 That is, our generators need to produce not only a low-level program
@@ -1909,11 +1912,12 @@ anymore.
 We extend this technique to keep track of the control flow behavior of
 the program being generated: each time a call or return sequence is
 generated, we ensure that the appropriate policy tags and code
-annotations are set for the entry or return points. At the same time,
-we allow the generation to sometimes relax those constraints,
-introducing potentially ill-formed flows: this causes our programs
-to failstop when executed in conjunction with the policy monitor,
-but also allows for revealing errors in our setup.\apt{??}
+annotations are set for the entry or return points.% At the same time,
+%we allow the generation to sometimes relax those constraints,
+%introducing potentially ill-formed flows: this causes our programs
+%to failstop when executed in conjunction with the policy monitor,
+%but also allows for revealing errors in our setup.\apt{??}
+\sna{Good idea, but we don't actually do it.}
 
 In addition, we need to extend this technique to handle the nested
 nature of our confidentiality property: rather than just generating two
@@ -1935,29 +1939,25 @@ by us (deliberately weakening the micro-policy in ways that we expect
 should break its guarantees), or actual bugs that we discovered through
 testing our implementation. We elaborate on some such bugs below.
 
-\sna{I am not sure about the MTTF table. Is it as
-  valuable at POPL? Do we need to go into more detail
-  about metholodology if we use it?}
+\begin{table}[]
+\centering
+\begin{tabular}{c|c|c}
+  Bug & Property Violated & MTTF (ms) \\
+  \hline
+      {\em LOAD\_NO\_CHECK}  & Confidentiality &  \\
+      {\em STORE\_NO\_CHECK} & Integrity &  \\
+      {\em HEADER\_NO\_INIT} & Integrity &  \\
+\end{tabular}
+\vspace*{1em}
+\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
+\vspace*{-2em}
+\label{tab:bug-table}
+\end{table}
 
-%\begin{table}[]
-%\centering
-%\begin{tabular}{c|c|c}
-%  Bug & Property Violated & MTTF (ms) \\
-%  \hline
-%      {\em LOAD\_NO\_CHECK}  & Confidentiality & 1670 \\
-%      {\em STORE\_NO\_CHECK} & Integrity & 638 \\
-%      {\em HEADER\_NO\_INIT} & Integrity & 1488 \\
-%\end{tabular}
-%\vspace*{1em}
-%\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
-%\vspace*{-2em}
-%\label{tab:bug-table}
-%\end{table}
-
-%The mean-time-to-failure (MTTF) for various bugs can be found in
-%Table~\ref{tab:bug-table}. All experiments were run in a desktop
-%machine equipped with i7-8700 CPU @ 3.20GHz with 32GB
-%RAM.
+The mean-time-to-failure (MTTF) for various bugs can be found in
+Table~\ref{tab:bug-table}. All experiments were run in a desktop
+machine equipped with i7-8700 CPU @ 3.20GHz with 32GB
+RAM.
 % \leo{Something like: There is really no baseline to compare this
   %against, but include it here for the future/reasons?}
 %
@@ -2005,8 +2005,7 @@ $l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s da
 \label{sec:lazy}
 
 The conservative policy described in the previous section, while
-testable\apt{is this important?} and enforceable\apt{?? it is an enforcement
-  mechanism so obviously it is enforceable -- whatever it may enforce!}, is rather slow in
+testably enforcing stack safety, is rather slow in
 some important practical cases. \citet{DBLP:conf/sp/RoesslerD18} observe
 that most of the performance overhead incurred
 stems from the need to set stack activation tags as a frame is created
@@ -2059,7 +2058,11 @@ for any \(\MPCT,\brk \in \MPCT^*\) where \(\head(\MPCT) = \mach,\pol,\context\) 
 set of sealed components that changed during the call.
 For any \(\nach'\) and \(\NPCT'\) such that \(\mach' \approx_{\components} \nach'\) and
 \((\nach',\pol',\context') \hookrightarrow \NPCT'\), \(\MPCT' \doteq \NPCT'\).
-\apt{Intuitive description of what this means?}
+ 
+Intuitively, deferred stepwise integrity means that if any components change from
+the a call to its matching return, they will afterward be treated as confidential
+(in the sense of stepwise confidentiality; the return state and a variant would
+execute in lockstep.)
 
 For example, consider again the integrity violation in
 Figure~\ref{fig:int1}. Under a deferred discipline, the write to {\tt
@@ -2217,7 +2220,7 @@ contain leaked information on either side of the first pair of variant traces.
 This becomes the basis for the second variation, because all of these values
 must be protected from leaking for the remainder of the program.
 
-Together with return-after-call\apt{??}, these two properties give us
+These two properties give us
 {\em Observable Stack Safety}. This is a weaker property
 than the stepwise one, and also much more extensional.
 We can think of stepwise, deferred, and observational as
@@ -2234,11 +2237,11 @@ miss such violations. The Lazy Tagging and Clearing
 micro-policy from \citet{DBLP:conf/sp/RoesslerD18} tags each stack slot with the call depth
 at which it was written, and enforces that it must be read from the
 same depth. However, this allows violations of observable stack safety!
-Specifically, a callee might write into the stack and leave tags behind
-for a future callee at the same depth to read. This violates confidentiality and,
-if the writes were in the caller's frame, integrity. \apt{A more detailed example
-  would be great here, and should not take too much space.}
-\apt{Mention here that this was found by testing.}
+Our implementation of this policy, {\em PER\_DEPTH\_TAG}, has an error that we find
+in testing. If, at depth \(d\), a callee \(A\) writes into its caller's
+frame, then returns, and later another callee \(B\) at depth \(d\) reads the same
+address and prints it, \(A\) has violated integrity in a way that later becomes visible,
+and \(B\) has likewise violated confidentiality!
 
 Lazy Tagging and Clearing can be repaired if, instead of tagging each function
 activation with its depth in the stack, we generate a fresh activation
@@ -2252,19 +2255,34 @@ instances of the same function.)
 
 We test {\em Lazy Per-activation Tagging and Clearing}, in which
 each activation is tagged uniquely, and find that it obeys stepwise
-confidentiality and observational integrity. Our testing catches the
-violation in the original {\em Lazy Tagging and Clearing}, as well as
-an equivalent to {\em LOAD\_NO\_CHECK}, which now also violates observational
-integrity.\apt{Move latter to above.}
+confidentiality and observational integrity. To round out our mutations testing 
+we also check an equivalent to {\em LOAD\_NO\_CHECK} and a version where
+stores succeed but fail to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
+
+\begin{table}[]
+\centering
+\begin{tabular}{c|c|c|c}
+	Bug & Property Violated & MTTF (ms) & Tests \\
+  \hline
+	{\em PER\_DEPTH\_TAG} & Observational Integrity &  & \\
+	{\em LOAD\_NO\_CHECK}  & Observational Integrity &  & \\
+	{\em STORE\_NO\_UPDATE} & Observational Integrity &  & \\
+\end{tabular}
+\vspace*{1em}
+\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
+\vspace*{-2em}
+\label{tab:lazy-bug-table}
+\end{table}
+
 
 %Per-activation tagging resolves the issue because tags that persist between
 %calls will not become active again.
 Our abstract properties have allowed us to identify an enforcement mechanism as
-not really stack safe, and to validate a possible fix. 
+not really stack safe, and to validate a possible fix.
 Unfortunately, Lazy Per-activation Tagging and Clearing
 puts severe pressure on the tag cache, so it may not be usable in practice.
 However, we conjecture that no lazy scheme can be fully stack safe
-without using unique per-activation identifiers. 
+without using unique per-activation identifiers.
 
 \section{Extensions}
 \label{sec:ext}
