@@ -1208,115 +1208,6 @@ instructions will be situated at the appropriate instruction of a {\em blessed s
 This is all we need for the policy to protect itself: it can then failstop if it would
 execute the blessed sequence out of order.
 
-%We model ordinary program state and policy-enforcement state separately to make it
-%easier to use well-established concepts from language-based security.
-%In particular, confidentiality has an elegant extensional characterization in terms of
-%\emph{noninterference}: a program preserves the confidentiality of certain data if
-%\emph{varying} that data would not change the program's observable
-%behavior~\citep{6234468}.
-%In applying this idea to a system that incorporates policy enforcement, only
-%ordinary program data should be varied, while any associated policy
-%state should be left alone; our model makes this distinction obvious.
-%That is, we compare the actual execution of the program with a \emph{hypothetical}
-%execution where data has been varied.
-%We will also introduce a notion of {\em observational integrity} that relies on the idea of
-%\emph{rolling back} program state; again, our model makes it easy to describe
-%rollback of ordinary program data while leaving policy state alone.
-
-%% \leo{Policies of interest: null, micro, cherri, software-only}
-%% \leo{TODO: Write down carefully}
-
-%This enforcement model directly describes micro-policies~\citep{pump_oakland2015}.
-%We believe that it is flexible enough to capture code-altering approaches, such as code
-%rewriting or capability-based techniques, though perhaps with less elegance.
-
-%\paragraph*{Micro-Policies}
-%
-%Micro-Policies are a flexible tag-based, hardware-accelerated
-%reference monitoring mechanism; they been applied to stack safety
-%enforcement by \citet{DBLP:conf/sp/RoesslerD18}.
-%Here the policy state consists of metadata tags (e.g., identifying stack frames)
-%attached to each value in memory or registers, and the policy step
-%function checks that each machine operation obeys a set of rules on tags
-%(e.g., that the current $\PCname$ tag matches the tag on the stack
-%location being accessed), and halts the machine if not.  Distinguishing
-%ordinary machine state and policy state is very natural in this setting.
-%% Here the machine state is extended with tags paired with all components of the
-%% system, and a monitor checks for each operation that the tags on the operands
-%% obey a set of rules. One could treat tags directly as part of the machine
-%% state, and build the rules into the step function. But local state
-%% encapsulation properties as we frame them are not intuitive in their
-%% interaction with tags or other additional enforcement state, so it is helpful
-%% to separate tags for clarity. This also distinguishes a hardware fail-stop from
-%% a software fail state.
-%% \rb{TODO Similarly to above, should we consider tags as part of the machine or part of the
-%%   policy? }
-
-
-%\iftrue\apt{This still seems wrong to me. The policy part needs somehow to describe everything that isn't varied or rolled back.}\fi
-%These approaches are represented as policies that
-%accept\bcp{what does it mean for a policy to accept a state??} only initial machine states that are well-formed for the policy (due to
-%being produced by the compiler.) The set of policy states is again the unit type
-%and the step function constant. Property enforcement comes from the fact that
-%only ill-formed states can induce a trace that violates the property.
-
-
-%% \Paragraph*{Null policy}
-%% %
-%% The simplest possible policy is the neutral policy that carries no information
-%% and does nothing. Its set of policy states is the unit type, and its policy step
-%% function is the constant unit function, thereby allowing all calls to the machine
-%% step function. Its initialization function is defined on all states. This
-%% corresponds to the lifting of our machine model to the policy setting. Machines
-%% that fulfill a property by construction will also fulfill that property with the
-%% null policy.
-
-%
-%\leo{TODO: Add citations of mitigation techniques}
-%\rb{And for those techniques, explain how they reflect their motivating
-%examples. What does each technique do for those examples? How are they
-%connected to this work?}
-%
-%\paragraph*{Bad Write}
-%
-%\[
-%44 : [\rsp - 5] \leftarrow r_4
-%%44 : ~ \sw ~ \rsp ~ r_4 ~ \negate 5
-%\]
-%
-%Instruction 44 currently is
-%$ [\rsp - 2] \leftarrow r_4$,
-%%$\sw ~ \rsp ~ r_4 ~ \negate 2$,
-%with the
-%effect of storing the contents of $r_4$ as the result of {\tt g}. If
-%instead it wrote to location $\rsp - 5$ then it would be overwriting
-%private data (the return address) belonging to {\tt f}.
-%
-%\paragraph*{Bad Read}
-%
-%\[
-%30 : r_5  \leftarrow [\rsp - 6]
-%%30 : ~ \lw ~ r_5 ~ \rsp ~ \negate 6
-%\]
-%
-%Instruction 30 currently is
-%$ r_5 \leftarrow [\rsp - 4]$,
-%%$\lw ~ r_5 ~ \rsp ~ \negate 4$,
-%with the
-%effect of loading the argument of {\tt f} to $r_5$. If instead it
-%loaded the contents of location $\rsp - 6$, it would obtain access
-%to the value of {\tt main}'s local variable {\tt x}. Worse, since the next instruction
-%outputs the contents of $r_5$, that value would immediately be made public.
-%
-%\paragraph*{Bad Control Flow}
-%
-%\[
-%5  : \rra \leftarrow \PCname + 1 ; ~ \PCname \leftarrow r_4
-%%5 : \jalr ~ r_4 ~ \rra ~ 0
-%\]
-%If a {\jalr} instruction was added to {\tt main} with its target being
-%the middle of the code block of {\tt g}.\apt{describe result of this?}
-
 \section{Machines and Traces}
 \label{sec:prelim}
 
@@ -1689,52 +1580,8 @@ A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every re
 \(\mpcstatename \stepsto \mpcstatename'\) where \(\pi_\context(\mpcstatename') = (\underscore,\rts'))\),
 if \(|\rts'| < |\rts|\), then \(|\rts'| = |\rts|-1\).
 
-%\subsection{Well-bracketed Control Flow}
-%\label{sec:wbcf}
-
-%Both the integrity and confidentiality components of stack safety
-%are reasonable even in programs that violate expected
-%control flow. But even though stack safety prevents control-flow violations
-%from being used to gain privileges, it is worth protecting control flow as well.
-%Indeed, all of the enforcement mechanisms we discuss do preserve well-bracketed
-%control flow.
-
-%When we focus on subroutines, the essence of well-bracketed control flow
-%is that a caller can expect that if its callee ever returns, it returns
-%to the caller at the appropriate return target. This is tantamount to saying
-%that we never ``skip'' a return, or perform a ``false'' one. To formalize this in
-%the simple model:
-
-%\definition A system enjoys {\em well-bracketed control flow} if for all
-%reachable states \(\mpcstatename\) and \(\mpcstatename'\) such that
-%\(\mpcstatename \stepstocon \mpcstatename'\), if
-%\(\pi_c(\mpcstatename) = (\underscore, \underscore::\rts)\) and \(\pi_m(\mpcstatename)\)
-%is annotated as a return, then \(\pi_c(\mpcstatename) = (\underscore, \rts)\).
-
-%Extending this idea to coroutines, we use the same notion that there are
-%no ``false'' yields.
-
-%\definition A system enjoys {\em well-structured control flow} if for all
-%reachable states \(\mpcstatename\) and \(\mpcstatename'\) such that
-%\(\mpcstatename \stepstocon \mpcstatename'\), if
-%\(\pi_c(\mpcstatename) = (\underscore,\underscore,\underscore,\stackid)\) and \(\pi_m(\mpcstatename)\)
-%is annotated as a return, then \(\pi_c(\mpcstatename) = (\underscore,\underscore,\underscore,\stackid')\)
-%where \(\stackid \not = \stackid'\).
-
 \section{Case Study: Do Micro-Policies Enforce Stack Safety?}
 \label{sec:enforcement}
-
-% \bcp{``Enforcement'' seems like too broad a title.  What about calling it
-%   ``Evaluating Micro-Policies'' or ``Do Micro-Policies Enforce Stack
-%   Safety?''? And what about folding the testing section into this one?  That
-% would keep related things together, would avoid appearing to make overly
-% grand claims in either section, and would give us an excuse to write less
-% about the mechanism here---we only need to write enough about the mechanism
-% itself that readers can understand our validation case study.}
-% \leo{Agreed. Took a crack at it.}
-
-% \leo{I am not sure we've hit the correct level of detail in this
-%   section.}\bcp{Agreed!}
 
 In this section we explore how an existing enforcement mechanism called {\em
   Depth Isolation}~\citep{DBLP:conf/sp/RoesslerD18} implements
@@ -2929,12 +2776,17 @@ is insufficient when we consider buggy, but not inherently adversarial,
 code --- one can imagine a function that, when called with the wrong
 inputs, behaves unreasonably, but under most circumstances can be
 considered reasonable. \citet{SkorstengaardSTKJFP} would be forced
-to classify such a function as an adversary, and would not guarantee it
+to classify such a function as an adversary, and would not guarantee its
 protection.
 \apt{But see p. 17 para 2 of the JFP version of their paper, where they explicitly
   dispute this characterization!}
+\sna{But on p. 30, Definition 5, the JFP version still clearly defines that to be reasonable,
+  a component must {\em always} behave reasonably. And immediately after states that the
+  adversarial code can {\em never} be given LSE and WBCF guarantees. I suppose I'll cite that
+  definition directly.}
 We argue that if individual function activations are well-behaved,
 they should be protected.
+In contrast in our setting, individual function well-behaved activations are protected.
 
 \item \citet{SkorstengaardSTKJFP}'s approach to proving safety via a fully
   abstract overlay
@@ -2967,9 +2819,6 @@ useful for reasoning; (3) reusable in secure compiler chains; (4)
 arguably ``complete'' with respect to informal notions of stack
 safety; and (5) potentially scalable to richer settings such as
 dynamic code generation or multithreading.
-
-\bcp{We could squish all these little paragraphs into one if we are short of
-space.}
 
 For criterion (1), intuitiveness, we contend that our property definitions are at least as
 intuitive as theirs, while being phrased in interestingly different terms.
