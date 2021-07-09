@@ -1454,12 +1454,14 @@ the stack to \(\unsealed\) and all other addresses and all registers to \(\outsi
 
 The rules for \(\stepsto_C\) are given inductively, and apply in the listed order.
 A call annotation tells us to push the return target onto the return stack and
-seal all components with the depth of the previous return stack. If we aren't making a call,
+seal all components with the depth of the previous return stack.
+(Recall that the code map \(\codemap\) is a partial function, and we can use its domain
+as a predicate on addresses.) If we aren't making a call,
 we identify a return by looking ahead and checking if we're about to step to a state
-that matches the topmost return target. If neither is true, the context remains unchanged.
-Recall that a ``code map'' \(\codemap\) is a partial function, and we can use its domain
-as a predicate on addresses. If a target is reached anywhere in the return stack, {\sc ReturnRec}
+that matches the topmost return target ({\sc ReturnFound}), and unsealing the caller's frame if so. 
+If a target is reached anywhere in the return stack, {\sc ReturnRec}
 unseals each frame down to the level that was returned to.
+If none of these situations hold, the context remains unchanged.
 
 \judgmentthree[ Call]
               {\(\codemap ~ (\mach ~ \PCname)\)}
@@ -1479,7 +1481,7 @@ unseals each frame down to the level that was returned to.
             {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
             {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
             {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'[\components \mapsto \unsealed],\rts'\)}
-\vspace*{-3.5ex}
+\vspace*{-2.5ex}
 \judgment[ Default]
          {}
          {\(\underscore,\context \stepsto_C \context\)}
@@ -2656,7 +2658,7 @@ The initial domain map maps each stack address in stack \(\stackid\) to
 return stacks, the initial yield targets are defined above, and the initial stack id matches the initial
 coroutine. Together these form the initial context.
 
-In our context update rules, calls and returns work the same as in the sharing model,
+In our context update rules, calls and returns work the same as in the subroutine models,
 with domain updates restricted to the top-level domain corresponding to the active stack,
 and likewise using the return target stacks. We will omit these rules and focus on the new yield rule.
 
