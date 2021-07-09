@@ -1939,29 +1939,25 @@ by us (deliberately weakening the micro-policy in ways that we expect
 should break its guarantees), or actual bugs that we discovered through
 testing our implementation. We elaborate on some such bugs below.
 
-\sna{I am not sure about the MTTF table. Is it as
-  valuable at POPL? Do we need to go into more detail
-  about metholodology if we use it?}
+\begin{table}[]
+\centering
+\begin{tabular}{c|c|c}
+  Bug & Property Violated & MTTF (ms) \\
+  \hline
+      {\em LOAD\_NO\_CHECK}  & Confidentiality &  \\
+      {\em STORE\_NO\_CHECK} & Integrity &  \\
+      {\em HEADER\_NO\_INIT} & Integrity &  \\
+\end{tabular}
+\vspace*{1em}
+\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
+\vspace*{-2em}
+\label{tab:bug-table}
+\end{table}
 
-%\begin{table}[]
-%\centering
-%\begin{tabular}{c|c|c}
-%  Bug & Property Violated & MTTF (ms) \\
-%  \hline
-%      {\em LOAD\_NO\_CHECK}  & Confidentiality & 1670 \\
-%      {\em STORE\_NO\_CHECK} & Integrity & 638 \\
-%      {\em HEADER\_NO\_INIT} & Integrity & 1488 \\
-%\end{tabular}
-%\vspace*{1em}
-%\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
-%\vspace*{-2em}
-%\label{tab:bug-table}
-%\end{table}
-
-%The mean-time-to-failure (MTTF) for various bugs can be found in
-%Table~\ref{tab:bug-table}. All experiments were run in a desktop
-%machine equipped with i7-8700 CPU @ 3.20GHz with 32GB
-%RAM.
+The mean-time-to-failure (MTTF) for various bugs can be found in
+Table~\ref{tab:bug-table}. All experiments were run in a desktop
+machine equipped with i7-8700 CPU @ 3.20GHz with 32GB
+RAM.
 % \leo{Something like: There is really no baseline to compare this
   %against, but include it here for the future/reasons?}
 %
@@ -2241,11 +2237,11 @@ miss such violations. The Lazy Tagging and Clearing
 micro-policy from \citet{DBLP:conf/sp/RoesslerD18} tags each stack slot with the call depth
 at which it was written, and enforces that it must be read from the
 same depth. However, this allows violations of observable stack safety!
-Specifically, a callee might write into the stack and leave tags behind
-for a future callee at the same depth to read. This violates confidentiality and,
-if the writes were in the caller's frame, integrity. \apt{A more detailed example
-  would be great here, and should not take too much space.}
-\apt{Mention here that this was found by testing.}
+Our implementation of this policy, {\em PER\_DEPTH\_TAG}, has an error that we find
+in testing. If, at depth \(d\), a callee \(A\) writes into its caller's
+frame, then returns, and later another callee \(B\) at depth \(d\) reads the same
+address and prints it, \(A\) has violated integrity in a way that later becomes visible,
+and \(B\) has likewise violated confidentiality!
 
 Lazy Tagging and Clearing can be repaired if, instead of tagging each function
 activation with its depth in the stack, we generate a fresh activation
@@ -2259,10 +2255,25 @@ instances of the same function.)
 
 We test {\em Lazy Per-activation Tagging and Clearing}, in which
 each activation is tagged uniquely, and find that it obeys stepwise
-confidentiality and observational integrity. Our testing catches the
-violation in the original {\em Lazy Tagging and Clearing}, as well as
-an equivalent to {\em LOAD\_NO\_CHECK}, which now also violates observational
-integrity.\apt{Move latter to above.}
+confidentiality and observational integrity. To round out our mutations testing 
+we also check an equivalent to {\em LOAD\_NO\_CHECK} and a version where
+stores succeed but fail to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
+
+\begin{table}[]
+\centering
+\begin{tabular}{c|c|c|c}
+	Bug & Property Violated & MTTF (ms) & Tests \\
+  \hline
+	{\em PER\_DEPTH\_TAG} & Observational Integrity &  & \\
+	{\em LOAD\_NO\_CHECK}  & Observational Integrity &  & \\
+	{\em STORE\_NO\_UPDATE} & Observational Integrity &  & \\
+\end{tabular}
+\vspace*{1em}
+\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
+\vspace*{-2em}
+\label{tab:lazy-bug-table}
+\end{table}
+
 
 %Per-activation tagging resolves the issue because tags that persist between
 %calls will not become active again.
