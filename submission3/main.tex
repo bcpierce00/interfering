@@ -1176,8 +1176,8 @@ including those that do not take advantage of this separation.
 Some mechanisms, like hardware capability systems, might exhibit failstop behavior,
 but have no protected policy state---this is represented by a trivial policy
 that failstops when the hardware faults. Others might never even failstop, such as
-code rewriting techniques that turn stack safety violations into other (erroneous, but not
-stack-unsafe) behaviors. Then the policy-enhanced machine is identical to the original.
+code rewriting techniques that prevent stack safety violations directly, in which
+case their policy state does nothing at all.
 
 An enforcement model may additionally
 apply a ``well-formedness'' criterion on initial states, ensuring that
@@ -1203,11 +1203,7 @@ to protect both stack and heap.
 \section{Machines and Traces}
 \label{sec:prelim}
 
-We now define our machine and enforcement model precisely. To make our definition of stack safety
-as generic as possible, this section proposes an abstract interface to a
-machine model plus some kind of (software- or hardware-enforced) policy monitor.
-In~\cref{sec:enforcement}, we instantiate this model with a concrete dynamic
-policy enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
+We now define our machine and enforcement model precisely.
 
 \paragraph*{Values and States}
 
@@ -2709,21 +2705,6 @@ stack confidentiality.
 %
 To our knowledge, the only line of work to date that has attempted
 a positive and formal characterization of stack safety
-%begins with \citet{SkorstengaardLocal}, who introduced a calling
-%convention that uses local capabilities to preserve local state
-%encapsulation and well-bracketed control flow
-%using a logical relation to reason about the stack safety of concrete
-%programs.
-% Although the required hardware support is readily available
-%in capability machines like Cheri,
-%% this technique incurs significant
-%% costs, because
-%it requires the entire unused part of the stack to be
-%cleared whenever a security boundary is crossed.
-%Their logical
-%relation captures capability safety without ``externally observable
-%side-effects (like console output or memory access traces)''
-%and can be used to reason about individual programs.
 is that of \citet{SkorstengaardSTKJFP}. Their
 StkTokens system enforces stack safety on hardware equipped with
 memory capabilities, similar to those used in the Cheri system~\citep{Woodruff+14,Chisnall+15}, but
@@ -2733,10 +2714,9 @@ well-bracketed control flow (WBCF).
 Informally, LSE means that the current activiation can only access its own frame,
 and WBCF means that the topmost frame can only return to
 the immediately adjacent frame below. Formally, these properties are defined
-with reference to the semantics of a
-capability machine with a built-in call stack and call and return
+with reference to a capability machine with a built-in call stack and call and return
 instructions; this machine is proven fully abstract with respect to a more
-concrete capability machine.  They call this approach a ``fully abstract overlay semantics.''
+concrete capability machine, an approach termed ``fully abstract overlay semantics.''
 The proof of full abstraction uses a standard notion of components, which
 import and export functions through their interfaces.
 
@@ -2744,17 +2724,18 @@ We improve upon \citet{SkorstengaardSTKJFP} in two significant ways:
 \begin{enumerate}[label=(\roman*)]
 \item Our definition captures the intuition that {\em
   every} caller should be protected from its callees.  By contrast,
-  \citet{SkorstengaardSTKJFP} describe a class of ``unreasonable'' code components
-  that are not protected, because the are capable of dynamic behavior that can compromise
-  their own security. Unreasonable code can be viewed as adversarial, but it is equally
-  likely to simply be buggy. One can imagine a function that, when called with the wrong
+  \citet{SkorstengaardSTKJFP} describe a class of ``unreasonable'' components
+  that are not protected, because they are capable of dynamic behavior that can compromise
+  their own security. Unreasonable code can be viewed as adversarial, or merely as
+  buggy. One can imagine a function that, when called with the wrong
   inputs, behaves unreasonably, but under most circumstances can be
   considered reasonable. \citet{SkorstengaardSTKJFP} would not consider this a
-  {\em reasonable component} (as defined in their section 4.3.3), and so
-  would not guarantee its protection. In contrast, in our setting, individual
+  {\em reasonable component} (as defined in their section 4.3.3), as a reasonable
+  component is always reasonable, and so they
+  would not guarantee its protection. In our setting, individual
   well-behaved activations of the buggy function would be protected.
-  \citet{SkorstengaardSTKJFP} note that they support mutually distrustful
-  components, but we go a step further. One can think of our hypothetical
+  \citet{SkorstengaardSTKJFP} support mutually distrustful
+  components; one can think of our hypothetical
   function as ``self-distrustful'' in that the safety of a well-behaved activation
   is not compromised by another, ill-behaved activiation of the same function.
 
