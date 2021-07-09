@@ -322,6 +322,7 @@ Import TestRISCVEagerNI.
 QuickCheck TestRISCVEagerNLC.prop_confidentiality.
 QuickCheck TestRISCVEagerNSC.prop_integrity.
 QuickCheck TestRISCVEagerNI.prop_integrity.
+(* These three errors in the eager policy are detected by testing. *)
 
 (*QuickCheck prop_confidentiality.*)
 
@@ -330,11 +331,14 @@ Import TestRISCVLazyNoDepth.
 Import TestRISCVLazyNoCheck.
 Import TestRISCVLazyFixed.
 
+(* These two can probably be ignored for now. *)
 (*QuickCheck prop_integrity.*)
 (*QuickCheck prop_confidentiality.*)
+
+(* In principle this should be detectable too, but does not seem to be. *)
 (*QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.*)
 
-(* More lazy tests: *)
+(* More lazy tests, with failures (expected and found) noted in comments: *)
 
 (* Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality. (* Fails *) *)
 (* Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *) *)
