@@ -280,8 +280,8 @@ invariant under hypothetical scrambling of the caller’s stack frame.
 Our threat model is very strong, allowing the attacker (i.e., the
 callee) to execute arbitrary code, including attempting to smash
 the stack to disrupt the program’s control flow. Our stack safety
-properties demand that, even in the presence of such attackers, confi-
-dentiality and integrity still apply to data in suspended stack frames
+properties demand that, even in the presence of such attackers, confidentiality
+and integrity still apply to data in suspended stack frames
 until the callee returns.
 
 We can also, optionally, include a notion of {\em well-bracketed control
@@ -495,6 +495,7 @@ int f() {
 This section explains our formal stack safety properties through a series
 of examples, each presented both in C syntax and in corresponding assembly code for a
 simple two-address machine (see Figure~\ref{fig:int1}).
+The address of each instruction is shown to its left.
 The assembly code reflects a simple compilation model in which
 local variables are stored in the stack frame.
 For the moment, arguments and return values are passed in registers.
@@ -502,22 +503,23 @@ The stack grows upward in
 memory and {\tt \%sp} points to the first unused word above the top of the stack.
 The {\tt call} and {\tt ret} instructions push and pop the return address from the stack,
 implicitly adjusting the stack pointer.
-At the right of each example, we show the layout of stack memory just before
-the specified instruction is executed; each box represents a memory word
+At the right of each example, we show snapshots of the layout of stack memory just before
+selected instructions (labeled by their addresses) are executed; each box represents a memory word
 (the machine is word addressed), and addresses increase to the right.
-The address of each instruction is shown to its left.  \bcp{Most of the
-  figure is kind of self-explanatory with this help, but the rightmost part
-  is a little opaque: what do 2, 3, 11, 12 mean?  What is SP?  What are the
-  numbers in the boxes?  What are these brackets under the boxes, ...  One
-  simple thing we could do to help might be to label the right-hand column
-  something like ``Snapshots,'' or at least explain early on in the text
-  that this is what they are.}
+  %% \bcp{Most of the
+  %% figure is kind of self-explanatory with this help, but the rightmost part
+  %% is a little opaque: what do 2, 3, 11, 12 mean?  What is SP?  What are the
+  %% numbers in the boxes?  What are these brackets under the boxes, ...  One
+  %% simple thing we could do to help might be to label the right-hand column
+  %% something like ``Snapshots,'' or at least explain early on in the text
+  %% that this is what they are.}
 
-Labeled boxes indicate an assignment of the address to a
-{\em domain}---a label reflecting a particular set of intended access
-rights. Unless otherwise marked, sequential addresses retain the previous domain,
-as hinted by their colors \bcp{where do we see this happening?  Is it
-  important?}. Domains are not part of the machine state; rather, they
+Labels under the boxes indicate an assignment of the address to a
+{\em domain}, which is a particular set of intended access
+rights. Unless otherwise marked, each address retains its domain as
+sequential instructions execute. %, as hinted by their colors.
+%\bcp{where do we see this happening?  Is it important?}.
+Domains are not part of the machine state; rather, they
 describe the intended security role of the address
 that the enforcement mechanism must adhere to. Such a domain
 can be \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
@@ -591,6 +593,8 @@ int f() {
 \end{verbatim}
 }
 \end{subfigure}
+\\
+\vspace*{0.3in}
 \begin{subfigure}{.59\textwidth}
 \centering
 \begin{tabular}{l l | l}
@@ -671,8 +675,7 @@ int f() {
 
 \end{subfigure}
 \caption{A confidentiality violation\ifspace\apt{Could save space by not
-    repeating C or assemly code for {\tt main}.}\fi\bcp{Can we put some more
-  space above the stack trace?}}
+    repeating C or assemly code for {\tt main}.}\fi}
 \label{fig:conf1}
 \end{figure}
 
@@ -1018,10 +1021,10 @@ Consider Figure~\ref{fig:controlflow}.
 (Here the diagram shows return addresses explicitly as line numbers, in the
 form $\#n$.\bcp{But the return address boxes are not black... should they
   be, really?})
-Function {\tt f} is called twice, at instructions 2 and 4; it should therefore return to instructions
-3 and 5, respectively. But the first time, before returning, it stashes its
-return pointer away, and the second time it returns to instruction 3 instead of 5; then it ends
-up being called a third time, at which point it finally returns to instruction 5.\apt{The line numbers are wrong.}
+Function {\tt f} is called twice, at instructions 3 and 5; it should therefore return to instructions
+4 and 6, respectively. But the first time, before returning, it stashes its
+return pointer away, and the second time it returns to instruction 4 instead of 6; then it ends
+up being called a third time, at which point it finally returns to instruction 6.
 
 Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that {\tt main} returns
 $-1$. But because of {\tt f}'s interference, {\tt x} is negated twice, and {\tt main} returns 1.
@@ -1035,14 +1038,14 @@ To capture this intuition, we add a new piece of context to our diagram:
 a stack of return targets.  Now a callee is
 only considered to have returned when it reaches a state that matches the caller's target.
 A return target is associated with a set of sealed locations that will become unsealed
-when it is reached, represented here by sharing a color with the sealed
-data.  \bcp{Don't understand that last sentence.}
+when it is reached, represented here by coloring both the target and its sealed data with the
+same color (blue). 
 
 In the example, on its first return, {\tt f} reaches its return target, because the
-\(\PCname\) is 3 after its return. But {\tt f}'s second return is to the wrong instruction
-(3 rather than 5) because the stack pointer has been overwritten (shown in light red).
+\(\PCname\) is 4 after its return. But {\tt f}'s second return is to the wrong instruction
+(4 rather than 6) because the stack pointer has been overwritten (shown in light red).
 Thus {\tt x} is still sealed and {\tt f}'s attempt to overwrite it at instruction 4
-violates the integrity property.\apt{Ditto}
+violates the integrity property.
 
 
 \paragraph{Well-bracketed control flow.} Together,
@@ -1072,13 +1075,15 @@ call \emph{well-bracketed control flow (WBCF)}.
 \label{sec:setup}
 \label{sec:threat}
 
-We will introduce a formal model of stack safety that abstracts over
-machine details. But first we must discuss the bounds of our assumptions ---
+Before introducing our formal model of stack safety, we describe our assumptions:
 how broadly we can abstract over machines, how we represent enforcement, and
 our threat model.
 
 We adopt a strong threat model in which both caller and callee may execute
-arbitrary machine code. But hardware and timing attacks are out of scope, as are
+arbitrary machine code. \apt{But don't they need to be well-formed?? In which case,
+  this should go at the end of the section, after that has been explained. [Earlier
+    I was only arguing for the explanatory background to be placed earlier, not
+    the actual statement of the threat model.]} But hardware and timing attacks are out of scope, as are
 are attacks on the heap---though we believe that the work of
 \citet{DBLP:conf/post/AmorimHP18} can be combined smoothly with ours
 to protect both stack and heap.
@@ -1185,14 +1190,14 @@ and untouchable by application code.
 \sna{Commented out shadow stacks until I can find a citation. May just skip it.}
 
 That said, our model is meant to apply generically to any enforcement mechanism,
-including those that do not take advantage of this separate.
+including those that do not take advantage of this separation.
 Some mechanisms, like hardware capability systems, might exhibit failstop behavior,
-but have no protected policy state --- this is represented by a ``unit'' policy
-that failstops when the hardware fault. Others might never even failstop, such as
+but have no protected policy state---this is represented by a trivial policy
+that failstops when the hardware faults. Others might never even failstop, such as
 code rewriting techniques that turn stack safety violations into other (erroneous, but not
 stack-unsafe) behaviors. Then the policy-enhanced machine is identical to the original.
-\sna{I'm thinking of SFI here, but that's not stacks, right? Does Softbound work like
-  this.}
+\sna{I'm thinking of SFI here\apt{yes}, but that's not stacks, right? Does Softbound work like
+  this.\apt{dunno}}
 
 An enforcement model may additionally
 apply a ``well-formedness'' criterion on initial states, ensuring that
