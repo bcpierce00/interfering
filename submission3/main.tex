@@ -527,7 +527,9 @@ can be \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\
 (outside the stack entirely.)
 % These are abbreviated \(U\) and \(S(\dots)\)\bcp{Nope} in the figures.
 Global variables and code, which are not shown in the figures, would
-also be labeled \(\outside\).  \bcp{what about RetPtr?}
+also be labeled \(\outside\). Return pointers, labeled ``RetPtr,''
+are shaded black and ignored for simplicity for now --- they will
+be treated properly later.
 Domains form part of the {\em context} associated with a machine state.
 (We will introduce some other parts of the context as needed.)
 
@@ -697,8 +699,9 @@ In Figure~\ref{fig:conf1} we see the callee, {\tt f}, violating confidentiality
 by reading {\tt main}'s variable {\tt x}. The trace
 shows how noninterference applies to this scenario. At instruction 10, we
 create an imaginary {\em variant}
-state with arbitrary values\bcp{IMO, it would be easier to
-understand if we chose concrete values for the examples}~(\(v_0\), etc.),
+state with arbitrary values\ifaftersubmission\bcp{IMO, it would be easier to
+  understand if we chose concrete values for the examples}\sna{FWIW I agree in
+  theory, but it looks bad every time I try it.\fi~(\(v_0\), etc.),
 in place of the actual values ($42$, ...) that should
 be hidden from {\tt f}; we show the evolving stack memory of the variant in a second, parallel column. At instruction 12, we note that the callee's first variable, {\tt y}, has
 changed to 5 in both the primary trace and the variant. The primary and variant agree on
@@ -1018,9 +1021,8 @@ Our stack safety properties do not assume that control flow follows a typical st
 of matching sets of calls and returns nested within one another.
 Rather, they aim to capture what it means to protect data even in the presence of control-flow attacks.
 Consider Figure~\ref{fig:controlflow}.
-(Here the diagram shows return addresses explicitly as line numbers, in the
-form $\#n$.\bcp{But the return address boxes are not black... should they
-  be, really?})
+(Now we treat return addresses properly, but write them as line numbers, in the
+form $\#n$.)
 Function {\tt f} is called twice, at instructions 3 and 5; it should therefore return to instructions
 4 and 6, respectively. But the first time, before returning, it stashes its
 return pointer away, and the second time it returns to instruction 4 instead of 6; then it ends
@@ -1156,7 +1158,6 @@ that we are given some way of telling when a given machine state is a
 %its own local state again and expected to find it unmolested.)}.
 
 \paragraph*{Enforcement Model}
-\apt{What are our ambititions for genericity over enforcement?}
 
 We model the base machine's behavior as a step function over machine states,
 and a machine
@@ -1801,11 +1802,11 @@ testing our implementation. We elaborate on some such bugs below.
 \begin{table}[]
 \centering
 \begin{tabular}{c|c|c|c}
-  Bug & Property Violated & MTTF (ms) & Tests \\
+  Bug & Property Violated & MTTF (s) & Tests \\
   \hline
-      {\em LOAD\_NO\_CHECK}  & Confidentiality &  \\
-      {\em STORE\_NO\_CHECK} & Integrity &  \\
-      {\em HEADER\_NO\_INIT} & Integrity &  \\
+      {\em LOAD\_NO\_CHECK}  & Confidentiality & 24.2 & 13.3 \\
+      {\em STORE\_NO\_CHECK} & Integrity & 26.9 & 26 \\
+      {\em HEADER\_NO\_INIT} & Integrity &  & \\
 \end{tabular}
 \vspace*{1em}
 \caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
@@ -1815,8 +1816,8 @@ testing our implementation. We elaborate on some such bugs below.
 
 The mean-time-to-failure (MTTF) for various bugs can be found in
 Table~\ref{tab:bug-table}, along with the average number of tests
-it took to find the failure. Experiments were run in a laptop
-machine equipped with i7-8550U CPU @ 1.8GHz with 32GB RAM.
+it took to find the failure. Experiments were run in a desktop
+machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
 % \leo{Something like: There is really no baseline to compare this
   %against, but include it here for the future/reasons?}
 %
