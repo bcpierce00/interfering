@@ -390,7 +390,6 @@ properties (\cref{sec:enforcement}).
 \item We show that the definition can be
 extended to argument passing on the stack, callee-saves registers, and a simple coroutine system (\cref{sec:ext}).
 \end{itemize}
-
 \Cref{sec:relwork,sec:future} discuss related and future work.
 
 \section{Key Ideas by Example}
@@ -494,10 +493,9 @@ int f() {
 \label{fig:int1}
 \end{figure}
 
-This section introduces the intuition behind our formal stack safety properties through a series
+This section explains our formal stack safety properties through a series
 of examples, each presented both in C syntax and in corresponding assembly code for a
-simple two-address machine (see Figure~\ref{fig:int1}). The address of each
-instruction is shown to its left.
+simple two-address machine (see Figure~\ref{fig:int1}).
 The assembly code reflects a simple compilation model in which
 local variables are stored in the stack frame.
 For the moment, arguments and return values are passed in registers.
@@ -508,16 +506,26 @@ implicitly adjusting the stack pointer.
 At the right of each example, we show the layout of stack memory just before
 the specified instruction is executed; each box represents a memory word
 (the machine is word addressed), and addresses increase to the right.
+The address of each instruction is shown to its left.  \bcp{Most of the
+  figure is kind of self-explanatory with this help, but the rightmost part
+  is a little opaque: what do 2, 3, 11, 12 mean?  What is SP?  What are the
+  numbers in the boxes?  What are these brackets under the boxes, ...  One
+  simple thing we could do to help might be to label the right-hand column
+  something like ``Snapshots,'' or at least explain early on in the text
+  that this is what they are.}
 
 Labeled boxes indicate an assignment of the address to a
 {\em domain}---a label reflecting a particular set of intended access
 rights. Unless otherwise marked, sequential addresses retain the previous domain,
-as hinted by their colors. Domains describe the intended security role of the address
+as hinted by their colors \bcp{where do we see this happening?  Is it
+  important?}. Domains are not part of the machine state; rather, they
+describe the intended security role of the address
 that the enforcement mechanism must adhere to. Such a domain
 can be \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), or \(\outside\)
-(outside the stack entirely.) These are abbreviated \(U\) and \(S(\dots)\) in the
-figures. Not shown are global variables and code, which would be labeled \(\outside\).
+(outside the stack entirely.) These are abbreviated \(U\) and \(S(\dots)\)\bcp{Nope} in the
+figures. Global variables and code, which are not shown in the figures, would
+also be labeled \(\outside\).  \bcp{what about RetPtr?}
 Domains form part of the {\em context} associated with a machine state.
 (We will introduce some other parts of the context as needed.)
 
@@ -530,9 +538,11 @@ meaning that it is eligible to be written to. At the call from {\tt main} to
 {\tt f}, {\tt main}'s locals are {\em sealed} with {\tt main}'s depth,
 in this case 0. Sealing is the fundamental integrity contract between the caller and callee:
 {\tt main} expects that {\tt x} will be unchanged when it gets control back.
-This gives us our simple, intuitive statement of {\em stepwise integrity}:
-if a component is sealed before a step, it will be unchanged afterward. Stepwise
-refers to the fact that the property must hold on every step. %Later we will
+This leads to a simple, intuitive statement of {\em stepwise integrity}:
+if a component is sealed before a step, it will be unchanged afterward.
+% Stepwise
+% refers to the fact that the property must hold on every step.
+ %Later we will
 %loosen this condition in the interest of extensionality---the caller only
 %cares about changes it can see after the return, not changes during execution.
 In this case, after instruction 11, {\tt f} has violated integrity by writing to {\tt x},
@@ -660,40 +670,48 @@ int f() {
 \vspace{\abovedisplayskip}
 
 \end{subfigure}
-\caption{A confidentiality violation\ifspace\apt{Could save space by not repeating C or assemly code for {\tt main}.}\fi}
+\caption{A confidentiality violation\ifspace\apt{Could save space by not
+    repeating C or assemly code for {\tt main}.}\fi\bcp{Can we put some more
+  space above the stack trace?}}
 \label{fig:conf1}
 \end{figure}
 
-Dually, confidentiality intuitively states that a callee is insensitive to
+Dually, confidentiality states intuitively that a callee is insensitive to
 the context of its call (except for its arguments and any global
 variables).
-We state this as a kind of {\em noninterference} property~\citep{Goguen1982SecurityPA}.
+We state this as a form of {\em noninterference}~\citep{Goguen1982SecurityPA}.
 Noninterference describes knowledge: it states that for system components
 containing secret values, we can substitute any values whatsoever without changing the results
-of our computation. If there exists some value for which we see different results, then
+of our computation.\bcp{That's too loose.  Even for standard NI, high inputs
+are allowed to change high results.  And for us it's even more subtle, since
+a given address can switch from high to low when a function returns.} If there exists some value for which we see different results, then
 in fact we can learn something about the initial state by observing those results, violating
 confidentiality.
 
-In Figure~\ref{fig:conf1} we see that the callee, {\tt f}, violates confidentiality
+In Figure~\ref{fig:conf1} we see the callee, {\tt f}, violating confidentiality
 by reading {\tt main}'s variable {\tt x}. The trace
-shows how noninterference applies to this scenario. At instruction 10, we create a {\em variant}
-state with arbitrary values\ifaftersubmission\bcp{IMO, it would be easier to
-understand if we chose concrete values for the examples}\fi~\(v_0\), etc., in place of the values that should
-be hidden from {\tt f}. (We show the evolving stack memory  of the variant in a second parallel column.) At instruction 12, we note that the callee's first variable, {\tt y}, has
+shows how noninterference applies to this scenario. At instruction 10, we
+create an imaginary {\em variant}
+state with arbitrary values\bcp{IMO, it would be easier to
+understand if we chose concrete values for the examples}~(\(v_0\), etc.),
+in place of the actual values ($42$, ...) that should
+be hidden from {\tt f}; we show the evolving stack memory of the variant in a second, parallel column. At instruction 12, we note that the callee's first variable, {\tt y}, has
 changed to 5 in both the primary trace and the variant. The primary and variant agree on
 the value in the changed location, so confidentiality was not violated. But at instruction 13,
 the other variable, {\tt z}, has changed. In the primary trace it changed to 42, but
 in the variant trace it might have any value \(v_0\). If \(v_0 \neq 42\) then the variant
 has behaved differently than the primary, violating confidentiality.
 
-We will term this form of confidentiality as {\em stepwise confidentiality}. Informally,
-for any state at the entry to a function, for any variant over the values in the stack,
-the primary state and its variant will step in lockstep until they return. To step in lockstep
+We can this form of confidentiality {\em stepwise confidentiality}. Informally,
+for any state at the entry to a function, and for any variant over the values in the stack,
+the primary state and the variant will step in lockstep until they
+return. To step in lockstep
 means that if both states step---that is, neither the primary nor the variant failstops---any
 {\em system component} (such as memory cell, register, program counter) that changes
-in one step has a matching value at the end of the other step.
-When we later extend the model with a notion of observable output (\cref{sec:lazy}),  we will instead apply the matching
-criteria to the outputs.
+in the original will change in the same way in the variant.
+When we later extend the model with a notion of observable output
+(\cref{sec:lazy}), we will apply this condition only to the outputs\bcp{what
+outputs?}.
 
 %\bcp{Remove this para?}We alternatively could imagine a version of stepwise confidentiality in which we explicitly
 %track which addresses may be read (i.e., which have been initialized), and at each step
@@ -1713,7 +1731,7 @@ if \(|\rts'| < |\rts|\), then \(|\rts'| = |\rts|-1\).
 In this section we explore how an existing enforcement mechanism called {\em
   Depth Isolation}~\citep{DBLP:conf/sp/RoesslerD18} implements
 the formal stack-safety property described in the previous
-section. We validate this claim 
+section. We validate this claim
 using a property-based random testing framework.
 
 \subsection{A Conservative Stack-Safety Enforcement Mechanism}
@@ -1805,9 +1823,9 @@ a caller to a callee or vice-versa:
   %The exit sequence retags all locations in the function frame with $\tagNoDepth$.
   at the actual return instruction,
   the $\PCname$ tag is decremented.
-		\apt{Doesn't the exit sequence retag to $\tagNoDepth$?}
-		\sna{On inspection, what's actually going on here is a sort of per-activation eager tagging.
-		Need to fix that to actually match the paper.}
+                \apt{Doesn't the exit sequence retag to $\tagNoDepth$?}
+                \sna{On inspection, what's actually going on here is a sort of per-activation eager tagging.
+                Need to fix that to actually match the paper.}
 %  \leo{Not sure the actual policy
 %    does that now (retag unused). But I don't think it's a
 %    confidentiality or integrity violation.}
@@ -2053,7 +2071,7 @@ for any \(\MPCT,\brk \in \MPCT^*\) where \(\head(\MPCT) = \mach,\pol,\context\) 
 set of sealed components that changed during the call.
 For any \(\nach'\) and \(\NPCT'\) such that \(\mach' \approx_{\components} \nach'\) and
 \((\nach',\pol',\context') \hookrightarrow \NPCT'\), \(\MPCT' \doteq \NPCT'\).
- 
+
 Intuitively, deferred stepwise integrity means that if any components change from
 the a call to its matching return, they will afterward be treated as confidential
 (in the sense of stepwise confidentiality; the return state and a variant would
@@ -2250,18 +2268,18 @@ instances of the same function.)
 
 We test {\em Lazy Per-activation Tagging and Clearing}, in which
 each activation is tagged uniquely, and find that it obeys stepwise
-confidentiality and observational integrity. To round out our mutations testing 
+confidentiality and observational integrity. To round out our mutations testing
 we also check an equivalent to {\em LOAD\_NO\_CHECK} and a version where
 stores succeed but fail to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
 
 \begin{table}[]
 \centering
 \begin{tabular}{c|c|c|c}
-	Bug & Property Violated & MTTF (ms) & Tests \\
+        Bug & Property Violated & MTTF (ms) & Tests \\
   \hline
-	{\em PER\_DEPTH\_TAG} & Observational Integrity &  & \\
-	{\em LOAD\_NO\_CHECK}  & Observational Integrity &  & \\
-	{\em STORE\_NO\_UPDATE} & Observational Integrity &  & \\
+        {\em PER\_DEPTH\_TAG} & Observational Integrity &  & \\
+        {\em LOAD\_NO\_CHECK}  & Observational Integrity &  & \\
+        {\em STORE\_NO\_UPDATE} & Observational Integrity &  & \\
 \end{tabular}
 \vspace*{1em}
 \caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
@@ -2273,11 +2291,11 @@ stores succeed but fail to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
 %Per-activation tagging resolves the issue because tags that persist between
 %calls will not become active again.
 Our abstract properties have allowed us to identify an enforcement mechanism as
-not really stack safe, and to validate a possible fix. 
+not really stack safe, and to validate a possible fix.
 Unfortunately, Lazy Per-activation Tagging and Clearing
 puts severe pressure on the tag cache, so it may not be usable in practice.
 However, we conjecture that no lazy scheme can be fully stack safe
-without using unique per-activation identifiers. 
+without using unique per-activation identifiers.
 
 \section{Extensions}
 \label{sec:ext}
@@ -2547,7 +2565,7 @@ void f(int &a) {
 \end{figure}
 
 To this point we have ignored function arguments, by assuming that they are placed
-in registers (which are implicitly shared by all functions). 
+in registers (which are implicitly shared by all functions).
 We now show how to implement two kinds of protected
 sharing of stack contents: passing by value on the stack, and passing by reference. We first explore
 some examples and then extend our formalization.
@@ -2605,7 +2623,7 @@ been explicitly given a pointer to it.  Preventing the latter kind of abuse
 is the provence of a fine-grained memory safety policy, e.g., based on
 capabilities
 (implemented by tags or otherwise); we would argue it is beyond the scope of
-stack safety \emph{per se}.\apt{Could try to incorporate some of 
+stack safety \emph{per se}.\apt{Could try to incorporate some of
   our response to OOPSLA reviewer 1 about this, but I don't see an easy way.}
 
 \paragraph{Formalization of variable passing.}
@@ -2858,42 +2876,41 @@ stack confidentiality.
 \paragraph{Formal Stack Safety on Capability Machines}
 %
 To our knowledge, the only line of work to date that has attempted
-a positive and formal characterization of
-stack safety begins with \citet{SkorstengaardLocal}, who introduced a calling
-convention that uses local capabilities to preserve local state
-encapsulation and well-bracketed control flow
-using a logical relation to reason about the stack safety of concrete
-programs.
+a positive and formal characterization of stack safety
+%begins with \citet{SkorstengaardLocal}, who introduced a calling
+%convention that uses local capabilities to preserve local state
+%encapsulation and well-bracketed control flow
+%using a logical relation to reason about the stack safety of concrete
+%programs.
 % Although the required hardware support is readily available
 %in capability machines like Cheri,
 %% this technique incurs significant
 %% costs, because
 %it requires the entire unused part of the stack to be
 %cleared whenever a security boundary is crossed.
-Their logical
-relation captures capability safety without ``externally observable
-side-effects (like console output or memory access traces)''
-and can be used to reason about individual programs.
-
-StkTokens \citep{SkorstengaardSTKJFP} continues this line of work by
-defining a more efficient
-calling convention that uses linear capabilities for stack and return
-pointers.
-Informally, local state encapsulation (LSE) is defined as
-restricting accesses to the range of memory allocated to the current stack
-frame, and well-bracketed control flow (WBCF) is defined as only allowing
-returns from the topmost
-frame to the immediately adjacent frame below. Formally, this work improves on
-\citet{SkorstengaardLocal} by building those properties into the semantics of a
+%Their logical
+%relation captures capability safety without ``externally observable
+%side-effects (like console output or memory access traces)''
+%and can be used to reason about individual programs.
+is that of \citet{SkorstengaardSTKJFP}. Their 
+StkTokens system enforces stack safety on hardware equipped with
+memory capabilities, similar to those used in the CHERI system~\citep{Woodruff+14,Chisnall+15}, but
+with additional support for linear capabilities.
+Stack safety is defined as the conjuncton of local state encapsulation (LSE) and
+well-bracketed control flow (WBCF). 
+Informally, LSE means that the current activiation can only access its own frame, 
+and WBCF means that the topmost frame can only return to 
+the immediately adjacent frame below. Formally, these properties are defined
+with reference to the semantics of a 
 capability machine with a built-in call stack and call and return
 instructions; this machine is proven fully abstract with respect to a more
-concrete capability machine.
+concrete capability machine.  They call this approach a ``fully abstract overlay semantics.''
 The proof of full abstraction uses a standard notion of components, which
 import and export functions through their interfaces.
 
 We improve upon \citet{SkorstengaardSTKJFP} in two significant ways:
 \begin{enumerate}[label=(\roman*)]
-\item Most importantly, our definition captures the intuition that {\em
+\item Our definition captures the intuition that {\em
   every} caller should be protected from its callees.  By contrast,
 \citet{SkorstengaardSTKJFP}
 statically divide the world into trusted functions, which feature additional
@@ -2905,10 +2922,13 @@ code --- one can imagine a function that, when called with the wrong
 inputs, behaves unreasonably, but under most circumstances can be
 considered reasonable. \citet{SkorstengaardSTKJFP} would be forced
 to classify such a function as an adversary, and would not guarantee it
-protection. We argue that if individual function activations are well-behaved,
+protection.
+\apt{But see p. 17 para 2 of the JFP version of their paper, where they explicitly
+  dispute this characterization!}
+We argue that if individual function activations are well-behaved,
 they should be protected.
 
-\item \citet{SkorstengaardSTKJFP}'s approach to proving safety via fully
+\item \citet{SkorstengaardSTKJFP}'s approach to proving safety via a fully
   abstract overlay
   semantics relies on the definition of a ``stack-safe-by-construction''
   abstract machine that is closely tied to an underlying enforcement
@@ -2922,15 +2942,15 @@ they should be protected.
   Our properties are more generic: since we abstract over most of the machine
   state as well as the sealing and return conventions, they apply directly
   to a range of architectures, code features, and enforcement mechanisms.
+  Moreover, we have implemented extensions such as passing arguments on the stack,
+  describing callee-saves registers, and coroutines by making simple modifications
+  to our base domain model.
+  %% While it may well be possible to extend 
+  %% \citet{SkorstengaardSTKJFP}'s approach to cover these features.  
+  %% abstract machine to pass arguments on the stack, or to support callee-saves
+  %% registers. It might even be viable to construct a safe-by-construction abstract
+  %% coroutine machine in the same style, but this is hypothetical.
 
-\vspace{.7\smallskipamount}
-
-  Conversely, it seems possible to extend \citet{SkorstengaardSTKJFP}'s
-  abstract machine to pass arguments on the stack, or to support callee-saves
-  registers. It might even be viable to construct a safe-by-construction abstract
-  coroutine machine in the same style, but this is hypothetical.
-  We have implemented these scenarios with
-  simple modifications to the domain model.
 \end{enumerate}
 
 \citet{SkorstengaardSTKJFP} propose a useful list of criteria for judging
