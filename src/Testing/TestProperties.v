@@ -86,12 +86,12 @@ Module TestPropsRISCVSimple
       if integrityComponent c k then
         if Z.eqb (proj m k) (proj m' k)
         then walk ks' cm m p c m' p' c' traceOut cont
-        else whenFail ("Initial Machine:" ++ nl ++
+        else (*whenFail ("Initial Machine:" ++ nl ++
                                           concatStr (List.rev (List.map (fun f => f tt) traceOut)) ++
                                           "Integrity failure at component: " ++ show k ++ nl ++
                                           "Component values: " ++ show (proj m k) ++ " vs " ++ show (proj m' k) ++ nl ++
                                           "Final state: " ++ nl ++
-                                          printMachine m p cm c)%string false
+                                          printMachine m p cm c)%string*) checker false
       else walk ks' cm m p c m' p' c' traceOut cont
     end.
   
@@ -111,7 +111,7 @@ Module TestPropsRISCVSimple
                  (fun tt => aux fuel' m' p' c' (traceDiff :: traceOut))
           end
         end in
-    aux fuel m p ctx ([fun tt => printMachine m p cm ctx]).
+    aux fuel m p ctx ([fun tt => (*printMachine m p cm ctx*) ""]).
 
   Definition prop_integrity :=
     let sm := defStackMap defLayoutInfo in
@@ -191,8 +191,8 @@ Module TestPropsRISCVSimple
       | Some (m',p1,c1,o1), Some (n',p2,c2,o2) =>
         if obs_eqb o1 o2 then
           prop_laziestLockstepIntegrity fuel' m' n' p1 cm c1
-        else whenFail ("Primary: " ++ show o1 ++ " | Variant: " ++ show o2 ++ nl ++
-                       "Final state: " ++ nl ++ printMachine m p cm ctx)%string false
+        else (*whenFail ("Primary: " ++ show o1 ++ " | Variant: " ++ show o2 ++ nl ++
+                       "Final state: " ++ nl ++ printMachine m p cm ctx)%string*) checker false
 
       | _, _ => collect "Failstop after return" true
       end
@@ -217,7 +217,7 @@ Module TestPropsRISCVSimple
       match changed with
       | [] => checker true
       | _ =>
-        trace (show (List.length changed) ++ nl)
+        (*trace (show (List.length changed) ++ nl)*)
         (bindGen (genVariantByList changed m')
                  (fun n =>
                     prop_laziestLockstepIntegrity defFuel m' n p' cm c'))
@@ -312,39 +312,57 @@ Module TestRISCVLazyFixed := TestPropsRISCVSimple RISCVObs TPLazyFixed DLObs
                                                   TSS GenRISCVLazyFixed
                                                   PrintRISCVLazyFixed.
 
-Extract Constant defNumTests => "500".
+Extract Constant defNumTests => "5000".
   
 Import TestRISCVEager.
 Import TestRISCVEagerNLC.
 Import TestRISCVEagerNSC.
 Import TestRISCVEagerNI.
 
-QuickCheck TestRISCVEagerNLC.prop_confidentiality.
-QuickCheck TestRISCVEagerNSC.prop_integrity.
-QuickCheck TestRISCVEagerNI.prop_integrity.
-(* These three errors in the eager policy are detected by testing. *)
+(* Mutations marked "Fails" are expected to fail, and do! *)
+(* Three trials with each mutation for averaging *)
+(*Time QuickCheck TestRISCVEagerNLC.prop_confidentiality. (* Fails *)
+Time QuickCheck TestRISCVEagerNLC.prop_confidentiality.
+Time QuickCheck TestRISCVEagerNLC.prop_confidentiality.
 
-(*QuickCheck prop_confidentiality.*)
+Time QuickCheck TestRISCVEagerNSC.prop_integrity. (* Fails *)
+Time QuickCheck TestRISCVEagerNSC.prop_integrity.
+Time QuickCheck TestRISCVEagerNSC.prop_integrity.
+
+Time QuickCheck TestRISCVEagerNI.prop_integrity. (* Fails *)
+Time QuickCheck TestRISCVEagerNI.prop_integrity.
+Time QuickCheck TestRISCVEagerNI.prop_integrity.
+
+Time QuickCheck TestRISCVEager.prop_integrity.
+(* Confidentiality hangs sometimes -- better to test it in
+   smaller batches (~500) and kill it. How we managed to make coq
+   code diverge...
+Time QuickCheck TestRISCVEager.prop_confidentiality.*) *)
 
 Import TestRISCVLazyOrig.
 Import TestRISCVLazyNoDepth.
 Import TestRISCVLazyNoCheck.
 Import TestRISCVLazyFixed.
 
-(* These two can probably be ignored for now. *)
-(*QuickCheck prop_integrity.*)
-(*QuickCheck prop_confidentiality.*)
+Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity. (* Fails *)
+Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.
+Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.
 
-(* In principle this should be detectable too, but does not seem to be. *)
-(*QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.*)
+Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality. (* Fails *)
+Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality.
+Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality.
 
-(* More lazy tests, with failures (expected and found) noted in comments: *)
+Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *)
+Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.
+Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.
 
-(* Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality. (* Fails *) *)
-(* Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *) *)
+Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality. (* Fails *)
+Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality.
+Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality.
 
-(* Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality. (* Fails *) *)
-(* Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *) *)
+Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *)
+Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.
+Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.
 
-(* Time QuickCheck TestRISCVLazyFixed.prop_confidentiality. *)
-(* Time QuickCheck TestRISCVLazyFixed.prop_laziestIntegrity. *)
+Time QuickCheck TestRISCVLazyFixed.prop_confidentiality.
+Time QuickCheck TestRISCVLazyFixed.prop_laziestIntegrity.

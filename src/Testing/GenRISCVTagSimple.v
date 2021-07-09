@@ -254,7 +254,9 @@ Module GenRISCVLazyFixed <: Gen RISCVObs TPLazyFixed DLObs TSS.
                     ; (if_true_n (516 <? spVal) 2%nat, (ret (Sw sp rs (-16))))
                     ; (if_true_n (520 <? spVal) 2%nat, (ret (Sw sp rs (-20))))
                     ; (1%nat, bindGen (choose (spVal - 500, spVal))
-                                     (fun off => ret (Sw sp rs (- off))))
+                                      (fun off => ret (Sw sp rs (- off))))
+                    ; (1%nat, bindGen (choose (0, 600 - spVal))
+                                      (fun off => ret (Sw sp rs off)))
             ]).
 
     Definition genStackbasedRead (i : LayoutInfo) (m : MachineState) : G InstructionI :=
@@ -268,6 +270,8 @@ Module GenRISCVLazyFixed <: Gen RISCVObs TPLazyFixed DLObs TSS.
                       ; (if_true_n (520 <? spVal) 2%nat, ret (Lw rd sp (-20)))
                       ; (1%nat, bindGen (choose (spVal - 500, spVal))
                                         (fun off => ret (Lw rd sp (- off))))
+                      ; (1%nat, bindGen (choose (0, 600 - spVal))
+                                      (fun off => ret (Lw rd sp off)))
               ]).
 
   (*
@@ -931,7 +935,9 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSS.
                     ; (if_true_n (516 <? spVal) 2%nat, (ret (Sw sp rs (-16))))
                     ; (if_true_n (520 <? spVal) 2%nat, (ret (Sw sp rs (-20))))
                     ; (1%nat, bindGen (choose (spVal - 500, spVal))
-                                     (fun off => ret (Sw sp rs (- off))))
+                                      (fun off => ret (Sw sp rs (- off))))
+                    ; (1%nat, bindGen (choose (0, 600 - spVal))
+                                      (fun off => ret (Sw sp rs off)))
             ]).
 
     Definition genStackbasedRead (i : LayoutInfo) (m : MachineState) : G InstructionI :=
@@ -945,6 +951,8 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSS.
                       ; (if_true_n (520 <? spVal) 2%nat, ret (Lw rd sp (-20)))
                       ; (1%nat, bindGen (choose (spVal - 500, spVal))
                                         (fun off => ret (Lw rd sp (- off))))
+                      ; (1%nat, bindGen (choose (0, 600 - spVal))
+                                        (fun off => ret (Lw rd sp off)))
               ]).
 
   (*
@@ -1609,6 +1617,8 @@ Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSS.
                     ; (if_true_n (520 <? spVal) 2%nat, (ret (Sw sp rs (-20))))
                     ; (1%nat, bindGen (choose (spVal - 500, spVal))
                                      (fun off => ret (Sw sp rs (- off))))
+                    ; (1%nat, bindGen (choose (0, 600 - spVal))
+                                      (fun off => ret (Sw sp rs off)))
             ]).
 
     Definition genStackbasedRead (i : LayoutInfo) (m : MachineState) : G InstructionI :=
@@ -1622,6 +1632,8 @@ Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSS.
                       ; (if_true_n (520 <? spVal) 2%nat, ret (Lw rd sp (-20)))
                       ; (1%nat, bindGen (choose (spVal - 500, spVal))
                                         (fun off => ret (Lw rd sp (- off))))
+                      ; (1%nat, bindGen (choose (0, 600 - spVal))
+                                        (fun off => ret (Lw rd sp off)))
               ]).
 
   (*
@@ -2286,6 +2298,8 @@ Module GenRISCVLazyNoDepth <: Gen RISCVObs TPLazyNoDepth DLObs TSS.
                     ; (if_true_n (520 <? spVal) 2%nat, (ret (Sw sp rs (-20))))
                     ; (1%nat, bindGen (choose (spVal - 500, spVal))
                                      (fun off => ret (Sw sp rs (- off))))
+                    ; (1%nat, bindGen (choose (0, 600 - spVal))
+                                      (fun off => ret (Sw sp rs off)))
             ]).
 
     Definition genStackbasedRead (i : LayoutInfo) (m : MachineState) : G InstructionI :=
@@ -2299,6 +2313,8 @@ Module GenRISCVLazyNoDepth <: Gen RISCVObs TPLazyNoDepth DLObs TSS.
                       ; (if_true_n (520 <? spVal) 2%nat, ret (Lw rd sp (-20)))
                       ; (1%nat, bindGen (choose (spVal - 500, spVal))
                                         (fun off => ret (Lw rd sp (- off))))
+                      ; (1%nat, bindGen (choose (0, 600 - spVal))
+                                        (fun off => ret (Lw rd sp off)))
               ]).
 
   (*
