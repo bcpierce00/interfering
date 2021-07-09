@@ -2876,42 +2876,41 @@ stack confidentiality.
 \paragraph{Formal Stack Safety on Capability Machines}
 %
 To our knowledge, the only line of work to date that has attempted
-a positive and formal characterization of
-stack safety begins with \citet{SkorstengaardLocal}, who introduced a calling
-convention that uses local capabilities to preserve local state
-encapsulation and well-bracketed control flow
-using a logical relation to reason about the stack safety of concrete
-programs.
+a positive and formal characterization of stack safety
+%begins with \citet{SkorstengaardLocal}, who introduced a calling
+%convention that uses local capabilities to preserve local state
+%encapsulation and well-bracketed control flow
+%using a logical relation to reason about the stack safety of concrete
+%programs.
 % Although the required hardware support is readily available
 %in capability machines like Cheri,
 %% this technique incurs significant
 %% costs, because
 %it requires the entire unused part of the stack to be
 %cleared whenever a security boundary is crossed.
-Their logical
-relation captures capability safety without ``externally observable
-side-effects (like console output or memory access traces)''
-and can be used to reason about individual programs.
-
-StkTokens \citep{SkorstengaardSTKJFP} continues this line of work by
-defining a more efficient
-calling convention that uses linear capabilities for stack and return
-pointers.
-Informally, local state encapsulation (LSE) is defined as
-restricting accesses to the range of memory allocated to the current stack
-frame, and well-bracketed control flow (WBCF) is defined as only allowing
-returns from the topmost
-frame to the immediately adjacent frame below. Formally, this work improves on
-\citet{SkorstengaardLocal} by building those properties into the semantics of a
+%Their logical
+%relation captures capability safety without ``externally observable
+%side-effects (like console output or memory access traces)''
+%and can be used to reason about individual programs.
+is that of \citet{SkorstengaardSTKJFP}. Their 
+StkTokens system enforces stack safety on hardware equipped with
+memory capabilities, similar to those used in the CHERI system~\citep{Woodruff+14,Chisnall+15}, but
+with additional support for linear capabilities.
+Stack safety is defined as the conjuncton of local state encapsulation (LSE) and
+well-bracketed control flow (WBCF). 
+Informally, LSE means that the current activiation can only access its own frame, 
+and WBCF means that the topmost frame can only return to 
+the immediately adjacent frame below. Formally, these properties are defined
+with reference to the semantics of a 
 capability machine with a built-in call stack and call and return
 instructions; this machine is proven fully abstract with respect to a more
-concrete capability machine.
+concrete capability machine.  They call this approach a ``fully abstract overlay semantics.''
 The proof of full abstraction uses a standard notion of components, which
 import and export functions through their interfaces.
 
 We improve upon \citet{SkorstengaardSTKJFP} in two significant ways:
 \begin{enumerate}[label=(\roman*)]
-\item Most importantly, our definition captures the intuition that {\em
+\item Our definition captures the intuition that {\em
   every} caller should be protected from its callees.  By contrast,
 \citet{SkorstengaardSTKJFP}
 statically divide the world into trusted functions, which feature additional
@@ -2923,10 +2922,13 @@ code --- one can imagine a function that, when called with the wrong
 inputs, behaves unreasonably, but under most circumstances can be
 considered reasonable. \citet{SkorstengaardSTKJFP} would be forced
 to classify such a function as an adversary, and would not guarantee it
-protection. We argue that if individual function activations are well-behaved,
+protection.
+\apt{But see p. 17 para 2 of the JFP version of their paper, where they explicitly
+  dispute this characterization!}
+We argue that if individual function activations are well-behaved,
 they should be protected.
 
-\item \citet{SkorstengaardSTKJFP}'s approach to proving safety via fully
+\item \citet{SkorstengaardSTKJFP}'s approach to proving safety via a fully
   abstract overlay
   semantics relies on the definition of a ``stack-safe-by-construction''
   abstract machine that is closely tied to an underlying enforcement
@@ -2940,15 +2942,15 @@ they should be protected.
   Our properties are more generic: since we abstract over most of the machine
   state as well as the sealing and return conventions, they apply directly
   to a range of architectures, code features, and enforcement mechanisms.
+  Moreover, we have implemented extensions such as passing arguments on the stack,
+  describing callee-saves registers, and coroutines by making simple modifications
+  to our base domain model.
+  %% While it may well be possible to extend 
+  %% \citet{SkorstengaardSTKJFP}'s approach to cover these features.  
+  %% abstract machine to pass arguments on the stack, or to support callee-saves
+  %% registers. It might even be viable to construct a safe-by-construction abstract
+  %% coroutine machine in the same style, but this is hypothetical.
 
-\vspace{.7\smallskipamount}
-
-  Conversely, it seems possible to extend \citet{SkorstengaardSTKJFP}'s
-  abstract machine to pass arguments on the stack, or to support callee-saves
-  registers. It might even be viable to construct a safe-by-construction abstract
-  coroutine machine in the same style, but this is hypothetical.
-  We have implemented these scenarios with
-  simple modifications to the domain model.
 \end{enumerate}
 
 \citet{SkorstengaardSTKJFP} propose a useful list of criteria for judging

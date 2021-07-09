@@ -55,7 +55,7 @@ Module TestPropsRISCVSimple
   Import GenImp.
   Import PrintImp.
   
-  Definition defFuel := 100%nat.
+  Definition defFuel := 42%nat.
 
   Definition sameDifferenceP (m m' n n' : MachineState) k :=
     if (orb (negb (Z.eqb (proj m k) (proj m' k)))
@@ -300,6 +300,18 @@ Module TestRISCVLazyOrig := TestPropsRISCVSimple RISCVObs TPLazyOrig DLObs
                                                    TSS GenRISCVLazyOrig
                                                    PrintRISCVLazyOrig.
 
+Module TestRISCVLazyNoDepth := TestPropsRISCVSimple RISCVObs TPLazyNoDepth DLObs
+                                                    TSS GenRISCVLazyNoDepth
+                                                    PrintRISCVLazyNoDepth.
+
+Module TestRISCVLazyNoCheck := TestPropsRISCVSimple RISCVObs TPLazyNoCheck DLObs
+                                                    TSS GenRISCVLazyNoCheck
+                                                    PrintRISCVLazyNoCheck.
+
+Module TestRISCVLazyFixed := TestPropsRISCVSimple RISCVObs TPLazyFixed DLObs
+                                                  TSS GenRISCVLazyFixed
+                                                  PrintRISCVLazyFixed.
+
 Extract Constant defNumTests => "500".
   
 Import TestRISCVEager.
@@ -310,11 +322,29 @@ Import TestRISCVEagerNI.
 QuickCheck TestRISCVEagerNLC.prop_confidentiality.
 QuickCheck TestRISCVEagerNSC.prop_integrity.
 QuickCheck TestRISCVEagerNI.prop_integrity.
+(* These three errors in the eager policy are detected by testing. *)
 
 (*QuickCheck prop_confidentiality.*)
 
 Import TestRISCVLazyOrig.
+Import TestRISCVLazyNoDepth.
+Import TestRISCVLazyNoCheck.
+Import TestRISCVLazyFixed.
 
+(* These two can probably be ignored for now. *)
 (*QuickCheck prop_integrity.*)
 (*QuickCheck prop_confidentiality.*)
+
+(* In principle this should be detectable too, but does not seem to be. *)
 (*QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.*)
+
+(* More lazy tests, with failures (expected and found) noted in comments: *)
+
+(* Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality. (* Fails *) *)
+(* Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *) *)
+
+(* Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality. (* Fails *) *)
+(* Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *) *)
+
+(* Time QuickCheck TestRISCVLazyFixed.prop_confidentiality. *)
+(* Time QuickCheck TestRISCVLazyFixed.prop_laziestIntegrity. *)
