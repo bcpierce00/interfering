@@ -390,7 +390,6 @@ properties (\cref{sec:enforcement}).
 \item We show that the definition can be
 extended to argument passing on the stack, callee-saves registers, and a simple coroutine system (\cref{sec:ext}).
 \end{itemize}
-
 \Cref{sec:relwork,sec:future} discuss related and future work.
 
 \section{Key Ideas by Example}
@@ -494,10 +493,9 @@ int f() {
 \label{fig:int1}
 \end{figure}
 
-This section introduces the intuition behind our formal stack safety properties through a series
+This section explains our formal stack safety properties through a series
 of examples, each presented both in C syntax and in corresponding assembly code for a
-simple two-address machine (see Figure~\ref{fig:int1}). The address of each
-instruction is shown to its left.
+simple two-address machine (see Figure~\ref{fig:int1}).
 The assembly code reflects a simple compilation model in which
 local variables are stored in the stack frame.
 For the moment, arguments and return values are passed in registers.
@@ -508,16 +506,28 @@ implicitly adjusting the stack pointer.
 At the right of each example, we show the layout of stack memory just before
 the specified instruction is executed; each box represents a memory word
 (the machine is word addressed), and addresses increase to the right.
+The address of each instruction is shown to its left.  \bcp{Most of the
+  figure is kind of self-explanatory with this help, but the rightmost part
+  is a little opaque: what do 2, 3, 11, 12 mean?  What is SP?  What are the
+  numbers in the boxes?  What are these brackets under the boxes, ...}
 
-Labeled boxes indicate an assignment of the address to a
-{\em domain}---a label reflecting a particular set of intended access
-rights. Unless otherwise marked, sequential addresses retain the previous domain,
-as hinted by their colors. Domains are descriptive\bcp{??}; it is up to the enforcement
-mechanism to ensure that the system adheres to these permissions. Such a domain
-can be \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
+Boxes labeled $\sealdesc{0}$, $\retptrdesc$, etc., indicate an assignment of
+the corresponding address to the indicated
+{\em domain}, reflecting a particular set of intended access
+rights. Unless otherwise marked, further addresses retain the previous domain,
+as hinted by their colors\bcp{where do we see this happening?  Is it
+  important?}. \proposecut{Domains are descriptive\bcp{??}; it is up to the enforcement
+mechanism to ensure that the system adheres to these
+permissions.}\proposeadd{These domain annotations are not part of the
+machine state; they are used to define which program behaviors are to be
+considered safe.}  The domain of a given address
+can be\bcp{awkward: we say it can be one of three things, but in the picture
+it can also be RetPtr.} \(\unsealed\) (meaning: part of the stack and
+accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), or \(\outside\)
-(outside the stack entirely.) These are abbreviated \(U\) and \(S(\dots)\) in the
-figures. Not shown are global variables and code, which would be labeled \(\outside\).
+(outside the stack entirely.) These are abbreviated \(U\) and \(S(\dots)\)\bcp{Nope} in the
+figures. Global variables and code, which are not shown in the figures, would
+also be labeled \(\outside\).
 Domains form part of the {\em context} associated with a machine state.
 (We will introduce some other parts of the context as needed.)
 
@@ -530,7 +540,7 @@ meaning that it is eligible to be written to. At the call from {\tt main} to
 {\tt f}, {\tt main}'s locals are {\em sealed} with {\tt main}'s depth,
 in this case 0. Sealing is the fundamental integrity contract between the caller and callee:
 {\tt main} expects that {\tt x} will be unchanged when it gets control back.
-This gives us our simple, intuitive statement of {\em stepwise integrity}:
+This leads to a simple, intuitive statement of {\em stepwise integrity}:
 if a component is sealed before a step, it will be unchanged afterward. Stepwise
 refers to the fact that the property must hold on every step. %Later we will
 %loosen this condition in the interest of extensionality---the caller only
@@ -664,10 +674,10 @@ int f() {
 \label{fig:conf1}
 \end{figure}
 
-Dually, confidentiality intuitively states that a callee is insensitive to
+Dually, confidentiality states intuitively that a callee is insensitive to
 the context of its call (except for its arguments and any global
 variables).
-We state this as a kind of {\em noninterference} property~\citep{Goguen1982SecurityPA}.
+We state this as a form of {\em noninterference}~\citep{Goguen1982SecurityPA}.
 Noninterference describes knowledge: it states that for system components
 containing secret values, we can substitute any values whatsoever without changing the results
 of our computation. If there exists some value for which we see different results, then
@@ -2258,11 +2268,11 @@ integrity.\apt{Move latter to above.}
 %Per-activation tagging resolves the issue because tags that persist between
 %calls will not become active again.
 Our abstract properties have allowed us to identify an enforcement mechanism as
-not really stack safe, and to validate a possible fix. 
+not really stack safe, and to validate a possible fix.
 Unfortunately, Lazy Per-activation Tagging and Clearing
 puts severe pressure on the tag cache, so it may not be usable in practice.
 However, we conjecture that no lazy scheme can be fully stack safe
-without using unique per-activation identifiers. 
+without using unique per-activation identifiers.
 
 \section{Extensions}
 \label{sec:ext}
