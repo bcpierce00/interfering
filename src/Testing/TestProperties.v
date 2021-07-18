@@ -323,20 +323,20 @@ Import TestRISCVEagerNI.
 (* Three trials with each mutation for averaging *)
 (*Time QuickCheck TestRISCVEagerNLC.prop_confidentiality. (* Fails *)
 Time QuickCheck TestRISCVEagerNLC.prop_confidentiality.
-Time QuickCheck TestRISCVEagerNLC.prop_confidentiality.
+Time QuickCheck TestRISCVEagerNLC.prop_confidentiality. *)
 
-Time QuickCheck TestRISCVEagerNSC.prop_integrity. (* Fails *)
+(*Time QuickCheck TestRISCVEagerNSC.prop_integrity. (* Fails *)
 Time QuickCheck TestRISCVEagerNSC.prop_integrity.
-Time QuickCheck TestRISCVEagerNSC.prop_integrity.
+Time QuickCheck TestRISCVEagerNSC.prop_integrity.*)
 
-Time QuickCheck TestRISCVEagerNI.prop_integrity. (* Fails *)
+(*Time QuickCheck TestRISCVEagerNI.prop_integrity. (* Fails *)
 Time QuickCheck TestRISCVEagerNI.prop_integrity.
-Time QuickCheck TestRISCVEagerNI.prop_integrity.
+Time QuickCheck TestRISCVEagerNI.prop_integrity.*)
 
-Time QuickCheck TestRISCVEager.prop_integrity.
+(*Time QuickCheck TestRISCVEager.prop_integrity.
 (* Confidentiality hangs sometimes -- better to test it in
-   smaller batches (~500) and kill it. How we managed to make coq
-   code diverge...
+   smaller batches (~500) and kill it when needed.
+   How we managed to make coq code diverge...
 Time QuickCheck TestRISCVEager.prop_confidentiality.*) *)
 
 Import TestRISCVLazyOrig.
@@ -344,25 +344,20 @@ Import TestRISCVLazyNoDepth.
 Import TestRISCVLazyNoCheck.
 Import TestRISCVLazyFixed.
 
-Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity. (* Fails *)
+(*Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity. (* Fails *)
 Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.
 Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.
+Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.*)
 
-Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality. (* Fails *)
+(*Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality. (* Fails *)
 Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality.
-Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality.
-
 Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *)
-Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.
-Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.
+Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.*)
 
-Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality. (* Fails *)
+(*Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality. (* Fails *)
 Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality.
-Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality.
-
 Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *)
-Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.
-Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.
+Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.*)
 
-Time QuickCheck TestRISCVLazyFixed.prop_confidentiality.
-Time QuickCheck TestRISCVLazyFixed.prop_laziestIntegrity.
+(*Time QuickCheck TestRISCVLazyFixed.prop_confidentiality.
+Time QuickCheck TestRISCVLazyFixed.prop_laziestIntegrity.*)

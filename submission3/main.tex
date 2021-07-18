@@ -216,6 +216,8 @@ in several broken variants, including Roessler and DeHon's original lazy policy.
 %% environment and commands, and keywords command.
 \maketitle
 
+\newcommand{\paragraphx}[1]{\emph{#1.}}
+
 \section{Introduction}
 
 The call stack is a perennial target for low-level attacks, leading to a
@@ -234,13 +236,6 @@ and hardware tagging~\citep{DBLP:conf/sp/RoesslerD18}. \ifaftersubmission\apt{Mo
 this is a well-studied mechanism (so formalizing its protections is
 useful).}
 \fi
-
-Intuitively, stack safety means that the stack frame of each caller is protected
-from attempts by a confused or malicious callee (including all its
-descendant callees) to read or write its private data.
-That is, the attacker model treats every caller as a defender and its callee as
-an attacker, meaning that with nested calls, a single function invocation
-may be viewed in both ways.
 
 The protections offered by such mechanisms are commonly described in terms
 of concrete examples of attacks that they can prevent---corruption of return
@@ -527,7 +522,9 @@ can be \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\
 (outside the stack entirely.)
 % These are abbreviated \(U\) and \(S(\dots)\)\bcp{Nope} in the figures.
 Global variables and code, which are not shown in the figures, would
-also be labeled \(\outside\).  \bcp{what about RetPtr?}
+also be labeled \(\outside\). Return pointers, labeled ``RetPtr,''
+are shaded black and ignored for simplicity for now --- they will
+be treated properly later.
 Domains form part of the {\em context} associated with a machine state.
 (We will introduce some other parts of the context as needed.)
 
@@ -697,8 +694,9 @@ In Figure~\ref{fig:conf1} we see the callee, {\tt f}, violating confidentiality
 by reading {\tt main}'s variable {\tt x}. The trace
 shows how noninterference applies to this scenario. At instruction 10, we
 create an imaginary {\em variant}
-state with arbitrary values\bcp{IMO, it would be easier to
-understand if we chose concrete values for the examples}~(\(v_0\), etc.),
+state with arbitrary values\ifaftersubmission\bcp{IMO, it would be easier to
+  understand if we chose concrete values for the examples}\sna{FWIW I agree in
+  theory, but it looks bad every time I try it.\fi~(\(v_0\), etc.),
 in place of the actual values ($42$, ...) that should
 be hidden from {\tt f}; we show the evolving stack memory of the variant in a second, parallel column. At instruction 12, we note that the callee's first variable, {\tt y}, has
 changed to 5 in both the primary trace and the variant. The primary and variant agree on
@@ -1018,9 +1016,8 @@ Our stack safety properties do not assume that control flow follows a typical st
 of matching sets of calls and returns nested within one another.
 Rather, they aim to capture what it means to protect data even in the presence of control-flow attacks.
 Consider Figure~\ref{fig:controlflow}.
-(Here the diagram shows return addresses explicitly as line numbers, in the
-form $\#n$.\bcp{But the return address boxes are not black... should they
-  be, really?})
+(Now we treat return addresses properly, but write them as line numbers, in the
+form $\#n$.)
 Function {\tt f} is called twice, at instructions 3 and 5; it should therefore return to instructions
 4 and 6, respectively. But the first time, before returning, it stashes its
 return pointer away, and the second time it returns to instruction 4 instead of 6; then it ends
@@ -1156,7 +1153,6 @@ that we are given some way of telling when a given machine state is a
 %its own local state again and expected to find it unmolested.)}.
 
 \paragraph*{Enforcement Model}
-\apt{What are our ambititions for genericity over enforcement?}
 
 We model the base machine's behavior as a step function over machine states,
 and a machine
@@ -1174,21 +1170,14 @@ primary execution data to inform security. Tag-based systems, in which a hardwar
 monitor tracks metadata tags associated with a software-defined ``micro-policy,'' are
 the motivating application. The tags, and any extra policy state, are separated from
 and untouchable by application code.
-%Another significant example is the shadow stack\apt{citations? what enforcement systems do we actually have in mind?}, where a second stack
-%mirrors the real one, and a return may only occur if both stacks agree on the
-%target address. Typically the shadow stack is isolated using a separate protection
-%mechanism.
-\sna{Commented out shadow stacks until I can find a citation. May just skip it.}
 
 That said, our model is meant to apply generically to any enforcement mechanism,
 including those that do not take advantage of this separation.
 Some mechanisms, like hardware capability systems, might exhibit failstop behavior,
 but have no protected policy state---this is represented by a trivial policy
 that failstops when the hardware faults. Others might never even failstop, such as
-code rewriting techniques that turn stack safety violations into other (erroneous, but not
-stack-unsafe) behaviors. Then the policy-enhanced machine is identical to the original.
-\sna{I'm thinking of SFI here\apt{yes}, but that's not stacks, right? Does Softbound work like
-  this.\apt{dunno}}
+code rewriting techniques that prevent stack safety violations directly, in which
+case their policy state does nothing at all.
 
 An enforcement model may additionally
 apply a ``well-formedness'' criterion on initial states, ensuring that
@@ -1214,13 +1203,9 @@ to protect both stack and heap.
 \section{Machines and Traces}
 \label{sec:prelim}
 
-We now define our machine and enforcement model precisely. To make our definition of stack safety
-as generic as possible, this section proposes an abstract interface to a
-machine model plus some kind of (software- or hardware-enforced) policy monitor.
-In~\cref{sec:enforcement}, we instantiate this model with a concrete dynamic
-policy enforcement mechanism based on \citet{DBLP:conf/sp/RoesslerD18}.
+We now define our machine and enforcement model precisely.
 
-\subsection{Values and States}
+\paragraph*{Values and States}
 
 The building blocks of the machine are {\em values} and {\em addresses}.
 Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\) and
@@ -1263,7 +1248,7 @@ refines it to a partial function. The extra policy state never changes behavior,
 but it can cause
 premature termination, representing failstop behavior.
 
-\subsection{Contexts}
+\paragraph*{Contexts}
 
 Separate from the machine state, we keep track of additional context
 information representing the history of the run. This has no influence on execution, it merely
@@ -1284,7 +1269,7 @@ a triple state \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
               {\(\mpcstate{\mach}{\pol}{\context} \stepstocon
                 \mpcstate{\mach'}{\pol'}{\context'}\)}
 
-\subsection{Machine Traces}
+\paragraph*{Machine Traces}
 \label{sec:traces}
 
 A {\em machine trace} is a nonempty, finite or infinite sequence of elements
@@ -1453,12 +1438,14 @@ the stack to \(\unsealed\) and all other addresses and all registers to \(\outsi
 
 The rules for \(\stepsto_C\) are given inductively, and apply in the listed order.
 A call annotation tells us to push the return target onto the return stack and
-seal all components with the depth of the previous return stack. If we aren't making a call,
+seal all components with the depth of the previous return stack.
+(Recall that the code map \(\codemap\) is a partial function, and we can use its domain
+as a predicate on addresses.) If we aren't making a call,
 we identify a return by looking ahead and checking if we're about to step to a state
-that matches the topmost return target. If neither is true, the context remains unchanged.
-Recall that a ``code map'' \(\codemap\) is a partial function, and we can use its domain
-as a predicate on addresses. If a target is reached anywhere in the return stack, {\sc ReturnRec}
+that matches the topmost return target ({\sc ReturnFound}), and unsealing the caller's frame if so. 
+If a target is reached anywhere in the return stack, {\sc ReturnRec}
 unseals each frame down to the level that was returned to.
+If none of these situations hold, the context remains unchanged.
 
 \judgmentthree[ Call]
               {\(\codemap ~ (\mach ~ \PCname)\)}
@@ -1478,7 +1465,7 @@ unseals each frame down to the level that was returned to.
             {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
             {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
             {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'[\components \mapsto \unsealed],\rts'\)}
-\vspace*{-3.5ex}
+\vspace*{-2.5ex}
 \judgment[ Default]
          {}
          {\(\underscore,\context \stepsto_C \context\)}
@@ -1504,8 +1491,8 @@ and any component \(\component \in \prot(\context)\),
 \(\pi_\mach(\mpcstatename') ~ \component = \mach ~ \component\).
 
 Next we consider {\em stepwise stack confidentiality}. Recall that our properties are
-nested: we will quantify over subtraces that represent whole calls. For each such
-subtrace, we will quantify over {\em variants} of its initial state. Then we require
+nested: we will quantify over subtraces that represent whole calls. For each
+subtrace, we quantify over {\em variants} of its initial state. Then we require
 that the original, {\em primary} traces move in {\em lockstep} with the variant.
 
 \definition The \emph{call set} \(\MPCT^*\) of a machine is
@@ -1766,8 +1753,8 @@ such as a blessed sequence) that makes sense locally (e.g., jumps go
 to a potentially valid code location and loads read from a
 potentially valid stack location). Then we step the machine and repeat
 the process until we generate or execute some target number of
-instructions, or reach a point where the machine can't step
-anymore.
+instructions, or reach a point where the machine cannot step
+any more.
 
 We extend this technique to keep track of the control flow behavior of
 the program being generated: each time a call or return sequence is
@@ -1778,7 +1765,7 @@ annotations are set for the entry or return points.% At the same time,
 %to failstop when executed in conjunction with the policy monitor,
 %but also allows for revealing errors in our setup.\apt{??}
 
-In addition, we need to extend this technique to handle the nested
+In addition, we need to further extend this technique to handle the nested
 nature of our confidentiality property: rather than just generating two
 initial machines that are variants of one another and letting them
 execute to test for noninterference, we generate a new variant
@@ -1801,22 +1788,22 @@ testing our implementation. We elaborate on some such bugs below.
 \begin{table}[]
 \centering
 \begin{tabular}{c|c|c|c}
-  Bug & Property Violated & MTTF (ms) & Tests \\
+  Bug & Property Violated & MTTF (s) & Tests \\
   \hline
-      {\em LOAD\_NO\_CHECK}  & Confidentiality &  \\
-      {\em STORE\_NO\_CHECK} & Integrity &  \\
-      {\em HEADER\_NO\_INIT} & Integrity &  \\
+      {\em LOAD\_NO\_CHECK}  & Confidentiality & 24.2 & 13.3 \\
+      {\em STORE\_NO\_CHECK} & Integrity & 26.9 & 26 \\
+      {\em HEADER\_NO\_INIT} & Integrity & 69.5 & 76.3 \\
 \end{tabular}
 \vspace*{1em}
-\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
+\caption{MTTF for finding bugs in erroneous eager policy enforcement mechanisms}
 \vspace*{-2em}
 \label{tab:bug-table}
 \end{table}
 
-The mean-time-to-failure (MTTF) for various bugs can be found in
+The mean-time-to-failure (MTTF) and average number of tests for various bugs can be found in
 Table~\ref{tab:bug-table}, along with the average number of tests
-it took to find the failure. Experiments were run in a laptop
-machine equipped with i7-8550U CPU @ 1.8GHz with 32GB RAM.
+it took to find the failure. Experiments were run in a desktop
+machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
 % \leo{Something like: There is really no baseline to compare this
   %against, but include it here for the future/reasons?}
 %
@@ -1881,7 +1868,7 @@ the \(\tagNoDepth\) tag, claiming the memory; the remainder of the policy functi
 as in Depth Isolation. However, on return, the callee must clear its frame, restoring
 each tag to \(\tagNoDepth\), which is still a heavy cost.
 
-To eliminate this cost, \citet{DBLP:conf/sp/RoesslerD18} augment Lazy Tagging
+To eliminate this cost, they augment Lazy Tagging
 with {\em Lazy Clearing}. Under this combination of optimizations,
 the policy does not initialize stack frames on entry \emph{or} clear them on exit,
 and it permits all writes to the stack, even when the $\PCname$ tag
@@ -1940,7 +1927,7 @@ behind lazy tagging, we are interested in properties that can be used to
 evaluate the broadest possible range of reasonable
 enforcement mechanisms.
 For example, reading after a dangerous write may be acceptable if the value
-read does not affect the ultimate output of the program; this looser scheme
+read does not affect the output of the program; this looser scheme
 could be enforced by tainting the dangerous writes and detecting taint
 at the point of output.
 %For example, consider a hypothetical
@@ -1964,7 +1951,7 @@ $\mach \stepsto[\obs] \mach' \in \MACHS \rightarrow \MACHS \times \OBSS $.
 
 \paragraph*{Observations-Of}
 
-The ``observations-of'' operator, written \(\obsof\), takes a machine trace and
+This operator, written \(\obsof\), takes a machine trace and
 gives the trace of observations of each step in
 the trace. It uses a coinductive helper \(\mathit{obsfor}\) that relates an
 initial observation, a machine-trace, and an observation trace; the helper is
@@ -2008,11 +1995,6 @@ compare up to deletion of \(\tau\) observations, coinductively:
            {\(\notfinished{\obs}{\obsT_1} \eqsim \notfinished{\obs}{\obsT_2}\)}
 \end{minipage}
 
-%\leo{I still don't know how to do this transition. Maybe contrast
-%with the ``perhaps surprisingly'' later?} Note that
-%similarity of observation traces could alternatively be defined coinductively,
-%just like the prefix relation, but by dropping the asymmetric rules that allow
-%for a finite trace ($\tau \lesssim \obsT$ or $w \lesssim w\obsT$).\apt{Is this immportant?}\leo{I agree. Probably not}
 
 Note that an infinite silent trace is a
 prefix of (and similar to) any other trace. While this might seem
@@ -2076,7 +2058,7 @@ For any \(\nach\) such that \(\mach \approx_\components \nach\) and
 
 This last condition is the most interesting: we identify the components that
 contain leaked information on either side of the first pair of variant traces.
-This becomes the basis for the second variation, because all of these values
+This becomes the basis for the second variation, as all of these values
 must be protected from leaking for the remainder of the program.
 
 These two properties give us
@@ -2092,7 +2074,9 @@ it would be the observational one.
 
 Observable properties allow us to defer enforcement until a property
 violation would become visible. Now we can identify when lazy policies
-miss such violations. The Lazy Tagging and Clearing
+miss such violations, which are again susceptible to testing;
+Table~\ref{tab:lazy-bug-table} summarizes the results of our evaluation.
+The Lazy Tagging and Clearing
 micro-policy from \citet{DBLP:conf/sp/RoesslerD18} tags each stack slot with the call depth
 at which it was written, and enforces that it must be read from the
 same depth. However, this allows violations of observable stack safety!
@@ -2117,18 +2101,22 @@ each activation is tagged uniquely, and find that it obeys stepwise
 confidentiality and observational integrity. To round out our mutations testing
 we also check an equivalent to {\em LOAD\_NO\_CHECK} and a version where
 stores succeed but fail to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
+It turns out that {\em PER\_DEPTH\_TAG} is a comparatively subtle bug,
+taking twice as long to catch as the next longest.
 
 \begin{table}[]
 \centering
 \begin{tabular}{c|c|c|c}
-        Bug & Property Violated & MTTF (ms) & Tests \\
+        Bug & Property Violated & MTTF (s) & Tests \\
   \hline
-        {\em PER\_DEPTH\_TAG} & Observational Integrity &  & \\
-        {\em LOAD\_NO\_CHECK}  & Observational Integrity &  & \\
-        {\em STORE\_NO\_UPDATE} & Observational Integrity &  & \\
+        {\em PER\_DEPTH\_TAG} & Observational Integrity & 189.7 & 8342.5  \\
+        {\em LOAD\_NO\_CHECK}  & Observational Integrity & 23.5 & 12.0 \\
+        {\em LOAD\_NO\_CHECK}  & Confidentiality & 19.2 & 695.5 \\
+        {\em STORE\_NO\_UPDATE} & Observational Integrity & 70 & 80.6  \\
+        {\em STORE\_NO\_UPDATE} & Confidentiality & 4.9 & 88.5 \\
 \end{tabular}
 \vspace*{1em}
-\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
+\caption{MTTF for finding bugs in erroneous lazy policy enforcement mechanisms}
 \vspace*{-2em}
 \label{tab:lazy-bug-table}
 \end{table}
@@ -2514,8 +2502,7 @@ At the matching return we just unseal the components at depth \(\depth\):
   \domMap~\component        & \text{else} \\
 \end{cases}\]
 
-Now we can inductively define the context update function; these rules again apply in the order
-presented. \ifspace\bcp{Too much space between the second and third.}\fi
+Now we can inductively define the context update function, as before.
 
 \judgmenttwo[ Call]
             {\(\codemap ~ (\mach ~ \PCname) = \callmap(P)\)}
@@ -2529,7 +2516,7 @@ presented. \ifspace\bcp{Too much space between the second and third.}\fi
             {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
 
 \vspace*{-1ex}
-\judgmentthree[ ReturnRec]
+\judgmenttwo[ ReturnRec]
               {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
               {\(\domMap'' = \mathit{pop} ~ \domMap' ~ |\rts|\)}
               {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'',\rts'\)}
@@ -2583,8 +2570,9 @@ should never be saved. We then extend the set of domains with these values, for 
 %
 \[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(S) ~ \mbox{\rm{where}} ~ S \in \REGS \rightarrow (\unsaved + \saved)\]
 %
+\vspace{-3.5ex}
 \[\stackDom \in \STKDOMS ::= \outside + \unsealed + \sealed{\depth} + \unsaved + \saved\]
-
+%
 \judgmenttwobrlong[ Call]
                   {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
 %              {\(\components = \sealcon ~ \mach\)}
@@ -2655,7 +2643,7 @@ The initial domain map maps each stack address in stack \(\stackid\) to
 return stacks, the initial yield targets are defined above, and the initial stack id matches the initial
 coroutine. Together these form the initial context.
 
-In our context update rules, calls and returns work the same as in the sharing model,
+In our context update rules, calls and returns work the same as in the subroutine models,
 with domain updates restricted to the top-level domain corresponding to the active stack,
 and likewise using the return target stacks. We will omit these rules and focus on the new yield rule.
 
@@ -2715,38 +2703,22 @@ stack confidentiality.
 \section{Related Work}
 \label{sec:relwork}
 
-\paragraph{Formal Stack Safety on Capability Machines}
+\paragraphx{Formal Stack Safety on Capability Machines}
 %
 To our knowledge, the only line of work to date that has attempted
 a positive and formal characterization of stack safety
-%begins with \citet{SkorstengaardLocal}, who introduced a calling
-%convention that uses local capabilities to preserve local state
-%encapsulation and well-bracketed control flow
-%using a logical relation to reason about the stack safety of concrete
-%programs.
-% Although the required hardware support is readily available
-%in capability machines like Cheri,
-%% this technique incurs significant
-%% costs, because
-%it requires the entire unused part of the stack to be
-%cleared whenever a security boundary is crossed.
-%Their logical
-%relation captures capability safety without ``externally observable
-%side-effects (like console output or memory access traces)''
-%and can be used to reason about individual programs.
 is that of \citet{SkorstengaardSTKJFP}. Their
 StkTokens system enforces stack safety on hardware equipped with
-memory capabilities, similar to those used in the CHERI system~\citep{Woodruff+14,Chisnall+15}, but
+memory capabilities, similar to those used in the Cheri system~\citep{Woodruff+14,Chisnall+15}, but
 with additional support for linear capabilities.
 Stack safety is defined as the conjuncton of local state encapsulation (LSE) and
 well-bracketed control flow (WBCF).
 Informally, LSE means that the current activiation can only access its own frame,
 and WBCF means that the topmost frame can only return to
 the immediately adjacent frame below. Formally, these properties are defined
-with reference to the semantics of a
-capability machine with a built-in call stack and call and return
+with reference to a capability machine with a built-in call stack and call and return
 instructions; this machine is proven fully abstract with respect to a more
-concrete capability machine.  They call this approach a ``fully abstract overlay semantics.''
+concrete capability machine, an approach termed ``fully abstract overlay semantics.''
 The proof of full abstraction uses a standard notion of components, which
 import and export functions through their interfaces.
 
@@ -2754,17 +2726,18 @@ We improve upon \citet{SkorstengaardSTKJFP} in two significant ways:
 \begin{enumerate}[label=(\roman*)]
 \item Our definition captures the intuition that {\em
   every} caller should be protected from its callees.  By contrast,
-  \citet{SkorstengaardSTKJFP} describe a class of ``unreasonable'' code components
-  that are not protected, because the are capable of dynamic behavior that can compromise
-  their own security. Unreasonable code can be viewed as adversarial, but it is equally
-  likely to simply be buggy. One can imagine a function that, when called with the wrong
+  \citet{SkorstengaardSTKJFP} describe a class of ``unreasonable'' components
+  that are not protected, because they are capable of dynamic behavior that can compromise
+  their own security. Unreasonable code can be viewed as adversarial, or merely as
+  buggy. One can imagine a function that, when called with the wrong
   inputs, behaves unreasonably, but under most circumstances can be
   considered reasonable. \citet{SkorstengaardSTKJFP} would not consider this a
-  {\em reasonable component} (as defined in their section 4.3.3), and so
-  would not guarantee its protection. In contrast, in our setting, individual
+  {\em reasonable component} (as defined in their section 4.3.3), as a reasonable
+  component is always reasonable, and so they
+  would not guarantee its protection. In our setting, individual
   well-behaved activations of the buggy function would be protected.
-  \citet{SkorstengaardSTKJFP} note that they support mutually distrustful
-  components, but we go a step further. One can think of our hypothetical
+  \citet{SkorstengaardSTKJFP} support mutually distrustful
+  components; one can think of our hypothetical
   function as ``self-distrustful'' in that the safety of a well-behaved activation
   is not compromised by another, ill-behaved activiation of the same function.
 
@@ -2793,14 +2766,15 @@ We improve upon \citet{SkorstengaardSTKJFP} in two significant ways:
 
 \end{enumerate}
 
-\citet{SkorstengaardSTKJFP} propose a useful list of criteria for judging
-candidate stack safety properties: they should be (1) intuitive; (2)
-useful for reasoning; (3) reusable in secure compiler chains; (4)
-arguably ``complete'' with respect to informal notions of stack
-safety; and (5) potentially scalable to richer settings such as
-dynamic code generation or multithreading.
-
-For criterion (1), intuitiveness, we contend that our property definitions are at least as
+\citet{SkorstengaardSTKJFP} propose a useful list of five criteria for judging
+candidate stack safety properties.
+%% : they should be (1) intuitive; (2)
+%% useful for reasoning; (3) reusable in secure compiler chains; (4)
+%% arguably ``complete'' with respect to informal notions of stack
+%% safety; and (5) potentially scalable to richer settings such as
+%% dynamic code generation or multithreading.
+%
+(1) {\em Intuitiveness}. We contend that our property definitions are at least as
 intuitive as theirs, while being phrased in interestingly different terms.
 We use the language of formal security
 properties to apply well-established concepts and formal techniques
@@ -2810,25 +2784,26 @@ ad-hoc abstract machine.
 Which approach is ``better'' is probably a matter of taste, but ours
 has at least the merit of explicitly relating stack safety to existing
 notions of security.
-
-We agree that criterion (2), usefulness of the safety criterion
-for carrying out formal proofs (about individual programs), is important;
+%
+(2) {\em Usefulness} of the safety criterion
+for carrying out formal proofs (about individual programs). We agree that this is an important consideration;
 demonstrating it for our proposal remains future work, in which we
 plan to apply our properties to justifying a low-level program logic.
-
+%
+(3) {\em Reusability} in secure compilation chains.
 StkTokens
-is specifically set up to address criterion (3), reusability in secure
-compilation chains, while this is not a goal of
+is specifically set up to address this,
+while it is not a goal of
 our work.
-
-With respect to criterion (4), capturing programmers' informal
-understanding of stack safety, we believe that our support
+%
+(4) {\em Comprehensiveness} in capturing programmers' informal
+understanding of stack safety. We believe that our support
 for dynamically changing notion of adversaries, as outlined in point (i) above,
 captures a better definition of safety than LSE; moreover, our observational
 properties capture an even richer and more extensional notion of stack safety
 that can be applied to a broader range of enforcement mechanisms and code features.
-
-As for criterion (5), broad applicability, we have demonstrated that our approach extends to
+%
+(5) {\em Broad applicability} to richer settings. We have demonstrated that our approach extends to
 coroutines, a first step towards multithreading. Dynamic code generation is
 more challenging, but StkTokens does not yet handle this either.
 
@@ -2840,34 +2815,33 @@ via formal proof. We have used ours to obtain a weaker, testing-based validation
 two different mechanisms on a single machine, and will target a capability machine
 next as future work.
 
-\paragraph{Protecting the Stack with Micro-Policies}
+\paragraphx{Protecting the Stack with Micro-Policies}
 %
 \citet{DBLP:conf/sp/RoesslerD18} consider a standard attacker model where all
 attacks against stack data are in scope (but not side channels or hardware
 attacks), and study the protection of stack data through three families of
 micro-policies that tag stack objects with a pair of frame and object identifiers
-used to validate accesses to the stack: {\em Return Address Protection} (which
+used to validate accesses: {\em Return Address Protection} (which
 prevents an adversary from overwriting designated return addresses), {\em Static
 Authorities} (which only allows the code of a function to access the stack frames
-of its own dynamic instances), and {\em Depth Isolation} (described in
-\cref{sec:enforcement}). All these policies exploit various kinds of spatial and
+of its own dynamic instances), and {\em Depth Isolation}
+(\cref{sec:enforcement}). All these policies exploit various kinds of spatial and
 temporal locality of stack memory and local call graphs, as well as information
 generated by the compilation toolchain, to strike various balances between
 precision and cacheability, evaluated through benchmarks that demonstrate
 limited performance overhead. In addition to the baseline ``eager'' policies,
 they propose a number of lazy optimizations, notably {\em Lazy Tagging} and
 {\em Lazy
-Clearing}, discussed in \cref{sec:lazy}, with associated improvements in
-performance.
+Clearing} (\cref{sec:lazy}).
 
 We evaluated {\em Depth Isolation}, {\em Lazy Tagging}, and {\em Lazy
   Clearing} against our properties, finding that {\em Depth Isolation} does
-indeed enforce stepwise stack safety and therefore also observable stack
+indeed enforce stepwise stack safety and therefore observable stack
 safety. We also found that neither lazy micro-policy actually enforces
 stack safety, and we proposed a fix.
 
-\paragraph{Heap Safety as a Security Property}
-
+\paragraphx{Heap Safety as a Security Property}
+%
 Heap safety, like stack safety, may be framed as a security property using
 the language of
 noninterference~\citep{DBLP:conf/post/AmorimHP18}. Their paper was a significant inspiration
@@ -2886,8 +2860,8 @@ systems. Second, we can further demonstrate
 the functionality of our definitions by showing that they can be used to prove
 the correctness of a programming logic with strengthened rules around calls and returns.
 
-\paragraph*{Stack Safety in the Cheri Ecosystem}
-
+\paragraphx{Stack Safety in the Cheri Ecosystem}
+%
 There are several proposals around the use of Cheri capabilities to enforce stack safety,
 including mechanisms that use the standard Cheri hardware (which includes local
 capabilities) \citep{SkorstengaardLocal},
@@ -2900,15 +2874,15 @@ to clear large swaths of the stack. We plan to implement a model of the stack sa
 system described in \citet{Georges+21} and test it against our properties using
 QuickChick.
 
-\paragraph*{A Program Logic for Stacks}
-
+\paragraphx{A Program Logic for Stacks}
+%
 Stack integrity suggests a reasoning principle in which knowledge about a
 caller's local data can be carried across a call site. We aim to develop
 this idea into a low-level separation logic with a ``call rule'' that
 preserves propositions whose domains are sealed across a call, while
 allowing those propositions proven about the behavior of the callee to apply
 to the accessible stack.
-
+%
 It is easy to imagine that such a rule could be proven sound in a system
 with lockstep stack safety. More challenging would be to ask what kind of
 proof rule would be appropriate for a system that obeys only our
