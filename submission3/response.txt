@@ -1,170 +1,144 @@
-# Overview
+Review #416A
+Overall merit
 
-We thank the reviewers for their comments.
+B. Weak Accept
+Reviewer expertise
 
-The reviews identify some areas that the paper fails to explain
-adequately -- in particular, "framing" questions: How does the work improve
-on existing formalizations of stack safety? Do we have a plan to validate
-the model further?  Can our work be extended to cover more complex uses of
-the stack?
+X. Expert
+Paper summary
 
-In the next section, we outline the changes we plan to make in the paper to
-clarify these questions.  We discuss the issues in more detail in the third
-section.
+This submission formalizes the general notion of stack safety (roughly speaking, every caller should be protected from its callees during program execution) using well-known notions of security (integrity, confidentiality and non interference), and defines several security policies for protecting the stack. The formalization is validated on existing (and less general) micro-policies for stack safety (depth isolation, lazy tagging and lazy clearing) using property-based random testing. This evaluation of former policies detected some security violations in former and less precise works.
 
-## Changes
+First, this submission introduces the main required security policies, in terms of traces of memory, register states and stepwise stack-safety: stepwise integrity (an execution step does not modify the memory slots that are reserved for a caller at a given depth), confidentiality (a callee is insensitive to the context of its call), stepwise confidentiality, temporal stack safety, and well-bracketed control-flow (calls and returns should be correctly nested). Then, the submission describes the requirements on the machine model (presence of a program counter, used to distinguish between the different stack-frames, and a mechanism for recognizing the return from a call) and the threat model. The machine model is abstract enough to represent different architectures.
 
-1. We will give a more thorough discussion of validation, discuss the
-   feasibility of proofs and of randomized testing of more complex
-   properties, and detail our roadmap for further validation of different
-   versions of the property. For details, see the comments responding
-   to reviewer A.
+Next, the submission details in a progressive way the formalization of machine behaviors and stack safety using semantic rules. The first formalization of the execution stack is simple, with a single stack and no sharing between callers and callees. Then the model is enriched with function parameters passed on the stack (by value or by reference), with callee-saves registers and with coroutines. Moreover, the first model is implemented in Coq and this implementation reuses an existing RISCV specification. The QuickChick tool is used to test the stepwise property and validate an existing enforcement mechanism (called depth isolation) of the literature. Furthermore, as the previous policy is conservative and rather slow to be practical, more permissive variants of confidentiality and integrity properties are formalized, resulting in an observational property that is again validated by testing.
+Strengths
 
-  *Status* - not incorporated
+    well-written submission, well-explained ideas
 
-2. We will give a more explicit and direct comparison to the work of
-   Skorstengaard et. al. Currently we discuss it briefly in our related work
-   section, but the novelty of our work does not come through clearly
-   enough; we will explain the differences more thoroughly, all in one place.
-   For details, see the comments responding to reviewer B.
+    general formalization that addresses a real challenge and that is validated by testing
 
-  *Status* - incorporated, but needs example/more discussion
+Weaknesses
 
-3. We will improve the presentation as suggested. In particular, we will
-   gradually introduce the examples and associated intuitions (including our
-   visual metaphors) as early as possible, starting in the introduction.
+    lack of discussion about the limitations of the work
 
-  *Status* - not incorporated
+    medium delta with respect to previous works
 
-4. We will more clearly call out common language features, such as the heap,
-   that are compatible with our treatment of stack safety. For details,
-   see the comments responding to reviewer B.
+Comments for author
 
-  *Status* incorporated
+This submission is well-written, with well-explained ideas. Examples of C and assembly programs are used throughout the submission to illustrate the various définitions. The formalization is provided as a supplementary material together with the test cases. The techniques and results of the submission are interesting and general enough to be reused in different settings.
 
-5. We will add a discussion of how to extend the model to a callee-saves
-   registers convention, which demonstrates a second concrete use for 
-   the observational properties. Previously we were concerned about space
-   and explanatory complexity, but in retrospect we see that discussing
-   register protection would paint a more complete picture.
-   For details, see the comments responding to reviewer A.
+I am in favor of accepting this paper; however there are a few questions that I would like to be addressed.
 
-  *Status* incorporated
+Why did you choose this RISCV specification? Why didn't you choose to reuse an ARM specification (as there are some of them written in Coq in the literature)? Would it be easy to adapt your work to another ISA specification? How realistic is the RISCV specification? In other words, are there any RISCV vulnerabilities that are not taken into account in your model? More generally, what are the limitations of the presented work? For example, in the model, there seems to be no distinction between values and addresses; is it a limitation? Another example is the outside qualifier that characterizes only a whole component. Wouldn't you need a finer-grain access control policy (and a qualifier for partially outside components)?
 
-# Detailed Comments
+Could you comment on the Coq formalization that is provided as a supplementary material? Was it straightforward to write a Coq program from a C++ program? Moreover, I looked at the Coq development and found some admitted lemmas in it.
+Other comments
 
-## Reviewer A
+The supplementary material is not mentioned in the submission. Links to the Coq formalization would have been useful (e.g., for definition 7.4 that I did not fully understand in the submission, as K' is defined but not used, and so is n'').
 
-We will extend the paper with a more detailed discussion of our roadmap for
-verification and testing and the issues that we expect to arise. Here is a
-rough outline of how it would cover the concerns raised in the review.
+The first example programs (Fig. 1 to 4) are C programs. The programs in Fig. 5 and 6 are qualified as C++ programs, but they could be C programs and they are close to the first programs. Moreover, the C syntax for passing parameters by reference is surprising. I would have written f(&x)(line 934) and void f(int *a)(line 944).
 
-> ...discussion on whether it is feasible/desirable/in-progress/etc. to prove enforcement mechanisms correct.
+    (83) when THAT an
+    (83) actiVation
+    (210) We CAN this form
+    (310, 886,895,947) The return instruction is confusing as the return type of fis void.
+    (357) when THE state
+    (389) are ARE
+    (568) two many closing parentheses (twice)
+    (626) we need REQUIRE
+    (626) followS
+    (652) calls. That
+    (796) I was expecting m' in (m,p',ctx').
+    (1005) lack of space between the last two rules
+    (1118) conjunctIon
 
-Correctness of an enforcement mechanism with respect to our properties
-is certainly amenable to formal proof. Such a proof would be
-considerable work to carry out for a full ISA like RISC-V, but we see
-no fundamental barriers.  We chose to concentrate on testing because
-it is better aligned with our immediate goal of evaluating real
-enforcement mechanisms for real machine architectures.
+Questions for the response period
 
-> * The testing for the lazy tagging/clearing found mistakes but the "potential fix [is] itself a prime candidate for future testing" [line 868]
->
-> * Any validation for the lazier observability definition (this is listed as future work.)^M
->
-> * Any validation for the coroutine work.
+See my former questions related to 1) the Coq formalization, 2) the choice of a RISCV model and 3) the limitations of the approach
 
+====================================================================================================================================
 
-[ We have since tested lazy tagging/clearing and found it to pass the
-  newly implemented observational integrity property as well as normal,
-  stepwise confidentiality. But we did not have this ready before the
-  deadline.
-| We are working to implement testing of observational properties and to apply
-  this to the putatively fixed version of the lazy tagging/clearing
-  micro-policy. ]
+Review #416B
+Overall merit
 
-Our other short-term plan is to implement testing of a second enforcement
-mechanism -- a Cheri implementation of stack safety -- to demonstrate that
-our properties are not strictly tied to tag-based enforcement. We are
-currently working on QuickChick generators for Cheri programs, which
-have a different calling convention (a more complicated one, which is easier
-to get wrong!). This effort is beyond the scope of this paper, but we will
-sketch it as future work. 
+C. Weak Reject
+Reviewer expertise
 
-Validation of the argument-passing and coroutine models are longer-term
-projects.  The argument-passing model has existing enforcement mechanisms and serves
-an important role in common stack use cases. Coroutines will require the
-development of an enforcement mechanism (e.g., one based on tags) to
-validate.
+Y. Knowledgeable
+Paper summary
 
-> Another minor question: The difference between [nested] call-by-reference
-> and passing address-of-local was interesting, but I'm not sure how much it
-> makes sense to argue the latter is "beyond the scope of stack safety per
-> se" [line 939] without arguing the same of the former.  Perhaps the
-> argument can be made that address-of-local can be put in the heap while a
-> by-reference parameter cannot and since you don't guarantee heap safety,
-> you shouldn't try to do anything useful with address-of-local?
+This paper presents a semantics for formalising safety properties of stack safety enforcement systems. The paper uses a map to say which parts of the stack can currently be accessed and which can't, similar to the semantics of separation logic. It then connects this to a notion of call and return, that can be configured to enable different machine's implementations of functions.
 
-Yes, this was exactly our thinking.  We know what constitutes legal access
-to stack-allocated arguments, but for explicit pointers this is much less
-clear, and depends on the intent of the programmer. We believe an
-address-of-local should be treated similarly to the address of a heap
-object, but with a different lifetime. For instance, if a heap safety model
-treats heap pointers like capabilities (possession implies access rights),
-we would treat stack pointers the same.  Similarly, if the heap model
-permits pointer forging (restricted to within compartments, say) we would
-expect to be able to forge pointers to address-taken locals in the same
-circumstances.
+The paper uses a systematic testing approach with QuickChick to show that a hardware enforcement mechanism actually provides stack safety, and find bugs that are injected into the approach. It is great that you found the bug in lazy approach, however, it is fairly obvious type of security issue where uninitialised data leads to something escaping.
 
-In the longer term we would like to extend our model with a heap, in
-the style of Azevedo de Amorim et al. [1] which is phrased in similar
-terms to our model and should be compatible. In this setting the
-interplay between heap-derived and stack-derived pointers (with
-similar behaviors but different lifespans) will be much more
-interesting.
+The paper discusses extension, where parameter passing can use the stack, and passing references to structures.
 
-## Reviewer B
+The paper is primarily a semantics paper, though that seems fairly straightforward. The more interesting aspect of the paper is the more elaborate examples in Section 6 and 7, and the more elaborate extensions in 8. But I had not followed the earlier aspects well enough to appreciate those.
 
-> Q3. Why don't you assume well-bracketed control flow like Skorstengaard et
-> al (L289-291)? What are the implications of that?
+Overall, I didn't find the paper particularly compelling in its current form. It seems complex for what it achieves earlier on, and doesn't have clear enough exposition for the later parts.
+Strengths
 
-Skorstengaard et al. don't directly assume well-bracketed control
-flow, they enforce it. But the terms in which they define it differ
-from ours. Their version assumes a code layout where each function has
-an isolated footprint and they don't permit unrestricted jumps between
-footprints.  Our definitions are sensible without that assumption.
+    Checks properties of stack safety using capabilities
+    Interesting topic
 
-## Reviewer C
+Weaknesses
 
-> - It is a bit difficult to assess the merits of this work. Yes, the
->   stack safety property is important for security, but what new results
->   or new capabilities does the proposed definition bring in?
+    Exposition doesn't connect the different aspects of the paper well.
 
-First, we contend that a formal definition of stack safety is valuable in
-its own right, as a way of shifting the discussion away from specific
-examples of bad behavior that must be prevented and toward general
-mechanisms that ensure good behavior.  A formal definition gives us the
-ability to reason clearly about what is gained from applying a given
-enforcement mechanism to a system. Since many enforcement mechanisms are
-quite costly in speed, dollars, and/or silicon, it is important to
-understand precisely what they buy us.
+    Seems overly complex in comparison to other relational reasoning papers.
 
-More immediately, we can use a formal definition like this to test proposed
-enforecement mechanisms for violations of the policy.  In our case study, we
-identify a previously unknown bug in Roessler and Dehon's proposed "lazy
-tagging" micro-policy, and we use randomized testing to increase confidence
-that their "depth isolation" micro-policy correctly implements stack safety.
+Comments for author
 
->   The paper does not talk about data flow
->   across heap and stack, which is an important element for many
->   real-world memory corruption attacks.
+I found the paper did not connect the section well. Section 4 presents a lot of details for a framework, which is then used in Section 5. Seem very disconnected? For instance, Line 501: ←C\leftarrow_C←C​ this has a different type to the semantics in the previous section. How does it relate? Generally, there are a lot of things that are similar to the previous section, but you are not actually connecting them. Is this because they are different or just missing exposition.
 
-Agreed!  We plan to combine our stack model with a heap model in the style
-of Azevedo de Amorim et al. [1] as future work.  Both models are phrased in the
-conceptual terminology of language-based security, so we have reason to
-believe that they will fit together cleanly.
+Line 320: defition
 
-----------------
+Line 329: I was really interested in address taken at this point, and whether the model could handle it. I really think the informal aspects of the extensions, should be pulled forward, so these questions are answered earlier
 
-[1] A. Azevedo de Amorim, C. Hritcu, and B. Pierce, "The Meaning of Memory Safety,"
-Proc. Principles of Security and Trust, 2018. 
+Line 349: How does this related to control flow integrity/guard, and Intel's CET?
+
+Line 448: "If the predicate always holds" never holds?
+
+Line 510: "isRet" is a relation, but you are using as a function.
+
+Line 515: ReturnRec: This seems like it would allow you to access outer frames as long as you didn't return?
+
+Line 642: wrok
+
+====================================================================================================================================
+
+Review #416C
+Overall merit
+
+B. Weak Accept
+Reviewer expertise
+
+Z. No familiarity
+Strengths
+
+The work presents a compelling model for stack security, framed in terms of existing notions of integrity and confidentiality.
+
+Models are sufficiently abstract and general to be transportable to a variety of mechanisms and machines.
+
+Notions of observable stack safety capture a more idealized notion that can reflect realistic violations, rather than "false positives" due to the limitations of particular mechanisms. This is my favorite contribution of this work.
+
+Some evidence that the approach can be tailored to complex control mechanisms, by showing how it applies to a simple fixed coroutine model.
+Weaknesses
+
+Validation is performed using random testing rather than formal proof. However, testing proved sufficient to uncover shortcomings in prior lazy models (which could then be fixed), and mutation testing was used to ensure that the testing approach would catch errors.
+Comments for author
+
+line 13: variant of our properties and /does so/ correctly, and
+
+line 94: what about tail calls?
+
+line 118: please briefly summarize what "stepwise" means here. Doing so should not need the full formalism, just a notion of steps. Simply hoisting the discussion from line 521 would likely suffice.
+
+line 123: "we extend the generation ..." I'm not sure what that means.
+
+line 210: We /call/ this form...
+
+line 293: What about exceptions?
+
+line 563: all possible calls that /can/ be reached
