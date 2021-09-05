@@ -1,144 +1,184 @@
-Review #416A
-Overall merit
+> Review #416A
+> Overall merit
 
-B. Weak Accept
-Reviewer expertise
+> B. Weak Accept
+> Reviewer expertise
 
-X. Expert
-Paper summary
+> X. Expert
+> Paper summary
 
-This submission formalizes the general notion of stack safety (roughly speaking, every caller should be protected from its callees during program execution) using well-known notions of security (integrity, confidentiality and non interference), and defines several security policies for protecting the stack. The formalization is validated on existing (and less general) micro-policies for stack safety (depth isolation, lazy tagging and lazy clearing) using property-based random testing. This evaluation of former policies detected some security violations in former and less precise works.
+> This submission formalizes the general notion of stack safety (roughly speaking, every caller should be protected from its callees during program execution) using well-known notions of security (integrity, confidentiality and non interference), and defines several security policies for protecting the stack. The formalization is validated on existing (and less general) micro-policies for stack safety (depth isolation, lazy tagging and lazy clearing) using property-based random testing. This evaluation of former policies detected some security violations in former and less precise works.
 
-First, this submission introduces the main required security policies, in terms of traces of memory, register states and stepwise stack-safety: stepwise integrity (an execution step does not modify the memory slots that are reserved for a caller at a given depth), confidentiality (a callee is insensitive to the context of its call), stepwise confidentiality, temporal stack safety, and well-bracketed control-flow (calls and returns should be correctly nested). Then, the submission describes the requirements on the machine model (presence of a program counter, used to distinguish between the different stack-frames, and a mechanism for recognizing the return from a call) and the threat model. The machine model is abstract enough to represent different architectures.
+> First, this submission introduces the main required security policies, in terms of traces of memory, register states and stepwise stack-safety: stepwise integrity (an execution step does not modify the memory slots that are reserved for a caller at a given depth), confidentiality (a callee is insensitive to the context of its call), stepwise confidentiality, temporal stack safety, and well-bracketed control-flow (calls and returns should be correctly nested). Then, the submission describes the requirements on the machine model (presence of a program counter, used to distinguish between the different stack-frames, and a mechanism for recognizing the return from a call) and the threat model. The machine model is abstract enough to represent different architectures.
 
-Next, the submission details in a progressive way the formalization of machine behaviors and stack safety using semantic rules. The first formalization of the execution stack is simple, with a single stack and no sharing between callers and callees. Then the model is enriched with function parameters passed on the stack (by value or by reference), with callee-saves registers and with coroutines. Moreover, the first model is implemented in Coq and this implementation reuses an existing RISCV specification. The QuickChick tool is used to test the stepwise property and validate an existing enforcement mechanism (called depth isolation) of the literature. Furthermore, as the previous policy is conservative and rather slow to be practical, more permissive variants of confidentiality and integrity properties are formalized, resulting in an observational property that is again validated by testing.
-Strengths
+> Next, the submission details in a progressive way the formalization of machine behaviors and stack safety using semantic rules. The first formalization of the execution stack is simple, with a single stack and no sharing between callers and callees. Then the model is enriched with function parameters passed on the stack (by value or by reference), with callee-saves registers and with coroutines. Moreover, the first model is implemented in Coq and this implementation reuses an existing RISCV specification. The QuickChick tool is used to test the stepwise property and validate an existing enforcement mechanism (called depth isolation) of the literature. Furthermore, as the previous policy is conservative and rather slow to be practical, more permissive variants of confidentiality and integrity properties are formalized, resulting in an observational property that is again validated by testing.
+> Strengths
 
-    well-written submission, well-explained ideas
+>    well-written submission, well-explained ideas
 
-    general formalization that addresses a real challenge and that is validated by testing
+>    general formalization that addresses a real challenge and that is validated by testing
 
-Weaknesses
+> Weaknesses
 
-    lack of discussion about the limitations of the work
+>    lack of discussion about the limitations of the work
 
-    medium delta with respect to previous works
+>    medium delta with respect to previous works
 
-Comments for author
+> Comments for author
 
-This submission is well-written, with well-explained ideas. Examples of C and assembly programs are used throughout the submission to illustrate the various définitions. The formalization is provided as a supplementary material together with the test cases. The techniques and results of the submission are interesting and general enough to be reused in different settings.
+> This submission is well-written, with well-explained ideas. Examples of C and assembly programs are used throughout the submission to illustrate the various définitions. The formalization is provided as a supplementary material together with the test cases. The techniques and results of the submission are interesting and general enough to be reused in different settings.
 
-I am in favor of accepting this paper; however there are a few questions that I would like to be addressed.
+> I am in favor of accepting this paper; however there are a few questions that I would like to be addressed.
 
-Why did you choose this RISCV specification? Why didn't you choose to reuse an ARM specification (as there are some of them written in Coq in the literature)? Would it be easy to adapt your work to another ISA specification? How realistic is the RISCV specification? In other words, are there any RISCV vulnerabilities that are not taken into account in your model? More generally, what are the limitations of the presented work? For example, in the model, there seems to be no distinction between values and addresses; is it a limitation? Another example is the outside qualifier that characterizes only a whole component. Wouldn't you need a finer-grain access control policy (and a qualifier for partially outside components)?
+*** Questions Begin ***
 
-Could you comment on the Coq formalization that is provided as a supplementary material? Was it straightforward to write a Coq program from a C++ program? Moreover, I looked at the Coq development and found some admitted lemmas in it.
-Other comments
+> Why did you choose this RISCV specification?
+> Why didn't you choose to reuse an ARM specification (as there are some of them written in Coq in the literature)?
 
-The supplementary material is not mentioned in the submission. Links to the Coq formalization would have been useful (e.g., for definition 7.4 that I did not fully understand in the submission, as K' is defined but not used, and so is n'').
+Because the enforcement mechanisms we test are existing micropolicies defined in terms of a reference monitor attached to a RISCV machine.
+Note that the formalism itself is not dependent on the details of the architecture, only the testing framework to test that architecture is.
+There is little in the tested micropolicies that depends on RISCV, either, but moving them to another architecture such as ARM would nevertheless
+require translating the micropolicies rules to apply to that architecture.
 
-The first example programs (Fig. 1 to 4) are C programs. The programs in Fig. 5 and 6 are qualified as C++ programs, but they could be C programs and they are close to the first programs. Moreover, the C syntax for passing parameters by reference is surprising. I would have written f(&x)(line 934) and void f(int *a)(line 944).
+> Would it be easy to adapt your work to another ISA specification?
 
-    (83) when THAT an
-    (83) actiVation
-    (210) We CAN this form
-    (310, 886,895,947) The return instruction is confusing as the return type of fis void.
-    (357) when THE state
-    (389) are ARE
-    (568) two many closing parentheses (twice)
-    (626) we need REQUIRE
-    (626) followS
-    (652) calls. That
-    (796) I was expecting m' in (m,p',ctx').
-    (1005) lack of space between the last two rules
-    (1118) conjunctIon
+Fairly easy. The formalism itself translates naturally to most ISA specifications. The largest amount of work
+is in the testing framework - modifying the code generation system to match the new ISA.
+We are currently working on extending the work to a model of a Cheri-style hardware capability machine, Cerise,
+and have not encountered major obstacles.
 
-Questions for the response period
+> How realistic is the RISCV specification? In other words, are there any RISCV vulnerabilities that are not taken into account in your model?
 
-See my former questions related to 1) the Coq formalization, 2) the choice of a RISCV model and 3) the limitations of the approach
+Timing channels; anything else?
 
-====================================================================================================================================
+> More generally, what are the limitations of the presented work? For example, in the model, there seems to be no distinction between values and addresses; is it a limitation?
 
-Review #416B
-Overall merit
 
-C. Weak Reject
-Reviewer expertise
+> Another example is the outside qualifier that characterizes only a whole component. Wouldn't you need a finer-grain access control policy (and a qualifier for partially outside components)?
 
-Y. Knowledgeable
-Paper summary
+I don't understand this question, any insight would be helpful.
 
-This paper presents a semantics for formalising safety properties of stack safety enforcement systems. The paper uses a map to say which parts of the stack can currently be accessed and which can't, similar to the semantics of separation logic. It then connects this to a notion of call and return, that can be configured to enable different machine's implementations of functions.
 
-The paper uses a systematic testing approach with QuickChick to show that a hardware enforcement mechanism actually provides stack safety, and find bugs that are injected into the approach. It is great that you found the bug in lazy approach, however, it is fairly obvious type of security issue where uninitialised data leads to something escaping.
+> Could you comment on the Coq formalization that is provided as a supplementary material? Was it straightforward to write a Coq program from a C++ program? Moreover, I looked at the Coq development and found some admitted lemmas in it.
 
-The paper discusses extension, where parameter passing can use the stack, and passing references to structures.
+Writing Coq program from C++: I believe this one is for Rob
+Admitted Lemmas:
 
-The paper is primarily a semantics paper, though that seems fairly straightforward. The more interesting aspect of the paper is the more elaborate examples in Section 6 and 7, and the more elaborate extensions in 8. But I had not followed the earlier aspects well enough to appreciate those.
+> Other comments
 
-Overall, I didn't find the paper particularly compelling in its current form. It seems complex for what it achieves earlier on, and doesn't have clear enough exposition for the later parts.
-Strengths
+> The supplementary material is not mentioned in the submission. Links to the Coq formalization would have been useful (e.g., for definition 7.4 that I did not fully understand in the submission, as K' is defined but not used, and so is n'').
 
-    Checks properties of stack safety using capabilities
-    Interesting topic
+The supplementary material should indeed be mentioned in the submission.
+Explanation of definition 7.4:
 
-Weaknesses
+> The first example programs (Fig. 1 to 4) are C programs. The programs in Fig. 5 and 6 are qualified as C++ programs, but they could be C programs and they are close to the first programs. Moreover, the C syntax for passing parameters by reference is surprising. I would have written f(&x)(line 934) and void f(int *a)(line 944).
 
-    Exposition doesn't connect the different aspects of the paper well.
+>    (83) when THAT an
+>    (83) actiVation
+>    (210) We CAN this form
+>    (310, 886,895,947) The return instruction is confusing as the return type of fis void.
+>    (357) when THE state
+>    (389) are ARE
+>    (568) two many closing parentheses (twice)
+>    (626) we need REQUIRE
+>    (626) followS
+>    (652) calls. That
+>    (796) I was expecting m' in (m,p',ctx').
+>    (1005) lack of space between the last two rules
+>    (1118) conjunctIon
 
-    Seems overly complex in comparison to other relational reasoning papers.
+> Questions for the response period
 
-Comments for author
-
-I found the paper did not connect the section well. Section 4 presents a lot of details for a framework, which is then used in Section 5. Seem very disconnected? For instance, Line 501: ←C\leftarrow_C←C​ this has a different type to the semantics in the previous section. How does it relate? Generally, there are a lot of things that are similar to the previous section, but you are not actually connecting them. Is this because they are different or just missing exposition.
-
-Line 320: defition
-
-Line 329: I was really interested in address taken at this point, and whether the model could handle it. I really think the informal aspects of the extensions, should be pulled forward, so these questions are answered earlier
-
-Line 349: How does this related to control flow integrity/guard, and Intel's CET?
-
-Line 448: "If the predicate always holds" never holds?
-
-Line 510: "isRet" is a relation, but you are using as a function.
-
-Line 515: ReturnRec: This seems like it would allow you to access outer frames as long as you didn't return?
-
-Line 642: wrok
+> See my former questions related to 1) the Coq formalization, 2) the choice of a RISCV model and 3) the limitations of the approach
 
 ====================================================================================================================================
 
-Review #416C
-Overall merit
+> Review #416B
+> Overall merit
 
-B. Weak Accept
-Reviewer expertise
+> C. Weak Reject
+> Reviewer expertise
 
-Z. No familiarity
-Strengths
+> Y. Knowledgeable
+> Paper summary
 
-The work presents a compelling model for stack security, framed in terms of existing notions of integrity and confidentiality.
+> This paper presents a semantics for formalising safety properties of stack safety enforcement systems. The paper uses a map to say which parts of the stack can currently be accessed and which can't, similar to the semantics of separation logic. It then connects this to a notion of call and return, that can be configured to enable different machine's implementations of functions.
 
-Models are sufficiently abstract and general to be transportable to a variety of mechanisms and machines.
+> The paper uses a systematic testing approach with QuickChick to show that a hardware enforcement mechanism actually provides stack safety, and find bugs that are injected into the approach. It is great that you found the bug in lazy approach, however, it is fairly obvious type of security issue where uninitialised data leads to something escaping.
 
-Notions of observable stack safety capture a more idealized notion that can reflect realistic violations, rather than "false positives" due to the limitations of particular mechanisms. This is my favorite contribution of this work.
+> The paper discusses extension, where parameter passing can use the stack, and passing references to structures.
 
-Some evidence that the approach can be tailored to complex control mechanisms, by showing how it applies to a simple fixed coroutine model.
-Weaknesses
+> The paper is primarily a semantics paper, though that seems fairly straightforward. The more interesting aspect of the paper is the more elaborate examples in Section 6 and 7, and the more elaborate extensions in 8. But I had not followed the earlier aspects well enough to appreciate those.
 
-Validation is performed using random testing rather than formal proof. However, testing proved sufficient to uncover shortcomings in prior lazy models (which could then be fixed), and mutation testing was used to ensure that the testing approach would catch errors.
-Comments for author
+> Overall, I didn't find the paper particularly compelling in its current form. It seems complex for what it achieves earlier on, and doesn't have clear enough exposition for the later parts.
+> Strengths
 
-line 13: variant of our properties and /does so/ correctly, and
+>    Checks properties of stack safety using capabilities
+>    Interesting topic
 
-line 94: what about tail calls?
+> Weaknesses
 
-line 118: please briefly summarize what "stepwise" means here. Doing so should not need the full formalism, just a notion of steps. Simply hoisting the discussion from line 521 would likely suffice.
+>    Exposition doesn't connect the different aspects of the paper well.
 
-line 123: "we extend the generation ..." I'm not sure what that means.
+>    Seems overly complex in comparison to other relational reasoning papers.
 
-line 210: We /call/ this form...
+> Comments for author
 
-line 293: What about exceptions?
+> I found the paper did not connect the section well. Section 4 presents a lot of details for a framework, which is then used in Section 5. Seem very disconnected? For instance, Line 501: ←C\leftarrow_C←C​ this has a different type to the semantics in the previous section. How does it relate? Generally, there are a lot of things that are similar to the previous section, but you are not actually connecting them. Is this because they are different or just missing exposition.
 
-line 563: all possible calls that /can/ be reached
+We should think if there is anything we can suggest here to improve organization, but it's unclear to me just what the problem was
+
+> Line 320: defition
+
+> Line 329: I was really interested in address taken at this point, and whether the model could handle it. I really think the informal aspects of the extensions, should be pulled forward, so these questions are answered earlier
+
+> Line 349: How does this related to control flow integrity/guard, and Intel's CET?
+
+> Line 448: "If the predicate always holds" never holds?
+
+> Line 510: "isRet" is a relation, but you are using as a function.
+
+> Line 515: ReturnRec: This seems like it would allow you to access outer frames as long as you didn't return?
+
+> Line 642: wrok
+
+====================================================================================================================================
+
+> Review #416C
+> Overall merit
+
+> B. Weak Accept
+> Reviewer expertise
+
+> Z. No familiarity
+> Strengths
+
+> The work presents a compelling model for stack security, framed in terms of existing notions of integrity and confidentiality.
+
+> Models are sufficiently abstract and general to be transportable to a variety of mechanisms and machines.
+
+> Notions of observable stack safety capture a more idealized notion that can reflect realistic violations, rather than "false positives" due to the limitations of particular mechanisms. This is my favorite contribution of this work.
+
+> Some evidence that the approach can be tailored to complex control mechanisms, by showing how it applies to a simple fixed coroutine model.
+> Weaknesses
+
+> Validation is performed using random testing rather than formal proof. However, testing proved sufficient to uncover shortcomings in prior lazy models (which could then be fixed), and mutation testing was used to ensure that the testing approach would catch errors.
+> Comments for author
+
+> line 13: variant of our properties and /does so/ correctly, and
+
+> line 94: what about tail calls?
+
+Copy tail-call discussion from previous response
+
+> line 118: please briefly summarize what "stepwise" means here. Doing so should not need the full formalism, just a notion of steps. Simply hoisting the discussion from line 521 would likely suffice.
+
+> line 123: "we extend the generation ..." I'm not sure what that means.
+
+> line 210: We /call/ this form...
+
+> line 293: What about exceptions?
+
+Copy exception discussion from previous response
+
+> line 563: all possible calls that /can/ be reached
