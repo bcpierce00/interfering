@@ -35,43 +35,62 @@
 > Why did you choose this RISCV specification?
 > Why didn't you choose to reuse an ARM specification (as there are some of them written in Coq in the literature)?
 
-Because the enforcement mechanisms we test are existing micropolicies defined in terms of a reference monitor attached to a RISCV machine.
-Note that the formalism itself is not dependent on the details of the architecture, only the testing framework to test that architecture is.
-There is little in the tested micropolicies that depends on RISCV, either, but moving them to another architecture such as ARM would nevertheless
-require translating the micropolicies rules to apply to that architecture.
+We chose RISCV for the sake of the evaluation: the enforcement mechanisms we
+test are existing micropolicies defined in terms of a reference monitor
+attached to a RISCV machine.
+
+The underlying formalism itself is not dependent on the details of the
+architecture, only the testing framework to test that architecture is.
+Indeed, even wrt. testing, there is little in the tested micropolicies that
+depends on RISCV either, but moving to another architecture such as ARM
+would require translating the micropolicy rules to apply to that
+architecture and its calling conventions.
 
 > Would it be easy to adapt your work to another ISA specification?
 
-Fairly easy. The formalism itself translates naturally to most ISA specifications. The largest amount of work
-is in the testing framework - modifying the code generation system to match the new ISA.
-We are currently working on extending the work to a model of a Cheri-style hardware capability machine, Cerise,
-and have not encountered major obstacles.
+Fairly easy. The formalism itself translates naturally to most ISA
+specifications. The largest amount of work is in the testing framework -
+modifying the example generator to match the new ISA.
+
+We are currently working on extending the work to a model of a Cheri-style
+hardware capability machine, Cerise, and have not encountered major
+obstacles.
 
 > How realistic is the RISCV specification? In other words, are there any RISCV vulnerabilities that are not taken into account in your model?
 
-Timing channels; anything else?
+[Timing channels; anything else?]  [BCP: Even if the RISCV model is fairly
+complete (though it doesn't include stuff like VM management, hypervisor
+instructions, ..., right?), we don't generate test cases for most
+instructions -- we're really just testing the protection mechanism for
+function calls.]
 
 > More generally, what are the limitations of the presented work? For example, in the model, there seems to be no distinction between values and addresses; is it a limitation?
 
+[BCP: ???]
 
 > Another example is the outside qualifier that characterizes only a whole component. Wouldn't you need a finer-grain access control policy (and a qualifier for partially outside components)?
 
-I don't understand this question, any insight would be helpful.
-
+[I don't understand this question, any insight would be helpful.]
+[BCP: Me either.  I wonder if we can ask for clarification...]
 
 > Could you comment on the Coq formalization that is provided as a supplementary material? Was it straightforward to write a Coq program from a C++ program? Moreover, I looked at the Coq development and found some admitted lemmas in it.
 
 Writing Coq program from C++: I believe this one is for Rob
 Admitted Lemmas:
 
+[BCP: I wonder whether they are asking about the compilation from our C/C++
+pseudo-source-code to RISCV...?]
+
 > Other comments
 
 > The supplementary material is not mentioned in the submission. Links to the Coq formalization would have been useful (e.g., for definition 7.4 that I did not fully understand in the submission, as K' is defined but not used, and so is n'').
 
 The supplementary material should indeed be mentioned in the submission.
-Explanation of definition 7.4:
+[Explanation of definition 7.4:]
 
 > The first example programs (Fig. 1 to 4) are C programs. The programs in Fig. 5 and 6 are qualified as C++ programs, but they could be C programs and they are close to the first programs. Moreover, the C syntax for passing parameters by reference is surprising. I would have written f(&x)(line 934) and void f(int *a)(line 944).
+
+[BCP: We should check our C / C++ syntax.]
 
 >    (83) when THAT an
 >    (83) actiVation
@@ -126,11 +145,19 @@ Explanation of definition 7.4:
 
 > I found the paper did not connect the section well. Section 4 presents a lot of details for a framework, which is then used in Section 5. Seem very disconnected? For instance, Line 501: ←C\leftarrow_C←C​ this has a different type to the semantics in the previous section. How does it relate? Generally, there are a lot of things that are similar to the previous section, but you are not actually connecting them. Is this because they are different or just missing exposition.
 
-We should think if there is anything we can suggest here to improve organization, but it's unclear to me just what the problem was
+[We should think if there is anything we can suggest here to improve
+organization, but it's unclear to me just what the problem was
+
+[BCP: The review here gives one specific example -- what can we say about it?]
 
 > Line 320: defition
 
+[BCP: We should just fix these sorts of things and then not mention them in
+the response.]
+
 > Line 329: I was really interested in address taken at this point, and whether the model could handle it. I really think the informal aspects of the extensions, should be pulled forward, so these questions are answered earlier
+
+[BCP: This is a good expositional idea.]
 
 > Line 349: How does this related to control flow integrity/guard, and Intel's CET?
 
@@ -169,11 +196,13 @@ We should think if there is anything we can suggest here to improve organization
 
 > line 94: what about tail calls?
 
-Tail calls are a plausible extension of our framework, but not supported as written.
-Since a tail call is both a call and a return in a single step, our normal handling of
-returns will not work -- it would interpret the tail call as a call to and immediate return from
-a new function activation. We would need to distinguish tail calls from normal calls and essentially
-process the call and the return in the reverse order.
+We believe tail calls are a straightforward extension of our framework,
+though they are not supported at present.  Since a tail call is both a call
+and a return in a single step, our normal handling of returns doesn't
+work -- it would interpret the tail call as a call to and immediate return
+from a new function activation. We would need to distinguish tail calls from
+normal calls and essentially process the call and the return in the reverse
+order.
 
 > line 118: please briefly summarize what "stepwise" means here. Doing so should not need the full formalism, just a notion of steps. Simply hoisting the discussion from line 521 would likely suffice.
 
@@ -183,8 +212,10 @@ process the call and the return in the reverse order.
 
 > line 293: What about exceptions?
 
-Exceptions are another plausible extension. They would involve interleaving the return
-target stack with entries that are not return targets, but "catch targets." Reaching a catch target
-would pop all return targets above it, much like returns that violate well-bracketedness already do.
+Exceptions are another plausible extension. Adding them would involve
+interleaving the return target stack with entries that are not return
+targets, but "catch targets." Reaching a catch target would pop all return
+targets above it, much like returns that violate well-bracketedness already
+do.
 
 > line 563: all possible calls that /can/ be reached
