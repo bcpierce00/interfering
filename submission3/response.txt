@@ -163,14 +163,23 @@ Properties contains Coq definitions corresponding to the different Properties:
 - CalleeSave.v defines stack safety with callee-save registers
 Testing contains the test system, with generators for different machines and the final test run
 via extraction in TestProperties.v
+[APT: Can we give pointers from each paper definition to corresponding Coq definition?]
 
 > The first example programs (Fig. 1 to 4) are C programs. The programs in Fig. 5 and 6 are qualified as C++ programs, but they could be C programs and they are close to the first programs. Moreover, the C syntax for passing parameters by reference is surprising. I would have written f(&x)(line 934) and void f(int *a)(line 944).
 
-[BCP: We should check our C / C++ syntax.]
-[APT: I think the reviewer is confused. C doesn't really have call-by-reference: (explicitly) passing a pointer
-is _not_ the same thing as (implicitly) passing a reference, as the latter cannot be used in a first-class way
-in the callee: that's the whole distinction we're trying to make starting at line 954 of the text.
-Evidently we need to clarify this.]
+Only Fig. 6 uses C++ features.  Although C programmers might indeed
+try to simulate call-by-reference by passing a pointer as suggested
+here, this is subtly different from a genuine by-reference argument in
+C++, because the latter cannot be directly used in a first-class way
+in the callee (without using the & operator, as e.g. at line 945).
+Thus, legal access to the value of a by-reference argument is
+restricted to the immediate callee (and any chain of sub-callees to
+which the argument is handed down by reference), and we can capture
+this access pattern in our policies.  On the other hand, pointer
+arguments might escape into arbitrary sub-callees, and there is no
+obvious way for policies in our style to specify when access through
+these pointers should be permitted. We will improve the discussion at
+line 954ff to clarify this point.
 
 >    (83) when THAT an
 >    (83) actiVation
@@ -226,11 +235,11 @@ Evidently we need to clarify this.]
 > I found the paper did not connect the section well. Section 4 presents a lot of details for a framework, which is then used in Section 5. Seem very disconnected? For instance, Line 501: ←C\leftarrow_C←C​ this has a different type to the semantics in the previous section. How does it relate? Generally, there are a lot of things that are similar to the previous section, but you are not actually connecting them. Is this because they are different or just missing exposition.
 
 Many of the content that seems disconnected takes the form of a parameterizable relation and its various
-instatiations in different versions of the property. \rightarrow_C parameterized by the type ctx, which is section 5
+instantiations in different versions of the property. \rightarrow_C parameterized by the type ctx, which is section 5
 is instantiated as (K -> SD)x(list(target)). In later sections it will be instantiated by other types.
 Then for any \rightarrow_C, we can extend \rightharpoonup to form \rightharpoonup_C.
 
-We can do more to call out which parts of the formalization are parameterized and when they are being
+We will do more to call out which parts of the formalization are parameterized and when they are being
 instantiated, so that the connections are more clear.
 
 > Line 320: defition
@@ -287,12 +296,18 @@ moving them up would look like.]
 
 > line 94: what about tail calls?
 
+[APT: Add pointer]
+
 > line 118: please briefly summarize what "stepwise" means here. Doing so should not need the full formalism, just a notion of steps. Simply hoisting the discussion from line 521 would likely suffice.
 
 > line 123: "we extend the generation ..." I'm not sure what that means.
 
+[APT: Add a clarification that is is "generation-by-execution" ?]
+
 > line 210: We /call/ this form...
 
 > line 293: What about exceptions?
+
+[APT: Add pointer]
 
 > line 563: all possible calls that /can/ be reached
