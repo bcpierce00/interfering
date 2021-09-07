@@ -70,50 +70,67 @@ That said, the RISCV specification we use is complete for user mode integer inst
 
 > More generally, what are the limitations of the presented work? For example, in the model, there seems to be no distinction between values and addresses; is it a limitation?
 
-Currently, some discussions of our model's limitations is scattered throughout the paper.
-We will expand and organize it into an explicit discussion, as follows.
-Our goal is to specifically characterize stack safety.
-So we are particularly concerned with limitations that prevent the model from applying to realistic
-uses of the stack, and not with other structures such as the heap, which we intentionally make no
-guarantees about.
+Currently, discussion of our model's limitations is scattered
+throughout the paper.  We will expand and organize it into an explicit
+section, as follows.
+
+Our goal is to specifically characterize stack safety.  So we are
+particularly concerned with limitations that prevent the model from
+applying to realistic uses of the stack, and not with other structures
+such as the heap, which we intentionally make no guarantees about.
 
 Features that we do not currently support:
-- Dynamic code generation: this would be rather challenging to integrate into
-  our framework.
-- Address-taken locals: we have discussed why we don't consider our model suitable
-  for handling.
-- Exceptions, though we can see a way to extend the model to include them:
-  essentially, we would model a "setjump" operation by inserting a special
-  target in the return target stack. We would weaken well-bracketedness to
-  allow reach such a target from any depth. Since integrity and confidentiality
-  are distinct from well-bracketedness and already permit the popping of multiple
-  functions from the stack, they can simply treat the exception's target as another
-  return target.
-- Tail calls, but again we can see how we might extend the model for them:
-  though they are not supported at present.  Since a tail call is both a call
-  and a return in a single step, our normal handling of returns doesn't
-  work -- it would interpret the tail call as a call to and immediate return
-  from a new function activation. We would need to distinguish tail calls from
-  normal calls and essentially process the call and the return in the reverse
+
+- Address-taken locals. As we discuss at line 954ff, a satisfactory
+  treatment of these seems to require integration with a more general
+  model of memory safety that covers the heap and static globals too.
+
+- Exceptions. We can see a way to extend the model to include them:
+  essentially, we would model a "setjump" operation by inserting a
+  special target in the return target stack. We would weaken
+  well-bracketedness to allow reaching such a target from any
+  depth. Since integrity and confidentiality are distinct from
+  well-bracketedness and already permit the popping of multiple
+  functions from the stack, they can simply treat the exception's
+  target as another return target.
+
+- Tail calls. Again, we can see how we might extend the model for them
+  Since a tail call is both a call and a return in a single step, our
+  normal handling of returns doesn't work -- it would interpret the
+  tail call as a call to and immediate return from a new function
+  activation. We would need to distinguish tail calls from normal
+  calls and essentially process the call and the return in the reverse
   order.
 
-As for the distinction between values and addresses, conventional ISAs do not make this distinction.
-Ongoing work on the Cerise capability machine formalization has required some modification to distinguish
-values from addresses, as they are not the same in a capability machine, but it has little effect on the 
-model itself. Further, distinguishing between values and addresses is a higher-level abstraction that can
-"hide" potential bugs resulting from implicit conversions between them, so it may even be preferable to model
-them as the same when possible.
+- Dynamic code generation. This would be rather challenging to
+  integrate into our framework, because we rely on annotations in the
+  code.
+[APT: Right? Can we imagine how this might be supported in future?]
+
+- Concurrency. We can handle a limited form of coroutines, as
+  described in 8.3. But handling true concurrency would require
+  significant changes in our underlying machine model. 
+
+As for the distinction between values and addresses, conventional ISAs
+do not make this distinction.  Ongoing work on the Cerise capability
+machine formalization has required some modification to distinguish
+values from addresses, as they are not the same in a capability
+machine, but it has little effect on the model itself. Further,
+distinguishing between values and addresses is a higher-level
+abstraction that can "hide" potential bugs resulting from implicit
+conversions between them, so it may even be preferable to model them
+as the same when possible.
 
 > Another example is the outside qualifier that characterizes only a whole component. Wouldn't you need a finer-grain access control policy (and a qualifier for partially outside components)?
 
-There appears to be some confusion arising from the term "components."
-In our model, components are already fine-grained: individual registers
-and memory addresses. We recognize that this is a poor choice of term
-given the common usage of component to refer to a larger module in a
-compartmentalization context, and will change the term to [SNA: still
-looking for a word. Atom?]
-Since components/atoms are so fine-grained, there is no need for finer
-access control.
+There may be some confusion arising from our use of the term
+"components."  In our model (see line 398), components are already
+fine-grained: individual registers and memory addresses. We recognize
+that this is a poor choice of term given the common usage of component
+to refer to a larger module in a compartmentalization context, and
+will change the term to [SNA: still looking for a word. Atom?
+APT: "state element" ?]  Since components/atoms are so fine-grained, there
+is no need for finer access control.
 
 > Could you comment on the Coq formalization that is provided as a supplementary material? Was it straightforward to write a Coq program from a C++ program? Moreover, I looked at the Coq development and found some admitted lemmas in it.
 
