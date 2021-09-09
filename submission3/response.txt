@@ -213,42 +213,8 @@ obvious way for policies in our style to specify when access through
 these pointers should be permitted. We will improve the discussion at
 line 954ff to clarify this point.
 
->    (310, 886,895,947) The return instruction is confusing as the return type of f is void.
-
-[SNA: should we do jlr?]
-[APT: The reviewer is uncomfortable seeing a C `return` with no argument. Not sure why.
-I don't think this needs a response at all.]
-
-> Questions for the response period
-
-> See my former questions related to 1) the Coq formalization, 2) the choice of a RISCV model and 3) the limitations of the approach
-
 ___________________________________________________________________________
 # Reviewer B
-
-> Paper summary
-
-> This paper presents a semantics for formalising safety properties of stack safety enforcement systems. The paper uses a map to say which parts of the stack can currently be accessed and which can't, similar to the semantics of separation logic. It then connects this to a notion of call and return, that can be configured to enable different machine's implementations of functions.
-
-> The paper uses a systematic testing approach with QuickChick to show that a hardware enforcement mechanism actually provides stack safety, and find bugs that are injected into the approach. It is great that you found the bug in lazy approach, however, it is fairly obvious type of security issue where uninitialised data leads to something escaping.
-
-> The paper discusses extension, where parameter passing can use the stack, and passing references to structures.
-
-> The paper is primarily a semantics paper, though that seems fairly straightforward. The more interesting aspect of the paper is the more elaborate examples in Section 6 and 7, and the more elaborate extensions in 8. But I had not followed the earlier aspects well enough to appreciate those.
-
-> Overall, I didn't find the paper particularly compelling in its current form. It seems complex for what it achieves earlier on, and doesn't have clear enough exposition for the later parts.
-> Strengths
-
->    Checks properties of stack safety using capabilities
->    Interesting topic
-
-> Weaknesses
-
->    Exposition doesn't connect the different aspects of the paper well.
-
->    Seems overly complex in comparison to other relational reasoning papers.
-
-> Comments for author
 
 > I found the paper did not connect the section well. Section 4 presents a lot of details for a framework, which is then used in Section 5. Seem very disconnected? For instance, Line 501: ←C\leftarrow_C←C​ this has a different type to the semantics in the previous section. How does it relate? Generally, there are a lot of things that are similar to the previous section, but you are not actually connecting them. Is this because they are different or just missing exposition.
 
@@ -265,9 +231,9 @@ parameterized and when they are being instantiated, so that the connections
 are clearer.
 
 > Line 329: I was really interested in address taken at this point, and
-  whether the model could handle it. I really think the informal aspects of
-  the extensions, should be pulled forward, so these questions are answered
-  earlier
+>  whether the model could handle it. I really think the informal aspects of
+>  the extensions, should be pulled forward, so these questions are answered
+>  earlier
 
 This is a good point, and we will examine ways to introduce that
 information sooner. But we are hesitant to go into too much detail on
@@ -275,7 +241,7 @@ variants while introducing the basic formalism, because it can be a
 lot for the reader to keep track of.
 
 > Line 349: How does this related to control flow integrity/guard, and
-  Intel's CET? 
+>  Intel's CET? 
 
 [BCP: ???]  [APT: made a stab; others please check.]
 The identification of call points, as described in this paragraph, is
@@ -286,18 +252,19 @@ enforce WBCF, but not the other two properties.
 
 > Line 508: "isRet" is a relation, but you are using as a function.
 
-[APT: Complaint is correct, no? Can admit to it and say we'll avoid
-this abuse of notation. Otherwise, just don't include this point
-in reply.]
+Yes, we will avoid this abuse of notation.
 
 > Line 515: ReturnRec: This seems like it would allow you to access outer
   frames as long as you didn't return? 
 
-[LEO: Sean, check this.]
-All ReturnRec does is unseal the frames between the levels before and
-after the return. Frames marked "outside" are left unaffected, while
-out frames that had been sealed by earlier calls can only be accessed
-after returning to the outer level.
+[LEO: Sean, check this.][SNA: I think they're confused about us allowing long returns.]
+ReturnRec defines a return in the case that well-bracketedness does
+not hold and a caller is returned to out of order. This has the cost of
+additional complexity, but allows our integrity and confidentiality properties
+to be orthogonal to well-bracketed control flow. It also opens the possibility
+of implementing exceptions, as described in the Limitations section above.
+So, accessing outer frames through ReturnRec is valid because if ReturnRec
+applies, there has been a return.
 
 ___________________________________________________________________________
 # Reviewer C
