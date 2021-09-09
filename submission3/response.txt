@@ -1,116 +1,7 @@
-We first address for the most important high-level points, then go back to
+We first address the most important high-level points, then go back to
 fill in detailed responses to all points made in the reviews.
 
-_[BCP: Fill this part in!!]_
-
-___________________________________________________________________
-
-_[BCP: This could all use some more attention to markdown formatting so that
-the output looks readable.]_
-
-_[BCP: Still some comments below marked BCP/LEO...]_
-
-# Reviewer A
-
-> Paper summary
-
-> This submission formalizes the general notion of stack safety (roughly
-  speaking, every caller should be protected from its callees during program
-  execution) using well-known notions of security (integrity,
-  confidentiality and non interference), and defines several security
-  policies for protecting the stack. The formalization is validated on
-  existing (and less general) micro-policies for stack safety (depth
-  isolation, lazy tagging and lazy clearing) using property-based random
-  testing. This evaluation of former policies detected some security
-  violations in former and less precise works. 
-
-> First, this submission introduces the main required security policies, in
-  terms of traces of memory, register states and stepwise stack-safety:
-  stepwise integrity (an execution step does not modify the memory slots
-  that are reserved for a caller at a given depth), confidentiality (a
-  callee is insensitive to the context of its call), stepwise
-  confidentiality, temporal stack safety, and well-bracketed control-flow
-  (calls and returns should be correctly nested). Then, the submission
-  describes the requirements on the machine model (presence of a program
-  counter, used to distinguish between the different stack-frames, and a
-  mechanism for recognizing the return from a call) and the threat
-  model. The machine model is abstract enough to represent different
-  architectures.
-
-> Next, the submission details in a progressive way the formalization of
-  machine behaviors and stack safety using semantic rules. The first
-  formalization of the execution stack is simple, with a single stack and no
-  sharing between callers and callees. Then the model is enriched with
-  function parameters passed on the stack (by value or by reference), with
-  callee-saves registers and with coroutines. Moreover, the first model is
-  implemented in Coq and this implementation reuses an existing RISCV
-  specification. The QuickChick tool is used to test the stepwise property
-  and validate an existing enforcement mechanism (called depth isolation) of
-  the literature. Furthermore, as the previous policy is conservative and
-  rather slow to be practical, more permissive variants of confidentiality
-  and integrity properties are formalized, resulting in an observational
-  property that is again validated by testing.
-
-> Strengths
-
->    well-written submission, well-explained ideas
-
->    general formalization that addresses a real challenge and that is validated by testing
-
-> Weaknesses
-
->    lack of discussion about the limitations of the work
-
->    medium delta with respect to previous works
-
-> Comments for author
-
-> This submission is well-written, with well-explained ideas. Examples of C and assembly programs are used throughout the submission to illustrate the various définitions. The formalization is provided as a supplementary material together with the test cases. The techniques and results of the submission are interesting and general enough to be reused in different settings.
-
-> I am in favor of accepting this paper; however there are a few questions that I would like to be addressed.
-
-*** Questions Begin ***
-
-> Why did you choose this RISCV specification?
-> Why didn't you choose to reuse an ARM specification (as there are some of
-> them written in Coq in the literature)? 
-> Would it be easy to adapt your work to another ISA specification?
-
-We chose RISCV for its simplicity, and because it has been used as the base
-ISA for much of the existing work (by others) on designing hardware that
-supports tag-based micro-policies.
-
-To clarify a possible misunderstanding: the Coq specification of RISCV that
-we use was developed by others (see footnote p. 14); we were able to adapt
-it to our testing framework with relatively little effort.
-
-Our stack safety theory itself is not dependent on the details of the
-architecture, since the properties are defined in terms of a generic
-interface over machine and enforcement policy; see the `Properties`
-directory in the Coq development as explained below for concrete
-modelling details.
-
-Porting the testing framework to another architecture such as ARM would
-require adding a test case generator for the new ISA (including its specific
-calling conventions) and translating the micropolicy rules to apply to that
-architecture / calling conventions.  This would take some work, but it
-should be straightforward.
-
-For example, we are currently working on extending the work to a model of a
-Cheri-style hardware capability machine, Cerise, and have not encountered
-major obstacles.
-
-> How realistic is the RISCV specification? In other words, are there any
-  RISCV vulnerabilities that are not taken into account in your model? 
-
-We use the RISCV specification to demonstrate that our properties are
-testable in a realistic setting. We do not aim to exercise the entire RISCV
-specification, and the validity of the model is not dependent on the absence
-of (not stack-related) vulnerabilities in the RISCV implementation. That said,
-the RISCV specification we use is complete for user mode integer
-instructions (RV32IM).
-
-> More generally, what are the limitations of the presented work? For example, in the model, there seems to be no distinction between values and addresses; is it a limitation?
+# Limitations #
 
 Currently, discussion of our model's limitations is scattered
 throughout the paper.  We will expand and organize it into an explicit
@@ -159,40 +50,10 @@ Features that we do not currently support:
   8.3. Handling full-blown preemptive concurrency would require significant
   changes in our underlying machine model.
 
-As for the distinction between values and addresses, conventional ISAs do
-not make this distinction.  Ongoing work on the Cerise capability machine
-formalization has required some modifications to our model to distinguish
-values from addresses, as they are _not_ the same in a capability machine,
-but it has little global effect on the model itself. Indeed, distinguishing
-between values and addresses is a higher-level abstraction that can "hide"
-potential bugs resulting from implicit conversions between them, so we feel
-it is preferable to model them as the same when possible.
+# Supplementary Coq Material #
 
-> Another example is the outside qualifier that characterizes only a whole
-  component. Wouldn't you need a finer-grain access control policy (and a
-  qualifier for partially outside components)?
-
-We don't entirely understand this question, but we wonder whether there may
-be some confusion arising from our use of the term "components."  In our
-model (see line 398), components are already fine-grained: individual
-registers and memory addresses. We recognize that this is a poor choice of
-term given the common usage of component to refer to a larger module in a
-compartmentalization context, and we plan to change the term to "state
-elements."  Since components/elements are so fine-grained, there is no need
-for finer access control.
-
-> Could you comment on the Coq formalization that is provided as a
-  supplementary material? Was it straightforward to write a Coq program from
-  a C++ program? Moreover, I looked at the Coq development and found some
-  admitted lemmas in it. 
-
-See below.
-
-> Other comments
-
-> The supplementary material is not mentioned in the submission. Links to the Coq formalization would have been useful (e.g., for definition 7.4 that I did not fully understand in the submission, as K' is defined but not used, and so is n'').
-
-The supplementary material should indeed be mentioned in the submission.
+The supplementary material should be mentioned in the submission, and its
+purpose described.
 
 The Coq formalization provided contains two parts: the formalization of our
 properties, which was a conceptual aid in their development and may be
@@ -200,18 +61,12 @@ useful to readers' intuitions, and the testing framework, which is used to
 validate our properties by showing that computable versions of them are
 testable.
 
-Admitted lemmas are the beginnings of an effort to formalize [details] [BCP:
-N.b. missing][LEO: Not sure what we can say here.]
-
-In the case of definition 7.4, this is a typo. The K in the third bullet should be K', and the
-last instance of n' should be n''.
-
 Map of the supplementary material:
 
-Core contains the abstract machine and policy models, as well as the RISCV
+Core/ contains the abstract machine and policy models, as well as the RISCV
 instantiations with different policies.
 
-Properties contains Coq definitions corresponding to the different Properties:
+Properties/ contains Coq definitions corresponding to the different Properties:
 - Trace.v and ObsTrace.v define the trace model and observation model
 
 - SubroutineSimple.v defines the basic stack safety properties.
@@ -245,11 +100,104 @@ Properties contains Coq definitions corresponding to the different Properties:
   This also refers to the general properties presented in TraceProperties.v
 
   Lazy.v is an outdated file that was included by mistake.
-  [SNA: I'm not sure how strongly we should call this out, but it's pretty obvious that it doesn't match the paper.]
-  [BCP: This is fine, IMO.]
 
-Testing contains the test system, with generators for different machines and the final test run
+Testing/ contains the test system, with generators for different machines and the final test run
 via extraction in TestProperties.v
+
+___________________________________________________________________
+
+_[BCP: This could all use some more attention to markdown formatting so that
+the output looks readable.]_
+
+_[BCP: Still some comments below marked BCP/LEO...]_
+
+# Reviewer A
+
+> I am in favor of accepting this paper; however there are a few questions that I would like to be addressed.
+
+> Why did you choose this RISCV specification?
+> Why didn't you choose to reuse an ARM specification (as there are some of
+> them written in Coq in the literature)? 
+> Would it be easy to adapt your work to another ISA specification?
+
+We chose RISCV for its simplicity, and because it has been used as the base
+ISA for much of the existing work (by others) on designing hardware that
+supports tag-based micro-policies.
+
+To clarify a possible misunderstanding: the Coq specification of RISCV that
+we use was developed by others (see footnote p. 14); we were able to adapt
+it to our testing framework with relatively little effort.
+
+Our stack safety theory itself is not dependent on the details of the
+architecture, since the properties are defined in terms of a generic
+interface over machine and enforcement policy; see the `Properties`
+directory in the Coq development as explained below for concrete
+modelling details.
+
+Porting the testing framework to another architecture such as ARM would
+require adding a test case generator for the new ISA (including its specific
+calling conventions) and translating the micropolicy rules to apply to that
+architecture / calling conventions.  This would take some work, but it
+should be straightforward.
+
+For example, we are currently working on extending the work to a model of a
+Cheri-style hardware capability machine, Cerise, and have not encountered
+major obstacles.
+
+> How realistic is the RISCV specification? In other words, are there any
+> RISCV vulnerabilities that are not taken into account in your model? 
+
+We use the RISCV specification to demonstrate that our properties are
+testable in a realistic setting. We do not aim to exercise the entire RISCV
+specification, and the validity of the model is not dependent on the absence
+of (not stack-related) vulnerabilities in the RISCV implementation. That said,
+the RISCV specification we use is complete for user mode integer
+instructions (RV32IM).
+
+> More generally, what are the limitations of the presented work? For example, in the model, there seems to be no distinction between values and addresses; is it a limitation?
+
+As for the distinction between values and addresses, conventional ISAs do
+not make this distinction.  Ongoing work on the Cerise capability machine
+formalization has required some modifications to our model to distinguish
+values from addresses, as they are _not_ the same in a capability machine,
+but it has little global effect on the model itself. Indeed, distinguishing
+between values and addresses is a higher-level abstraction that can "hide"
+potential bugs resulting from implicit conversions between them, so we feel
+it is preferable to model them as the same when possible.
+
+> Another example is the outside qualifier that characterizes only a whole
+> component. Wouldn't you need a finer-grain access control policy (and a
+> qualifier for partially outside components)?
+
+We don't entirely understand this question, but we wonder whether there may
+be some confusion arising from our use of the term "components."  In our
+model (see line 398), components are already fine-grained: individual
+registers and memory addresses. We recognize that this is a poor choice of
+term given the common usage of component to refer to a larger module in a
+compartmentalization context, and we plan to change the term to "state
+elements."  Since components/elements are so fine-grained, there is no need
+for finer access control.
+
+> Could you comment on the Coq formalization that is provided as a
+> supplementary material? Was it straightforward to write a Coq program from
+> a C++ program? Moreover, I looked at the Coq development and found some
+> admitted lemmas in it. 
+
+See above for a discussion of the coq formalism in general.
+
+_[SNA: not sure what to say about writing Coq programs from C++ programs... really we wrote assembly programs anyway.]_
+
+Admitted lemmas are the beginnings of an effort to formalize the relationships
+between our various properties, especially that Stepwise properties are stronger
+than Observational.
+
+> Other comments
+
+> The supplementary material is not mentioned in the submission. Links to the Coq formalization would have been useful (e.g., for definition 7.4 that I did not fully understand in the submission, as K' is defined but not used, and so is n'').
+
+We agree, the Coq formalization should be better integrated into the submission. We give a map of
+the files above. In the case of definition 7.4, this is a typo. The K in the third bullet should be K', and the
+last instance of n' should be n''.
 
 > The first example programs (Fig. 1 to 4) are C programs. The programs in Fig. 5 and 6 are qualified as C++ programs, but they could be C programs and they are close to the first programs. Moreover, the C syntax for passing parameters by reference is surprising. I would have written f(&x)(line 934) and void f(int *a)(line 944).
 
