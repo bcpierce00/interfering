@@ -1097,6 +1097,10 @@ passing on the stack, are not supported directly by this property; we introduce
 secondary properties that use the same underlying formalism to handle these cases,
 as well as a simple coroutine model, in Section~\ref{sec:ext}.
 
+Other enhancements, such as runtime code generation and true concurrency,
+would be much more challenging to support, and we consider these features
+out of scope for now.
+
 \paragraph*{What is a ``call''?}  One significant challenge in formulating our
 properties arises from the fact that we want to define stack safety at the
 machine-code level for a variety of ISAs, including RISCy
@@ -1134,6 +1138,18 @@ call and the $\PCname$ points to the instruction following that call.  We
 abstract away from the details of specific calling conventions by assuming
 that we are given some way of telling when a given machine state is a
 {\em return target} with respect to some set of pending calls.
+
+%, returns, and function entry points\BCP{I
+%  still want to talk about whether returns and entry points need to be
+%  annotated.  To me, these annotations do not make intuitive sense: it is
+%  the caller's responsibility to know whether the address that it is calling
+%is really an entry point, and we can trust it to check this.  Similarly, it
+%is not the callee's role to say when it is returning; it is the caller's
+%prerogative to decide when it has been returned to!  I.e., from the caller's
+%point of view, it has been returned to when control resumes at the
+%instruction following the call with the SP reset to where it was at the
+%point of the call. (This is the point where it wants to be able to access
+%its own local state again and expected to find it unmolested.)}.
 
 \paragraph*{Enforcement Model}
 
@@ -1182,44 +1198,6 @@ are attacks on the heap---though we believe that the work of
 \citet{DBLP:conf/post/AmorimHP18} can be combined smoothly with ours
 to protect both stack and heap.
 
-\paragraph{Limitations}
-
-Our model is flexible enough to support many realistic uses of the stack.
-We intentionall say little or nothing about other structures
-such as the heap.  (Heap safety has already been studied, in isolation,
-by [Azevedo et al 2018], and we expect that their correctness condition and ours can be
-combined cleanly to characterize correct protection of stack + heap.)
-
-Features that we do not currently support:
-
-\begin{itemize}
-\item Address-taken locals. A satisfactory
-  treatment of these seems to require integration with a more general
-  model of memory safety that covers the heap and static globals too,
-  such as the aforementioned model of Azevedo et al.
-
-\item Exceptions. We can see a way to extend the model to include them:
-  we would model a "setjump" operation by inserting a
-  special target in the return target stack. We would weaken
-  well-bracketedness to allow reaching such a target from any
-  depth. Since integrity and confidentiality are distinct from
-  well-bracketedness and already permit the popping of multiple
-  functions from the stack, they can simply treat the exception's
-  target as another return target.
-
-\item Tail calls. To implement these, we would need to distinguish them
-  from normal calls and slightly adjust the mechanics of the return stack.
-
-\item Dynamic code generation. This would be challenging to
-  integrate into our framework, because we rely on code annotations.
-  But we can easily envision supporting limited cases in which
-  the generated code never contains a call or other annotated instruction,
-  or in which existing code is copied along with its annotations.
-
-\item Concurrency. We can handle a limited form of coroutines, as described in
-  8.3. Handling full-blown preemptive concurrency would require significant
-  changes in our underlying machine model.
-\end{itemize}
 
 \section{Machines and Traces}
 \label{sec:prelim}

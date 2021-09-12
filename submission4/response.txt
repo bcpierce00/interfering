@@ -1,0 +1,306 @@
+We thank the reviewers for their comments and questions.
+We first address the most important high-level points, then go back to
+fill in detailed responses to all questions posed in the reviews.
+
+# Limitations #
+
+Currently, discussion of our model's limitations is scattered
+throughout the paper.  We will expand and organize it into an explicit
+section, along the following lines:
+
+Our focus is on characterizing stack safety.  So we are particularly
+concerned with limitations that prevent the model from applying to
+realistic uses of the stack, as opposed to modeling other structures
+such as the heap, which we intentionally say nothing about.  (Heap
+safety has already been studied, in isolation, by [Azevedo et al 2018],
+and we expect that their correctness condition and ours can be
+combined cleanly to characterize correct protection of stack + heap.)
+
+Features that we do not currently support:
+
+- Address-taken locals. As we discuss at line 954, a satisfactory
+  treatment of these seems to require integration with a more general
+  model of memory safety that covers the heap and static globals too,
+  such as the aforementioned model of Azevedo et al.
+
+- Exceptions. We can see a way to extend the model to include them:
+  we would model a "setjump" operation by inserting a
+  special target in the return target stack. We would weaken
+  well-bracketedness to allow reaching such a target from any
+  depth. Since integrity and confidentiality are distinct from
+  well-bracketedness and already permit the popping of multiple
+  functions from the stack, they can simply treat the exception's
+  target as another return target.
+
+- Tail calls. To implement these, we would need to distinguish them
+  from normal calls and extend &#8594;<sub>C</sub> to process them
+  as a simultaneous return and call.
+
+- Dynamic code generation. This would be challenging to
+  integrate into our framework, because we rely on code annotations.
+  But we can easily envision supporting limited cases in which
+  the generated code never contains a call or other annotated instruction,
+  or in which existing code is copied along with its annotations.
+
+- Concurrency. We can handle a limited form of coroutines, as described in
+  8.3. Handling full-blown preemptive concurrency would require significant
+  changes in our underlying machine model.
+
+# Supplementary Coq Material #
+
+We should have referenced the supplementary material from the submission, and
+described its purpose.
+
+The Coq formalization provided contains two parts: the formalization of our
+properties, which was a conceptual aid in their development and may be
+useful to readers' intuitions, and the testing framework, which is used to
+validate our properties by showing that computable versions of them are
+testable. The contents are laid out in detail at the end of our response,
+with definitions mapped from the paper to the coq where relevant.
+
+___________________________________________________________________________
+# Reviewer A
+
+> Why did you choose this RISCV specification?
+> Why didn't you choose to reuse an ARM specification (as there are some of
+> them written in Coq in the literature)? 
+> Would it be easy to adapt your work to another ISA specification?
+
+We chose RISCV for its simplicity, and because it has been used as the base
+ISA for much of the existing work (by others) on designing hardware that
+supports tag-based micro-policies.
+
+To clarify a possible misunderstanding: the Coq specification of RISCV that
+we use was developed by others (see footnote p. 14); we were able to adapt
+it to our testing framework with relatively little effort.
+
+Our stack safety theory itself is not dependent on the details of the
+architecture, since the properties are defined in terms of a generic
+interface over machine and enforcement policy; see the `Properties`
+directory in the Coq development as explained below for concrete
+modelling details.
+
+Porting the testing framework to another architecture such as ARM would
+require adding a test case generator for the new ISA (including its specific
+calling conventions) and translating the micropolicy rules to apply to that
+architecture / calling conventions.  This would take some work, but it
+should be straightforward.
+
+For example, we are currently working on extending the work to a model of a
+Cheri-style hardware capability machine, Cerise, and have not encountered
+major obstacles.
+
+> How realistic is the RISCV specification? In other words, are there any
+>  RISCV vulnerabilities that are not taken into account in your model? 
+
+We use the RISCV specification to demonstrate that our properties are
+testable in a realistic setting. We do not aim to exercise the entire RISCV
+specification, and the validity of the model is not dependent on the absence
+of (not stack-related) vulnerabilities in the RISCV implementation. That said,
+the RISCV specification we use is complete for user mode integer
+instructions (RV32IM).
+
+> More generally, what are the limitations of the presented work?
+
+We discuss limitations broadly in our top-level response.
+
+> For example, in the model, there seems to be no distinction between
+> values and addresses; is it a limitation?
+
+Conventional ISAs do not make this distinction.  Our ongoing work on the
+Cerise capability machine formalization has required some
+modifications to our model to distinguish values from addresses, as
+they are _not_ the same in a capability machine, but it has little
+global effect on the model itself. Indeed, distinguishing between
+values and addresses is a higher-level abstraction that can "hide"
+potential bugs resulting from implicit conversions between them, so we
+feel it is preferable to model them as the same when possible.
+
+> Another example is the outside qualifier that characterizes only a whole
+> component. Wouldn't you need a finer-grain access control policy (and a
+> qualifier for partially outside components)?
+
+We don't entirely understand this question, but we wonder whether there may
+be some confusion arising from our use of the term "components."  In our
+model (see line 398), components are already fine-grained: individual
+registers and memory addresses. We recognize that this is a poor choice of
+term given the common usage of component to refer to a larger module in a
+compartmentalization context, and we plan to change the term to "state
+elements."  Since components/elements are so fine-grained, there is no need
+for finer access control.
+
+> Could you comment on the Coq formalization that is provided as a
+>  supplementary material? Moreover, I looked at the Coq development and found some
+>  admitted lemmas in it. 
+
+We have discussed the Coq formalization broadly in our general response.
+The theorems and lemmas in the formalization files serve only as
+sanity checks on our definitions. The Admitted and commented-out ones
+are mostly part of an early effort to formalize the relationships
+between our various properties, especially that Stepwise properties are stronger
+than Observational ones. They were included by mistake.
+
+> Was it straightforward to write a Coq program from a C++ program?
+
+If this question is referring to the example RISCV programs in the Coq
+development, they do not necessarily correspond to C++ programs. They served as
+intended as early test-cases for the property checker. More broadly, we do not
+generate specifically C or C++ code for the testing, but arbitrary low-level code
+that contains C-like call and return conventions.
+
+> Other comments
+
+> The supplementary material is not mentioned in the submission. Links
+> to the Coq formalization would have been useful (e.g., for
+> definition 7.4 that I did not fully understand in the submission, as
+> K' is defined but not used, and so is n'').
+
+We agree, the Coq formalization should be better integrated into the
+submission, as described at the head of this response. In the case of
+definition 7.4, this is a typo. The K in the third bullet should be
+K', and the last instance of n' should be n''.
+
+> The first example programs (Fig. 1 to 4) are C programs. The
+> programs in Fig. 5 and 6 are qualified as C++ programs, but they
+> could be C programs and they are close to the first
+> programs. Moreover, the C syntax for passing parameters by reference
+> is surprising. I would have written f(&x)(line 934) and void f(int > *a)
+> (line 944).
+
+Only Fig. 6 uses C++ features.  Although C programmers might indeed
+try to simulate call-by-reference by passing a pointer as suggested
+here, this is subtly different from a genuine by-reference argument in
+C++, because the latter cannot be directly used in a first-class way
+in the callee (without using the & operator, as e.g. at line 945).
+Thus, legal access to the value of a by-reference argument is
+restricted to the immediate callee (and any chain of sub-callees to
+which the argument is handed down by reference), and we can capture
+this access pattern in our policies.  On the other hand, pointer
+arguments might escape into arbitrary sub-callees, and there is no
+obvious way for policies in our style to specify when access through
+these pointers should be permitted. We will improve the discussion at
+line 954ff to clarify this point.
+
+___________________________________________________________________________
+# Reviewer B
+
+> I found the paper did not connect the section well. Section 4
+> presents a lot of details for a framework, which is then used in
+> Section 5. Seem very disconnected? For instance, Line 501:
+> ←C\leftarrow<sub>C</sub>←C​ this has a different type to the
+> semantics in the previous section. How does it relate? Generally,
+> there are a lot of things that are similar to the previous section,
+> but you are not actually connecting them. Is this because they are
+> different or just missing exposition.
+
+Much of the content that may seem disconnected takes the form of a
+parameterizable relation and its various instantiations in different
+versions of the property. &#8594;<sub>C</sub> is parameterized by the
+type ctx, which is section 5 is instantiated as (K -> SD)x(list(target)).
+In later sections it will be instantiated by other
+types.  Then for any &#8594;<sub>C</sub>, we can extend &#8640; to
+form &#8640;<sub>C</sub>.
+
+We will do more to call out which parts of the formalization are
+parameterized and when they are being instantiated, so that the
+connections are clearer.
+
+> Line 329: I was really interested in address taken at this point,
+>  and whether the model could handle it. I really think the informal
+>  aspects of the extensions, should be pulled forward, so these
+>  questions are answered earlier
+
+This is a good point, and we will examine ways to introduce that
+information sooner. But we are hesitant to go into too much detail on
+variants while introducing the basic formalism, because it can be a
+lot for the reader to keep track of.
+
+> Line 349: How does this related to control flow integrity/guard, and
+> Intel's CET? 
+
+The identification of call points, as described in this paragraph, is
+required for all our properties: integrity, confidentiality, and
+well-bracketed control flow (WBCF). Software or hardware support for
+control flow integrity (e.g. the CET shadow stack) could be used to
+enforce WBCF, but not the other two properties.
+
+> Line 508: "isRet" is a relation, but you are using as a function.
+
+Yes; we will avoid this abuse of notation.
+
+> Line 515: ReturnRec: This seems like it would allow you to access outer
+> frames as long as you didn't return?
+
+ReturnRec allows us to handle the case that well-bracketedness is
+violated and a caller is returned to before its callee. We choose to
+define this as a return, so that integrity and confidentiality are
+meaningful even without well-bracketed control flow. This also opens
+the possibility of implementing exceptions, as described in the
+Limitations section above.  In short, accessing outer frames through
+ReturnRec is valid because if ReturnRec applies, there has been a
+return.
+
+___________________________________________________________________________
+# Reviewer C
+
+> line 94: what about tail calls?
+
+Tail calls are discussed above in our proposed "limitations" section.  They
+are not currently supported, but we describe there how they might be.
+
+> line 123: "we extend the generation ..." I'm not sure what that means.
+
+Line 123 should read "... we extend the generation-by-execution
+techniques...", referring to the method of randomly generating valid
+low-level programs by lazily adding instructions while simulating execution.
+
+> line 293: What about exceptions?
+
+Exceptions are also discussed above in our "limitations" section,
+along with a description of what it would take to implement them.
+
+___________________________________________________________________________
+# Map of Supplementary Material
+
+Here is a brief map of the supplementary material:
+
+Core/ contains the abstract machine and policy models, as well as the RISCV
+instantiations with different policies.
+
+Properties/ contains Coq definitions corresponding to the different Properties:
+- Trace.v and ObsTrace.v define the trace model and observation model
+
+- SubroutineSimple.v defines the basic stack safety properties.
+  Some comments are outdated, and will be updated or removed for the final
+  submission. 
+
+  &#8594;<sub>C</sub> => Line 126 (disregard comment regarding returns)
+  Definition 5.2 => Line 184
+  Definition 5.9 => Line 255
+  Definition 5.10 => Line 277
+
+- CalleeSave.v defines stack safety with callee-save registers.
+  &#8594;<sub>C</sub> => Line 62
+  Definition 8.6 => Line 123 & Line 130
+  These definitions refer to general integrity and confidentiality properties for arbitrary
+  traces defined in TraceProperties.v at Lines 51 & 60.
+
+- SubroutineShare.v defines the version enhanced with argument passing on the stack.
+  Note that a preliminary treatment of address-taken locals is present; we discuss this briefly
+  in the submission at line 960, but find it uninteresting in a model that lacks a heap.
+
+  &#8594;<sub>C</sub> => Line 82
+  Definition 8.3 (Stepwise only) => Line 152
+  Note that this definition refers to a general confidentiality property of traces defined in 
+  TraceProperties.v at Line 35.
+
+- Coroutine.v defines the coroutine version. Unlike in the paper, passing on the stack is included.
+  &#8594;<sub>C</sub> => Line 107
+  Definition 8.10 (Stepwise only) => Line 192 & Line 199
+  Definition 8.11 (Stepwise only) => Line 212 & Line 221
+  This also refers to the general properties presented in TraceProperties.v
+
+  Lazy.v is an outdated file that was included by mistake.
+
+Testing/ contains the test system, with generators for different machines and the final test run
+via extraction in TestProperties.v
