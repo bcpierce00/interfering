@@ -1020,30 +1020,18 @@ that we are given some way of telling when a given machine state is a
 
 \paragraph*{Enforcement Model}
 
-We model the base machine's behavior as a step function over machine states,
-and a machine
-enhanced with an enforcement mechanism, or {\em policy} for short, as a
-partial step function over machine states extended with some
-auxiliary state, refining the base machine. When the policy-enhanced machine
-does not step from a given state, this is a {\em failstop}, halting the program before it can perform an
+We model the machine's behavior as a partial step function over machine states.
+Machine states may contain arbitrary data, including data used exclusively by the
+enforcement mechanism, while our properties contend only with the data that are
+relevant to normal execution: addresses and registers.
+When the machine does not step from a given state, this
+is a {\em failstop}, halting the program before it can perform an
 action that would violate the security property;
 our properties are therefore naturally \emph{termination insensitive.}
-This model will be made more precise in \cref{sec:prelim}.
-
-Dividing policy state from machine state helps us reason about
-enforcement mechanisms that keep a significant amount of data separate from the
-primary execution data to inform security. Tag-based systems, in which a hardware
-monitor tracks metadata tags associated with a software-defined ``micro-policy,'' are
-the motivating application. The tags, and any extra policy state, are separated from
-and untouchable by application code.
 
 That said, our model is meant to apply generically to any enforcement mechanism,
-including those that do not take advantage of this separation.
-Some mechanisms, like hardware capability systems, might exhibit failstop behavior,
-but have no protected policy state---this is represented by a trivial policy
-that failstops when the hardware faults. Others might never even failstop, such as
-code rewriting techniques that prevent stack safety violations directly, in which
-case their policy state does nothing at all.
+including those that do not failstop, such as
+code rewriting techniques that prevent stack safety violations directly.
 
 An enforcement model may additionally
 apply a ``well-formedness'' criterion on initial states, ensuring that
@@ -1109,52 +1097,21 @@ Features that we do not currently support:
 
 We now define our machine and enforcement model precisely.
 
-The building blocks of the machine are {\em values} and {\em addresses}.
-Both are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\) and
-\(\addr\), respectively.
+The building blocks of the machine are {\em values}, {\em addresses}, and {\em registers}.
+Values and addresses are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\) and
+\(\addr\), respectively. Register names (\(\reg\)) drawn from some set
+\(\REGS\), which is assumed to include a special-purpose register, the
+program counter {\PCname}. Collectively addresses and registers are {\em components} \(\component\)
+in the set \(\COMPONENTS ::= \WORDS + \REGS\).
 %
-Our machine states are composed of {\em components} \(\component\),
-which are either addresses or register names (\(\reg\)) drawn from some set
-\(\REGS\), which is assumed to include two special-purpose registers: the
-program counter {\PCname} and the stack pointer \(\SP\).
-A {\em machine state} is a map from components to values.
+A {\em machine state} \(\mach\) is drawn from a set \(\MACHS\) and supports a mapping
+from components to values, written
+\(\mach[\component] ::= \MACHS \rightarrow \COMPONENTS \rightarrow \WORDS \).
 
-\begin{minipage}{.45\columnwidth}
-  \[\component \in \COMPONENTS ::= \WORDS + \REGS\]
-\vspace{\afterdisplayskip}
-\end{minipage}
-\begin{minipage}{.45\columnwidth}
-  \[\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\]
-\vspace{\afterdisplayskip}
-\end{minipage}
-
-We have a total step function between machine states, written \(\mach \stepsto \mach'\).
-
-We now formalize the model of enforcement that we introduced in Section~\ref{sec:threat}.
-A {\em policy} consists of a set of policy
-states \(\pol \in \POLS\) and a policy step function \((\mach, \pol) \polstep \pol' \in
-\MACHS \times \POLS \rightharpoonup \POLS\). This step function is partial;
-it is undefined on input configurations that correspond to a policy fault. The policy
-can see the machine state, but cannot modify it. The policy also provides a
-well-formedness predicate, \(\WF \subseteq \MACHS \times \POLS\), describing
-initial states that are properly configured.
-%
-%A concrete policy based on \citet{DBLP:conf/sp/RoesslerD18} will be described in
-%\Cref{sec:enforcement}.---APT: We just said this.
-
-We lift the policy step function to operate on such pairs
-by combining it with the regular step function for machine states.
-
-\judgmenttwo{\(\mach \stepsto \mach'\)}{\((\mach, \pol)
-               \polstep \pol'\)}
-            {\(\mpstate{\mach}{\pol} \stepstopol
-               \mpstate{\mach'}{\pol'}\)}
-
-\noindent
-Note that the base machine has a total step function, while the policy-enhanced machine
-refines it to a partial function. The extra policy state never changes behavior,
-but it can cause
-premature termination, representing failstop behavior.
+We have a partial step function between machine states, written \(\mach \stepsto \mach'\), which
+is undefined on input states that correspond to a policy fault. So, a security mechanism is
+represented by the capacity of the machine to ``fail-stop,'' as well as by whatever initial
+well-formedness conditions are required for the mechanism to function properly.
 
 \paragraph*{Contexts}
 
@@ -1168,20 +1125,20 @@ an initial context state \(\context_0 \in \CONTEXTS\), and a context step functi
 \rightarrow \CONTEXTS\). We also assume the existence of a \emph{code map},
 \(\codemap \in \WORDS \rightharpoonup \ANNS\)
 that relates each code address to its annotation, if any.
-We lift contexts into an MP trace in much the same way as we lifted policy states to get
-a triple state \(\mpcstatename \in \MPCS = \MACHS \times \POLS \times
-\CONTEXTS\).
+We pair a machine state with a context state to get a combined ``MC-state''
+\(\mpcstatename \in \MPCS = \MACHS \times \CONTEXTS\), and lift the context-step
+function into the machine step like so:
 
-\judgmenttwo{\(\mpstate{\mach}{\pol} \stepstopol \mpstate{\mach'}{\pol'}\)}
+\judgmenttwo{\(\mach \stepsto \mach'\)}
               {\(\mach, \context \constep \context'\)}
-              {\(\mpcstate{\mach}{\pol}{\context} \stepstocon
-                \mpcstate{\mach'}{\pol'}{\context'}\)}
+              {\(\mach,\context \stepstocon
+                 \mach',\context'\)}
 
 \paragraph*{Machine Traces}
 \label{sec:traces}
 
-A {\em machine trace} is a nonempty, finite or infinite sequence of elements
-of MPC-states, ranged over by \(\MPCT\) and \(\NPCT\).
+A {\em machine trace} is a nonempty, finite or infinite sequence
+of MC-states, ranged over by \(\MPCT\) and \(\NPCT\).
 We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces (ordinary lists will use
 ``::'').
 
@@ -1203,8 +1160,8 @@ produced by repeated application of \(\stepstocon\)
 \end{center}
 %
 
-We project out the machine state of an MPC-state with \(\pi_\mach\), the
-policy state with \(\pi_\pol\), and the context with \(\pi_\context\).
+We project out the machine state of an MPC-state with \(\pi_\mach\)
+and the context with \(\pi_\context\).
 We take the first element of a trace with \(\head(\MPCT)\), which is a total
 function since traces are non-empty, and the final element (if one exists) with
 \(\last(\MPCT)\), which is partial.
@@ -1290,9 +1247,10 @@ vertical space between inference rules.}\fi
 
 We often want to quantify over all traces from any initial state so that our
 properties apply to the system as a whole. We say that a state \(\mpcstatename'\)
-is {\em reachable} if for some initial state \(\mpcstatename = \mach,\pol,\context_0\)
-where \((\mach,\pol) \in \WF\), \(\mpcstatename \hookrightarrow \MPCT\)
-and \(\MPCT\) contains \(\mpcstatename'\). A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
+is {\em reachable} if for some initial state \(\mpcstatename = \mach,\context_0\)
+where \(\mach\) is well-formed, \(\mpcstatename \hookrightarrow \MPCT\)
+and \(\MPCT\) contains \(\mpcstatename'\).
+A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
 such that from some similarly well-formed initial state \(\mpcstatename\),
 \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\).
 
@@ -1392,9 +1350,9 @@ for some depth \(\depth\).
 
 \definition
 A system enjoys \textit{\textbf{stepwise stack integrity}} if, for any reachable state
-\(\mach,\pol,\context\) such that \(\mach,\pol,\context \stepstocon \mpcstatename'\),
+\(\mach,\context\) such that \(\mach,\context \stepstocon \mach',\context'\),
 and any component \(\component \in \prot(\context)\),
-\(\pi_\mach(\mpcstatename') ~ \component = \mach ~ \component\).
+\(\mach'[\component] = \mach[\component]\).
 
 Next we consider {\em stepwise stack confidentiality}. Recall that our properties are
 nested: we will quantify over subtraces that represent whole calls. For each
@@ -1405,7 +1363,7 @@ that the original, {\em primary} traces move in {\em lockstep} with the variant.
 \[\begin{aligned}
 \bigcup_{\depth \in \mathbb{Z}} \{\MPCT, \neg f_\depth | \MPCT\langle f_\depth \rangle
 \text{ is a reachable segment}\} \hspace{1em} &
-\text{where } f_\depth ~ (\mach,\pol,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
+\text{where } f_\depth ~ (\mach,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
 \end{aligned}\]
 
 This is the set of all possible calls that can be reached from any well-formed initial state.
@@ -1446,10 +1404,10 @@ set of components \(\component\) such that \(\domMap ~ \component \not = \outsid
 
 \definition
 A system enjoys \textbf{\textit{stepwise stack confidentiality}} if,
-for any \(\MPCT,\brk \in \MPCT^*\) with \(\head(\MPCT) = \mach,\pol,\context\),
+for any \(\MPCT,\brk \in \MPCT^*\) with \(\head(\MPCT) = \mach,\context\),
 any \(\nach\) such that \(\mach \approx_{\mathit{secret}(\context)} \nach\), and any trace
 %\(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk\),
-\(\NPCT\) such that \(\nach,\pol,\context \hookrightarrow \NPCT | \brk\),
+\(\NPCT\) such that \(\nach,\context \hookrightarrow \NPCT | \brk\),
 \(\MPCT \doteq \NPCT\) holds.
 
 %\medskip
@@ -1803,13 +1761,13 @@ leads us to a hybrid of integrity and confidentiality.
 
 \definition
 A system enjoys \textbf{\textit{deferred stepwise integrity}} if,
-for any \(\MPCT,\brk \in \MPCT^*\) where \(\head(\MPCT) = \mach,\pol,\context\) and
-\(\last(\MPCT) = \mach',\pol',\context'\), the following holds. Let
-\((\mach',\pol',\context') \hookrightarrow \MPCT'\) and
+for any \(\MPCT,\brk \in \MPCT^*\) where \(\head(\MPCT) = \mach,\context\) and
+\(\last(\MPCT) = \mach',\context'\), the following holds. Let
+\((\mach',\context') \hookrightarrow \MPCT'\) and
 \(\components = \prot(\context) \cap \Delta(\mach,\mach')\), the
 set of sealed components that changed during the call.
 For any \(\nach'\) and \(\NPCT'\) such that \(\mach' \approx_{\components} \nach'\) and
-\((\nach',\pol',\context') \hookrightarrow \NPCT'\), \(\MPCT' \doteq \NPCT'\).
+\((\nach',\context') \hookrightarrow \NPCT'\), \(\MPCT' \doteq \NPCT'\).
 
 Intuitively, deferred stepwise integrity means that if any components change from
 the a call to its matching return, they will afterward be treated as confidential
@@ -1918,13 +1876,13 @@ prevent them from being leaked.
 
 \definition
 \textbf{\em Observational integrity} means that for any \(\MPCT,\brk \in \MPCT^*\)
-where \(\head(\MPCT) = \mach,\pol,\context\) and \(\last(\MPCT) = \mach',\pol',\context'\),
+where \(\head(\MPCT) = \mach\context\) and \(\last(\MPCT) = \mach',\context'\),
 the following holds. Let \(\components\) be the set of protected components that changed during
 the call, \(\components = \prot(\context) \cap \Delta(\mach, \mach')\),
-and let \((\mach',\pol',\context') \hookrightarrow \MPCT'\).
+and let \((\mach',\context') \hookrightarrow \MPCT'\).
 Then for any \(\nach\) such that
 \(\mach' \approx_{\components'} \nach\), and its induced trace
-\((\nach,\pol',\context') \hookrightarrow \NPCT\), \(\obsof(\MPCT') \simeq \obsof(\NPCT)\).
+\((\nach,\context') \hookrightarrow \NPCT\), \(\obsof(\MPCT') \simeq \obsof(\NPCT)\).
 
 \medskip
 
@@ -1941,7 +1899,7 @@ be pairs of states. Their {\em unsafe set}, written
 
 \definition
 A system enjoys \textbf{\em observational confidentiality} if for all
-\(\MPCT,\brk \in \MPCT^*\), with \(\head(\MPCT) = \mach,\pol,\context\) and
+\(\MPCT,\brk \in \MPCT^*\), with \(\head(\MPCT) = \mach,\context\) and
 \(\components = \secret(\context)\), the following holds.
 %
 For any \(\nach\) such that \(\mach \approx_\components \nach\) and
@@ -1953,12 +1911,12 @@ For any \(\nach\) such that \(\mach \approx_\components \nach\) and
   meaning that no secrets leak during the call
 \item \(\brk ~ (\last(\MPCT)) \leftrightarrow \brk ~
 (\last(\NPCT))\), i.e. if one call returns, so does the other
-\item Assuming both calls return, let \(\last(\MPCT) = \mach',\pol',\context'\)
+\item Assuming both calls return, let \(\last(\MPCT) = \mach',\context'\)
   and \(\pi_\mach(\last(\NPCT)) = \nach'\),
   let \(\components' = \components \cap \bar{\Diamond}(\mach,\mach',\nach,\nach')\),
   and let \(\nach''\) be a state such that \(\mach' \approx_\components \nach''\).
-  Then if \(\mach',\pol',\context' \hookrightarrow \MPCT'\) and
-  \(\nach',\pol',\context' \hookrightarrow \NPCT'\), it must be
+  Then if \(\mach',\context' \hookrightarrow \MPCT'\) and
+  \(\nach',\context' \hookrightarrow \NPCT'\), it must be
   that \(\obsof(\MPCT') \simeq \obsof(\NPCT')\)
 \end{itemize}
 
