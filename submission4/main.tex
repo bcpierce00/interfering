@@ -1611,38 +1611,38 @@ that exhibits interesting control-flow patterns, but also the policy
 meta-information and code annotations that would normally be produced
 by the compiler.
 
-\paragraph*{Generators}
-
-To write such generators we build on the work of
-Hri\c{t}cu et al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
-introduced {\em generation by execution} to produce progams that lead
-machines towards interesting behaviors. Generation by
-execution receives as an input a partially instantiated machine state
-and attempts to generate an instruction (or a sequence of instructions
-such as a blessed sequence) that makes sense locally (e.g., jumps go
-to a potentially valid code location and loads read from a
-potentially valid stack location). Then we step the machine and repeat
-the process until we generate or execute some target number of
-instructions, or reach a point where the machine cannot step
-any more.
-
-We extend this technique to keep track of the control flow behavior of
-the program being generated: each time a call or return sequence is
-generated, we ensure that the appropriate policy tags and code
-annotations are set for the entry or return points.% At the same time,
-%we allow the generation to sometimes relax those constraints,
-%introducing potentially ill-formed flows: this causes our programs
-%to failstop when executed in conjunction with the policy monitor,
-%but also allows for revealing errors in our setup.\apt{??}
-
-In addition, we need to further extend this technique to handle the nested
-nature of our confidentiality property: rather than just generating two
-initial machines that are variants of one another and letting them
-execute to test for noninterference, we generate a new variant
-{\em every time a call is made} and check confidentiality for the
-subtrace produced from that variant state until its corresponding
-return. As a result, a ``single'' confidentiality test compactly
-checks the confidentiality of multiple nested calls.
+%\paragraph*{Generators}
+%
+%To write such generators we build on the work of
+%Hri\c{t}cu et al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
+%introduced {\em generation by execution} to produce progams that lead
+%machines towards interesting behaviors. Generation by
+%execution receives as an input a partially instantiated machine state
+%and attempts to generate an instruction (or a sequence of instructions
+%such as a blessed sequence) that makes sense locally (e.g., jumps go
+%to a potentially valid code location and loads read from a
+%potentially valid stack location). Then we step the machine and repeat
+%the process until we generate or execute some target number of
+%instructions, or reach a point where the machine cannot step
+%any more.
+%
+%We extend this technique to keep track of the control flow behavior of
+%the program being generated: each time a call or return sequence is
+%generated, we ensure that the appropriate policy tags and code
+%annotations are set for the entry or return points.% At the same time,
+%%we allow the generation to sometimes relax those constraints,
+%%introducing potentially ill-formed flows: this causes our programs
+%%to failstop when executed in conjunction with the policy monitor,
+%%but also allows for revealing errors in our setup.\apt{??}
+%
+%In addition, we need to further extend this technique to handle the nested
+%nature of our confidentiality property: rather than just generating two
+%initial machines that are variants of one another and letting them
+%execute to test for noninterference, we generate a new variant
+%{\em every time a call is made} and check confidentiality for the
+%subtrace produced from that variant state until its corresponding
+%return. As a result, a ``single'' confidentiality test compactly
+%checks the confidentiality of multiple nested calls.
 
 \paragraph*{Findings}
 
@@ -1716,8 +1716,7 @@ $l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s da
 %\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
 %  and the write from {\tt f} was already a violation.}
 
-
-\section{Stack Safety for Lazy Enforcement}
+\section{Observable Stack Safety}
 \label{sec:lazy}
 
 The conservative policy described in the previous section, while
@@ -1727,42 +1726,26 @@ that most of the performance overhead incurred
 stems from the need to set stack activation tags as a frame is created
 and reset them as it is destructed;  this
 is particularly costly for frames that contain large uninitialized arrays.
-To mitigate those costs, they propose a number of optimizations to the policy
-that make it more permissive but also more efficient to implement.
+To mitigate those costs, they eliminate the costly frame initialization pass.
 
-First, they eliminate the costly frame initialization pass. In the {\em Lazy Tagging}
-system, the stack is again initially tagged as \(\tagNoDepth\).
-A function is permitted
-to overwrite \(\tagNoDepth\) memory, and when it does so its depth tag overwrites
-the \(\tagNoDepth\) tag, claiming the memory; the remainder of the policy functions
-as in Depth Isolation. However, on return, the callee must clear its frame, restoring
-each tag to \(\tagNoDepth\), which is still a heavy cost.
-
-To eliminate this cost, they augment Lazy Tagging
-with {\em Lazy Clearing}. Under this combination of optimizations,
-the policy does not initialize stack frames on entry \emph{or} clear them on exit,
+Under the most optimized version of the micro-policy, {\em Lazy Tagging and Clearing},
+it does not initialize stack frames on entry \emph{or} clear them on exit,
 and it permits all writes to the stack, even when the $\PCname$ tag
 does not match the memory tag; the \(\PCname\) tag is always propagated
 to the written location. Reads from the stack \emph{do} require $\PCname$
 tag and memory tag to match. Thus, even if a callee illicitly writes to
 a private location in its caller, the caller will eventually detect this
 if it ever tries to read from that location.
-%
-These \emph{lazy policies} admit more efficient implementations, but
-they deliberately allow temporary violations of stack integrity,
-with the checks deferred until the point a violation truly becomes
-harmful. The natural question then is: how do we characterize the
+
+This \emph{lazy policy} admits more a efficient implementations, but
+they deliberately allow temporary violations of stack integrity.
+The natural question then is: how do we characterize the
 protections provided by these policies once stepwise stack safety is broken?
 How does a harmful violation that must be caught later differ from a
 harmless one?
 
-\subsection{Observability}
-
-In addition to capturing the intuition behind lazy tagging, we are interested
-in properties that can be used to evaluate the broadest possible range of reasonable
-enforcement mechanisms.
-
-And some code features may involve moving data, overwriting its original location,
+Beyond this one enforcement mechanism, some code features may involve
+moving data, overwriting its original location,
 and ultimately restoring it before the change becomes visible; for example, the
 ``callee-saves'' registers in some calling conventions will be stashed and restored.
 These examples call for an abstract mechanism to characterize behaviors that are externally
@@ -1827,7 +1810,7 @@ an external observer looking at two machine runs cannot (computably)
 distinguish between a machine that steps forever and a machine that
 steps for a long time before producing some output.
 
-\subsection{Observational Stack Safety}
+\paragraph*{Observational Stack Safety}
 
 We now sketch observational versions of both integrity and confidentiality.
 Integrity is already straightforward, simply weakening the condition that must hold
@@ -1977,153 +1960,6 @@ registers  (\ref{sec:callee}), and to a very simple coroutine model
   \begin{subfigure}[t]{.2\textwidth}
 {\small
 \begin{verbatim}
-void main() {
-  int x = 5;
-  x = f(x);
-  return;
-}
-
-
-
-
-
-void f(int a) {
-  int y = 2*a;
-  a = 0;
-  return;
-}
-\end{verbatim}
-}
-  \end{subfigure}
-  \begin{subfigure}[t]{.6\textwidth}
-{\small
-\begin{verbatim}
-1  main: add $1,%sp          ; allocate frame
-2        mov $5,-1(%sp)      ; initalize x
-3        add $1,%sp          ; allocate arg
-4        mov -2(%sp),-1(%sp) ; set arg
-5        call f              ; SHARE: %sp-1
-6        sub $1,%sp          ; deallocate arg
-7        mov %ra,-1(%sp)     ; store x
-8        sub $1,%sp          ; deallocate frame
-9        ret
-
-10  f:   add $1,%sp          ; allocate frame
-11       mov -3(%sp),-1(%sp) ; y = a
-12       mul $2,-1(%sp)      ; y = a*2
-13       mov $0,-3(%sp)      ; a = 0
-14       sub $1,%sp          ; deallocate frame
-15       ret
-\end{verbatim}
-}
-  \end{subfigure}
-\begin{subfigure}{.65\textwidth}
-\vspace*{0.2in}
-\begin{center}
-\begin{tabular}{l r | l}
-  {\tt 3} &
-  \multicolumn{2}{c}{
-    \memoryaddrs[(0)]{8em}
-    \memory{4}{\unsealc}
-    ~$\cdots$
-    \MemoryLabel{-19em}{0.75em}{5}
-%    \MemoryLabel{-14em}{0.75em}{0}
-%    \MemoryLabel{-10em}{0.75em}{0}
-%    \MemoryLabel{-7em}{0.75em}{0}
-    \vspace{.5em}
-  } \\
-  {\tt 11} &
-  \memoryaddrs[(1)]{21.5em}
-  \memory{1}{\mainsealc}[\sealdesc{0}]%
-  \memory{1}{\mainpassc}[\passdesc{0}{1}]%
-  \memory{1}{\retptrc}[\retptrdesc]%
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{5}
-  \MemoryLabel{-14em}{0.75em}{5}
-%  \MemoryLabel{-6em}{0.75em}{0}
-  &
-  \memoryaddrs[(1)]{21.5em}
-  \memory{1}{\mainsealc}
-  \memory{1}{\mainpassc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-14em}{0.75em}{5}
-  \MemoryLabel{-6em}{0.75em}{\(v_1\)}
-  \\
-  {\tt 13} &
-  \memoryaddrs[(1)]{21.5em}
-  \memory{1}{\mainsealc}
-  \memory{1}{\mainpassc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{5}
-  \MemoryLabel{-14em}{0.75em}{5}
-  \MemoryLabel{-6em}{0.75em}{10}
-  &
-  \memoryaddrs[(1)]{21.5em}
-  \memory{1}{\mainsealc}
-  \memory{1}{\mainpassc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-14em}{0.75em}{5}
-  \MemoryLabel{-6em}{0.75em}{10}
-  \\
-  {\tt 14} &
-  \memoryaddrs[(1)]{21.5em}
-  \memory{1}{\mainsealc}
-  \memory{1}{\mainpassc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{5}
-  \MemoryLabel{-14em}{0.75em}{0}
-  \MemoryLabel{-6em}{0.75em}{10}
-  &
-  \memoryaddrs[(1)]{21.5em}
-  \memory{1}{\mainsealc}
-  \memory{1}{\mainpassc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-14em}{0.75em}{0}
-  \MemoryLabel{-6em}{0.75em}{10}
-  \\
-  \\
-  {\tt 8} &
-  \multicolumn{2}{c}{
-    \memoryaddrs[(0)]{8em}
-    \memory{4}{\unsealc}
-    ~$\cdots$
-    \MemoryLabel{-19em}{0.75em}{10}
-    \MemoryLabel{-14em}{0.75em}{0}
-    \MemoryLabel{-10em}{0.75em}{\#6}
-    \MemoryLabel{-7em}{0.75em}{10}
-    \vspace{.5em}
-  } \\
-\end{tabular}
-\end{center}
-
-\vspace{\abovedisplayskip}
-
-\end{subfigure}
-
-\caption{Sharing on the stack \ifaftersubmission\bcp{Not enough space above the bottom part of
-    the figure (at least in the latex build that I'm looking at...)}\fi}
-\label{fig:passingsimple}
-\end{figure*}
-
-\begin{figure*}
-  \centering
-  \begin{subfigure}[t]{.2\textwidth}
-{\small
-\begin{verbatim}
 int *stash = 0;
 int main() {
   int x, y;
@@ -2146,11 +1982,11 @@ void f(int &a) {
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}[t]{.49\textwidth}
+  \begin{subfigure}[t]{.47\textwidth}
 {\small
 \begin{verbatim}
    stash: .word 0
-1  main:  add $2,%sp      ; allocate frame
+1  main:  add $2,%sp      ; alloc frame
 2         mov %sp,%ra
 3         add -2,%ra      ; ra = &x
 4         call f          ; SHARE: %sp-2
@@ -2158,8 +1994,8 @@ void f(int &a) {
 6         mov %sp,%ra
 7         add -1,%ra      ; ra = &y
 8         call f          ; SHARE: %sp-1
-9         mov -2(%sp),%ra ; set return value
-10        sub $2,%sp      ; deallocate frame
+9         mov -2(%sp),%ra ; set return
+10        sub $2,%sp      ; dealloc frame
 11        ret
 
 20 f:     cmp stash, $0   ; stash = 0?
@@ -2172,7 +2008,7 @@ void f(int &a) {
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}[t]{.29\textwidth}
+  \begin{subfigure}[t]{.27\textwidth}
     \begin{center}
     \begin{tabular}{l l}
       {\tt 20} &
@@ -2216,7 +2052,6 @@ void f(int &a) {
       \MemoryLabel{-18em}{0.75em}{\bf 5}
 \end{tabular}
 \end{center}
-\vspace{\abovedisplayskip}
 \end{subfigure}
 \caption{A violation with pass-by-reference}
 \label{fig:passing}
@@ -2228,21 +2063,9 @@ We now show how to implement two kinds of protected
 sharing of stack contents: passing by value on the stack, and passing by reference. We first explore
 some examples and then extend our formalization.
 
-Example~\ref{fig:passingsimple} shows a sample trace of
-a program that passes a value on the stack, without an attack.
-We extend our call annotation with an additional parameter identifying a memory location to be
-passed (the diagram displays it in magenta). Our notion of domains is extended as well,
-to include \(\passed{\depth,\depth'}\), recording two depths. We note the
-current depth of the active function next to the stack pointer in the diagram, for reference.
-The argument {\tt a} has
-its value copied from {\tt x}, and we note that {\tt f} can read it---because it is marked
-as passed between depths 0 and 1, it is not varied. At instruction 13 it is
-modified---naturally this is permitted as well.
-
-The same annotation mechanism can be used to pass
-variables by reference, and here there are important stack safety concerns,
-as seen in Figure~\ref{fig:passing}. In this example, written in C++ notation,
-{\tt f} takes a single argument by reference.  The function
+Example~\ref{fig:passingsimple} shows a sample trace of a program that passes
+variables by reference. In this example, written in C++ notation,
+{\tt f} takes a single argument by reference (the diagram displays it in magenta). The function
 {\tt main} calls {\tt f}, passing a reference to {\tt x}, then clears {\tt x} and calls
 {\tt f} again, passing a reference to {\tt y}.
 We would expect that the first call to {\tt f} can modify
@@ -2253,7 +2076,9 @@ although its behavior is officially undefined.)
 To avoid cluttering the picture at the assembly level, we revert to assuming that the
 argument {\tt a} is passed in a register, namely {\tt \%ra}.
 The question is how the local variables {\tt x} and {\tt y} themselves
-should be labelled in order for the policy to detect an integrity violation.
+should be labelled in order for the property to correctly classify an integrity violation.
+Our notion of domains is extended to include \(\passed{\depth,\depth'}\),
+recording two depths for reasons explained below.
 At the initial call, the address of {\tt x} is marked as passed, and {\tt f} is free to write to it. Then upon
 return, {\tt main}'s frame is unsealed. At the second call it is the address of {\tt y} that is marked as passed,
 and when {\tt f} instead tries to write to {\tt x}, it violates integrity.
@@ -2418,7 +2243,6 @@ should never be saved. We then extend the set of domains with these values, for 
 %
 \judgmenttwobrlong[ Call]
                   {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
-%              {\(\components = \sealcon ~ \mach\)}
                   {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
                   {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
                   {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
