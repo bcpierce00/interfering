@@ -1034,7 +1034,7 @@ are attacks on the heap---though we believe that the work of
 Azevedo de Amorim et al.\cite{DBLP:conf/post/AmorimHP18} can be combined smoothly with ours
 to protect both stack and heap.
 
-\paragraph{Limitations}
+\paragraph*{Limitations}
 
 Our model is flexible enough to support many realistic uses of the stack.
 We intentionall say little or nothing about other structures
@@ -1875,9 +1875,8 @@ violation would become visible. Now we can identify when lazy policies
 miss such violations, which are again susceptible to testing;
 Table~\ref{tab:lazy-bug-table} summarizes the results of our evaluation.
 The Lazy Tagging and Clearing
-micro-policy from Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} tags each stack slot with the call depth
-at which it was written, and enforces that it must be read from the
-same depth. However, this allows violations of observable stack safety!
+micro-policy from Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} in fact
+allows violations of observable stack safety!
 Our implementation of this policy, {\em PER\_DEPTH\_TAG}, has an error that we find
 in testing. If, at depth \(d\), a callee \(A\) writes into its caller's
 frame, then returns, and later another callee \(B\) at depth \(d\) reads the same
@@ -1920,14 +1919,61 @@ taking twice as long to catch as the next longest.
 \end{table}
 
 
-%Per-activation tagging resolves the issue because tags that persist between
-%calls will not become active again.
 Our abstract properties have allowed us to identify an enforcement mechanism as
 not really stack safe, and to validate a possible fix.
 Unfortunately, Lazy Per-activation Tagging and Clearing
 puts severe pressure on the tag cache, so it may not be usable in practice.
 However, we conjecture that no lazy scheme can be fully stack safe
 without using unique per-activation identifiers.
+
+\subsection{Callee-saves Registers}
+\label{sec:callee}
+
+Another application of observational properties is characterizing a ``callee-saves''
+calling convention.
+Intuitively, a caller expects a callee-saves register to be unchanged on
+return, but it
+may change during the call, as long as it is restored. We similarly expect a callee-saves
+register to be secret from the callee, except when it is copied to the stack. Both scenarios
+reflect observational rather than stepwise stack safety.
+
+We begin by adding information to Call annotations defining which registers will be {\em saved}
+and which are {\em unsaved}. The stack pointer and the register containing the return address
+should never be saved. We then extend the set of domains with these values, for the first time applying
+(non-{\em outside}) domains to registers as well as addresses.
+%
+\[\begin{split}
+\codemap \in \CODEMAPS ::= & \WORDS \rightharpoonup \callmap(S)\\
+\mbox{\rm{where}} ~ & S \in \REGS \rightarrow (\unsaved + \saved) \\
+\end{split}\]
+
+\[\begin{split}
+\stackDom \in \STKDOMS ::= & \outside + \unsealed + \sealed{\depth} \\
+& + \unsaved + \saved
+\end{split}\]
+%
+\judgmenttwobrlong[ Call]
+                  {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
+                  {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
+                  {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
+                  {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
+The remaining rules are the same as in the simple model.
+
+\definition Let the protected set of a context, \(\prot_S(\domMap,\rts)\),
+be the set of elements \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
+or \(\domMap ~ \component = \saved\).
+
+\definition Let the secret set of a context, written \(\secret_S(\domMap,\rts)\),
+be the set of elements \(\component\) such that
+\(\domMap ~ \component = \sealed{\underscore}\), \(\domMap ~ \component = \unsealed\), or
+\(\domMap ~ \component = \saved\).
+
+\definition
+%
+\textbf{\em Observational stack integrity} with callee-saves registers substitutes the above
+\(\CONTEXTS\) type and update function, and \(\prot_S\), for its equivalent in the simple model.
+%
+\textbf{\em Observational stack confidentiality} additionally substitutes \(\secret_S\).
 
 \section{Extensions}
 \label{sec:ext}
@@ -2200,73 +2246,6 @@ function, and \(\prot_P\), for their equivalents in the simple model.
 For both the \textbf{\em stepwise} and \textbf{\em observational} versions of \textbf{\em stack confidentiality} in
 the original model, the passing model equivalents additionally substitute \(\secret_P\).
 
-\subsection{Callee-saves Registers}
-\label{sec:callee}
-
-Under some calling conventions, rather than the caller saving the non-argument
-data from its registers
-and clearing them (and therefore implicitly taking responsibility for
-protecting this data),
-the callee is responsible for this. But of course we may still wish for
-those registers to be
-protected, just as they would be in a caller-saves convention.
-
-Intuitively, a caller expects a callee-saves register to be unchanged on
-return: it
-may change during the call, as long as it is restored. We similarly expect a callee-saves
-register to be secret from the callee, except when it is copied to the stack! Both scenarios
-reflect observational rather than stepwise stack safety.
-
-We begin by adding information to Call annotations defining which registers will be {\em saved}
-and which are {\em unsaved}. The stack pointer and the register containing the return address
-should never be saved. We then extend the set of domains with these values, for the first time applying
-(non-{\em outside}) domains to registers as well as addresses.
-%
-\[\begin{split}
-\codemap \in \CODEMAPS ::= & \WORDS \rightharpoonup \callmap(S)\\
-\mbox{\rm{where}} ~ & S \in \REGS \rightarrow (\unsaved + \saved) \\
-\end{split}\]
-
-\[\begin{split}
-\stackDom \in \STKDOMS ::= & \outside + \unsealed + \sealed{\depth} \\
-& + \unsaved + \saved
-\end{split}\]
-%
-\judgmenttwobrlong[ Call]
-                  {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
-                  {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
-                  {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
-                  {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
-The remaining rules are the same as in the simple model.
-
-\definition Let the protected set of a context, \(\prot_S(\domMap,\rts)\),
-be the set of elements \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
-or \(\domMap ~ \component = \saved\).
-
-\definition Let the secret set of a context, written \(\secret_S(\domMap,\rts)\),
-be the set of elements \(\component\) such that
-\(\domMap ~ \component = \sealed{\underscore}\), \(\domMap ~ \component = \unsealed\), or
-\(\domMap ~ \component = \saved\).
-
-\definition
-%
-\textbf{\em Observational stack integrity} with callee-saves registers substitutes the above
-\(\CONTEXTS\) type and update function, and \(\prot_S\), for its equivalent in the simple model.
-%
-\textbf{\em Observational stack confidentiality} additionally substitutes \(\secret_S\).
-
-\paragraph*{Discussion}
-
-Observational properties are not only for lazy enforcement mechanisms---they reflect a useful
-loosening of the stepwise properties. Consider a single register \(\reg\) that is saved.
-It is copied to some stack address \(\addr\), violating stepwise confidentiality, and then
-overwritten, violating stepwise integrity. Then before the return, it is restored to its
-original value. In observational integrity terms, \(\reg\) is unchanged between call and return,
-and in observational confidentiality terms, both the original and variant values are unchanged
-from their originals, so that \(\reg\) is not in the \(\Delta\) set.  But \(\addr\) is in the
-\(\Delta\) set, so confidentiality additionally requires that the value of \(\reg\) does not
-leak through the callee-saves mechanism, for instance if the caller allocates but fails to
-initialize more memory.
 
 \subsection{Coroutines}
 \label{sec:coroutines}
