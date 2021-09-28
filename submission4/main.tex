@@ -300,7 +300,8 @@ int main() {
 
 
 int f() {
-  int y;
+  int y, z;
+  z = *(&y-2);
   *(&y-2) = 0;
   return 5;
 }
@@ -317,11 +318,12 @@ int f() {
 5       sub $1,%sp      ; deallocate frame
 6       ret
 
-10 f:   add $1,%sp      ; allocate frame
-11      mov $0,-3(%sp)  ; violation!
-12      mov $5, %ra     ; set return value
-13      sub $1,%sp      ; deallocate frame
-14      ret
+10 f:   add $2,%sp      ; allocate frame
+11      mov -4(%sp),-1(%sp) ; violation!
+12      mov $0,-4(%sp)      ; violation!
+13      mov $5, %ra     ; set return value
+14      sub $1,%sp      ; deallocate frame
+15      ret
 \end{verbatim}
 }
 \end{subfigure}
@@ -341,7 +343,7 @@ int f() {
     \MemoryLabel{-15em}{0.75em}{42}
     \vspace{.5em}
 \\
-{\tt 11} &
+{\tt 12} &
 \memoryaddrs{16em}
 \memory{1}{\mainsealc}[\sealdesc{0}]%
 \memory{1}{\retptrc}[\retptrdesc]%
@@ -350,7 +352,7 @@ int f() {
 \MemoryLabel{-15em}{0.75em}{42}
 \vspace{.5em}
 \\
-{\tt 12} &
+{\tt 13} &
 \memoryaddrs{16em}
 \memory{1}{\mainsealc}
 \memory{1}{\retptrc}
@@ -412,12 +414,14 @@ are shaded black and ignored for simplicity for now --- they will
 be treated properly later.
 
 Figure~\ref{fig:int1} shows a program with a simple integrity violation. It consists of a {\tt main}
-function that performs a call to a function {\tt f}, which overwrites {\tt main}'s
+function that performs a call to a function {\tt f}, which reads and then overwrites {\tt main}'s
 variable {\tt x}. (Of course, this is illegal C, but it is characteristic of what buggy or malicious code might do.)
 In the initial memory layout the entire stack is {\em unsealed},
 meaning that it is eligible to be written to. At the call from {\tt main} to
 {\tt f}, {\tt main}'s locals are {\em sealed} with {\tt main}'s depth,
-in this case 0. Sealing is the fundamental integrity contract between the caller and callee:
+in this case 0. (Note that this does not include the return address, which is saved
+by the call instruction.)
+Sealing is the fundamental integrity contract between the caller and callee:
 {\tt main} expects that {\tt x} will be unchanged when it gets control back.
 This leads to a simple, intuitive statement of {\em stepwise integrity}:
 if a element is sealed before a step, it will be unchanged afterward.
@@ -426,41 +430,10 @@ if a element is sealed before a step, it will be unchanged afterward.
  %Later we will
 %loosen this condition in the interest of extensionality---the caller only
 %cares about changes it can see after the return, not changes during execution.
-In this case, after instruction 11, {\tt f} has violated integrity by writing to {\tt x},
+In this case, after instruction 12, {\tt f} has violated integrity by writing to {\tt x},
 so the final return value produced by {\tt main} is wrong.
-%
-(The black rectangle represents the return address, which is saved by the call
-instruction itself, so it is not sealed.)
 
 \begin{figure*}
-\begin{subfigure}[t]{.2\textwidth}
-{\small
-\begin{verbatim}
-int f() {
-  int y,z;
-  y = 5;
-  z = *(&y-2);
-  return y+z;
-}
-\end{verbatim}
-}
-\end{subfigure}
-\begin{subfigure}[t]{.3\textwidth}
-{\small
-\begin{verbatim}
-10 f: add $2,%sp      ; allocate frame
-11     mov $5,-2(%sp)  ; assign into y
-12     mov -4(%sp),-1(%sp)  ; violation!
-13     mov -2(%sp),%ra ; calculate and
-14     add -1(%sp),%ra ; set return value
-15     sub $2,%sp      ; deallocate frame
-16     ret
-\end{verbatim}
-}
-\end{subfigure}
-\\
-\vspace*{0.3in}
-\begin{subfigure}{.59\textwidth}
 \centering
 \begin{tabular}{l l | l}
   {\tt 2} &
@@ -538,12 +511,13 @@ int f() {
 
 \vspace{\abovedisplayskip}
 
-\end{subfigure}
 \caption{A confidentiality violation\ifspace\apt{Could save space by not
     repeating C or assemly code for {\tt main}.}\fi}
 \label{fig:conf1}
 \end{figure*}
 
+But before violating integrity, {\tt f} violates confidentiality by
+reading {\tt x}.
 Confidentiality states intuitively that a callee is insensitive to
 the context of its call (except for its arguments and any global
 variables).
@@ -559,19 +533,17 @@ in fact we can learn something about the initial state by observing those result
 To adapt this to the stack, the notion of ``secret'' must be dynamic with function
 calls and returns.
 
-In Figure~\ref{fig:conf1} we see the callee, {\tt f}, violating confidentiality
-by reading {\tt main}'s variable {\tt x}. The trace
-shows how noninterference applies to this scenario. At instruction 10, we
+In Figure~\ref{fig:conf1} we see how noninterference applies to this scenario.
+At instruction 10, we
 create an imaginary {\em variant}
 state with arbitrary values\ifaftersubmission\bcp{IMO, it would be easier to
   understand if we chose concrete values for the examples}\sna{FWIW I agree in
   theory, but it looks bad every time I try it.\fi~(\(v_0\), etc.),
 in place of the actual values ($42$, ...) that should
-be hidden from {\tt f}; we show the evolving stack memory of the variant in a second, parallel column. At instruction 12, we note that the callee's first variable, {\tt y}, has
-changed to 5 in both the primary trace and the variant. The primary and variant correctly agree on
-the value in the changed location. But at instruction 13,
-the other variable, {\tt z}, has changed. In the primary trace it changed to 42, but
-in the variant trace it might have any value \(v_0\). If \(v_0 \neq 42\) then the variant
+be hidden from {\tt f}; we show the evolving stack memory of the variant in a second, parallel column.
+At instruction 11, we note that the callee's variable, {\tt z}, has
+changed to 42 in the primary trace, but
+in the variant trace it instead might have any value \(v_0\). If \(v_0 \neq 42\) then the variant
 has behaved differently than the primary, violating confidentiality.
 
 We call this form of confidentiality {\em stepwise confidentiality}. Informally,
@@ -2326,7 +2298,7 @@ is that of Skorstengaard et al. \cite{SkorstengaardSTKJFP}. Their
 StkTokens system enforces stack safety on hardware equipped with
 memory capabilities, similar to those used in the Cheri system~\cite{Woodruff+14,Chisnall+15}, but
 with additional support for linear capabilities.
-Stack safety is defined as the conjunction of local state encapsulation (LSE) and
+They define Stack safety as the conjunction of local state encapsulation (LSE) and
 well-bracketed control flow (WBCF).
 Informally, LSE means that the current activiation can only access its own frame,
 and WBCF means that the topmost frame can only return to
@@ -2334,50 +2306,31 @@ the immediately adjacent frame below. Formally, these properties are defined
 with reference to a capability machine with a built-in call stack and call and return
 instructions; this machine is proven fully abstract with respect to a more
 concrete capability machine, an approach termed ``fully abstract overlay semantics.''
-The proof of full abstraction uses a standard notion of elements, which
-import and export functions through their interfaces.
-
 We improve upon Skorstengaard et al. \cite{SkorstengaardSTKJFP} in two significant ways:
 \begin{enumerate}[label=(\roman*)]
 \item Our definition captures the intuition that {\em
   every} caller should be protected from its callees.  By contrast,
   Skorstengaard et al. \cite{SkorstengaardSTKJFP} describe a class of ``unreasonable'' elements
   that are not protected, because they are capable of dynamic behavior that can compromise
-  their own security. Unreasonable code can be viewed as adversarial, or merely as
-  buggy. One can imagine a function that, when called with the wrong
-  inputs, behaves unreasonably, but under most circumstances can be
-  considered reasonable. Skorstengaard et al. \cite{SkorstengaardSTKJFP} would not consider this a
+  their own security. Consider a function that, when called with the wrong
+  inputs, behaves unreasonably. Skorstengaard et al. \cite{SkorstengaardSTKJFP} would not consider this a
   {\em reasonable element} (as defined in their section 4.3.3), as a reasonable
-  element is always reasonable, and so they
-  would not guarantee its protection. In our setting, individual
+  element is always reasonable. In our setting, individual
   well-behaved activations of the buggy function would be protected.
-  Skorstengaard et al. \cite{SkorstengaardSTKJFP} support mutually distrustful
-  elements; one can think of our hypothetical
-  function as ``self-distrustful'' in that the safety of a well-behaved activation
-  is not compromised by another, ill-behaved activiation of the same function.
-
-\item Skorstengaard et al. \cite{SkorstengaardSTKJFP}'s approach to proving safety via a fully
+  
+\item Skorstengaard et al. \cite{SkorstengaardSTKJFP}'s fully
   abstract overlay
-  semantics relies on the definition of a ``stack-safe-by-construction''
-  abstract machine that is closely tied to an underlying enforcement
-  mechanism and actual machine architecture.
-  %the the abstract machine being architecturally similar to
-  %      the concrete one (beyond the specific call and return semantics that
-  %      distinguish them).
+  semantics rely on the definition of a ``stack-safe-by-construction''
+  abstract machine that is closely tied to the underlying machine architecture.
   While the fundamental approach can no doubt be ported to other architectures and enforcement
   schemes, each such port will require a new abstract machine definition whose
   safety-by-construction property must be checked afresh.
-  Our properties are more generic: since we abstract over most of the machine
-  state as well as the sealing and return conventions, they apply directly
+  Since we abstract over most of the machine
+  state as well as the sealing and return conventions, our properties apply directly
   to a range of architectures, code features, and enforcement mechanisms.
   Moreover, we have implemented extensions such as passing arguments on the stack,
   describing callee-saves registers, and coroutines by making simple modifications
   to our base domain model.
-  %% While it may well be possible to extend
-  %% \citet{SkorstengaardSTKJFP}'s approach to cover these features.
-  %% abstract machine to pass arguments on the stack, or to support callee-saves
-  %% registers. It might even be viable to construct a safe-by-construction abstract
-  %% coroutine machine in the same style, but this is hypothetical.
 
 \end{enumerate}
 
@@ -2389,7 +2342,7 @@ candidate stack safety properties.
 %% safety; and (5) potentially scalable to richer settings such as
 %% dynamic code generation or multithreading.
 %
-(1) {\em Intuitiveness}. We contend that our property definitions are at least as
+(1) {\em Intuitiveness}. Our property definitions are at least as
 intuitive as theirs, while being phrased in interestingly different terms.
 We use the language of formal security
 properties to apply well-established concepts and formal techniques
@@ -2422,8 +2375,7 @@ that can be applied to a broader range of enforcement mechanisms and code featur
 coroutines, a first step towards multithreading. Dynamic code generation is
 more challenging, but StkTokens does not yet handle this either.
 
-Finally, we would propose one more criterion: having a generic definition
-of stack safety that is directly reusable to evaluate multiple machines and
+Finally, we would propose one more criterion: reusability in evaluating multiple machines and
 enforcement mechanisms. They have used their approach to give strong validation
 to one machine/enforcement mechanism, a linear-capability machine,
 via formal proof. We have used ours to obtain a weaker, testing-based validation of
@@ -2432,9 +2384,8 @@ next as future work.
 
 \paragraphx{Protecting the Stack with Micro-Policies}
 %
-Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} consider a standard attacker model where all
-attacks against stack data are in scope (but not side channels or hardware
-attacks), and study the protection of stack data through three families of
+Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18}
+study the protection of stack data through three families of
 micro-policies that tag stack objects with a pair of frame and object identifiers
 used to validate accesses: {\em Return Address Protection} (which
 prevents an adversary from overwriting designated return addresses), {\em Static
@@ -2449,10 +2400,10 @@ they propose a number of lazy optimizations, notably {\em Lazy Tagging} and
 {\em Lazy
 Clearing} (\cref{sec:lazy}).
 
-We evaluated {\em Depth Isolation}, {\em Lazy Tagging}, and {\em Lazy
+We evaluate {\em Depth Isolation}, {\em Lazy Tagging}, and {\em Lazy
   Clearing} against our properties, finding that {\em Depth Isolation} does
 indeed enforce stepwise stack safety and therefore observable stack
-safety. We also found that neither lazy micro-policy actually enforces
+safety. We also find that neither lazy micro-policy actually enforces
 stack safety, and we proposed a fix.
 
 \paragraphx{Heap Safety as a Security Property}
@@ -2465,9 +2416,6 @@ combine smoothly.
 
 \section{Future Work}
 \label{sec:future}
-
-We introduced a characterization against which stack safety enforcement
-mechanisms can be measured and used it to evaluate tag-based enforcement mechanisms.
 
 From here, we see two natural ways to extend the work. First, we should thoroughly evaluate
 other enforcement mechanisms, especially Cheri-based capability
