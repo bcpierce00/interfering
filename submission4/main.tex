@@ -1550,18 +1550,14 @@ it would be the observational formalization.
 
 Observable properties allow us to defer enforcement until a property
 violation would become visible. Now we can identify when lazy policies
-miss such violations, which are again susceptible to testing;
-Table~\ref{tab:lazy-bug-table} summarizes the results of our evaluation.
-The Lazy Tagging and Clearing
-micro-policy from Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} in fact
-allows violations of observable stack safety!
-Our implementation of this policy, {\em PER\_DEPTH\_TAG}, has an error that we find
-in testing. If, at depth \(d\), a callee \(A\) writes into its caller's
+miss such violations. It turns out that {\em Lazy Tagging and Clearing},
+as written, falls short of observational stack safety.
+If, at depth \(d\), a callee \(A\) writes into its caller's
 frame, then returns, and later another callee \(B\) at depth \(d\) reads the same
 address and prints it, \(A\) has violated integrity in a way that later becomes visible,
 and \(B\) has likewise violated confidentiality!
 
-Lazy Tagging and Clearing can be repaired if, instead of tagging each function
+{\em Lazy Tagging and Clearing} can be repaired if, instead of tagging each function
 activation with its depth in the stack, we generate a fresh activation
 identifier on each call, which prevents a program from exploiting stale
 tags from previous activations.
@@ -1569,39 +1565,8 @@ tags from previous activations.
 Static Authorities policy of Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18}, which
 associates a unique \emph{static} identifier to each function, which is shared
 by all activations---but that policy allows leaks between
-instances of the same function.)
-
-We test {\em Lazy Per-activation Tagging and Clearing}, in which
-each activation is tagged uniquely, and find that it obeys stepwise
-confidentiality and observational integrity. To round out our mutations testing
-we also check an equivalent to {\em LOAD\_NO\_CHECK} and a version where
-stores succeed but fail to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
-It turns out that {\em PER\_DEPTH\_TAG} is a comparatively subtle bug,
-taking twice as long to catch as the next longest.
-
-\begin{table}[]
-\centering
-\begin{tabular}{c|c|c|c}
-        Bug & Property Violated & MTTF (s) & Tests \\
-  \hline
-        {\em PER\_DEPTH\_TAG} & Obs. Integrity & 189.7 & 8342.5  \\
-        {\em LOAD\_NO\_CHECK}  & Obs. Integrity & 23.5 & 12.0 \\
-        {\em LOAD\_NO\_CHECK}  & Confidentiality & 19.2 & 695.5 \\
-        {\em STORE\_NO\_UPDATE} & Obs. Integrity & 70 & 80.6  \\
-        {\em STORE\_NO\_UPDATE} & Confidentiality & 4.9 & 88.5 \\
-\end{tabular}
-\vspace*{1em}
-\caption{MTTF for finding bugs in erroneous lazy policy enforcement mechanisms}
-\vspace*{-2em}
-\label{tab:lazy-bug-table}
-\end{table}
-
-Our properties have allowed us to identify an enforcement mechanism as
-not really stack safe, and to validate a possible fix.
-Unfortunately, Lazy Per-activation Tagging and Clearing
-puts severe pressure on the tag cache, so it may not be usable in practice.
-However, we conjecture that no lazy scheme can be fully stack safe
-without using unique per-activation identifiers.
+instances of the same function.) We validate this repaired micro-policy in
+\ref{sec:testing}.
 
 \subsection{Callee-saves Registers}
 \label{sec:callee}
@@ -1665,7 +1630,7 @@ void f(int &a) {
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}[t]{.47\textwidth}
+  \begin{subfigure}[t]{.4\textwidth}
 {\small
 \begin{verbatim}
    stash: .word 0
@@ -1691,7 +1656,7 @@ void f(int &a) {
 \end{verbatim}
 }
   \end{subfigure}
-  \begin{subfigure}[t]{.27\textwidth}
+  \begin{subfigure}[t]{.25\textwidth}
     \begin{center}
     \begin{tabular}{l l}
       {\tt 20} &
@@ -1907,14 +1872,10 @@ systematically testing that it satisfies eager stack integrity and
 confidentiality. We use a Coq specification of the RISC-V
 architecture\bcp{change from footnote to citation :-)}\footnote{Available at
   \url{https://github.com/mit-plv/riscv-coq}.}
-%\leo{translated from Haskell via hs-2-coq?\apt{not worth saying since the MIT people did it}}
-and extend it with a
-runtime monitor implementing the stack-safety
-micro-policy. We
-  chose the Coq proof assistant as the setting for our implementation
-  to ensure that our coinductive trace
-  definitions are well-formed, and reason about them, and to leverage the power of the
-  QuickChick property-based testing framework~\cite{Pierce:SF4}.
+and extend it with a runtime monitor implementing a stack-safety
+micro-policy. We chose the Coq proof assistant as the setting for our implementation
+to ensure that our coinductive trace definitions are well-formed, and reason about
+them, and to leverage the power of the QuickChick property-based testing framework~\cite{Pierce:SF4}.
 
 To use QuickChick, we build random test-case generators that produce
 % \begin{enumerate}
@@ -1936,12 +1897,16 @@ that exhibits interesting control-flow patterns, but also the policy
 meta-information and code annotations that would normally be produced
 by the compiler.
 
+To write such generators we build on the work of
+Hri\c{t}cu et al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
+introduced {\em generation by execution} to produce progams that lead
+machines towards interesting behaviors. We extend the technique by tracking
+control flow information so that programs will usually --- but not always ---
+return to their call sites.
+
 %\paragraph*{Generators}
 %
-%To write such generators we build on the work of
-%Hri\c{t}cu et al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
-%introduced {\em generation by execution} to produce progams that lead
-%machines towards interesting behaviors. Generation by
+% Generation by
 %execution receives as an input a partially instantiated machine state
 %and attempts to generate an instruction (or a sequence of instructions
 %such as a blessed sequence) that makes sense locally (e.g., jumps go
@@ -1960,16 +1925,19 @@ by the compiler.
 %%to failstop when executed in conjunction with the policy monitor,
 %%but also allows for revealing errors in our setup.\apt{??}
 %
-%In addition, we need to further extend this technique to handle the nested
-%nature of our confidentiality property: rather than just generating two
-%initial machines that are variants of one another and letting them
-%execute to test for noninterference, we generate a new variant
-%{\em every time a call is made} and check confidentiality for the
-%subtrace produced from that variant state until its corresponding
-%return. As a result, a ``single'' confidentiality test compactly
-%checks the confidentiality of multiple nested calls.
+We need to further extend typical testing to handle the nested
+nature of confidentiality: rather than just generating two
+initial machines that are variants of one another and letting them
+execute to test for noninterference, we generate a new variant
+{\em every time a call is made} and check confidentiality for the
+subtrace produced from that variant state until its corresponding
+return. As a result, a ``single'' confidentiality test compactly
+checks the confidentiality of multiple nested calls.
 
-\paragraph*{Findings}
+Our primary testing targets are the eager {\em Depth Isolation}
+and the {\em Lazy Per-Activation Tagging and Clearing} micro-policies.
+We test the former against stepwise integrity and confidentiality, and
+the latter against their observational counterparts.
 
 To ensure the effectiveness of testing against our formal properties, we
 use {\em mutation testing}~\cite{JiaH11}. In mutation testing, we inject errors
@@ -1980,17 +1948,38 @@ by us (deliberately weakening the micro-policy in ways that we expect
 should break its guarantees), or actual bugs that we discovered through
 testing our implementation. We elaborate on some such bugs below.
 
+For example, when loading from a stack location, {\em Depth Isolation}
+needs to enforce that the tag on the location being read
+is $\tagStackDepth{n}$ for some number $n$ and that the tag of the
+current $\PCname$ is $\tagPCDepth{n}$ for the same depth $n$. We can relax
+that restriction by not checking the depth equality (row {\em
+  LOAD\_NO\_CHECK\_DI}).
+
+Similarly, when storing to a stack location, the correct micro-policy
+needs to ensure that the tag on the memory location is either
+$\tagNoDepth$ or has again the same depth as the current $\PCname$
+tag. Relaxing that constraint causes violations to the integrity
+property (row {\em STORE\_NO\_CHECK}).
+
 \begin{table}[]
 \centering
 \begin{tabular}{c|c|c|c}
   Bug & Property Violated & MTTF (s) & Tests \\
   \hline
-      {\em LOAD\_NO\_CHECK}  & Confidentiality & 24.2 & 13.3 \\
+      {\em LOAD\_NO\_CHECK\_DI}  & Confidentiality & 24.2 & 13.3 \\
       {\em STORE\_NO\_CHECK} & Integrity & 26.9 & 26 \\
       {\em HEADER\_NO\_INIT} & Integrity & 69.5 & 76.3 \\
+  \hline
+  \hline
+      {\em PER\_DEPTH\_TAG} & Obs. Integrity & 189.7 & 8342.5  \\
+      {\em LOAD\_NO\_CHECK\_LT}  & Obs. Integrity & 23.5 & 12.0 \\
+      {\em LOAD\_NO\_CHECK\_LT}  & Confidentiality & 19.2 & 695.5 \\
+      {\em STORE\_NO\_UPDATE} & Obs. Integrity & 70 & 80.6  \\
+      {\em STORE\_NO\_UPDATE} & Confidentiality & 4.9 & 88.5 \\
+  \hline
 \end{tabular}
 \vspace*{1em}
-\caption{MTTF for finding bugs in erroneous eager policy enforcement mechanisms}
+\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms}
 \vspace*{-2em}
 \label{tab:bug-table}
 \end{table}
@@ -1999,24 +1988,6 @@ The mean-time-to-failure (MTTF) and average number of tests for various bugs can
 Table~\ref{tab:bug-table}, along with the average number of tests
 it took to find the failure. Experiments were run in a desktop
 machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
-% \leo{Something like: There is really no baseline to compare this
-  %against, but include it here for the future/reasons?}
-%
-The artificially injected bugs weaken the tag propagation
-and checking mechanism.
-%
-For example, when loading from a stack location, the correct
-micro-policy needs to enforce that the tag on the location being read
-is $\tagStackDepth{n}$ for some number $n$ and that the tag of the
-current $\PCname$ is $\tagPCDepth{n}$ for the same depth $n$. We can relax
-that restriction by not checking the depth equality (row {\em
-  LOAD\_NO\_CHECK}).
-%
-Similarly, when storing to a stack location, the correct micro-policy
-needs to ensure that the tag on the memory location is either
-$\tagNoDepth$ or has again the same depth as the current $\PCname$
-tag. Relaxing that constraint causes violations to the integrity
-property (row {\em STORE\_NO\_CHECK}).
 
 Naturally, testing also revealed a number of errors in our
 implementation of the enforcement mechanism (the original was written in C++
@@ -2041,6 +2012,21 @@ $l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s da
 %\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
 %  and the write from {\tt f} was already a violation.}
 
+Table~\ref{tab:lazy-bug-table} summarizes the results of our evaluation on lazy micro-policies.
+The {\em Lazy Tagging and Clearing} micro-policy implemented as {\em PER\_DEPTH\_TAG},
+fails in testing, in cases where data is leaked between sequential calls.
+To round out our mutations testing
+we also check an equivalent to {\em LOAD\_NO\_CHECK\_DI}, {\em LOAD\_NO\_CHECK\_LT}
+and a version where stores succeed but fail to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
+It turns out that {\em PER\_DEPTH\_TAG} is a comparatively subtle bug,
+taking twice as long to catch as the next longest.
+
+Our properties have allowed us to identify an enforcement mechanism as
+not really stack safe, and to validate a possible fix.
+Unfortunately, Lazy Per-activation Tagging and Clearing
+puts severe pressure on the tag cache, so it may not be usable in practice.
+However, we conjecture that no lazy scheme can be fully stack safe
+without using unique per-activation identifiers.
 
 \section{Related Work}
 \label{sec:relwork}
