@@ -1596,8 +1596,7 @@ taking twice as long to catch as the next longest.
 \label{tab:lazy-bug-table}
 \end{table}
 
-
-Our abstract properties have allowed us to identify an enforcement mechanism as
+Our properties have allowed us to identify an enforcement mechanism as
 not really stack safe, and to validate a possible fix.
 Unfortunately, Lazy Per-activation Tagging and Clearing
 puts severe pressure on the tag cache, so it may not be usable in practice.
@@ -1608,50 +1607,19 @@ without using unique per-activation identifiers.
 \label{sec:callee}
 
 Another application of observational properties is characterizing a ``callee-saves''
-calling convention.
-Intuitively, a caller expects a callee-saves register to be unchanged on
-return, but it
-may change during the call, as long as it is restored. We similarly expect a callee-saves
+calling convention. Intuitively, a caller expects a callee-saves register to be unchanged on
+return, but it may change during the call, as long as it is restored. We similarly expect a callee-saves
 register to be secret from the callee, except when it is copied to the stack. Both scenarios
 reflect observational rather than stepwise stack safety.
 
 We begin by adding information to Call annotations defining which registers will be {\em saved}
 and which are {\em unsaved}. The stack pointer and the register containing the return address
 should never be saved. We then extend the set of domains with these values, for the first time applying
-(non-{\em outside}) domains to registers as well as addresses.
-%
-\[\begin{split}
-\codemap \in \CODEMAPS ::= & \WORDS \rightharpoonup \callmap(S)\\
-\mbox{\rm{where}} ~ & S \in \REGS \rightarrow (\unsaved + \saved) \\
-\end{split}\]
-
-\[\begin{split}
-\stackDom \in \STKDOMS ::= & \outside + \unsealed + \sealed{\depth} \\
-& + \unsaved + \saved
-\end{split}\]
-%
-\judgmenttwobrlong[ Call]
-                  {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
-                  {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
-                  {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
-                  {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
-The remaining rules are the same as in the simple model.
-
-\definition Let the protected set of a context, \(\prot_S(\domMap,\rts)\),
-be the set of elements \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
-or \(\domMap ~ \component = \saved\).
-
-\definition Let the secret set of a context, written \(\secret_S(\domMap,\rts)\),
-be the set of elements \(\component\) such that
-\(\domMap ~ \component = \sealed{\underscore}\), \(\domMap ~ \component = \unsealed\), or
-\(\domMap ~ \component = \saved\).
-
-\definition
-%
-\textbf{\em Observational stack integrity} with callee-saves registers substitutes the above
-\(\CONTEXTS\) type and update function, and \(\prot_S\), for its equivalent in the simple model.
-%
-\textbf{\em Observational stack confidentiality} additionally substitutes \(\secret_S\).
+(non-{\em outside}) domains to registers as well as addresses. On each call, we save precisely those
+registers given by the annotation, and the rest are unsaved; {\em saved} registers are treated as part
+of the protected and secret sets for purposes of \textbf{\em Observational stack integrity} and
+\textbf{\em Observational stack confidentiality}, respectively. For full formal definitions, see
+Appendix \ref{app:calleesave}.
 
 \section{Extensions}
 \label{sec:ext}
@@ -1825,104 +1793,6 @@ to access the location without having been explicitly given a pointer
 to it.
 %\sna{This is trying to get toward what we were saying at OOPSLA: it's not
 %  a technical obstacle, it's that the behavior is tied to things we don't model.}
-\paragraph*{Formalization of variable passing.}
-We add extra information to our call
-annotations to reflect that they may now pass variables on the stack, and that the locations
-of those variables may be dynamic (as in the case of pass-by-reference).
-A call annotation now includes a predicate relating machine states to the elements
-that should be passed, expressed as offsets from the stack pointer.
-\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P)~\mbox{\rm where}~P \subseteq \WORDS\]
-We extend the set of domains to include passed elements,
-which are labeled with the range of depths of the caller that has passed them.
-\[\begin{split}
-\stackDom \in \STKDOMS ::= & \outside + \unsealed\\
-& + \sealed{\depth} + \passed{\depth,\depth'}
-\end{split}\]
-The definition of context looks the same, but is based on the revised definition of \(\STKDOMS\):
-\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
-\times (\rts \in \listT (\target)) \]
-The initial context again maps all elements to \(\unsealed\).
-We straightforwardly describe how the sealing convention and passing predicate combine to
-update a domain map at a call from depth \(\depth\).
-
-\judgmentthree[]
-              {\(\domMap ~ \component = \unsealed\)}
-              {\(\sealcon ~ \mach[\component]\)}
-              {\(\component - (\mach ~ \rsp) \not \in P\)}
-              {\((\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) \component = \sealed{\depth}\)}
-\judgmentthree[]
-              {\(\domMap ~ \component = \unsealed\)}
-              {\(\sealcon ~ \mach[\component]\)}
-              {\(\component - (\mach ~ \rsp) \in P\)}
-              {\((\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) \component = \passed{\depth,\depth+1}\)}
-\judgmentthree[]
-              {\(\domMap ~ \component = \passed{\depth',\depth}\)}
-              {\(\sealcon ~ \mach[\component]\)}
-              {\(\component - (\mach ~ \rsp) \in P\)}
-              {\((\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) \component = \passed{\depth',\depth+1}\)}
-\judgment[]
-         {}
-         {\((\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) \component = \domMap ~ \component\)}
-
-         At the matching return we just unseal the elements at depth \(\depth\):
-
-\judgment[]
-         {\(\domMap ~ \component = \sealed{\depth}\)}
-         {\((\mathit{pop} ~ \domMap ~ \depth) \component = \domMap ~ \component\)}
-\judgment[]
-         {\(\domMap ~ \component = \passed{\depth-1,\depth}\)}
-         {\((\mathit{pop} ~ \domMap ~ \depth) \component = \domMap ~ \component\)}
-\judgmenttwo[]
-           {\(\domMap ~ \component = \passed{\depth',\depth}\)}
-           {\(\depth' < \depth\)}
-           {\((\mathit{pop} ~ \domMap ~ \depth) \component = \domMap ~ \component\)}
-\judgment[]
-         {}
-         {\((\mathit{pop} ~ \domMap ~ \depth) \component = \domMap ~ \component\)}
-
-Now we can inductively define the context update function, as before.
-
-\judgmenttwo[ CallSeal]
-            {\(\codemap ~ (\mach ~ \PCname) = \callmap(P)\)}
-            {\(\domMap' = \mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ |\rts|\)}
-            {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
-
-\vspace*{-1ex}
-\judgmenttwo[ ReturnFound]
-            {\(\mach \stepsto \mach' \in \target\)}
-            {\(\domMap' = \mathit{pop} ~ \domMap ~ |\rts|\)}
-            {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
-
-\vspace*{-1ex}
-\judgmenttwo[ ReturnRec]
-              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
-              {\(\domMap'' = \mathit{pop} ~ \domMap' ~ |\rts|\)}
-              {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'',\rts'\)}
-
-\vspace*{-3ex}
-\judgment[ Default]
-         {}
-         {\(\underscore,\context \stepsto_C \context\)}
-
-\definition The \emph{protected set} of a context, \(\prot_P(\domMap,\rts)\),
-is the set of elements \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
-or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
-\(|\rts| > \depth'\).
-
-\definition The \emph{secret set} of a context, written \(\secret_P(\domMap,\rts)\),
-is the set of elements \(\component\) such that
-\(\domMap ~ \component = \sealed{\underscore}\), \(\domMap ~ \component = \unsealed\), or
-\(\domMap ~ \component = \passed{\depth,\depth'}\)
-where \(|\rts| < \depth\) or \(|\rts| > \depth'\).
-
-\definition
-For each of the \textbf{\em stepwise} and \textbf{\em observational} versions of
-\textbf{\em stack integrity} in the simple model, the equivalent property in the
-passing model substitutes the above \(\CONTEXTS\) type and update
-function, and \(\prot_P\), for their equivalents in the simple model.
-
-For both the \textbf{\em stepwise} and \textbf{\em observational} versions of \textbf{\em stack confidentiality} in
-the original model, the passing model equivalents additionally substitute \(\secret_P\).
 
 \subsection{Coroutines}
 \label{sec:coroutines}
@@ -2361,8 +2231,142 @@ observational properties.
 
 
 %% Appendix
-%\appendix
-%\section{Appendix}
+\appendix
+\paragraph*{Formalization of Callee-saves Registers}
+\label{app:calleesave}
+%
+\[\begin{split}
+\codemap \in \CODEMAPS ::= & \WORDS \rightharpoonup \callmap(S)\\
+\mbox{\rm{where}} ~ & S \in \REGS \rightarrow (\unsaved + \saved) \\
+\end{split}\]
+
+\[\begin{split}
+\stackDom \in \STKDOMS ::= & \outside + \unsealed + \sealed{\depth} \\
+& + \unsaved + \saved
+\end{split}\]
+%
+\judgmenttwobrlong[ Call]
+                  {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
+                  {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
+                  {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
+                  {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
+The remaining rules are the same as in the simple model.
+
+\definition Let the protected set of a context, \(\prot_S(\domMap,\rts)\),
+be the set of elements \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
+or \(\domMap ~ \component = \saved\).
+
+\definition Let the secret set of a context, written \(\secret_S(\domMap,\rts)\),
+be the set of elements \(\component\) such that
+\(\domMap ~ \component = \sealed{\underscore}\), \(\domMap ~ \component = \unsealed\), or
+\(\domMap ~ \component = \saved\).
+
+\definition
+%
+\textbf{\em Observational stack integrity} with callee-saves registers substitutes the above
+\(\CONTEXTS\) type and update function, and \(\prot_S\), for its equivalent in the simple model.
+%
+\textbf{\em Observational stack confidentiality} additionally substitutes \(\secret_S\).
+
+\paragraph*{Formalization of variable passing.}
+We add extra information to our call
+annotations to reflect that they may now pass variables on the stack, and that the locations
+of those variables may be dynamic (as in the case of pass-by-reference).
+A call annotation now includes a predicate relating machine states to the elements
+that should be passed, expressed as offsets from the stack pointer.
+\[\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap(P)~\mbox{\rm where}~P \subseteq \WORDS\]
+We extend the set of domains to include passed elements,
+which are labeled with the range of depths of the caller that has passed them.
+\[\begin{split}
+\stackDom \in \STKDOMS ::= & \outside + \unsealed\\
+& + \sealed{\depth} + \passed{\depth,\depth'}
+\end{split}\]
+The definition of context looks the same, but is based on the revised definition of \(\STKDOMS\):
+\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
+\times (\rts \in \listT (\target)) \]
+The initial context again maps all elements to \(\unsealed\).
+We straightforwardly describe how the sealing convention and passing predicate combine to
+update a domain map at a call from depth \(\depth\).
+
+\judgmentthree[]
+              {\(\domMap ~ \component = \unsealed\)}
+              {\(\sealcon ~ \mach[\component]\)}
+              {\(\component - (\mach ~ \rsp) \not \in P\)}
+              {\((\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) \component = \sealed{\depth}\)}
+\judgmentthree[]
+              {\(\domMap ~ \component = \unsealed\)}
+              {\(\sealcon ~ \mach[\component]\)}
+              {\(\component - (\mach ~ \rsp) \in P\)}
+              {\((\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) \component = \passed{\depth,\depth+1}\)}
+\judgmentthree[]
+              {\(\domMap ~ \component = \passed{\depth',\depth}\)}
+              {\(\sealcon ~ \mach[\component]\)}
+              {\(\component - (\mach ~ \rsp) \in P\)}
+              {\((\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) \component = \passed{\depth',\depth+1}\)}
+\judgment[]
+         {}
+         {\((\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) \component = \domMap ~ \component\)}
+
+         At the matching return we just unseal the elements at depth \(\depth\):
+
+\judgment[]
+         {\(\domMap ~ \component = \sealed{\depth}\)}
+         {\((\mathit{pop} ~ \domMap ~ \depth) \component = \domMap ~ \component\)}
+\judgment[]
+         {\(\domMap ~ \component = \passed{\depth-1,\depth}\)}
+         {\((\mathit{pop} ~ \domMap ~ \depth) \component = \domMap ~ \component\)}
+\judgmenttwo[]
+           {\(\domMap ~ \component = \passed{\depth',\depth}\)}
+           {\(\depth' < \depth\)}
+           {\((\mathit{pop} ~ \domMap ~ \depth) \component = \domMap ~ \component\)}
+\judgment[]
+         {}
+         {\((\mathit{pop} ~ \domMap ~ \depth) \component = \domMap ~ \component\)}
+
+Now we can inductively define the context update function, as before.
+
+\judgmenttwo[ CallSeal]
+            {\(\codemap ~ (\mach ~ \PCname) = \callmap(P)\)}
+            {\(\domMap' = \mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ |\rts|\)}
+            {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
+
+\vspace*{-1ex}
+\judgmenttwo[ ReturnFound]
+            {\(\mach \stepsto \mach' \in \target\)}
+            {\(\domMap' = \mathit{pop} ~ \domMap ~ |\rts|\)}
+            {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
+
+\vspace*{-1ex}
+\judgmenttwo[ ReturnRec]
+              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
+              {\(\domMap'' = \mathit{pop} ~ \domMap' ~ |\rts|\)}
+              {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'',\rts'\)}
+
+\vspace*{-3ex}
+\judgment[ Default]
+         {}
+         {\(\underscore,\context \stepsto_C \context\)}
+
+\definition The \emph{protected set} of a context, \(\prot_P(\domMap,\rts)\),
+is the set of elements \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
+or \(\domMap ~ \component = \passed{\depth,\depth'}\) and \(|\rts| < \depth\) or
+\(|\rts| > \depth'\).
+
+\definition The \emph{secret set} of a context, written \(\secret_P(\domMap,\rts)\),
+is the set of elements \(\component\) such that
+\(\domMap ~ \component = \sealed{\underscore}\), \(\domMap ~ \component = \unsealed\), or
+\(\domMap ~ \component = \passed{\depth,\depth'}\)
+where \(|\rts| < \depth\) or \(|\rts| > \depth'\).
+
+\definition
+For each of the \textbf{\em stepwise} and \textbf{\em observational} versions of
+\textbf{\em stack integrity} in the simple model, the equivalent property in the
+passing model substitutes the above \(\CONTEXTS\) type and update
+function, and \(\prot_P\), for their equivalents in the simple model.
+
+For both the \textbf{\em stepwise} and \textbf{\em observational} versions of \textbf{\em stack confidentiality} in
+the original model, the passing model equivalents additionally substitute \(\secret_P\).
+
 %Text of appendix \ldots
 
 \end{document}
