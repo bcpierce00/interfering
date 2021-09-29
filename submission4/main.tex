@@ -766,7 +766,7 @@ In the example, on its first return, {\tt f} reaches its return target, because 
 Thus {\tt x} is still sealed and {\tt f}'s attempt to overwrite it at instruction 4
 violates the integrity property.
 
-\paragraph{Well-bracketed control flow.} Together,
+\paragraph*{Well-bracketed control flow.} Together,
 integrity and confidentiality protect a caller's data until its callee
 returns to it. However, it is possible that an intermediate caller is not
 returned {\em to}, but rather returned {\em past}, to some ancestor caller!
@@ -775,14 +775,8 @@ returns directly to $A$ by resetting the stack pointer to $A$'s stack frame
 and branching to the address after the call from $A$ to $B$.  Strictly
 speaking, this is not an information-flow violation, since neither $A$'s nor
 $B$'s stack frames are improperly read or written by $C$.  But it is still
-arguably unsafe in general.  For example, suppose that $B$'s continuation
-after the call to $C$ takes $C$'s result, doubles it, and returns this to
-$A$.  If $A$'s correct behavior after the call to $B$ returns depends on the
-result it receives being a even number---i.e., $A$ is trusting that $B$'s
-continuation will execute after $C$ returns, perhaps because $A$ and $B$ are
-written by the same person while $C$ is an untrusted library---then $C$ can
-cause it to behave incorrectly, possibly even insecurely, by returning an
-odd result directly to $A$.
+arguably unsafe if $A$'s programmer depends on $B$ completing its execution before
+it returns.
 %
 Thus, a formal definition of safe use of the stack should include the
 condition that calls and returns should be correctly nested---e.g., $C$ should
@@ -802,7 +796,7 @@ Our properties are defined in terms of an abstract machine model that makes very
 assumptions about the concrete machine that instantiates it. Each formal property
 may be instantiated with any machine that meets the following criteria, and it
 will be a meaningful definition of stack safety for that machine. It must at least be a
-register machine with a program counter (\(\PCname\)), and there must be a well-defined
+register machine with a program counter (\(\PCname\)) and there must be a well-defined
 mechanism for determining the bounds of a stack frame, and for recognizing when a call
 has returned. In this paper we discuss those machines with a stack pointer (\(\rsp\)),
 in which the current stack frame is everything below the stack pointer and above the
@@ -810,7 +804,9 @@ previous frame, and a call from instruction \(\addr_\PCname\) with stack pointer
 is said to have returned when the pc is at \(\addr_\PCname + 4\) and the stack pointer
 is again at \(\addr_\rsp\). But, other configurations, such as those involving frame pointers,
 are equally feasible. A machine may use its non-stack memory in any way, including
-as a heap, as long as the stack has static bounds.
+as a heap, as long as the stack has static bounds. It might also possess additional
+state beyond its registers and memory addresses, such as the state of a hardware
+enforcement mechanism.
 
 Our core property assumes that all register values passed to the callee are public,
 and that all data in a stack frame is private.
@@ -870,27 +866,24 @@ our properties are therefore naturally \emph{termination insensitive.}
 
 That said, our model is meant to apply generically to any enforcement mechanism,
 including those that do not failstop, such as
-code rewriting techniques that prevent stack safety violations directly.
+code rewriting techniques that prevent stack safety violations directly by
+restricting the set of possible initial states.
 
-An enforcement model may additionally
-apply a ``well-formedness'' criterion on initial states, ensuring that
-they are set up properly for the enforcement mechanism in question.
-When validating Roessler and DeHon's \cite{DBLP:conf/sp/RoesslerD18}'s micro-policies,
-well-behaved calls and returns are implemented by fixed sequences of instructions
-which the tag policy will force to be executed from start to finish,
-termed {\em blessed sequences}. Well-formedness requires that all annotated
-instructions will be situated at the appropriate instruction of a {\em blessed sequence}.
-This is all we need for the policy to protect itself: it can then failstop if it would
+Most enforcement mechanisms make assumptions about their initial conditions,
+so we assume that any given machine will restrict its conditions a ``well-formedness''
+criterion on initial states, ensuring that they are set up properly. In the case of
+Roessler and DeHon's \cite{DBLP:conf/sp/RoesslerD18}'s micro-policies, well-formedness
+requires that all annotated instructions will be situated at the appropriate instruction
+of a {\em blessed sequence} -- a series of instructions that are tagged to enforce correct
+behavior. This is all we need for the policy to protect itself: it can then failstop if it would
 execute the blessed sequence out of order.
 
 \paragraph*{Threat Model}
 
 We adopt a strong threat model in which both caller and callee may execute
-arbitrary machine code, subject to whatever well-formedness conditions the
-enforcement mechanism demands. But hardware and timing attacks are out of scope, as
-are attacks on the heap---though we believe that the work of
-Azevedo de Amorim et al.\cite{DBLP:conf/post/AmorimHP18} can be combined smoothly with ours
-to protect both stack and heap.
+arbitrary machine code, subject to whatever ``well-formedness'' conditions the
+enforcement mechanism demands. But hardware and timing attacks are out of scope,
+and our properties are termination insensitive as described above.
 
 \paragraph*{Limitations}
 
@@ -999,7 +992,7 @@ produced by repeated application of \(\stepstocon\)
 \end{center}
 %
 
-We project out the machine state of an MPC-state with \(\pi_\mach\)
+We project out the machine state of an MC-state with \(\pi_\mach\)
 and the context with \(\pi_\context\).
 We take the first element of a trace with \(\head(\MPCT)\), which is a total
 function since traces are non-empty, and the final element (if one exists) with
@@ -1261,14 +1254,14 @@ A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every re
 \(\mpcstatename \stepsto \mpcstatename'\) where \(\pi_\context(\mpcstatename') = (\underscore,\rts')\),
 if \(|\rts'| < |\rts|\), then \(|\rts'| = |\rts|-1\).
 
-\section{Case Study: Micro-Policies}
+\subsection{Case Study: Micro-Policies}
 \label{sec:enforcement}
 
 In this section we explore how an existing enforcement mechanism called {\em
   Depth Isolation}~\cite{DBLP:conf/sp/RoesslerD18} implements
 the formal stack-safety property described in the previous
-section. We validate this claim
-using property-based random testing.
+section, and why its optimized form, {\em Lazy Tagging and Clearing}, does not..
+We later validate this claim using property-based random testing.
 
 \subsection{A Conservative Stack-Safety Enforcement Mechanism}
 %
@@ -1294,6 +1287,11 @@ Existing work \cite{TestingNI:ICFP,pump_oakland2015, DBLP:conf/sp/RoesslerD18}
 has shown that a wide range of
 micro-policies can be defined using this scheme.
 
+Tags in the PIPE system are not accessible to application code, being separated
+from their associated values at the hardware level. So they are not modeled
+as part of the values, and therefore our properties make no claims about
+their behavior.
+
 Efficient execution of these micro-policies relies on hardware acceleration,
 such as the PUMP architecture~\cite{pump:asplos2015}.
 The hardware incorporates a rule cache
@@ -1307,7 +1305,7 @@ set of distinct tags.
 %% \rb{Maybe go into more detail, examples later\ldots or try to segue into stack
 %% policies}
 
-%\paragraph{A Conservative Tag Policy}
+%\paragraph*{A Conservative Tag Policy}
 %\label{sec:conservative}
 
 The micro-policy we present here to illustrate enforcement of stack
@@ -1385,165 +1383,9 @@ the micro-policy will incorrectly behave as if execution
 is continuing in the callee, but since the callee never has stronger access
 rights than the caller, this is harmless.
 
-\subsection{Validation through Random Testing}
-\label{sec:testing}
+\paragraph*{A Lazy Alternative}
 
-There are several ways to evaluate whether an enforcement mechanism enforces
-stack safety properties. Ideally such validation would be done through formal proof over
-the semantics of the enforcement-augmented machine.
-However, while there are no fundamental barriers to producing such a proof,
-it would be considerable work to carry out for a full ISA like RISC-V and
-complex enforcement mechanism like the Depth Isolation micro-policy.
-We therefore choose to validate the micro-policy of the previous section by
-systematically \emph{testing} that it satisfies our properties.
-This focus on testing is better aligned with our immediate
-goal of evaluating real enforcement mechanisms for real machine architectures.
-Formal proof remains future work.
-
-We validate the micro-policy of the previous section by
-systematically testing that it satisfies eager stack integrity and
-confidentiality. We use a Coq specification of the RISC-V
-architecture\bcp{change from footnote to citation :-)}\footnote{Available at
-  \url{https://github.com/mit-plv/riscv-coq}.}
-%\leo{translated from Haskell via hs-2-coq?\apt{not worth saying since the MIT people did it}}
-and extend it with a
-runtime monitor implementing the stack-safety
-micro-policy. We
-  chose the Coq proof assistant as the setting for our implementation
-  to ensure that our coinductive trace
-  definitions are well-formed, and reason about them, and to leverage the power of the
-  QuickChick property-based testing framework~\cite{Pierce:SF4}.
-
-To use QuickChick, we build random test-case generators that produce
-% \begin{enumerate}
-% \item
-(1) an initial RISC-V machine state, including most notably
-  the program to be executed;
-  % \item
-(2)
-  an initial policy state, tagging instructions corresponding to
-  blessed call or return sequences appropriately, while marking
-  all potential stack locations as $\tagNoDepth$; and
-% \item
-(3)
- a code map identifying the locations of calls.
-% \end{enumerate}
-
-That is, our generators need to produce not only a low-level program
-that exhibits interesting control-flow patterns, but also the policy
-meta-information and code annotations that would normally be produced
-by the compiler.
-
-%\paragraph*{Generators}
-%
-%To write such generators we build on the work of
-%Hri\c{t}cu et al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
-%introduced {\em generation by execution} to produce progams that lead
-%machines towards interesting behaviors. Generation by
-%execution receives as an input a partially instantiated machine state
-%and attempts to generate an instruction (or a sequence of instructions
-%such as a blessed sequence) that makes sense locally (e.g., jumps go
-%to a potentially valid code location and loads read from a
-%potentially valid stack location). Then we step the machine and repeat
-%the process until we generate or execute some target number of
-%instructions, or reach a point where the machine cannot step
-%any more.
-%
-%We extend this technique to keep track of the control flow behavior of
-%the program being generated: each time a call or return sequence is
-%generated, we ensure that the appropriate policy tags and code
-%annotations are set for the entry or return points.% At the same time,
-%%we allow the generation to sometimes relax those constraints,
-%%introducing potentially ill-formed flows: this causes our programs
-%%to failstop when executed in conjunction with the policy monitor,
-%%but also allows for revealing errors in our setup.\apt{??}
-%
-%In addition, we need to further extend this technique to handle the nested
-%nature of our confidentiality property: rather than just generating two
-%initial machines that are variants of one another and letting them
-%execute to test for noninterference, we generate a new variant
-%{\em every time a call is made} and check confidentiality for the
-%subtrace produced from that variant state until its corresponding
-%return. As a result, a ``single'' confidentiality test compactly
-%checks the confidentiality of multiple nested calls.
-
-\paragraph*{Findings}
-
-To ensure the effectiveness of testing against our formal properties, we
-use {\em mutation testing}~\cite{JiaH11}. In mutation testing, we inject errors
-(mutations) in a program that should cause the property of interest (here,
-stack safety) to fail, and ensure that the testing framework can find
-them. The bugs we use for our evaluation are either artificially generated
-by us (deliberately weakening the micro-policy in ways that we expect
-should break its guarantees), or actual bugs that we discovered through
-testing our implementation. We elaborate on some such bugs below.
-
-\begin{table}[]
-\centering
-\begin{tabular}{c|c|c|c}
-  Bug & Property Violated & MTTF (s) & Tests \\
-  \hline
-      {\em LOAD\_NO\_CHECK}  & Confidentiality & 24.2 & 13.3 \\
-      {\em STORE\_NO\_CHECK} & Integrity & 26.9 & 26 \\
-      {\em HEADER\_NO\_INIT} & Integrity & 69.5 & 76.3 \\
-\end{tabular}
-\vspace*{1em}
-\caption{MTTF for finding bugs in erroneous eager policy enforcement mechanisms}
-\vspace*{-2em}
-\label{tab:bug-table}
-\end{table}
-
-The mean-time-to-failure (MTTF) and average number of tests for various bugs can be found in
-Table~\ref{tab:bug-table}, along with the average number of tests
-it took to find the failure. Experiments were run in a desktop
-machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
-% \leo{Something like: There is really no baseline to compare this
-  %against, but include it here for the future/reasons?}
-%
-The artificially injected bugs weaken the tag propagation
-and checking mechanism.
-%
-For example, when loading from a stack location, the correct
-micro-policy needs to enforce that the tag on the location being read
-is $\tagStackDepth{n}$ for some number $n$ and that the tag of the
-current $\PCname$ is $\tagPCDepth{n}$ for the same depth $n$. We can relax
-that restriction by not checking the depth equality (row {\em
-  LOAD\_NO\_CHECK}).
-%
-Similarly, when storing to a stack location, the correct micro-policy
-needs to ensure that the tag on the memory location is either
-$\tagNoDepth$ or has again the same depth as the current $\PCname$
-tag. Relaxing that constraint causes violations to the integrity
-property (row {\em STORE\_NO\_CHECK}).
-
-Naturally, testing also revealed a number of errors in our
-implementation of the enforcement mechanism (the original was written in C++
-and targeted ARM machine code;
-%\bcp{right?}\leo{yeah}
-we re-implemented it in Coq targeting RISC-V).  These errors range
-from trivial typos to ones that require an intriguingly complex setup
-to appear.  The most interesting bug (included in the table as row
-{\em HEADER\_NO\_INIT}) was that, on our first try, the blessed call
-sequence %/policy combination\apt{??}
-did not initialize all locations for the
-newly allocated stack frame correctly, but left some of them as
-$\tagNoDepth$. This allowed for a potential integrity violation, but
-only if a rather complicated sequence of events occured.
-The smallest counterexample requires calling a function {\tt f},
-which fails to initialize some of its frame during the blessed sequence,
-but writes into an uninitialized location $l$ later, treating \(l\) as outside
-the stack. Then {\tt f} calls a further function {\tt g} (which should have
-the effect of sealing $l$ for integrity purposes). {\tt g} attempts to write to $l$,
-which is allowed because the enforcement mechanism still has
-$l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s data.
-%\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
-%  and the write from {\tt f} was already a violation.}
-
-\section{Observable Stack Safety}
-\label{sec:lazy}
-
-The conservative policy described in the previous section, while
-testably enforcing stack safety, is rather slow in
+The conservative policy described above is rather slow in
 some important practical cases. Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18} observe
 that most of the performance overhead incurred
 stems from the need to set stack activation tags as a frame is created
@@ -1561,20 +1403,24 @@ a private location in its caller, the caller will eventually detect this
 if it ever tries to read from that location.
 
 This \emph{lazy policy} admits more a efficient implementations, but
-they deliberately allow temporary violations of stack integrity.
+deliberately allows temporary violations of stack integrity.
 The natural question then is: how do we characterize the
 protections provided by these policies once stepwise stack safety is broken?
 How does a harmful violation that must be caught later differ from a
 harmless one?
 
-Beyond this one enforcement mechanism, some code features may involve
+\section{Observable Stack Safety}
+\label{sec:lazy}
+
+We answer the above questions by introducing a notion of observations to our model.
+This has uses beyond this one enforcement mechanism, as some code features may involve
 moving data, overwriting its original location,
 and ultimately restoring it before the change becomes visible; for example, the
 ``callee-saves'' registers in some calling conventions will be stashed and restored.
 These examples call for an abstract mechanism to characterize behaviors that are externally
 \emph{observable}.
 
-So we extend our model with a notion of observations. We abstract over an
+We abstract over an
 observation type \(\obs \in \OBSS\), containing at minimum the silent observation
 \(\tau\). Our machine step function now takes a state and returns a state and an observation,
 which is carried over into the policy and context step functions:
@@ -2171,6 +2017,161 @@ We define \textbf{\em stepwise coroutine confidentiality} in the same way as ste
 integrity, substituting the above definitions. Likewise
 \textbf{\em observational coroutine confidentiality} is defined in terms of observational
 stack confidentiality.
+
+\section{Validation through Random Testing}
+\label{sec:testing}
+
+There are several ways to evaluate whether an enforcement mechanism enforces
+stack safety properties. Ideally such validation would be done through formal proof over
+the semantics of the enforcement-augmented machine.
+However, while there are no fundamental barriers to producing such a proof,
+it would be considerable work to carry out for a full ISA like RISC-V and
+complex enforcement mechanism like the Depth Isolation micro-policy.
+We therefore choose to validate the micro-policy of the previous section by
+systematically \emph{testing} that it satisfies our properties.
+This focus on testing is better aligned with our immediate
+goal of evaluating real enforcement mechanisms for real machine architectures.
+Formal proof remains future work.
+
+We validate the micro-policy of the previous section by
+systematically testing that it satisfies eager stack integrity and
+confidentiality. We use a Coq specification of the RISC-V
+architecture\bcp{change from footnote to citation :-)}\footnote{Available at
+  \url{https://github.com/mit-plv/riscv-coq}.}
+%\leo{translated from Haskell via hs-2-coq?\apt{not worth saying since the MIT people did it}}
+and extend it with a
+runtime monitor implementing the stack-safety
+micro-policy. We
+  chose the Coq proof assistant as the setting for our implementation
+  to ensure that our coinductive trace
+  definitions are well-formed, and reason about them, and to leverage the power of the
+  QuickChick property-based testing framework~\cite{Pierce:SF4}.
+
+To use QuickChick, we build random test-case generators that produce
+% \begin{enumerate}
+% \item
+(1) an initial RISC-V machine state, including most notably
+  the program to be executed;
+  % \item
+(2)
+  an initial policy state, tagging instructions corresponding to
+  blessed call or return sequences appropriately, while marking
+  all potential stack locations as $\tagNoDepth$; and
+% \item
+(3)
+ a code map identifying the locations of calls.
+% \end{enumerate}
+
+That is, our generators need to produce not only a low-level program
+that exhibits interesting control-flow patterns, but also the policy
+meta-information and code annotations that would normally be produced
+by the compiler.
+
+%\paragraph*{Generators}
+%
+%To write such generators we build on the work of
+%Hri\c{t}cu et al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
+%introduced {\em generation by execution} to produce progams that lead
+%machines towards interesting behaviors. Generation by
+%execution receives as an input a partially instantiated machine state
+%and attempts to generate an instruction (or a sequence of instructions
+%such as a blessed sequence) that makes sense locally (e.g., jumps go
+%to a potentially valid code location and loads read from a
+%potentially valid stack location). Then we step the machine and repeat
+%the process until we generate or execute some target number of
+%instructions, or reach a point where the machine cannot step
+%any more.
+%
+%We extend this technique to keep track of the control flow behavior of
+%the program being generated: each time a call or return sequence is
+%generated, we ensure that the appropriate policy tags and code
+%annotations are set for the entry or return points.% At the same time,
+%%we allow the generation to sometimes relax those constraints,
+%%introducing potentially ill-formed flows: this causes our programs
+%%to failstop when executed in conjunction with the policy monitor,
+%%but also allows for revealing errors in our setup.\apt{??}
+%
+%In addition, we need to further extend this technique to handle the nested
+%nature of our confidentiality property: rather than just generating two
+%initial machines that are variants of one another and letting them
+%execute to test for noninterference, we generate a new variant
+%{\em every time a call is made} and check confidentiality for the
+%subtrace produced from that variant state until its corresponding
+%return. As a result, a ``single'' confidentiality test compactly
+%checks the confidentiality of multiple nested calls.
+
+\paragraph*{Findings}
+
+To ensure the effectiveness of testing against our formal properties, we
+use {\em mutation testing}~\cite{JiaH11}. In mutation testing, we inject errors
+(mutations) in a program that should cause the property of interest (here,
+stack safety) to fail, and ensure that the testing framework can find
+them. The bugs we use for our evaluation are either artificially generated
+by us (deliberately weakening the micro-policy in ways that we expect
+should break its guarantees), or actual bugs that we discovered through
+testing our implementation. We elaborate on some such bugs below.
+
+\begin{table}[]
+\centering
+\begin{tabular}{c|c|c|c}
+  Bug & Property Violated & MTTF (s) & Tests \\
+  \hline
+      {\em LOAD\_NO\_CHECK}  & Confidentiality & 24.2 & 13.3 \\
+      {\em STORE\_NO\_CHECK} & Integrity & 26.9 & 26 \\
+      {\em HEADER\_NO\_INIT} & Integrity & 69.5 & 76.3 \\
+\end{tabular}
+\vspace*{1em}
+\caption{MTTF for finding bugs in erroneous eager policy enforcement mechanisms}
+\vspace*{-2em}
+\label{tab:bug-table}
+\end{table}
+
+The mean-time-to-failure (MTTF) and average number of tests for various bugs can be found in
+Table~\ref{tab:bug-table}, along with the average number of tests
+it took to find the failure. Experiments were run in a desktop
+machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
+% \leo{Something like: There is really no baseline to compare this
+  %against, but include it here for the future/reasons?}
+%
+The artificially injected bugs weaken the tag propagation
+and checking mechanism.
+%
+For example, when loading from a stack location, the correct
+micro-policy needs to enforce that the tag on the location being read
+is $\tagStackDepth{n}$ for some number $n$ and that the tag of the
+current $\PCname$ is $\tagPCDepth{n}$ for the same depth $n$. We can relax
+that restriction by not checking the depth equality (row {\em
+  LOAD\_NO\_CHECK}).
+%
+Similarly, when storing to a stack location, the correct micro-policy
+needs to ensure that the tag on the memory location is either
+$\tagNoDepth$ or has again the same depth as the current $\PCname$
+tag. Relaxing that constraint causes violations to the integrity
+property (row {\em STORE\_NO\_CHECK}).
+
+Naturally, testing also revealed a number of errors in our
+implementation of the enforcement mechanism (the original was written in C++
+and targeted ARM machine code;
+%\bcp{right?}\leo{yeah}
+we re-implemented it in Coq targeting RISC-V).  These errors range
+from trivial typos to ones that require an intriguingly complex setup
+to appear.  The most interesting bug (included in the table as row
+{\em HEADER\_NO\_INIT}) was that, on our first try, the blessed call
+sequence %/policy combination\apt{??}
+did not initialize all locations for the
+newly allocated stack frame correctly, but left some of them as
+$\tagNoDepth$. This allowed for a potential integrity violation, but
+only if a rather complicated sequence of events occured.
+The smallest counterexample requires calling a function {\tt f},
+which fails to initialize some of its frame during the blessed sequence,
+but writes into an uninitialized location $l$ later, treating \(l\) as outside
+the stack. Then {\tt f} calls a further function {\tt g} (which should have
+the effect of sealing $l$ for integrity purposes). {\tt g} attempts to write to $l$,
+which is allowed because the enforcement mechanism still has
+$l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s data.
+%\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
+%  and the write from {\tt f} was already a violation.}
+
 
 \section{Related Work}
 \label{sec:relwork}
