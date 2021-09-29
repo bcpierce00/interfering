@@ -71,7 +71,7 @@
 
 \begin{abstract}
 
-What does ``stack safety'' mean, exactly? The phrase is associated with a
+What does ``stack safety'' mean, precisely? The phrase is associated with a
 variety of compiler,
 run-time, and hardware mechanisms for protecting stack
 memory, but these mechanisms typically lack precise specifications,
@@ -83,14 +83,13 @@ of stack safety based on concepts from language-based security: a
 combination of an integrity property (``the private
 state in each caller's stack frame is held invariant by the callee''),
 and a confidentiality property (``the callee's behavior is insensitive to the
-caller's private state''), which can optionally be extended with a control
-flow property.
+caller's private state''), plus an optional control-flow property.
 
 We use these properties to validate the stack-safety {\em micro-policies}
 proposed by Roessler and DeHon. %~\cite{DBLP:conf/sp/RoesslerD18}.
 Specifically, we check (with
 property-based random testing) that their ``eager''
-micro-policy, which catches violations as early as possible, enforces a
+micro-policy, which catches violations early, enforces a
 simple ``stepwise'' variant of our properties, and that
 (a repaired version of) their more performant
 ``lazy'' micro-policy enforces a slightly weaker and more extensional
@@ -105,7 +104,7 @@ in several broken variants, including Roessler and DeHon's original lazy policy.
 
 The call stack is a perennial target for low-level attacks, leading to a
 range of dire consequences, from leakage or corruption of private stack data
-to control-flow hijacking. To prevent or detect such attacks, a profusion of
+to control-flow hijacking. To foil such attacks, a profusion of
 software and hardware protections have been proposed,
 %
 including stack canaries~\cite{Cowan+98},
@@ -203,8 +202,8 @@ intentionally crafted to be broken in order to increase our confidence
 in testing and the enforcement mechanism itself.
 
 We find that Roessler and DeHon's {\em Depth Isolation} micro-policy, in
-which memory cells within each stack frame are tagged with the depth of
-the function activation that owns the frame and access to those locations is
+which memory within each stack frame is tagged with the depth of
+the function activation that owns the frame and access is
 then permitted only when an activation at that depth is currently executing, validates our
 stepwise properties. On the other hand, our testing reveals that \emph{Lazy Tagging and Clearing}
 violates the temporal aspect of confidentiality in
@@ -243,7 +242,12 @@ to a fixed region of memory.  Though simplistic, this extension is a step
 toward full-blown multithreading and demonstrates that our approach is flexible
 enough to handle more sophisticated styles of control flow.
 
-In the rest of the paper, we begin with an informal overview of our key ideas via
+\ifspace
+In the rest of the paper, we
+\else
+We
+\fi
+begin with an informal overview of our key ideas via
 examples (\cref{sec:running-example}), followed by a description of our key
 assumptions about the machine environment and threat model (\cref{sec:setup}).
 We then offer the following contributions:
@@ -255,14 +259,14 @@ control flow to formalize a {\em stepwise stack-safety}
 property, and which captures the intuitive concept of
 strict stack safety enforced over each step of execution~(\cref{sec:prelim,sec:lse}).
 \item We use property-based random testing to check that this stepwise
-property is actually enforced by the {\em Depth Isolation} policy
+property is  enforced by the {\em Depth Isolation} policy
 of Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}; in the process, we extend the generation by
 execution techniques of Hri\c{t}cu et al.\cite{TestingNI:ICFP} to handle nested
 properties (\cref{sec:enforcement}).
 \item We formalize weaker but more extensional \emph{observational} variants of
   confidentiality and integrity. Both are parameterized over a notion of external
-  observation, and are violated only if the accessing of secrets or overwriting of
-  data later causes a visible change in the system behavior (\cref{sec:lazy}).
+  observation, and are violated only if accessing secrets or overwriting
+  data causes a visible change in the system behavior (\cref{sec:lazy}).
 \item We show that the definition can be
 extended to argument passing on the stack, callee-saves registers, and a simple coroutine system (\cref{sec:ext}).
 \end{itemize}
@@ -435,6 +439,7 @@ so the final return value produced by {\tt main} is wrong.
 
 \begin{figure}
 \centering
+\hspace*{-1cm}
 \begin{tabular}{l l | l}
   {\tt 2} &
   \multicolumn{2}{c}{
@@ -511,7 +516,7 @@ so the final return value produced by {\tt main} is wrong.
 
 \vspace{\abovedisplayskip}
 
-\caption{A confidentiality violation\ifspace\apt{Could save space by not
+\caption{A confidentiality violation\bcp{tighten so it doesn't spill into margins}\ifspace\apt{Could save space by not
     repeating C or assemly code for {\tt main}.}\fi}
 \label{fig:conf1}
 \end{figure}
@@ -530,20 +535,22 @@ without changing the effect of our computation on non-secret values.
 % a given address can switch from high to low when a function returns.}
 If there exists some value for which we see different results, then
 in fact we can learn something about the initial state by observing those results.
-To adapt this to the stack, the notion of ``secret'' must be dynamic with function
+To adapt this to the stack, the notion of ``secret'' must vary with function
 calls and returns.
 
 In Figure~\ref{fig:conf1} we see how noninterference applies to this scenario.
 At instruction 10, we
 create an imaginary {\em variant}
-state with arbitrary values\ifaftersubmission\bcp{IMO, it would be easier to
-  understand if we chose concrete values for the examples}\sna{FWIW I agree in
-  theory, but it looks bad every time I try it.\fi~(\(v_0\), etc.),
+state with arbitrary values~%
+%\ifaftersubmission\bcp{IMO, it would be easier to
+%  understand if we chose concrete values for the examples}\sna{FWIW I agree in
+%  theory, but it looks bad every time I try it.}\fi
+(\(v_0\), etc.),
 in place of the actual values ($42$, ...) that should
-be hidden from {\tt f}; we show the evolving stack memory of the variant in a second, parallel column.
-At instruction 11, we note that the callee's variable, {\tt z}, has
-changed to 42 in the primary trace, but
-in the variant trace it instead might have any value \(v_0\). If \(v_0 \neq 42\) then the variant
+be hidden from {\tt f}; we show the evolving stack memory of the variant in the second column.
+At instruction 11, the callee's variable, {\tt z},
+changes to 42 in the primary trace, but
+in the variant trace it instead might have any value \(v_0\). If \(v_0 \neq 42\), then the variant
 has behaved differently than the primary, violating confidentiality.
 
 We call this form of confidentiality {\em stepwise confidentiality}. Informally,
@@ -551,7 +558,7 @@ for any state at the entry to a function, and for any variant over the values in
 the primary state and the variant will step in lockstep until they
 return. To step in lockstep
 means that if both states step---that is, neither the primary nor the variant failstops---any
-state element that changes in the original will change in the same way in the variant.
+state element that changes in the original will do the same in the variant.
 
 
 \begin{figure}
@@ -728,7 +735,7 @@ void f() {
     \end{center}
     \vspace{\abovedisplayskip}
   \end{subfigure}
-  \caption{A control-flow attack.}
+  \caption{A control-flow attack. \bcp{Move the caption up a bit}}
   \label{fig:controlflow}
 \end{figure*}
 
@@ -747,8 +754,8 @@ up being called a third time, at which point it finally returns to instruction 6
 
 Reasoning about {\tt main}, we expect that {\tt x} is negated once, so that {\tt main} returns
 $-1$. But because of {\tt f}'s interference, {\tt x} is negated twice, and {\tt main} returns 1.
-This has the appearance of an integrity violation, so how do we capture it in our
-integrity property?
+This seems like an integrity violation; how do we capture it in our
+\ifspace integrity \fi property?
 
 The key intuition is that, to be considered as having returned to {\tt main}, {\tt f} needs
 to do more than just execute a return-labeled instruction: it must actually reach the
@@ -768,7 +775,7 @@ violates the integrity property.
 
 \paragraph*{Well-bracketed control flow.} Together,
 integrity and confidentiality protect a caller's data until its callee
-returns to it. However, it is possible that an intermediate caller is not
+returns to it. However, it is possible that the caller is not
 returned {\em to}, but rather returned {\em past}, to some ancestor caller!
 For example, function $A$ calls function $B$, which in turn calls $C$, which
 returns directly to $A$ by resetting the stack pointer to $A$'s stack frame
@@ -778,8 +785,8 @@ $B$'s stack frames are improperly read or written by $C$.  But it is still
 arguably unsafe if $A$'s programmer depends on $B$ completing its execution before
 it returns.
 %
-Thus, a formal definition of safe use of the stack should include the
-condition that calls and returns should be correctly nested---e.g., $C$ should
+Thus, a formal definition of safe use of the stack should require that calls
+and returns be correctly nested---e.g., $C$ should
 only return to $B$.  This is what Skorstengaard et al.\cite{SkorstengaardSTKJFP}
 call \emph{well-bracketed control flow (WBCF)}.
 
@@ -788,7 +795,7 @@ call \emph{well-bracketed control flow (WBCF)}.
 \label{sec:threat}
 
 Before introducing our formal model of stack safety, we describe our assumptions:
-how broadly we can abstract over machines, how we represent enforcement, and
+how we abstract over machines, how we represent enforcement, and
 our threat model.
 
 \paragraph*{Machine model}
@@ -965,7 +972,7 @@ function into the machine step:
               {\(\mach, \context \constep \context'\)}
               {\(\mach,\context \stepstocon
                 \mach',\context'\)}
-              
+
 \paragraph*{Machine Traces}
 \label{sec:traces}
 
