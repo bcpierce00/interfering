@@ -742,7 +742,7 @@ This seems like an integrity violation; how do we capture it in our
 The key intuition is that, to be considered as having returned to {\tt main}, {\tt f} needs
 to do more than just execute a return-labeled instruction: it must actually reach the
 appropriate return target in {\tt main}.
-To capture this intuition, we add a new piece of context to our diagram:
+To capture this intuition, we add a new piece of context:
 a stack of return targets.  Now a callee is
 only considered to have returned when it reaches a state that matches the caller's target.
 A return target is associated with a set of sealed locations that will become unsealed
@@ -750,26 +750,22 @@ when it is reached, represented here by coloring both the target and its sealed 
 same color (blue).
 
 In the example, {\tt f} reaches its return target on its first return, to instruction 4.
-But {\tt f}'s second return is to the wrong instruction
-(4 rather than 6) because the stack pointer has been overwritten (shown in light red).
+But {\tt f}'s second return is to 4 rather than 6
+because the stack pointer has been overwritten (shown in light red).
 Thus {\tt x} is still sealed and {\tt f}'s attempt to overwrite it at instruction 4
 violates the integrity property.
 
-\paragraph*{Well-bracketed control flow.} Together,
+\paragraph*{Well-bracketed control flow} Together,
 integrity and confidentiality protect a caller's data until its callee
 returns to it. However, it is possible that the caller is not
 returned {\em to}, but rather returned {\em past}, to some ancestor caller!
-For example, function $A$ calls function $B$, which in turn calls $C$, which
-returns directly to $A$ by resetting the stack pointer to $A$'s stack frame
-and branching to the address after the call from $A$ to $B$.  Strictly
-speaking, this is not an information-flow violation, since neither $A$'s nor
-$B$'s stack frames are improperly read or written by $C$.  But it is still
-arguably unsafe if $A$'s programmer depends on $B$ completing its execution before
+Strictly speaking, this is not an information-flow violation. But it is still
+arguably unsafe if the ancestor depends on the skipped function completing its execution before
 it returns.
 %
 Thus, another aspect of safe use of the stack is that calls
-and returns should be correctly nested---e.g., $C$ should
-only return to $B$.  This is what Skorstengaard et al.\cite{SkorstengaardSTKJFP}
+and returns should be correctly nested---a caller should
+only return to its own callee.  This is what Skorstengaard et al.\cite{SkorstengaardSTKJFP}
 call \emph{well-bracketed control flow (WBCF)}, and is orthogonal to
 confidentiality and integrity, so we treat is as an optional additional property.
 
@@ -806,8 +802,8 @@ in Section~\ref{sec:ext}.
 
 \paragraph*{What is a ``call''?}  One significant challenge in formulating our
 properties arises from the fact that we want to define stack safety at the
-machine-code level for a variety of ISAs, including RISCy ones.  In
-particular, there may be no single ``call'' instruction that does all the
+machine-code level for a variety of ISAs.  There may be no single ``call''
+instruction that does all the
 required manipulation of the \(\PCname\) and stack pointer. Instead, there
 might be just a simple branch instruction that stores the old \(\PCname\) in
 a register, with the rest of the call sequence performed by other
@@ -1202,21 +1198,14 @@ any \(\nach\) such that \(\mach \approx_{\mathit{secret}(\context)} \nach\), and
 \(\NPCT\) such that \(\nach,\context \hookrightarrow \NPCT | \brk\),
 \(\MPCT \doteq \NPCT\) holds.
 
-In other words, stepwise stack confidentiality states that if, at the start of the call,
-we vary all stack locations that are supposed to be secret from the callee
-(which in our simple setting is the entirety of the stack),
+In short, if we consider a variant of the stack at the start of a call, 
 the resulting trace remains in lockstep with the original trace
-until either both return together or one failstops. This implies that
-if the callee reads a secret location, it must failstop.
-%
+until either both return together or one failstops.
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
 of the elements in \(\components\), and in addition their subtraces are also in
-\(\MPCT^*\), and therefore confidentiality must hold on them separately. \(\NPCT\)
-will contain these calls and returns as well, so its return stack pushes and pops
-in lockstep until it breaks at the final return.
+\(\MPCT^*\), and therefore confidentiality must hold on them separately.
 
-Finally, we formalize a version of WBCF, which captures the same informal idea
-as that of Skorstengaard et al.\cite{SkorstengaardSTKJFP} using our context machinery.
+Finally, we formalize WBCF as a simple property of the behavior of returns.
 \definition
 A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every reachable state
 \(\mpcstatename\) where \(\pi_\context(\mpcstatename) = (\underscore,\rts)\), and
@@ -1259,7 +1248,7 @@ micro-policies can be defined using this scheme.
 
 Tags in the PIPE system are not accessible to application code, being separated
 from their associated values at the hardware level. So they are not modeled
-as part of the values, and therefore our properties make no claims about
+as values, and therefore our properties make no claims about
 their behavior.
 
 Efficient execution of these micro-policies relies on hardware acceleration,
