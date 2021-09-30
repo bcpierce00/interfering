@@ -1094,18 +1094,18 @@ If none of these rules apply, the default rule leaves context unchanged.
 \begin{tabular}{l}
 {\sc Call} \\
 \judgmenttwobrlong[]
-              {\(\codemap ~ (\mach ~ \PCname)\)}
-%              {\(\components = \sealcon ~ \mach\)}
+              {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
+%             {\(\components = \sealcon ~ \mach\)}
               {\(\components = \{\component | \sealcon ~ \mach[\component]\}\)}
               {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
-                {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)} \\
+              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)} \\
 \end{tabular}
 \begin{tabular}{l}
 {\sc ReturnFound} \\
 \judgmenttwo[]
-              {\(\mach \stepsto \mach' \in \target\)}
-              {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
-              {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap[\components \mapsto \unsealed],\rts\)} \\
+            {\(\mach \stepsto \mach' \in \target\)}
+            {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
+            {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap[\components \mapsto \unsealed],\rts\)} \\
 {\sc ReturnRec} \\
 \end{tabular}
 \begin{tabular}{l}
@@ -2096,7 +2096,7 @@ combine smoothly.
 From here, we see two natural ways to extend the work. First, we should thoroughly evaluate
 other enforcement mechanisms, especially Cheri-based capability
 systems. Second, we can further demonstrate
-the functionality of our definitions by showing that they can be used to prove
+the functionality of our definitions by using them to prove
 the correctness of a programming logic with strengthened rules around calls and returns.
 
 \paragraphx{Stack Safety in the Cheri Ecosystem}
@@ -2291,6 +2291,35 @@ the original model, the passing model equivalents additionally substitute \(\sec
 
 \paragraph*{Exceptions}
 
-%Text of appendix \ldots
+Our core formalism already models control flow patterns in which a return skips over one or more callers to
+reach a point further down the call stack. This is essentially the behavior of an exception; we need only add an
+annotation representing the {\tt setjump} operation or equivalent to enable a ``return'' to an arbitrary point
+not associated with a call. We add an annotation, {\sc SetJump}, and define a target label as either a call-return
+or an exception, \(\mathit{TL} ::= \text{\sc CR} + \text{\sc EX}\), which annotates targets in the return stack.
+\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS) \times (\rts \in \listT (\mathit{TL} \times \target)) \]
+
+We add a rule to handle {\sc SetJump} annotations, and modify the {\sc Call} rule to insert {\sc CR} labels into the
+return stack.
+\judgment[]
+         {\(\codemap ~ (\mach ~ \PCname) = {\sc SetJump}\)}
+         {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\text{\sc EX}, \retcon ~ \mach)::\rts\)}
+\judgmenttwobrlong[]
+              {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
+              {\(\components = \{\component | \sealcon ~ \mach[\component]\}\)}
+              {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
+              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\text{\sc CR}, \retcon ~ \mach)::\rts\)}
+The return rules operate identically regardless of the target labels.
+
+\definition
+We define \textbf{\em stepwise stack integrity}, \textbf{\em stepwise stack confidentiality},
+\textbf{\em observational stack integrity}, \textbf{\em observational stack confidentiality},
+in the same way as in the core model, substituting the above \(\CONTEXTS\) type and update
+function for their original.
+
+\definition
+A system enjoys \textit{\textbf{well-bracketed control flow}} with exceptions when, for every reachable state
+\(\mpcstatename\) where \(\pi_\context(\mpcstatename) = (\underscore,\rts)\), and
+\(\mpcstatename \stepsto \mpcstatename'\) where \(\pi_\context(\mpcstatename') = (\underscore,\rts')\),
+if \(|\rts'| < |\rts|\), then either \(|\rts'| = |\rts|-1\) or \(\rts = \underscore +\!\!+ (\text{\sc EX},\underscore) +\!\!+ \rts'\).
 
 \end{document}
