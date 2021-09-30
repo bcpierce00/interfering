@@ -75,7 +75,7 @@
 
 \begin{abstract}
 
-What does ``stack safety'' mean, precisely? The phrase is associated with a
+What does ``stack safety'' mean? The phrase is associated with a
 variety of compiler,
 run-time, and hardware mechanisms for protecting stack
 memory, but these mechanisms typically lack precise specifications,
@@ -248,7 +248,7 @@ security, combine these with an existing notion of well-bracketed
 control flow to formalize a {\em stepwise stack-safety}
 property, and which captures the intuitive concept of
 strict stack safety enforced over each step of execution~(\cref{sec:prelim,sec:lse}).
-As a case study, we explore how our properties are enforced 
+As a case study, we explore how our properties are enforced
 by the {\em Depth Isolation} micro-policy
 of Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}, but not by some of its optimized variants~(\cref{sec:enforcement}).
 \item We formalize weaker but more extensional \emph{observational} variants of
@@ -312,14 +312,14 @@ int f() {
 4       add -1(%sp),%ra ; set return value
 5       sub $1,%sp      ; deallocate frame
 6       ret
-   
+
 10 f:   add $2,%sp      ; allocate frame
 11      mov -4(%sp),-1(%sp) ; violation 1!
 12      mov $0,-4(%sp)      ; violation 2!
 13      mov $5,%ra      ; set return value
 14      sub $1,%sp      ; deallocate frame
 15      ret
-    \end{lstlisting}    
+    \end{lstlisting}
 }
 \end{subfigure}
 \begin{subfigure}[t]{.25\textwidth}
@@ -395,14 +395,13 @@ We refer to registers and addresses collectively as {\em state elements} or just
   %% that this is what they are.}
 
 Labels under the boxes indicate an assignment of the address to a
-{\em domain}, which is a particular set of intended access
+{\em domain}---a set of intended access
 rights. Unless otherwise marked, each address retains its domain as
-sequential instructions execute. %, as hinted by their colors.
+instructions execute. %, as hinted by their colors.
 %\bcp{where do we see this happening?  Is it important?}.
 Domains are not part of the machine state; rather, they are part
 of the {\em context} of a state that describes the security restrictions
 that the enforcement mechanism must adhere to.
-(We will introduce some other parts of the context as needed.)
 The possible domains
 are \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), or \(\outside\)
@@ -412,6 +411,7 @@ Global variables and code, which are not shown in the figures, would
 also be labeled \(\outside\). Return pointers, labeled ``RetPtr,''
 are shaded black and ignored for simplicity for now---they will
 be treated properly later.
+(We will introduce some other parts of the context as needed.)
 
 Figure~\ref{fig:int1} shows a program with simple integrity and confidentiality violations. It consists of a {\tt main}
 function that performs a call to a function {\tt f}, which reads and then overwrites {\tt main}'s
@@ -429,7 +429,7 @@ if a element is sealed before a step, it will be unchanged afterward.
 
 \begin{figure}
 \centering
-\addtolength{\tabcolsep}{-1em}    
+\addtolength{\tabcolsep}{-1em}
 \begin{tabular}{l | l}
   \multicolumn{2}{c}{
     2 \hspace{-1.5em}
@@ -492,7 +492,7 @@ if a element is sealed before a step, it will be unchanged afterward.
   \MemoryLabel{-6em}{0.75em}{\(v_0\)}
   \vspace{.5em}
 \end{tabular}
-\addtolength{\tabcolsep}{1em}    
+\addtolength{\tabcolsep}{1em}
 
 \vspace{\abovedisplayskip}
 
@@ -778,19 +778,20 @@ how we abstract over machines, how we represent enforcement, and
 our threat model.
 
 \paragraph*{Machine model}
-Our properties are defined in terms of an abstract machine model that makes very few
-assumptions about the concrete machine that instantiates it. We require a
-register machine with a program counter (\(\PCname\)) and there must be a well-defined
-mechanism for determining the bounds of a stack frame, and for recognizing when a call
-has returned. In this paper we discuss machines with a stack pointer (\(\rsp\)),
+Our properties are defined in terms of an abstract model that makes few
+assumptions about the concrete machine that instantiates it. We assume a
+register machine with a program counter (\(\PCname\)) and well-defined
+mechanisms for determining the bounds of a stack frame and recognizing when a call
+has returned. Our examples consider machines with a stack pointer (\(\rsp\)),
 in which the current stack frame is everything below the stack pointer and above the
-previous frame, and a call from instruction \(\addr_\PCname\) with stack pointer \(\addr_\rsp\)
+previous frame, and where a call from instruction \(\addr_\PCname\) with
+stack pointer \(\addr_\rsp\)
 is considered to have returned when the pc is at \(\addr_\PCname + 4\) and the stack pointer
-is again at \(\addr_\rsp\). But our properties apply equally to machines with
-other architectural conventions, such as those involving frame pointers.
-A machine may use its non-stack memory in any way, including
-as a heap, as long as the stack has static bounds. It might also possess additional
-state beyond its registers and memory addresses, such as the state of a hardware
+is again at \(\addr_\rsp\). However, our properties apply equally to
+other architectural conventions, such as frame pointers.
+The non-stack memory can be used in any way, including
+as a heap, as long as the stack has static bounds. There can be
+state other than registers and memory, such as the internal state of a hardware
 enforcement mechanism.
 
 Our core property assumes that all register values passed to the callee are public,
@@ -804,14 +805,18 @@ in Section~\ref{sec:ext}.
 properties arises from the fact that we want to define stack safety at the
 machine-code level for a variety of ISAs.  There may be no single ``call''
 instruction that does all the
-required manipulation of the \(\PCname\) and stack pointer. Instead, there
+required manipulation of the \(\PCname\) and stack pointer. Instead, the
+same instruction opcode may be
+used in some places in a call or return sequence and in other places
+for other purposes.
+\ifspace
+For example, there
 might be just a simple branch instruction that stores the old \(\PCname\) in
 a register, with the rest of the call sequence performed by other
-instructions either before or after the jump.  Similarly, there may be no
-``return'' instruction, but rather a ``return sequence'' involving an
-indirect branch at some point.  Thus, the same instruction opcode may be
-used in some places as part of a call or return sequence and in other places
-for other purposes.
+instructions either before or after the jump.  Similarly, instead of a single
+``return'' instruction,  there may be a ``return sequence'' involving an
+indirect branch at some point.
+\fi
 
 Since our stack-safety properties are all about protecting ``callers'' from
 their ``callees,'' we need some clear-cut way to recognize when the program
@@ -1198,7 +1203,7 @@ any \(\nach\) such that \(\mach \approx_{\mathit{secret}(\context)} \nach\), and
 \(\NPCT\) such that \(\nach,\context \hookrightarrow \NPCT | \brk\),
 \(\MPCT \doteq \NPCT\) holds.
 
-In short, if we consider a variant of the stack at the start of a call, 
+In short, if we consider a variant of the stack at the start of a call,
 the resulting trace remains in lockstep with the original trace
 until either both return together or one failstops.
 Note that \(\MPCT\) may contain nested calls; these must also respect the secrecy
@@ -1216,7 +1221,7 @@ if \(|\rts'| < |\rts|\), then \(|\rts'| = |\rts|-1\).
 \section{Case Study: Micro-Policies}
 \label{sec:enforcement}
 
-In this section we explore how an existing enforcement mechanism called {\em
+We next explore how an \ifspace existing \fi enforcement mechanism called {\em
   Depth Isolation}~\cite{DBLP:conf/sp/RoesslerD18} implements
 the formal stack-safety property described in the previous
 section, and why its optimized form, {\em Lazy Tagging and Clearing}, does not.
@@ -2016,7 +2021,7 @@ ii) Skorstengaard et al. \cite{SkorstengaardSTKJFP}'s fully
   Since we abstract over most of the machine state as well as the sealing and return conventions, and
   can support further enhancements such as coroutines,
   our properties apply directly to a range of architectures, code features, and enforcement mechanisms.
-  
+
 Skorstengaard et al. \cite{SkorstengaardSTKJFP} propose a useful list of five criteria for judging
 candidate stack safety properties.
 %% : they should be (1) intuitive; (2)
