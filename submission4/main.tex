@@ -166,11 +166,13 @@ the stack to disrupt the program’s control flow. Our stack safety
 properties demand that, even in the presence of such attackers, confidentiality
 and integrity still apply to data in suspended stack frames
 until the callee returns.
-
-We can also, optionally, include a notion of {\em well-bracketed control
-flow (WBCF)} as in Skorstengaard et al. \cite{SkorstengaardSTKJFP}---a global requirement that
+%
+We can also, optionally, enforce {\em well-bracketed control
+flow (WBCF)}~\cite{SkorstengaardSTKJFP}---a global requirement that
 callees must always return to their immediate caller, if they return
 at all.
+\apt{Originally, we were using this spot to contrast with Skorstengaard et al. in the intro.
+  Do we really need to do that? Reads better without!}
 
 For confidentiality and integrity, we consider both {\em stepwise}
 and {\em observational} variants.  The simpler stepwise
@@ -246,17 +248,19 @@ security, combine these with an existing notion of well-bracketed
 control flow to formalize a {\em stepwise stack-safety}
 property, and which captures the intuitive concept of
 strict stack safety enforced over each step of execution~(\cref{sec:prelim,sec:lse}).
-\item We use property-based random testing to check that this stepwise
-property is  enforced by the {\em Depth Isolation} policy
-of Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}; in the process, we extend the generation by
-execution techniques of Hri\c{t}cu et al.\cite{TestingNI:ICFP} to handle nested
-properties (\cref{sec:enforcement}).
+As a case study, we explore how our properties are enforced 
+by the {\em Depth Isolation} micro-policy
+of Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}, but not by some of its optimized variants~(\cref{sec:enforcement}).
 \item We formalize weaker but more extensional \emph{observational} variants of
   confidentiality and integrity. Both are parameterized over a notion of external
   observation, and are violated only if accessing secrets or overwriting
   data causes a visible change in the system behavior (\cref{sec:lazy}).
 \item We show that our definitions can be
 extended to describe argument passing on the stack, callee-saves registers, and a simple coroutine system (\cref{sec:ext}).
+\item We use property-based random testing to validate the relationship between
+  our properties and micro-policies; in the process, we extend the generation by
+execution techniques of Hri\c{t}cu et al.\cite{TestingNI:ICFP} to handle nested
+properties (\cref{sec:testing})\apt{Seems like some of the relevant support for this contribution is now cut?}
 \end{itemize}
 \Cref{sec:relwork,sec:future} discuss related and future work.
 
@@ -869,16 +873,16 @@ and our properties are termination insensitive as described above.
 
 Our model is flexible enough to support many realistic uses of the stack.
 We intentionally say little or nothing about other structures
-such as the heap.  (Heap safety has already been studied, in isolation,
-by Azevedo de Amorim et al., and we expect that their correctness condition and ours can be
-combined cleanly to characterize correct protection of stack + heap.)
+such as the heap.  Heap safety has already been studied, in isolation,
+by Azevedo de Amorim et al.~\cite{DBLP:conf/post/AmorimHP18}, and we expect that their correctness condition and ours can be
+combined cleanly to characterize correct protection of stack + heap.
 
 We do not currently support:
 1) address-taken locals, as a satisfactory treatment of these seems to require
 integration with a more general model of memory safety,
 2) exceptions, \sna{I could just write up how to do these...}
 3) tail calls,
-4) dynamic code generation, which is difficult to integrate with code annotations in general, and
+4) dynamic code generation, which is difficult to integrate with code annotations in general, or
 5) concurrency --- we can handle a limited form of coroutines, but
   not full-blown preemptive concurrency.
 
@@ -1209,16 +1213,16 @@ A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every re
 if \(|\rts'| < |\rts|\), then \(|\rts'| = |\rts|-1\).
 
 \medskip
-\paragraph*{Case Study: Micro-Policies}
+\section{Case Study: Micro-Policies}
 \label{sec:enforcement}
 
 In this section we explore how an existing enforcement mechanism called {\em
   Depth Isolation}~\cite{DBLP:conf/sp/RoesslerD18} implements
 the formal stack-safety property described in the previous
-section, and why its optimized form, {\em Lazy Tagging and Clearing}, does not..
-We later validate this claim using property-based random testing.
+section, and why its optimized form, {\em Lazy Tagging and Clearing}, does not.
+We validate this claim using property-based random testing in \cref{sec:testing}.
 
-\paragraph*{A Conservative Stack-Safety Enforcement Mechanism}
+\paragraph*{Conservative Stack-Safety Enforcement Mechanism}
 %
 The enforcement policy of Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} relies
 on a programmable, tag-based reference monitor that runs alongside the
@@ -1339,7 +1343,7 @@ is continuing in the callee, but since the callee never has stronger access
 rights than the caller, this is harmless.
 
 \medskip
-\paragraph*{A Lazy Alternative}
+\paragraph*{Lazy Alternative}
 
 The conservative policy described above is rather slow in
 some important practical cases. Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18} observe
