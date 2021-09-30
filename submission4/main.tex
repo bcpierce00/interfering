@@ -606,15 +606,15 @@ int g() {
 
 It may be unclear in Figure~\ref{fig:conf1} why we vary the initial values of {\tt y}
 and {\tt z} as well as that of {\tt x}. This is to detect some violations of so-called
-{\em temporal stack safety}. 
+{\em temporal stack safety}.
 Consider the code in Figure~\ref{fig:conf2}.
 Using the same compilation strategy as before, {\tt y} and {\tt z} will end up occupying the
-same memory location in the stack,  
+same memory location in the stack,
 so the value {\tt f} leaves behind in {\tt y}, which later becomes the value of {\tt x}, also
 becomes the value of {\tt z}. Thus, {\tt g} is able to learn the value of its caller's
 variable {\tt x}.  We regard this as a violation of confidentiality as well. In terms of noninterference,
 in the primary trace, {\tt z} will have the value 5, but in the variant it can have
-an arbitrary value. 
+an arbitrary value.
 
 \paragraph*{Control-Flow Attacks}
 \begin{figure*}
@@ -776,7 +776,7 @@ A return target is associated with a set of sealed locations that will become un
 when it is reached, represented here by coloring both the target and its sealed data with the
 same color (blue).
 
-In the example, {\tt f} reaches its return target on its first return, to instruction 4. 
+In the example, {\tt f} reaches its return target on its first return, to instruction 4.
 But {\tt f}'s second return is to the wrong instruction
 (4 rather than 6) because the stack pointer has been overwritten (shown in light red).
 Thus {\tt x} is still sealed and {\tt f}'s attempt to overwrite it at instruction 4
@@ -812,7 +812,7 @@ our threat model.
 Our properties are defined in terms of an abstract machine model that makes very few
 assumptions about the concrete machine that instantiates it. \apt{This sentence adds little:} Each formal property
 may be instantiated with any machine that meets the following criteria, and it
-will be a meaningful definition of stack safety for that machine. We require a 
+will be a meaningful definition of stack safety for that machine. We require a
 register machine with a program counter (\(\PCname\)) and there must be a well-defined
 mechanism for determining the bounds of a stack frame, and for recognizing when a call
 has returned. In this paper we discuss machines with a stack pointer (\(\rsp\)),
@@ -884,7 +884,7 @@ our properties are therefore naturally \emph{termination insensitive.}
 
 That said, our model is meant to apply generically to any enforcement mechanism,
 including those that do not failstop, such as
-code rewriting techniques that prevent stack safety violations directly by
+code rewriting techniques that protect stack safety directly by
 restricting the set of possible initial states.
 
 Most enforcement mechanisms make assumptions about their initial conditions,
@@ -991,8 +991,7 @@ function into the machine step:
 
 A {\em machine trace} is a nonempty, finite or infinite sequence
 of MC-states, ranged over by \(\MPCT\) and \(\NPCT\).
-We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces (ordinary lists will use
-``::'').
+We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces and ``::'' for list-cons.
 
 The ``trace-of'' operator, written \(\mpcstatename \hookrightarrow \MPCT\),
 coinductively relates an initial state with the trace of states
@@ -1178,7 +1177,7 @@ If none of these situations hold, the context remains unchanged.
          {}
          {\(\underscore,\context \stepsto_C \context\)} \\
 \end{tabular}
-         
+
 \noindent
 When we build machine traces with this step function, we always know how deep in the
 call stack we are and which elements are sealed.
@@ -1272,9 +1271,8 @@ A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every re
 \(\mpcstatename \stepsto \mpcstatename'\) where \(\pi_\context(\mpcstatename') = (\underscore,\rts')\),
 if \(|\rts'| < |\rts|\), then \(|\rts'| = |\rts|-1\).
 
-\apt{This doesn't want to be a lettered subsection, but it wants to be somehow
-  a bigger division than the paragraphs below.}
-\subsection{Case Study: Micro-Policies}
+\medskip
+\paragraph*{Case Study: Micro-Policies}
 \label{sec:enforcement}
 
 In this section we explore how an existing enforcement mechanism called {\em
@@ -1391,8 +1389,8 @@ using a combination of tags on the instructions
 and an additional tag on the $\PCname$.
 
 There remains the question of how to ensure that the sequences are
-invoked at the right places from the perspective of the stack-safety
-property. For a program to enjoy stack safety
+invoked at the right places\ifspace from the perspective of the stack-safety
+property\fi. For a program to enjoy stack safety
 (with respect to a particular call map), all we require is that
 the entry sequence immediately follows any instruction marked as a call
 in the call map. This is achieved by giving these instructions (another) special tag,
@@ -1403,6 +1401,7 @@ the micro-policy will incorrectly behave as if execution
 is continuing in the callee, but since the callee never has stronger access
 rights than the caller, this is harmless.
 
+\medskip
 \paragraph*{A Lazy Alternative}
 
 The conservative policy described above is rather slow in
@@ -1432,11 +1431,11 @@ harmless one?
 \section{Observable Stack Safety}
 \label{sec:lazy}
 
-We answer the above questions by introducing a notion of observations to our model.
-This has uses beyond this one enforcement mechanism, as some code features may involve
-moving data, overwriting its original location,
-and ultimately restoring it before the change becomes visible; for example, the
-``callee-saves'' registers in some calling conventions will be stashed and restored.
+We answer these questions by introducing a notion of observations to our model.
+This will also be useful when, for example,
+a compiler wants to move data, overwrite its original location,
+and ultimately restore it before the change becomes visible, as in
+``callee-saves'' calling conventioons.
 These examples call for an abstract mechanism to characterize behaviors that are externally
 \emph{observable}.
 
@@ -1518,10 +1517,10 @@ Then for any \(\nach\) such that
 
 \medskip
 
-Confidentiality is more sophisticated. We must capture the intuition that
+For confidentiality, we must capture the intuition that
 secrets do not escape during a call {\em and} are not leaked during a return.
 This require us to be able to quantify over elements that fail to preserve
-the change-together relation \(\diamond\).
+the change-together relation~\(\diamond\).
 
 \definition Let \(\mach,\mach'\) and \(\nach,\nach'\)
 be pairs of states. Their {\em unsafe set}, written
@@ -1566,7 +1565,8 @@ thus as one end of a spectrum that can become arbitrarily permissive.
 Therefore, if we had to choose a single property to represent stack safety,
 it would be the observational formalization.
 
-\subsection{Connection to Policies}
+\medskip
+\paragraph*{Connection to Policies}
 
 Observable properties allow us to defer enforcement until a property
 violation would become visible. Now we can identify when lazy policies
@@ -1588,7 +1588,8 @@ by all activations---but that policy allows leaks between
 instances of the same function.) We validate this repaired micro-policy in
 \ref{sec:testing}.
 
-\subsection{Callee-saves Registers}
+\medskip
+\paragraph*{Callee-saves Registers}
 \label{sec:callee}
 
 Another application of observational properties is characterizing a ``callee-saves''
