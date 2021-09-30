@@ -7,6 +7,8 @@
                         %% http://ctan.org/pkg/subcaption
 \usepackage{amsmath,amsthm,amssymb}
 
+\usepackage{xcolor,listings}
+
 \theoremstyle{definition}
 \newtheorem{definition}{Definition}
 
@@ -276,10 +278,9 @@ extended to describe argument passing on the stack, callee-saves registers, and 
 \newcommand{\passdesc}[2]{Pass(#1,#2)}
 
 \begin{figure*}
-
 \begin{subfigure}[t]{.2\textwidth}
 {\small
-\begin{verbatim}
+  \begin{lstlisting}%[backgroundcolor=\color{gray!20}]
 int main() {
   int x = 42;
   return f()+x;
@@ -293,54 +294,56 @@ int f() {
   *(&y-2) = 0;
   return 5;
 }
-\end{verbatim}
+  \end{lstlisting}
 }
 \end{subfigure}
-\begin{subfigure}[t]{.5\textwidth}
-{\small
-\begin{verbatim}
+\begin{subfigure}[t]{.45\textwidth}
+  {\small
+    \begin{lstlisting}[backgroundcolor=\color{lgray}]
 1 main: add $1,%sp      ; allocate frame
 2       mov $42,-1(%sp) ; initialize local
 3       call f
 4       add -1(%sp),%ra ; set return value
 5       sub $1,%sp      ; deallocate frame
 6       ret
-
+   
 10 f:   add $2,%sp      ; allocate frame
 11      mov -4(%sp),-1(%sp) ; violation 1!
 12      mov $0,-4(%sp)      ; violation 2!
-13      mov $5, %ra     ; set return value
+13      mov $5,%ra      ; set return value
 14      sub $1,%sp      ; deallocate frame
 15      ret
-\end{verbatim}
+    \end{lstlisting}    
 }
 \end{subfigure}
 \begin{subfigure}[t]{.25\textwidth}
 \begin{center}
 \begin{tabular}{l l}
-{\tt 2} &
+2 &
 \memoryaddrs{8em}
 \memory{3}{\unsealc}[\unsealdesc]
+
 ~$\cdots$
 \vspace{.5em}
 \\
-{\tt 3} &
+3 &
 \memoryaddrs{8em}
 \memory{3}{\unsealc}
 ~$\cdots$
     \MemoryLabel{-15em}{0.75em}{42}
     \vspace{.5em}
 \\
-{\tt 12} &
+12 &
 \memoryaddrs{16em}
 \memory{1}{\mainsealc}[\sealdesc{0}]%
 \memory{1}{\retptrc}[\retptrdesc]%
 \memory{1}{\unsealc}[\unsealdesc]
 ~$\cdots$
-\MemoryLabel{-15em}{0.75em}{42}
+\MemoryLabel{-16em}{0.75em}{42}
+\MemoryLabel{-7.5em}{0.75em}{42}
 \vspace{.5em}
 \\
-{\tt 13} &
+13 &
 \memoryaddrs{16em}
 \memory{1}{\mainsealc}
 \memory{1}{\retptrc}
@@ -355,9 +358,12 @@ int f() {
 \caption{Integrity and confidentiality violations
 \ifaftersubmission\bcp{I wonder if we
     could make the figures easier to read by putting very light, differently
-  colored backgrounds under the different parts}\fi}\apt{Picture is now wrong at step 12 (missing 42 at [sp-1]).}
+  colored backgrounds under the different parts} \sna{I like the minimalism of this, but the code is now set up to support playing with it}\fi}
 \label{fig:int1}
 \end{figure*}
+
+\addtolength{\abovecaptionskip}{-1em}
+
 
 This section explains our formal stack safety properties through a series
 of examples, each presented both in C syntax and in corresponding assembly code for a
@@ -423,28 +429,22 @@ so the final return value produced by {\tt main} is wrong.
 
 \begin{figure}
 \centering
-\hspace*{-1cm}
-\begin{tabular}{l l | l}
-  {\tt 2} &
+\addtolength{\tabcolsep}{-1em}    
+\begin{tabular}{l | l}
   \multicolumn{2}{c}{
+    2 \hspace{-1.5em}
     \memoryaddrs{8em}
     \memory{4}{\unsealc}
     ~$\cdots$
-%    \MemoryLabel{-18em}{0.75em}{0}
-%    \MemoryLabel{-14em}{0.75em}{0}
-%    \MemoryLabel{-10em}{0.75em}{0}
-%    \MemoryLabel{-7em}{0.75em}{0}
     \vspace{.5em}
   } \\
-  {\tt 11} &
+  11 \hspace{-1.5em}
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
   \memory{2}{\unsealc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{42}
-%  \MemoryLabel{-10em}{0.75em}{0}
-%  \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
@@ -455,15 +455,13 @@ so the final return value produced by {\tt main} is wrong.
   \MemoryLabel{-10em}{0.75em}{\(v_1\)}
   \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
-  {\tt 12} &
+  12 \hspace{-1.5em}
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
   \memory{2}{\unsealc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{42}
-  \MemoryLabel{-10em}{0.75em}{5}
- % \MemoryLabel{-6em}{0.75em}{0}
   &
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
@@ -471,10 +469,9 @@ so the final return value produced by {\tt main} is wrong.
   \memory{2}{\unsealc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-10em}{0.75em}{5}
   \MemoryLabel{-6em}{0.75em}{\(v_2\)}
   \\
-  {\tt 13} &
+  13 \hspace{-1.5em}
   \memoryaddrs{21em}
   \memory{1}{\unsealc}
   \memory{1}{\retptrc}
@@ -482,7 +479,6 @@ so the final return value produced by {\tt main} is wrong.
   \memory{1}{\badc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{42}
-  \MemoryLabel{-10em}{0.75em}{5}
   \MemoryLabel{-6em}{0.75em}{42}
   \vspace{.5em}
   &
@@ -493,14 +489,14 @@ so the final return value produced by {\tt main} is wrong.
   \memory{1}{\badc}
   ~$\cdots$
   \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-10em}{0.75em}{5}
   \MemoryLabel{-6em}{0.75em}{\(v_0\)}
   \vspace{.5em}
 \end{tabular}
+\addtolength{\tabcolsep}{1em}    
 
 \vspace{\abovedisplayskip}
 
-\caption{A confidentiality violation\bcp{tighten so it doesn't spill into margins}}
+\caption{Noninterference, violated}
 \label{fig:conf1}
 \end{figure}
 
@@ -547,35 +543,35 @@ state element that changes in the original will do the same in the variant.
 
 \begin{figure}
 %\begin{center}
-\begin{subfigure}[t]{.32\columnwidth}
+\begin{subfigure}[t]{.28\columnwidth}
   {\small
-\begin{verbatim}
+\begin{lstlisting}
 int main() {
   int x;
   x = f();
   return g();
 }
-\end{verbatim}
+\end{lstlisting}
   }
 \end{subfigure}
-\begin{subfigure}[t]{.32\columnwidth}
+\begin{subfigure}[t]{.27\columnwidth}
   {\small
-\begin{verbatim}
+\begin{lstlisting}[backgroundcolor=\color{lgray}]
 int f() {
   int y = 5;
   return y;
 }
-\end{verbatim}
+\end{lstlisting}
   }
 \end{subfigure}
 \begin{subfigure}[t]{.32\columnwidth}
   {\small
-\begin{verbatim}
+\begin{lstlisting}
 int g() {
   int z;
   return z;
 }
-\end{verbatim}
+\end{lstlisting}
   }
 \end{subfigure}
 \caption{Another confidentiality violation}
@@ -600,7 +596,7 @@ an arbitrary value.
 \hspace*{-6em}
   \begin{subfigure}[t]{.2\textwidth}
 {\footnotesize
-\begin{verbatim}
+\begin{lstlisting}
 int *stash = 0;
 int main() {
   int x = 1;
@@ -609,7 +605,6 @@ int main() {
   f();
   return x;
 }
-
 
 void f() {
   int y;
@@ -621,12 +616,12 @@ void f() {
   }
   return;
 }
-\end{verbatim}
+\end{lstlisting}
 }
 \end{subfigure}
   \begin{subfigure}[t]{.4\textwidth}
 {\footnotesize
-\begin{verbatim}
+\begin{lstlisting}[backgroundcolor=\color{lgray}]
    stash: .word 0
 1  main:  add $1,%sp     ; alloc frame
 2         mov $1,-1(%sp) ; init x
@@ -646,14 +641,14 @@ void f() {
 16        mov $0,stash
 17        sub $1,%sp     ; dealloc frame
 18        ret
-\end{verbatim}
+\end{lstlisting}
 }
   \end{subfigure}
 %
   \begin{subfigure}[t]{.2\textwidth}
     \begin{center}
     \begin{tabular}{l l l}
-      {\tt 3} &
+      3 &
       \memoryaddrs{8em}
       \memory{3}{\unsealc}
       ~$\cdots$
@@ -671,12 +666,12 @@ void f() {
       \memory[1.2em]{1}{\mainsealc}[Target]%
       \MemoryLabel{-2.2em}{0.75em}{\#4}
       \\
-      {\tt 4} &
+      4 &
       \memoryaddrs{8em}
       \memory{3}{\unsealc}
       ~$\cdots$
       \MemoryLabel{-15em}{0.75em}{1} \\
-      {\tt 11} &
+      11 &
       \memoryaddrs{16em}
       \memory{1}{\mainsealc}
       \memory{2}{\unsealc}%
@@ -687,7 +682,7 @@ void f() {
       \memory[1.2em]{1}{\mainsealc}
       \MemoryLabel{-1.2em}{0.75em}{\#6}
       \\
-      {\tt 18} &
+      18 &
       \memoryaddrs{12em}
       \memory{1}{\mainsealc}
       \memory{1}{\badc}
@@ -699,7 +694,7 @@ void f() {
       \memory[1.2em]{1}{\mainsealc}
       \MemoryLabel{-1.2em}{0.75em}{\#6}
       \\
-      {\tt 4} &
+      4 &
       \memoryaddrs{8em}
       \memory{1}{\mainsealc}
       \memory{2}{\unsealc}
@@ -709,7 +704,7 @@ void f() {
       \memory[1.2em]{1}{\mainsealc}
       \MemoryLabel{-1.2em}{0.75em}{\#6}
       \\
-      {\tt 5} &
+      5 &
       \memoryaddrs{8em}
       \memory{1}{\mainsealc}
       \memory{2}{\unsealc}
@@ -722,7 +717,7 @@ void f() {
     \end{center}
     \vspace{\abovedisplayskip}
   \end{subfigure}
-  \caption{A control-flow attack. \bcp{Move the caption up a bit}}
+  \caption{A control-flow attack.}
   \label{fig:controlflow}
 \end{figure*}
 
@@ -1584,7 +1579,7 @@ parameters on the stack and to a simple coroutine model.
   \centering
   \begin{subfigure}[t]{.2\textwidth}
 {\small
-\begin{verbatim}
+\begin{lstlisting}
 int *stash = 0;
 int main() {
   int x, y;
@@ -1604,14 +1599,14 @@ void f(int &a) {
   *stash = 5;
   return;
 }
-\end{verbatim}
+\end{lstlisting}
 }
   \end{subfigure}
-  \begin{subfigure}[t]{.4\textwidth}
+  \begin{subfigure}[t]{.5\textwidth}
 {\small
-\begin{verbatim}
+  \begin{lstlisting}[backgroundcolor=\color{lgray}]
    stash: .word 0
-1  main:  add $2,%sp      ; alloc frame
+1  main:  add $2,%sp      ; allocate frame
 2         mov %sp,%ra
 3         add -2,%ra      ; ra = &x
 4         call f          ; SHARE: %sp-2
@@ -1620,7 +1615,7 @@ void f(int &a) {
 7         add -1,%ra      ; ra = &y
 8         call f          ; SHARE: %sp-1
 9         mov -2(%sp),%ra ; set return
-10        sub $2,%sp      ; dealloc frame
+10        sub $2,%sp      ; deallocate frame
 11        ret
 
 20 f:     cmp stash, $0   ; stash = 0?
@@ -1630,51 +1625,52 @@ void f(int &a) {
 24        mov $5, (stash) ; *stash = 5
 25        ret
 }
-\end{verbatim}
+\end{lstlisting}
 }
   \end{subfigure}
   \begin{subfigure}[t]{.25\textwidth}
     \begin{center}
+      \vspace{1em}
     \begin{tabular}{l l}
-      {\tt 20} &
+      20 &
       \memoryaddrs[(1)]{17em}
       \memory{1}{\mainpassc}[{\makebox[0pt]{\passdesc{0}{1}}}]%
       \memory{1}{\mainsealc}[{\makebox[0pt]{\sealdesc{0}}}]%
       \memory{1}{\retptrc}
 %      \memory{1}{\unsealc}
       ~$\cdots$ \\
-      {\tt 25} &
+      25 &
       \memoryaddrs[(1)]{17em}
       \memory{1}{\mainpassc}
       \memory{1}{\mainsealc}
       \memory{1}{\retptrc}
 %      \memory{1}{\unsealc}
       ~$\cdots$
-      \MemoryLabel{-18em}{0.75em}{5}
+      \MemoryLabel{-14em}{0.75em}{5}
       \\
-      {\tt 8} &
+      8 &
       \memoryaddrs[(0)]{12em}
       \memory{3}{\unsealc}
       ~$\cdots$
-      \MemoryLabel{-18em}{0.75em}{0}
+      \MemoryLabel{-14em}{0.75em}{0}
       \\
-      {\tt 20} &
+      20 &
       \memoryaddrs[(1)]{17em}
       \memory{1}{\mainsealc}[{\makebox[0pt]{\sealdesc{0}}}]%
       \memory{1}{\mainpassc}[{\makebox[0pt]{\passdesc{0}{1}}}]%
       \memory{1}{\retptrc}
 %      \memory{1}{\unsealc}
       ~$\cdots$
-      \MemoryLabel{-18em}{0.75em}{0}
+      \MemoryLabel{-14em}{0.75em}{0}
       \\
-      {\tt 25} &
+      25 &
       \memoryaddrs[(1)]{17em}
       \memory{1}{\mainsealc}
       \memory{1}{\mainpassc}
       \memory{1}{\retptrc}
 %      \memory{1}{\unsealc}
       ~$\cdots$
-      \MemoryLabel{-18em}{0.75em}{\bf 5}
+      \MemoryLabel{-14em}{0.75em}{\bf 5}
 \end{tabular}
 \end{center}
 \end{subfigure}
@@ -1749,7 +1745,8 @@ the subroutine model.
 %\[\codemap \in \CODEMAPS ::= \addr \in \WORDS \rightharpoonup \ann \in \ANNS\]
 
 The first major difference in this model is the domains. Stack domains are now nested inside
-top-level domains, and associated with stack identifiers.
+top-level domains, \(\topDom \in \TOPDOMS ::= \outside + \instack{\stackid}{\stackDom}\),
+ssociated with stack identifiers.
 Our context now consists of a domain map, a map from stack identifiers to return target stacks,
 an additional map of targets for yields, and a stack identifier of the active stack.
 A yield target map \(\yts\) is a map from stack identifiers to targets.
@@ -1760,13 +1757,10 @@ target tells us that we have really yielded. When yielding from state \(\mach\),
 \(\ycon ~ \mach \in \MACHS\) gives us the yield target for coming back to the yielding
 coroutine.
 %
-\[\topDom \in \TOPDOMS ::= \outside + \instack{\stackid}{\stackDom}\]
 \[\begin{split}
-\context \in \CONTEXTS ::= &
- (\domMap \in \COMPONENTS \rightarrow \TOPDOMS) \times \\
+\context \in \CONTEXTS ::= & (\domMap \in \COMPONENTS \rightarrow \TOPDOMS) \times \\
 & (\rtm \in \STACKS \rightarrow \listT(\target)) \times \\
-& (\yts \in \STACKS \rightarrow \target) \times \\
-& \stackid \in \STACKS
+& (\yts \in \STACKS \rightarrow \target) \times \stackid \in \STACKS
 \end{split}\]
 
 The initial domain map maps each stack address in stack \(\stackid\) to
