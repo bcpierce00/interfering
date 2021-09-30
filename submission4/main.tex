@@ -167,16 +167,6 @@ We can also, optionally, include a notion of {\em well-bracketed control
 flow (WBCF)} as in Skorstengaard et al. \cite{SkorstengaardSTKJFP}---a global requirement that
 callees must always return to their immediate caller, if they return
 at all.
-\apt{Rest of this para could be delayed or perhaps removed altogether.}
-Skorstengaard et al. define stack safety as the conjunction of WBCF with
-{\em local state encapsulation (LSE)}.
-Informally, LSE says that the contents of
-a caller's stack frame are not read or written while its callees (and their callees, etc.) are
-executing.
-Skorstengaard et al. formalize these properties by defining an idealized
-machine in which they hold {\em by construction}. Our confidentiality and
-integrity properties are together stronger than LSE, guaranteeing protection even
-in the presence of control-flow violations, and are essentially orthogonal to WBCF.
 
 For confidentiality and integrity, we consider both {\em stepwise}
 and {\em observational} variants.  The simpler stepwise
@@ -233,26 +223,15 @@ confidentiality, albeit at some performance cost.
 are not saying anything incorrect at the moment.}
 \fi
 
-\apt{Next two paras could be condensed.}
-For ease of exposition, our development initially assumes a single simple
+For ease of exposition, we initially assume a single simple
 stack with no sharing between callers and callees: all parameters and return
-values are passed in registers.  Later, we show how to refine the properties
-to allow passing of scalar stack data, granting a callee access to the
-caller's data. Throughout, we note how we expect elements of the formalism
-to apply to enforcement mechanisms beyond micro-policies.
+values are passed in registers.  Later, we will introduce enhanced versions
+supporting
+1) passing of scalar stack data,
+2) callee-saves registers calling conventions, and
+3) a coroutine system with a static layout.
 
-Lastly, we define integrity and confidentiality properties for a coroutine
-system with a static layout, in which each coroutine's stack is constrained
-to a fixed region of memory.  Though simplistic, this extension is a step
-toward full-blown multithreading and demonstrates that our approach is flexible
-enough to handle more sophisticated styles of control flow.
-
-\ifspace
-In the rest of the paper, we
-\else
-We
-\fi
-begin with an informal overview of our key ideas via
+We begin with an informal overview of our key ideas via
 examples (\cref{sec:running-example}), followed by a description of our key
 assumptions about the machine environment and threat model (\cref{sec:setup}).
 We then offer the following contributions:
@@ -422,7 +401,7 @@ also be labeled \(\outside\). Return pointers, labeled ``RetPtr,''
 are shaded black and ignored for simplicity for now---they will
 be treated properly later.
 
-Figure~\ref{fig:int1} shows a program with a simple integrity violation.\apt{Mention confidentiality here too.} It consists of a {\tt main}
+Figure~\ref{fig:int1} shows a program with simple integrity and confidentiality violations. It consists of a {\tt main}
 function that performs a call to a function {\tt f}, which reads and then overwrites {\tt main}'s
 variable {\tt x}. (Of course, this is illegal C, but it is characteristic of what buggy or malicious code might do.)
 In the initial memory layout the entire stack is {\em unsealed},
@@ -521,8 +500,7 @@ so the final return value produced by {\tt main} is wrong.
 
 \vspace{\abovedisplayskip}
 
-\caption{A confidentiality violation\bcp{tighten so it doesn't spill into margins}\ifspace\apt{Could save space by not
-    repeating C or assemly code for {\tt main}.}\fi}
+\caption{A confidentiality violation\bcp{tighten so it doesn't spill into margins}}
 \label{fig:conf1}
 \end{figure}
 
@@ -794,11 +772,11 @@ $B$'s stack frames are improperly read or written by $C$.  But it is still
 arguably unsafe if $A$'s programmer depends on $B$ completing its execution before
 it returns.
 %
-Thus, a formal definition of safe use of the stack should require that calls
-and returns be correctly nested---e.g., $C$ should
+Thus, another aspect of safe use of the stack is that calls
+and returns should be correctly nested---e.g., $C$ should
 only return to $B$.  This is what Skorstengaard et al.\cite{SkorstengaardSTKJFP}
-call \emph{well-bracketed control flow (WBCF)}.
-\apt{We've lost the story about how we treat WBCF, namely as an optional additional property.}
+call \emph{well-bracketed control flow (WBCF)}, and is orthogonal to
+confidentiality and integrity, so we treat is as an optional additional property.
 
 \section{Threat Model, Machines, and Enforcement }
 \label{sec:setup}
@@ -810,9 +788,7 @@ our threat model.
 
 \paragraph*{Machine model}
 Our properties are defined in terms of an abstract machine model that makes very few
-assumptions about the concrete machine that instantiates it. \apt{This sentence adds little:} Each formal property
-may be instantiated with any machine that meets the following criteria, and it
-will be a meaningful definition of stack safety for that machine. We require a
+assumptions about the concrete machine that instantiates it. We require a
 register machine with a program counter (\(\PCname\)) and there must be a well-defined
 mechanism for determining the bounds of a stack frame, and for recognizing when a call
 has returned. In this paper we discuss machines with a stack pointer (\(\rsp\)),
@@ -831,12 +807,11 @@ and that all data in a stack frame is private.
 Some calling convention choices, such as callee-saves registers and argument
 passing on the stack, are not supported directly by this property; we introduce
 secondary properties that use the same underlying formalism to handle these cases,
-\apt{omit this clause?: ``as well as a simple coroutine model,''} in Section~\ref{sec:ext}.
+in Section~\ref{sec:ext}.
 
 \paragraph*{What is a ``call''?}  One significant challenge in formulating our
 properties arises from the fact that we want to define stack safety at the
-machine-code level for a variety of ISAs, including RISCy
-\ifaftersubmission\sna{RISCy?}\leo{RISC-like maybe?}\sna{Apparently riscy is a thing.}\fi ones.  In
+machine-code level for a variety of ISAs, including RISCy ones.  In
 particular, there may be no single ``call'' instruction that does all the
 required manipulation of the \(\PCname\) and stack pointer. Instead, there
 might be just a simple branch instruction that stores the old \(\PCname\) in
@@ -911,38 +886,14 @@ such as the heap.  (Heap safety has already been studied, in isolation,
 by Azevedo de Amorim et al., and we expect that their correctness condition and ours can be
 combined cleanly to characterize correct protection of stack + heap.)
 
-\apt{Suggest just listing these, with the briefest of descriptions, and omitting
- the mitigations/excuses/etc. And turn this into an in-paragraph itemization.}
-Features that we do not currently support:
-
-\begin{itemize}
-\item Address-taken locals. A satisfactory
-  treatment of these seems to require integration with a more general
-  model of memory safety that covers the heap and static globals too,
-  such as the aforementioned model of Azevedo de Amorim et al.
-
-\item Exceptions. We can see a way to extend the model to include them:
-  we would model a "setjump" operation by inserting a
-  special target in the return target stack. We would weaken
-  well-bracketedness to allow reaching such a target from any
-  depth. Since integrity and confidentiality are distinct from
-  well-bracketedness and already permit the popping of multiple
-  functions from the stack, they can simply treat the exception's
-  target as another return target.
-
-\item Tail calls. To implement these, we would need to distinguish them
-  from normal calls and slightly adjust the mechanics of the return stack.
-
-\item Dynamic code generation. This would be challenging to
-  integrate into our framework, because we rely on code annotations.
-  But we can easily envision supporting limited cases in which
-  the generated code never contains a call or other annotated instruction,
-  or in which existing code is copied along with its annotations.
-
-\item Concurrency. We can handle a limited form of coroutines, as described in
-  8.3. Handling full-blown preemptive concurrency would require significant
-  changes in our underlying machine model.
-\end{itemize}
+We do not currently support:
+1) address-taken locals, as a satisfactory treatment of these seems to require
+integration with a more general model of memory safety,
+2) exceptions, \sna{I could just write up how to do these...}
+3) tail calls,
+4) dynamic code generation, which is difficult to integrate with code annotations in general, and
+5) concurrency --- we can handle a limited form of coroutines, but
+  not full-blown preemptive concurrency.
 
 \section{Machines and Traces}
 \label{sec:prelim}
@@ -958,7 +909,7 @@ in the set \(\COMPONENTS ::= \WORDS + \REGS\).
 %
 A {\em machine state} \(\mach\) is drawn from a set \(\MACHS\) and supports a mapping
 from components to values, written
-\(\mach[\component] ::= \MACHS \rightarrow \COMPONENTS \rightarrow \WORDS \).
+\(\mach[\component] \in \MACHS \rightarrow \COMPONENTS \rightarrow \WORDS \).
 
 We have a partial step function between machine states, written \(\mach \stepsto \mach'\), which
 is undefined on input states that correspond to a policy fault. So, a security mechanism is
@@ -1153,7 +1104,6 @@ If a target is reached anywhere in the return stack, {\sc ReturnRec}
 unseals each frame down to the level that was returned to.
 If none of these situations hold, the context remains unchanged.
 
-\apt{splitting these into separated tabulars would allow them to flow over the column break, presumably.}
 \begin{tabular}{l}
 {\sc Call} \\
 \judgmenttwobrlong[]
@@ -1162,16 +1112,22 @@ If none of these situations hold, the context remains unchanged.
               {\(\components = \{\component | \sealcon ~ \mach[\component]\}\)}
               {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
                 {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)} \\
+\end{tabular}
+\begin{tabular}{l}
 {\sc ReturnFound} \\
 \judgmenttwo[]
               {\(\mach \stepsto \mach' \in \target\)}
               {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
               {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap[\components \mapsto \unsealed],\rts\)} \\
 {\sc ReturnRec} \\
+\end{tabular}
+\begin{tabular}{l}
 \judgmentbr[]
             {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
             {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
             {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'[\components \mapsto \unsealed],\rts'\)} \\
+\end{tabular}
+\begin{tabular}{l}
 {\sc Default} \\
 \judgment[]
          {}
@@ -1232,11 +1188,16 @@ such that \(\mach[\component] \not = \mach'[\component]\).
 written \(\machT \doteq \nachT\),
 if their adjacent pairs of states change together.  We define this as a coinductive relation:
 
+\smallskip
+\begin{minipage}[b]{.2\columnwidth}
 \judgment{}
          {\(\mpcstatename \doteq \npcstatename\)}
+\end{minipage}
+\begin{minipage}[b]{.75\columnwidth}
 \judgmenttwo{\(\mach, \pi_\mach(\head(\machT)) \diamond \nach, \pi_\mach(\head(\nachT))\)}
             {\(\machT \doteq \nachT\)}
-            {\(\notfinished{(\mach,\underscore,\underscore)}{\machT} \doteq \notfinished{(\nach,\underscore,\underscore)}{\nachT}\)}
+            {\(\notfinished{(\mach,\underscore)}{\machT} \doteq \notfinished{(\nach,\underscore)}{\nachT}\)}
+\end{minipage}
 
 \definition
 The \emph{secret set} of a context, written \(\secret(\domMap,\rts)\), is the
@@ -1526,7 +1487,7 @@ the change-together relation~\(\diamond\).
 be pairs of states. Their {\em unsafe set}, written
 \(\bar{\Diamond}(\mach,\mach',\nach,\nach')\), is the set of all elements
 \(\component \in \Delta(\mach,\mach') \cup \Delta(\nach,\nach')\) where
-\(\mach' ~ \component \not = \nach' ~ \component\).
+\(\mach'[\component] \not = \nach'[\component]\).
 
 \definition
 A system enjoys \textbf{\em observational confidentiality} if for all
@@ -1615,8 +1576,7 @@ subroutine model.
 What about more realistic uses of the stack? We now demonstrate the
 flexibility of our core concepts by extending
 them to a system that models the passing of
-parameters on the stack, to callee-saves
-registers\bcp{No longer here!}, and to a simple coroutine model.
+parameters on the stack and to a simple coroutine model.
 
 \newcommand{\mainpassc}{magenta}
 
@@ -1775,8 +1735,6 @@ This prevents most violations of temporal safety, although stale pointers
 can still be used in certain corner cases. Callees would be permitted
 to access the location without having been explicitly given a pointer
 to it.
-%\sna{This is trying to get toward what we were saying at OOPSLA: it's not
-%  a technical obstacle, it's that the behavior is tied to things we don't model.}
 
 \medskip
 
@@ -1822,7 +1780,7 @@ and likewise using the return target stacks. We will omit these rules and focus 
 
 \judgmenttwobr[ Yld]
              {\(\mach \stepsto \mach'\)}
-             {\(\stackid' = \stackof ~ (\mach'~ \rsp) \not = \stackid\)}
+             {\(\stackid \not = \stackid' = \stackof ~ (\mach'[\rsp])\)}
              {\(\yts ~ \stackid'\)}
              {\(\yts' = \yts[\stackid \mapsto \ycon ~ \mach]\)}
              {\(\mach,(\domMap,\rts,\yts,\stackid) \stepsto_C \domMap,\rts,\yts',\stackid'\)}
