@@ -166,11 +166,13 @@ the stack to disrupt the program’s control flow. Our stack safety
 properties demand that, even in the presence of such attackers, confidentiality
 and integrity still apply to data in suspended stack frames
 until the callee returns.
-
-We can also, optionally, include a notion of {\em well-bracketed control
-flow (WBCF)} as in Skorstengaard et al. \cite{SkorstengaardSTKJFP}---a global requirement that
+%
+We can also, optionally, enforce {\em well-bracketed control
+flow (WBCF)}~\cite{SkorstengaardSTKJFP}---a global requirement that
 callees must always return to their immediate caller, if they return
 at all.
+\apt{Originally, we were using this spot to contrast with Skorstengaard et al. in the intro.
+  Do we really need to do that? Reads better without!}
 
 For confidentiality and integrity, we consider both {\em stepwise}
 and {\em observational} variants.  The simpler stepwise
@@ -246,17 +248,19 @@ security, combine these with an existing notion of well-bracketed
 control flow to formalize a {\em stepwise stack-safety}
 property, and which captures the intuitive concept of
 strict stack safety enforced over each step of execution~(\cref{sec:prelim,sec:lse}).
-\item We use property-based random testing to check that this stepwise
-property is  enforced by the {\em Depth Isolation} policy
-of Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}; in the process, we extend the generation by
-execution techniques of Hri\c{t}cu et al.\cite{TestingNI:ICFP} to handle nested
-properties (\cref{sec:enforcement}).
+As a case study, we explore how our properties are enforced 
+by the {\em Depth Isolation} micro-policy
+of Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}, but not by some of its optimized variants~(\cref{sec:enforcement}).
 \item We formalize weaker but more extensional \emph{observational} variants of
   confidentiality and integrity. Both are parameterized over a notion of external
   observation, and are violated only if accessing secrets or overwriting
   data causes a visible change in the system behavior (\cref{sec:lazy}).
 \item We show that our definitions can be
 extended to describe argument passing on the stack, callee-saves registers, and a simple coroutine system (\cref{sec:ext}).
+\item We use property-based random testing to validate the relationship between
+  our properties and micro-policies; in the process, we extend the generation by
+execution techniques of Hri\c{t}cu et al.\cite{TestingNI:ICFP} to handle nested
+properties (\cref{sec:testing})\apt{Seems like some of the relevant support for this contribution is now cut?}
 \end{itemize}
 \Cref{sec:relwork,sec:future} discuss related and future work.
 
@@ -361,7 +365,7 @@ int f() {
 \ifaftersubmission\bcp{I wonder if we
     could make the figures easier to read by putting very light, differently
   colored backgrounds under the different parts} \sna{I like the minimalism of this, but the code is now set up to support playing with it}\fi}
-\label{fig:int1}
+\apt{We've lost the first line of main!}\label{fig:int1}
 \end{figure*}
 
 \addtolength{\abovecaptionskip}{-1em}
@@ -869,16 +873,16 @@ and our properties are termination insensitive as described above.
 
 Our model is flexible enough to support many realistic uses of the stack.
 We intentionally say little or nothing about other structures
-such as the heap.  (Heap safety has already been studied, in isolation,
-by Azevedo de Amorim et al., and we expect that their correctness condition and ours can be
-combined cleanly to characterize correct protection of stack + heap.)
+such as the heap.  Heap safety has already been studied, in isolation,
+by Azevedo de Amorim et al.~\cite{DBLP:conf/post/AmorimHP18}, and we expect that their correctness condition and ours can be
+combined cleanly to characterize correct protection of stack + heap.
 
 We do not currently support:
 1) address-taken locals, as a satisfactory treatment of these seems to require
 integration with a more general model of memory safety,
 2) exceptions, \sna{I could just write up how to do these...}
 3) tail calls,
-4) dynamic code generation, which is difficult to integrate with code annotations in general, and
+4) dynamic code generation, which is difficult to integrate with code annotations in general, or
 5) concurrency --- we can handle a limited form of coroutines, but
   not full-blown preemptive concurrency.
 
@@ -1209,17 +1213,18 @@ A system enjoys \textit{\textbf{well-bracketed control flow}} when, for every re
 if \(|\rts'| < |\rts|\), then \(|\rts'| = |\rts|-1\).
 
 \medskip
-\paragraph*{Case Study: Micro-Policies}
+\section{Case Study: Micro-Policies}
 \label{sec:enforcement}
 
 In this section we explore how an existing enforcement mechanism called {\em
   Depth Isolation}~\cite{DBLP:conf/sp/RoesslerD18} implements
 the formal stack-safety property described in the previous
-section, and why its optimized form, {\em Lazy Tagging and Clearing}, does not..
-We later validate this claim using property-based random testing.
+section, and why its optimized form, {\em Lazy Tagging and Clearing}, does not.
+We validate this claim using property-based random testing in \cref{sec:testing}.
 
-\paragraph*{A Conservative Stack-Safety Enforcement Mechanism}
+\paragraph*{Conservative Stack-Safety Enforcement Mechanism}
 %
+\apt{This whole section is indeed a bit verbose; could probably be condensed.}
 The enforcement policy of Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} relies
 on a programmable, tag-based reference monitor that runs alongside the
 program,
@@ -1266,11 +1271,11 @@ set of distinct tags.
 The micro-policy we present here to illustrate enforcement of stack
 safety as defined in \cref{sec:lse} is a small variation
 on the {\em Depth Isolation} policy presented by
-Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}. In their policies,  the stack memory is tagged
-with ownership information associated to each stack frame (and to each
+Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}. In their policies, each stack location is tagged
+with ownership information associated to a stack frame (and to each
 separate object inside that frame, a more finely grained access
-control that we do not need to consider here), and tags registers containing
-stack pointers with access permission information. The policy also
+control that we do not need to consider here), and each register containing
+a stack pointer is tagged with access permission information. The policy also
 uses tags on instructions to identify the code
 sequences that have permission to manage the stack, say during calls and returns.
 %\leo{If we have the simple exposition so far, no need to mention the following sentence:}
@@ -1328,7 +1333,7 @@ and an additional tag on the $\PCname$.
 There remains the question of how to ensure that the sequences are
 invoked at the right places\ifspace from the perspective of the stack-safety
 property\fi. For a program to enjoy stack safety
-(with respect to a particular call map), all we require is that
+(with respect to a particular call map\apt{?? what's that?}), all we require is that
 the entry sequence immediately follows any instruction marked as a call
 in the call map. This is achieved by giving these instructions (another) special tag,
 and it is easy to check statically that this has been done correctly.
@@ -1339,7 +1344,7 @@ is continuing in the callee, but since the callee never has stronger access
 rights than the caller, this is harmless.
 
 \medskip
-\paragraph*{A Lazy Alternative}
+\paragraph*{Lazy Alternative}
 
 The conservative policy described above is rather slow in
 some important practical cases. Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18} observe
@@ -1349,8 +1354,8 @@ and reset them as it is destructed;  this
 is particularly costly for frames that contain large uninitialized arrays.
 To mitigate those costs, they eliminate the costly frame initialization pass.
 
-Under the most optimized version of the micro-policy, {\em Lazy Tagging and Clearing},
-it does not initialize stack frames on entry \emph{or} clear them on exit,
+The most optimized version of the micro-policy, {\em Lazy Tagging and Clearing},
+does not initialize stack frames on entry \emph{or} clear them on exit,
 and it permits all writes to the stack, even when the $\PCname$ tag
 does not match the memory tag; the \(\PCname\) tag is always propagated
 to the written location. Reads from the stack \emph{do} require $\PCname$
