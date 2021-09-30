@@ -256,11 +256,9 @@ of Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}, but not by some of its opt
   observation, and are violated only if accessing secrets or overwriting
   data causes a visible change in the system behavior (\cref{sec:lazy}).
 \item We show that our definitions can be
-extended to describe argument passing on the stack, callee-saves registers, and a simple coroutine system (\cref{sec:ext}).
+extended to describe argument passing on the stack, callee-saves registers, exceptions, and a simple coroutine system (\cref{sec:ext}).
 \item We use property-based random testing to validate the relationship between
-  our properties and micro-policies; in the process, we extend the generation by
-execution techniques of Hri\c{t}cu et al.\cite{TestingNI:ICFP} to handle nested
-properties (\cref{sec:testing})\apt{Seems like some of the relevant support for this contribution is now cut?}
+  our properties and micro-policies (\cref{sec:testing})
 \end{itemize}
 \Cref{sec:relwork,sec:future} discuss related and future work.
 
@@ -286,7 +284,7 @@ properties (\cref{sec:testing})\apt{Seems like some of the relevant support for 
 \begin{figure*}
 \begin{subfigure}[t]{.2\textwidth}
 {\small
-  \begin{lstlisting}%[backgroundcolor=\color{gray!20}]
+  \begin{lstlisting}
 int main() {
   int x = 42;
   return f()+x;
@@ -365,7 +363,7 @@ int f() {
 \ifaftersubmission\bcp{I wonder if we
     could make the figures easier to read by putting very light, differently
   colored backgrounds under the different parts} \sna{I like the minimalism of this, but the code is now set up to support playing with it}\fi}
-\apt{We've lost the first line of main!}\label{fig:int1}
+\label{fig:int1}
 \end{figure*}
 
 \addtolength{\abovecaptionskip}{-1em}
@@ -880,10 +878,9 @@ combined cleanly to characterize correct protection of stack + heap.
 We do not currently support:
 1) address-taken locals, as a satisfactory treatment of these seems to require
 integration with a more general model of memory safety,
-2) exceptions, \sna{I could just write up how to do these...}
-3) tail calls,
-4) dynamic code generation, which is difficult to integrate with code annotations in general, or
-5) concurrency --- we can handle a limited form of coroutines, but
+2) tail calls,
+3) dynamic code generation, which is difficult to integrate with code annotations in general, or
+4) concurrency --- we can handle a limited form of coroutines, but
   not full-blown preemptive concurrency.
 
 \section{Machines and Traces}
@@ -1224,7 +1221,6 @@ We validate this claim using property-based random testing in \cref{sec:testing}
 
 \paragraph*{Conservative Stack-Safety Enforcement Mechanism}
 %
-\apt{This whole section is indeed a bit verbose; could probably be condensed.}
 The enforcement policy of Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} relies
 on a programmable, tag-based reference monitor that runs alongside the
 program,
@@ -1246,57 +1242,30 @@ Existing work \cite{TestingNI:ICFP,pump_oakland2015, DBLP:conf/sp/RoesslerD18}
 %\bcp{additional citations: the noninterference paper, Nick and Andre's papers, ...}
 has shown that a wide range of
 micro-policies can be defined using this scheme.
+Efficient execution of these micro-policies relies on hardware acceleration,
+such as the PUMP architecture~\cite{pump:asplos2015}.
 
 Tags in the PIPE system are not accessible to application code, being separated
 from their associated values at the hardware level. So they are not modeled
 as values, and therefore our properties make no claims about
 their behavior.
 
-Efficient execution of these micro-policies relies on hardware acceleration,
-such as the PUMP architecture~\cite{pump:asplos2015}.
-The hardware incorporates a rule cache
-to allow quick retrieval of rule outputs for mapped inputs. If the cache misses,
-the hardware traps to a software handler (running in a privileged context or
-on a co-processor) to compute the rule result. To obtain adequate performance,
-it is important to design micro-policies so that they hit in the cache as
-much as possible. Thus, practical policies need to maintain a small working
-set of distinct tags.
-%% %
-%% \rb{Maybe go into more detail, examples later\ldots or try to segue into stack
-%% policies}
-
-%\paragraph*{A Conservative Tag Policy}
-%\label{sec:conservative}
-
-The micro-policy we present here to illustrate enforcement of stack
-safety as defined in \cref{sec:lse} is a small variation
+The micro-policy we reference here is a variation
 on the {\em Depth Isolation} policy presented by
-Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}. In their policies, each stack location is tagged
-with ownership information associated to a stack frame (and to each
-separate object inside that frame, a more finely grained access
-control that we do not need to consider here), and each register containing
-a stack pointer is tagged with access permission information. The policy also
-uses tags on instructions to identify the code
-sequences that have permission to manage the stack, say during calls and returns.
-%\leo{If we have the simple exposition so far, no need to mention the following sentence:}
-%In the following, for ease of exposition, we will assume that no
-%arguments are passed on the stack.
-%% \rb{Conceivably on alloc
-%%   operations, etc., which we have not yet mentioned.}
-
+Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}.
 The Depth Isolation micro-policy maintains tags of the form $\tagStackDepth{n}$ for
 each stack location belonging to the stack frame at activation depth
-$n$, or the tag $\tagNoDepth$ for stack locations that are currently
+$\depth$, or the tag $\tagNoDepth$ for stack locations that are currently
 unused (but could be used in the future).
 %
-The $\PCname$ is tagged similarly as $\tagPCDepth{n}$.
+The $\PCname$ is tagged similarly as $\tagPCDepth{\depth}$.
 %
 Initially, the entire stack is considered unused (and therefore tagged
 $\tagNoDepth$), and the {\PCname} has tag $\tagPCDepth{0}$.
 %
 During normal execution, the micro-policy rules only permit load and
 store operations when the target memory is tagged {\em with the same
-  depth} as the current {\PCname} tag, and store operations also when the
+ depth} as the current {\PCname} tag, and store operations also when the
 target memory is $\tagNoDepth$.
 
 Interesting changes to the tags occur where the program switches from
@@ -1308,19 +1277,17 @@ a caller to a callee or vice-versa:
   %, when the machine executes an instruction marked as a call in
   % the call map.
   the current
-  $\tagPCDepth{n}$ tag is incremented to $\tagPCDepth{(n + 1)}$, and the function
+  $\tagPCDepth{\depth}$ tag is incremented to $\tagPCDepth{(\depth + 1)}$, and the function
   entry sequence initializes  all locations of the new function frame with
-  tag $\tagStackDepth{(n + 1)}$.
+  tag $\tagStackDepth{(\depth + 1)}$.
 
 \item From callee back to caller: the callee clears its frame, and at
   the actual return instruction,
   the $\PCname$ tag is decremented.
-
 \end{itemize}
 
-This discipline suffices to enforce stack safety.
-To implement it,  we define blessed instruction sequences
-intended to appear at the entry and exit of each function,
+To implement this discipline, blessed instruction sequences are designated
+to appear at the entry and exit of each function,
 which manipulate tags as just described in addition to performing the
 usual calling convention tasks of saving/restoring the return address to/from
 the stack and adjusting the stack pointer. With the aid of an additional tag on
@@ -1333,7 +1300,7 @@ and an additional tag on the $\PCname$.
 There remains the question of how to ensure that the sequences are
 invoked at the right places\ifspace from the perspective of the stack-safety
 property\fi. For a program to enjoy stack safety
-(with respect to a particular call map\apt{?? what's that?}), all we require is that
+(with respect to a particular set of call annotations), all we require is that
 the entry sequence immediately follows any instruction marked as a call
 in the call map. This is achieved by giving these instructions (another) special tag,
 and it is easy to check statically that this has been done correctly.
@@ -1805,6 +1772,17 @@ We define \textbf{\em stepwise coroutine confidentiality} in the same way as ste
 integrity, substituting the above definitions. Likewise
 \textbf{\em observational coroutine confidentiality} is defined in terms of observational
 stack confidentiality.
+
+\medskip
+
+\paragraph*{Exceptions}
+
+Exceptions are another useful form of control flow that disobeys the typical call and return pattern.
+We can extend our model easily to handle integrity and confidentiality in the presence of exceptions.
+In a typical exception model, the code point that ``catches'' a thrown exception is indicated by a {\tt setjump}
+instruction or equivalent, which is later jumped to by a {\tt longjump}. We treat {\tt setjump} as placing
+a special return target on the target stack, which then behaves like a normal return in terms of our properties.
+A full treatment is given in Appendix \ref{app:exceptions}.
 
 \section{Validation through Random Testing}
 \label{sec:testing}
