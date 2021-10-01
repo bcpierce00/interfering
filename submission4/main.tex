@@ -2150,7 +2150,12 @@ observational properties.
 \appendices
 \section{Formalization of Callee-saves Registers}
 \label{app:calleesave}
-%
+
+In order to support callee-saves registers, we extend {\sc Call} annotations to
+carry information about which registers are to be saved and which are used for arguments,
+etc. This takes the form of a ``saving function'' \(S\) that maps registers to domains \(\saved\) and
+\(\unsaved\). These also extend \(\STKDOMS\).
+
 \[\begin{split}
 \codemap \in \CODEMAPS ::= & \WORDS \rightharpoonup \callmap(S)\\
 \mbox{\rm{where}} ~ & S \in \REGS \rightarrow (\unsaved + \saved) \\
@@ -2158,9 +2163,17 @@ observational properties.
 
 \[\begin{split}
 \stackDom \in \STKDOMS ::= & \outside + \unsealed + \sealed{\depth} \\
-& + \unsaved + \saved
+& + \unsaved + \saved \\
 \end{split}\]
-%
+
+This property reuses most of the structure of the core property. Here we will highlight
+the definitions that have changed. Namely, the {\sc Call} rule for \(\stepsto_C\) now
+applies the saving function to determine which registers are saved. The remaining rules
+remain unchanged. Note that this means that at any given time, a register will be marked
+\(\saved\) or \(\unsaved\) depending on the most recent call chronologically (i.e., it is
+not nested like \(\sealed{\underscore}\)). This is because the protected and secret sets will be based
+only on the entry state of the call, and those are all that affect observational properties.
+
 \begin{tabular}{l}
   {\sc Call} \\
   \judgmenttwobrlong[]
@@ -2169,7 +2182,6 @@ observational properties.
                     {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
                     {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)} \\
 \end{tabular}
-The remaining rules are the same as in the simple model.
 
 \definition Let the protected set of a context, \(\prot_S(\domMap,\rts)\),
 be the set of elements \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
@@ -2202,12 +2214,10 @@ which are labeled with the range of depths of the caller that has passed them.
 \stackDom \in \STKDOMS ::= & \outside + \unsealed\\
 & + \sealed{\depth} + \passed{\depth,\depth'}
 \end{split}\]
-The definition of context looks the same, but is based on the revised definition of \(\STKDOMS\):
-\[\context \in \CONTEXTS ::= (\domMap \in \COMPONENTS \rightarrow \STKDOMS)
-\times (\rts \in \listT (\target)) \]
-The initial context again maps all elements to \(\unsealed\).
+
 We straightforwardly describe how the sealing convention and passing predicate combine to
-update a domain map at a call from depth \(\depth\).
+update a domain map at a call from depth \(\depth\), written as functions \(\mathit{push}\)
+and \(\mathit{pop}\) and written here as inference rules.
 
 \judgmentthree[]
               {\(\domMap ~ \component = \unsealed\)}
@@ -2228,8 +2238,6 @@ update a domain map at a call from depth \(\depth\).
          {}
          {\((\mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ \depth) \component = \domMap ~ \component\)}
 
-         At the matching return we just unseal the elements at depth \(\depth\):
-
 \judgment[]
          {\(\domMap ~ \component = \sealed{\depth}\)}
          {\((\mathit{pop} ~ \domMap ~ \depth) \component = \domMap ~ \component\)}
@@ -2244,7 +2252,7 @@ update a domain map at a call from depth \(\depth\).
          {}
          {\((\mathit{pop} ~ \domMap ~ \depth) \component = \domMap ~ \component\)}
 
-Now we can inductively define the context update function, as before.
+These are applied to update the context at calls and returns, respectively.
 
 \begin{tabular}{l}
   {\sc Call} \\
