@@ -130,7 +130,7 @@ of concrete examples of attacks that they can prevent---corruption of return
 addresses, buffer overflows, use of uninitialized variables, etc.---leaving
 a more abstract characterization to the reader's intuition.  But these
 mechanisms can be quite intricate, and the behaviors they aim to prevent are
-subtle and varied.  It can be hard to guess, based only on informal
+subtle and varied. It can be hard to guess, based only on informal
 intuitions, whether a given mechanism actually blocks all potential
 attacks---or, conversely, whether it is overly conservative and disallows
 system behaviors that are actually safe.
@@ -138,7 +138,9 @@ To settle such questions with confidence,
 we need a precise, generic, and formal specification for stack
 safety, as a basis both for comparing the security claims of different
 enforcement techniques and for validating that these claims
-are met by particular implementations.
+are met by particular implementations. With the exception of the model used
+in Skorstengaard et al.'s StkTokens work~\cite{SkorstengaardSTKJFP}, which we
+will discuss in Section \ref{sec:relwork}, there is a dearth of such properties.
 
 We propose such a characterization using the tools of language-based
 security~\cite{sabelfeld2003language}. The informal claim that
@@ -171,8 +173,6 @@ We can also, optionally, enforce {\em well-bracketed control
 flow (WBCF)}~\cite{SkorstengaardSTKJFP}---a global requirement that
 callees must always return to their immediate caller, if they return
 at all.
-\apt{Originally, we were using this spot to contrast with Skorstengaard et al. in the intro.
-  Do we really need to do that? Reads better without!}
 
 For confidentiality and integrity, we consider both {\em stepwise}
 and {\em observational} variants.  The simpler stepwise
@@ -1069,9 +1069,8 @@ a relation between machine states and the addresses that should be sealed.
 If a state's \(\PCname\) is annotated as a call, the sealing convention tells us
 which addresses must be protected until the return. Similarly, we abstract over what
 it means to return with a {\em return convention},
-%\(\retcon ~ (\mach \in \MACHS) ~ (\mach' \in \MACHS)\),
-\(\retcon \subseteq (\MACHS \times \MACHS)\),
-which relates call states to the states that can be considered valid returns to that call.
+\(\retcon ~ (\mach \in \MACHS) \subseteq \MACHS\), a function from states to sets of states,
+which maps call states to the states that can be considered valid returns to that call.
 The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
 and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
 
@@ -1644,12 +1643,12 @@ void f(int &a) {
 \paragraph*{Parameters Passed on the Stack}
 %
 Up to this point we have ignored function arguments, by assuming that they are placed
-in registers (which are implicitly shared by all functions).
-We now show how to implement two kinds of protected
-sharing of stack contents: passing by value on the stack, and passing by reference. We first explore
-some examples and then extend our formalization.
+in registers (which are shared by all functions).
+We now implement protected
+sharing of stack contents, as would be used for passing by value on the stack and for passing by reference.
+Here we give an example and high level discussion; the formalization can be found in Appendix \ref{app:argpass}.
 
-Example~\ref{fig:passingsimple} shows a sample trace of a program that passes
+Example~\ref{fig:passing} shows a sample trace of a program that passes
 variables by reference. In this example, written in C++ notation,
 {\tt f} takes a single argument by reference (the diagram displays it in magenta). The function
 {\tt main} calls {\tt f}, passing a reference to {\tt x}, then clears {\tt x} and calls
@@ -1669,7 +1668,6 @@ At the initial call, the address of {\tt x} is marked as passed, and {\tt f} is 
 return, {\tt main}'s frame is unsealed. At the second call it is the address of {\tt y} that is marked as passed,
 and when {\tt f} instead tries to write to {\tt x}, it violates integrity.
 
-This extension to our model is formalized in Appendix \ref{app:argpass}.
 
 When passing by reference, it is possible to repeatedly pass the same reference further
 and further down the stack. Note, however, that this sharing of the reference must be over
