@@ -294,8 +294,8 @@ int main() {
 
 
 int f() {
-  int y, z;
-  z = *(&y-2);
+  int y;
+  y = *(&y-2);
   *(&y-2) = 0;
   return 5;
 }
@@ -415,95 +415,8 @@ be treated properly later.
 Figure~\ref{fig:int1} shows a program with simple integrity and confidentiality violations. Function {\tt main}
 calls function {\tt f}, which reads and then overwrites {\tt main}'s
 variable {\tt x}. (Of course, this is illegal C, but it is characteristic of what buggy or malicious code might do.)
-In the initial memory layout the entire stack is {\em unsealed},
-meaning that it is eligible to be written to. At the call from {\tt main} to
-{\tt f}, {\tt main}'s locals are {\em sealed} with {\tt main}'s depth,
-in this case 0. (Note that this does not include the return address, which is saved
-by the call instruction.)
-Sealing is the fundamental integrity contract between the caller and callee:
-{\tt main} expects that {\tt x} will be unchanged when it gets control back,
-and usually at every step in between.
-This leads to a simple, intuitive statement of {\em stepwise integrity}:
-if a element is sealed before a step, it will be unchanged afterward.
-The write at line 12 violates this property.
 
-\begin{figure}
-\centering
-\addtolength{\tabcolsep}{-1em}
-\begin{tabular}{l | l}
-  \multicolumn{2}{c}{
-    2 \hspace{-1.5em}
-    \memoryaddrs{8em}
-    \memory{4}{\unsealc}
-    ~$\cdots$
-    \vspace{.5em}
-  } \\
-  11 \hspace{-1.5em}
-  \memoryaddrs{21em}
-  \memory{1}{\unsealc}
-  \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{42}
-  &
-  \memoryaddrs{21em}
-  \memory{1}{\unsealc}
-  \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-10em}{0.75em}{\(v_1\)}
-  \MemoryLabel{-6em}{0.75em}{\(v_2\)}
-  \\
-  12 \hspace{-1.5em}
-  \memoryaddrs{21em}
-  \memory{1}{\unsealc}
-  \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{42}
-  &
-  \memoryaddrs{21em}
-  \memory{1}{\unsealc}
-  \memory{1}{\retptrc}
-  \memory{2}{\unsealc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-6em}{0.75em}{\(v_2\)}
-  \\
-  13 \hspace{-1.5em}
-  \memoryaddrs{21em}
-  \memory{1}{\unsealc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  \memory{1}{\badc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{42}
-  \MemoryLabel{-6em}{0.75em}{42}
-  \vspace{.5em}
-  &
-  \memoryaddrs{21em}
-  \memory{1}{\unsealc}
-  \memory{1}{\retptrc}
-  \memory{1}{\unsealc}
-  \memory{1}{\badc}
-  ~$\cdots$
-  \MemoryLabel{-19em}{0.75em}{\(v_0\)}
-  \MemoryLabel{-6em}{0.75em}{\(v_0\)}
-  \vspace{.5em}
-\end{tabular}
-\addtolength{\tabcolsep}{1em}
-
-\vspace{\abovedisplayskip}
-
-\caption{Noninterference, violated}
-\vspace*{-1em}
-\label{fig:conf1}
-\end{figure}
-
-
-But before violating integrity, {\tt f} violates confidentiality by
-reading {\tt x}.
+First, {\tt f} violates confidentiality by reading {\tt x}.
 Confidentiality states intuitively that a callee is insensitive to
 the context of its call (except for its arguments and any global
 variables).
@@ -511,9 +424,7 @@ We state this as a form of {\em noninterference}~\cite{Goguen1982SecurityPA}.
 Noninterference describes knowledge: its standard form states that for state elements
 containing secret values, we can substitute any values whatsoever for the secrets
 without changing the effect of our computation on non-secret values.
-% \bcp{That's too loose.  Even for standard NI, high inputs
-% are allowed to change high results.  And for us it's even more subtle, since
-% a given address can switch from high to low when a function returns.}
+
 If there exists some value for which we see different results, then
 in fact we can learn something about the initial state by observing those results.
 To adapt this to the stack, the notion of ``secret'' must vary with function
@@ -540,6 +451,73 @@ the primary state and the variant will step in lockstep until they
 return. To step in lockstep
 means that if both states step---that is, neither the primary nor the variant failstops---any
 state element that changes in the original will do the same in the variant.
+
+Then, line 12 violates integrity.
+In the initial memory layout the entire stack is {\em unsealed},
+meaning that it is eligible to be written to. At the call from {\tt main} to
+{\tt f}, {\tt main}'s locals are {\em sealed} with {\tt main}'s depth,
+in this case 0. (Note that this does not include the return address, which is saved
+by the call instruction.)
+Sealing is the fundamental integrity contract between the caller and callee:
+{\tt main} expects that {\tt f} will not change {\tt x}.
+This leads to a simple, intuitive statement of {\em stepwise integrity}:
+if a element is sealed before a step, it will be unchanged afterward.
+Overwriting {\tt x} violates this property.
+
+\begin{figure}
+\centering
+\addtolength{\tabcolsep}{-1em}
+\begin{tabular}{l | l}
+  \multicolumn{2}{c}{
+    2 \hspace{-1.5em}
+    \memoryaddrs{8em}
+    \memory{3}{\unsealc}
+    ~$\cdots$
+    \vspace{.5em}
+  } \\
+  11 \hspace{-1.5em}
+  \memoryaddrs{17em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-16em}{0.75em}{42}
+  &
+  \memoryaddrs{17em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
+  \memory{1}{\unsealc}
+  ~$\cdots$
+  \MemoryLabel{-16em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-6em}{0.75em}{\(v_1\)}
+  \\
+  12 \hspace{-1.5em}
+  \memoryaddrs{17em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
+  \memory{1}{\badc}
+  ~$\cdots$
+  \MemoryLabel{-16em}{0.75em}{42}
+  \MemoryLabel{-6em}{0.75em}{42}
+  \vspace{.5em}
+  &
+  \memoryaddrs{17em}
+  \memory{1}{\unsealc}
+  \memory{1}{\retptrc}
+  \memory{1}{\badc}
+  ~$\cdots$
+  \MemoryLabel{-16em}{0.75em}{\(v_0\)}
+  \MemoryLabel{-6em}{0.75em}{\(v_0\)}
+  \vspace{.5em}
+\end{tabular}
+\addtolength{\tabcolsep}{1em}
+
+\vspace{\abovedisplayskip}
+
+\caption{Noninterference, violated}
+\vspace*{-1em}
+\label{fig:conf1}
+\end{figure}
 
 
 \begin{figure}
@@ -580,9 +558,8 @@ int g() {
 \label{fig:conf2}
 \end{figure}
 
-
-It may be unclear in Figure~\ref{fig:conf1} why we vary the initial values of {\tt y}
-and {\tt z} as well as that of {\tt x}. This is to detect some violations of so-called
+It may be unclear in Figure~\ref{fig:conf1} why we vary the initial value of {\tt y}
+as well as that of {\tt x}. This is to detect some violations of so-called
 {\em temporal stack safety}.
 Consider the code in Figure~\ref{fig:conf2}.
 Using the same compilation strategy as before, {\tt y} and {\tt z} will end up occupying the
