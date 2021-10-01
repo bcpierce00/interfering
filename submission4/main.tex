@@ -89,7 +89,7 @@ state in each caller's stack frame is held invariant by the callee''),
 and a confidentiality property (``the callee's behavior is insensitive to the
 caller's private state''), plus an optional control-flow property.
 
-We use these properties to validate the stack-safety {\em micro-policies}
+We use these properties to validate the stack-safety micro-policies
 proposed by Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}.
 Specifically, we check (with
 property-based random testing) that their ``eager''
@@ -116,8 +116,7 @@ bounds checking~\cite{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
 split stacks~\cite{Kuznetsov+14},
 shadow stacks~\cite{Dang+15,Shanbhogue+19},
 capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJFP,Georges+21},
-and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18}. \apt{Can we choose a bibstyle that
-  doesn't bracket each reference separately?}
+and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18}.
   \ifaftersubmission\apt{Mostly from
   nick; there could be more}\bcp{Yes, going back to MIT days---we should
   include several more of these, if only to give readers the impression that
@@ -138,15 +137,16 @@ To settle such questions with confidence,
 we need a precise, generic, and formal specification for stack
 safety, as a basis both for comparing the security claims of different
 enforcement techniques and for validating that these claims
-are met by particular implementations. With the exception of the model used
+are met by particular implementations. With the notable exception of the model used
 in Skorstengaard et al.'s StkTokens work~\cite{SkorstengaardSTKJFP}, which we
-will discuss in Section \ref{sec:relwork}, there is a dearth of such properties.
+discuss in Section \ref{sec:relwork}, there is a dearth of such properties in
+the literature.
 
-We propose such a characterization using the tools of language-based
+We propose a novel characterization of stack safety using the tools of language-based
 security~\cite{sabelfeld2003language}. The informal claim that
 ``stack safety protects a caller
 from its callee'' amounts to saying that it guarantees the {\em integrity} and
-{\em confidentiality} of the caller’s local state until it regains control.
+{\em confidentiality} of the caller’s local state until it regains control after the call.
 
 A key technical novelty in these definitions,
 compared to standard formulations of confidentiality and integrity from the
@@ -171,16 +171,16 @@ until the callee returns.
 %
 We can also, optionally, enforce {\em well-bracketed control
 flow (WBCF)}~\cite{SkorstengaardSTKJFP}---a global requirement that
-callees must always return to their immediate caller, if they return
+each callee must always return to its immediate caller, if it returns
 at all.
 
 For confidentiality and integrity, we consider both {\em stepwise}
 and {\em observational} variants.  The simpler stepwise
 variants formalize the intuition that a caller's local data is {\em never}
 read or modified during a call. The observational variants
-allow a callee to read from and write to their caller's stack frame, as
-long as nothing that they read affects their observable behavior and nothing
-they write affects the observable behavior of the caller after they return.
+allow a callee to read from and write to its caller's stack frame, as
+long as nothing that it reads affects its observable behavior and nothing
+that it writes affects the observable behavior of the caller after it returns.
 The observational properties are more extensional, and represent a baseline
 that any reasonable protection mechanism ought to enforce,
 even if it does not prevent every single dangerous read or write.
@@ -204,7 +204,7 @@ in testing and the enforcement mechanism itself.
 We find that Roessler and DeHon's {\em Depth Isolation} micro-policy, in
 which memory within each stack frame is tagged with the depth of
 the function activation that owns the frame and access is
-then permitted only when an activation at that depth is currently executing, validates our
+permitted only when an activation at that depth is currently executing, validates our
 stepwise properties. On the other hand, our testing reveals that \emph{Lazy Tagging and Clearing}
 violates the temporal aspect of confidentiality in
 corner cases where data can leak across repeated calls to the same callee,
@@ -233,20 +233,20 @@ For ease of exposition, we initially assume a single simple
 stack with no sharing between callers and callees: all parameters and return
 values are passed in registers.  Later, we will introduce enhanced versions
 supporting
-1) passing of scalar stack data,
-2) callee-saves registers calling conventions, and
-3) a coroutine system with a static layout.
+(1) passing of scalar stack data,
+(2) callee-saves registers calling conventions, and
+(3) a coroutine system with a static layout.
 
 We begin with an informal overview of our key ideas via
-examples (\cref{sec:running-example}), followed by a description of our key
+examples (\cref{sec:running-example}), followed by a description of our
 assumptions about the machine environment and threat model (\cref{sec:setup}).
 We then offer the following contributions:
 
 \begin{itemize}
 \item We adapt concepts of integrity and confidentiality from language-based
-security, combine these with an existing notion of well-bracketed
+security and combine these with an existing notion of well-bracketed
 control flow to formalize a {\em stepwise stack-safety}
-property, and which captures the intuitive concept of
+property that captures the intuitive concept of
 strict stack safety enforced over each step of execution~(\cref{sec:prelim,sec:lse}).
 As a case study, we explore how our properties are enforced
 by the {\em Depth Isolation} micro-policy
@@ -261,6 +261,7 @@ extended to describe argument passing on the stack, callee-saves registers, exce
   our properties and micro-policies (\cref{sec:testing})
 \end{itemize}
 \Cref{sec:relwork,sec:future} discuss related and future work.
+\apt{Say something about the Coq artifact?}
 
 \section{Key Ideas by Example}
 \label{sec:running-example}
@@ -392,7 +393,7 @@ We refer to registers and addresses collectively as {\em state elements} or just
   %% something like ``Snapshots,'' or at least explain early on in the text
   %% that this is what they are.}
 
-Labels under the boxes indicate an assignment of the address to a
+Labels under the boxes indicate an association of the address to a
 {\em domain}---a set of intended access
 rights. Unless otherwise marked, each address retains its domain as
 instructions execute. %, as hinted by their colors.
@@ -403,7 +404,7 @@ that the enforcement mechanism must adhere to.
 The possible domains
 are \(\unsealed\) (in the stack and accessible to writes), \(\sealed{\depth}\)
 (in the stack and reserved for the caller at depth \(\depth\)), or \(\outside\)
-(outside the stack entirely.)
+(outside the stack entirely).
 % These are abbreviated \(U\) and \(S(\dots)\)\bcp{Nope} in the figures.
 Global variables and code, which are not shown in the figures, would
 also be labeled \(\outside\). Return pointers, labeled ``RetPtr,''
@@ -411,8 +412,8 @@ are shaded black and ignored for simplicity for now---they will
 be treated properly later.
 (We will introduce some other parts of the context as needed.)
 
-Figure~\ref{fig:int1} shows a program with simple integrity and confidentiality violations. It consists of a {\tt main}
-function that performs a call to a function {\tt f}, which reads and then overwrites {\tt main}'s
+Figure~\ref{fig:int1} shows a program with simple integrity and confidentiality violations. Function {\tt main}
+calls function {\tt f}, which reads and then overwrites {\tt main}'s
 variable {\tt x}. (Of course, this is illegal C, but it is characteristic of what buggy or malicious code might do.)
 In the initial memory layout the entire stack is {\em unsealed},
 meaning that it is eligible to be written to. At the call from {\tt main} to
@@ -424,6 +425,7 @@ Sealing is the fundamental integrity contract between the caller and callee:
 and usually at every step in between.
 This leads to a simple, intuitive statement of {\em stepwise integrity}:
 if a element is sealed before a step, it will be unchanged afterward.
+The write at line 12 violates this property.
 
 \begin{figure}
 \centering
@@ -609,7 +611,7 @@ int main() {
 
 void f() {
   int y;
-  if (!stash) {
+  if (stash == 0) {
     stash = *(&y-1);
   } else {
     *(&y-1) = stash;
@@ -635,7 +637,7 @@ void f() {
 
 10 f:     add $1,%sp     ; alloc frame
 11        cmp stash, $0  ; stash = 0?
-12        breq #15       ; branch if so
+12        brneq #15      ; branch if not
 13        mov -2(%sp),stash ; set stash
 14        jmp #17
 15        mov stash,-2(%sp) ; get stash
@@ -728,7 +730,7 @@ Our stack safety properties do not assume that control flow follows a typical st
 of matching sets of calls and returns nested within one another.
 Rather, they aim to capture what it means to protect data even in the presence of control-flow attacks.
 Consider Figure~\ref{fig:controlflow}.
-(Now we treat return addresses properly, but write them as line numbers, in the
+(Here we treat return addresses properly, but write them as line numbers, in the
 form $\#n$.)
 Function {\tt f} is called twice, at instructions 3 and 5; it should therefore return to instructions
 4 and 6, respectively. But during the first call it stashes its
@@ -765,8 +767,8 @@ arguably unsafe if the ancestor depends on the skipped function completing its e
 it returns.
 %
 Thus, another aspect of safe use of the stack is that calls
-and returns should be correctly nested---a caller should
-only return to its own callee.  This is what Skorstengaard et al.\cite{SkorstengaardSTKJFP}
+and returns should be correctly nested---a callee should
+only return to its own caller.  This is what Skorstengaard et al.\cite{SkorstengaardSTKJFP}
 call \emph{well-bracketed control flow (WBCF)}, and is orthogonal to
 confidentiality and integrity, so we treat is as an optional additional property.
 
@@ -787,7 +789,7 @@ has returned. Our examples consider machines with a stack pointer (\(\rsp\)),
 in which the current stack frame is everything below the stack pointer and above the
 previous frame, and where a call from instruction \(\addr_\PCname\) with
 stack pointer \(\addr_\rsp\)
-is considered to have returned when the pc is at \(\addr_\PCname + 4\) and the stack pointer
+is considered to have returned when the \(\PCname\) is at \(\addr_\PCname + 4\) and the stack pointer
 is again at \(\addr_\rsp\). However, our properties apply equally to
 other architectural conventions, such as frame pointers.
 The non-stack memory can be used in any way, including
@@ -798,9 +800,10 @@ enforcement mechanism.
 Our core property assumes that all register values passed to the callee are public,
 and that all data in a stack frame is private.
 Some calling convention choices, such as callee-saves registers and argument
-passing on the stack, are not supported directly by this property; we introduce
-secondary properties that use the same underlying formalism to handle these cases,
-in Section~\ref{sec:ext}.
+passing on the stack, are not supported directly by this property;
+in Section~\ref{sec:ext},
+we introduce
+secondary properties that use the same underlying formalism to handle these cases.
 
 \paragraph*{What is a ``call''?}  One significant challenge in formulating our
 properties arises from the fact that we want to define stack safety at the
@@ -835,6 +838,7 @@ depend on knowing where calls are.
 Returns, on the other hand, need not be annotated: we can tell when a callee
 has returned control to the caller when...we see control return to the
 caller! We don't require the callee's cooperation at all.
+\ifaftersubmission\apt{Rest of this is repetitious with machine model section above.}\fi
 For example, under a standard calling convention, we can see that a
 return has occurred when the state of the machine reaches a state where
 the stack pointer has the same value as it did at the point of some earlier
@@ -847,13 +851,13 @@ that we are given some way of telling when a given machine state is a
 
 We model the machine's behavior as a partial step function over machine states.
 Machine states may contain arbitrary data, including data used exclusively by the
-enforcement mechanism, while our properties contend only with the data that are
+enforcement mechanism, while our properties refer only to the data that are
 relevant to normal execution: addresses and registers.
 When the machine does not step from a given state, this
 is a {\em failstop}, halting the program before it can perform an
 action that would violate the security property;
 our properties are therefore naturally \emph{termination insensitive.}
-
+%
 That said, our model is meant to apply generically to any enforcement mechanism,
 including those that do not failstop, such as
 code rewriting techniques that protect stack safety directly by
@@ -861,10 +865,10 @@ restricting the set of possible initial states.
 
 Most enforcement mechanisms make assumptions about their initial conditions,
 so we assume that any given machine will restrict its conditions a ``well-formedness''
-criterion on initial states, ensuring that they are set up properly. In the case of
+criterion on initial states, ensuring that they are set up properly. For eample, in the case of
 Roessler and DeHon's \cite{DBLP:conf/sp/RoesslerD18}'s micro-policies, well-formedness
 requires that all annotated instructions will be situated at the appropriate instruction
-of a {\em blessed sequence} --- a series of instructions that are tagged to enforce correct
+of a {\em blessed sequence}---a series of instructions that are tagged to enforce correct
 behavior. It can then failstop if it would
 execute the blessed sequence out of order.
 
@@ -884,11 +888,11 @@ by Azevedo de Amorim et al.~\cite{DBLP:conf/post/AmorimHP18}, and we expect that
 combined cleanly to characterize correct protection of stack + heap.
 
 We do not currently support:
-1) address-taken locals, as a satisfactory treatment of these seems to require
-integration with a more general model of memory safety,
-2) tail calls,
-3) dynamic code generation, which is difficult to integrate with code annotations in general, or
-4) concurrency --- we can handle a limited form of coroutines, but
+address-taken locals, as a satisfactory treatment of these seems to require
+integration with a more general model of memory safety;
+tail calls;
+dynamic code generation, which is difficult to integrate with code annotations in general; or
+concurrency---we can handle a limited form of coroutines, but
   not full-blown preemptive concurrency.
 
 \section{Machines and Traces}
@@ -1554,7 +1558,7 @@ int main() {
 
 
 void f(int &a) {
-  if(!stash)
+  if (stash == 0)
     stash = &a;
   *stash = 5;
   return;
@@ -1579,9 +1583,9 @@ void f(int &a) {
 11        ret
 
 20 f:     cmp stash, $0   ; stash = 0?
-21        breq #13        ; branch if so
+21        brneq #23       ; branch if not
 22        mov %ra,stash   ; stash = &a
-23        jmp #15
+23        jmp #25
 24        mov $5, (stash) ; *stash = 5
 25        ret
 }
