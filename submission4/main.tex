@@ -1732,12 +1732,15 @@ In our context update rules, calls and returns work the same as in the subroutin
 with domain updates restricted to the top-level domain corresponding to the active stack,
 and likewise using the return target stacks. We will omit these rules and focus on the new yield rule.
 
-\judgmenttwobr[ Yld]
-             {\(\mach \stepsto \mach'\)}
-             {\(\stackid \not = \stackid' = \stackof ~ (\mach'[\rsp])\)}
-             {\(\yts ~ \stackid'\)}
-             {\(\yts' = \yts[\stackid \mapsto \ycon ~ \mach]\)}
-             {\(\mach,(\domMap,\rts,\yts,\stackid) \stepsto_C \domMap,\rts,\yts',\stackid'\)}
+\begin{tabular}{l}
+  {\sc Yield} \\
+  \judgmenttwobr[]
+                {\(\mach \stepsto \mach'\)}
+                {\(\stackid \not = \stackid' = \stackof ~ (\mach'[\rsp])\)}
+                {\(\yts ~ \stackid'\)}
+                {\(\yts' = \yts[\stackid \mapsto \ycon ~ \mach]\)}
+                {\(\mach,(\domMap,\rts,\yts,\stackid) \stepsto_C \domMap,\rts,\yts',\stackid'\)} \\
+\end{tabular}
 
 First, we determine which coroutine we are yielding to by
 checking which stack the stack pointer of the next state is pointing to. Then we can only yield
@@ -2160,11 +2163,14 @@ observational properties.
 & + \unsaved + \saved
 \end{split}\]
 %
-\judgmenttwobrlong[ Call]
-                  {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
-                  {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
-                  {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
-                  {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
+\begin{tabular}{l}
+  {\sc Call} \\
+  \judgmenttwobrlong[]
+                    {\(\codemap ~ (\mach ~ \PCname) = \callmap(S)\)}
+                    {\(\components = \{\component | \sealcon ~ \mach ~ \component\}\)}
+                    {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}][\reg \mapsto S(\reg) ~ | ~ r \in \REGS]\)}
+                    {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)} \\
+\end{tabular}
 The remaining rules are the same as in the simple model.
 
 \definition Let the protected set of a context, \(\prot_S(\domMap,\rts)\),
@@ -2242,27 +2248,31 @@ update a domain map at a call from depth \(\depth\).
 
 Now we can inductively define the context update function, as before.
 
-\judgmenttwo[ CallSeal]
-            {\(\codemap ~ (\mach ~ \PCname) = \callmap(P)\)}
-            {\(\domMap' = \mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ |\rts|\)}
-            {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)}
+\begin{tabular}{l}
+  {\sc Call} \\
+  \judgmentbr[]
+              {\(\codemap ~ (\mach ~ \PCname) = \callmap(P)\)}
+              {\(\domMap' = \mathit{push} ~ \domMap ~ \sealcon ~ P ~ \mach ~ |\rts|\)}
+              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)} \\
+\end{tabular}
+              
+\vspace*{-1ex}
+\begin{tabular}{l}
+  {\sc ReturnFound} \\
+  \judgmenttwo[]
+              {\(\mach \stepsto \mach' \in \target\)}
+              {\(\domMap' = \mathit{pop} ~ \domMap ~ |\rts|\)}
+              {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)} \\
+\end{tabular}
 
 \vspace*{-1ex}
-\judgmenttwo[ ReturnFound]
-            {\(\mach \stepsto \mach' \in \target\)}
-            {\(\domMap' = \mathit{pop} ~ \domMap ~ |\rts|\)}
-            {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap',\rts\)}
-
-\vspace*{-1ex}
-\judgmenttwo[ ReturnRec]
+\begin{tabular}{l}
+  {\sc ReturnRec} \\
+  \judgmenttwo[]
               {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
               {\(\domMap'' = \mathit{pop} ~ \domMap' ~ |\rts|\)}
-              {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'',\rts'\)}
-
-\vspace*{-3ex}
-\judgment[ Default]
-         {}
-         {\(\underscore,\context \stepsto_C \context\)}
+              {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'',\rts'\)} \\
+\end{tabular}
 
 \definition The \emph{protected set} of a context, \(\prot_P(\domMap,\rts)\),
 is the set of elements \(\component\) such that either \(\domMap ~ \component = \sealed{\underscore}\)
@@ -2296,15 +2306,23 @@ or an exception, \(\mathit{TL} ::= \text{\sc CR} + \text{\sc EX}\), which annota
 We add a rule to handle {\sc SetJump} annotations, and modify the {\sc Call} rule to insert {\sc CR} labels into the
 return stack.
 
+\begin{tabular}{l}
+  {\sc SetJump} \\
 \judgment[]
          {\(\codemap ~ (\mach ~ \PCname) = {\sc SetJump}\)}
          {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\text{\sc EX}, \retcon ~ \mach)::\rts\)}
-\judgmenttwobrlong[]
-              {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
-              {\(\components = \{\component | \sealcon ~ \mach[\component]\}\)}
-              {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
-              {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\text{\sc CR}, \retcon ~ \mach)::\rts\)}
-The return rules operate identically regardless of the target labels.
+\end{tabular}
+
+\begin{tabular}{l}
+  {\sc Call} \\
+  \judgmenttwobrlong[]
+                    {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
+                    {\(\components = \{\component | \sealcon ~ \mach[\component]\}\)}
+                    {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
+                    {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\text{\sc CR}, \retcon ~ \mach)::\rts\)} \\
+\end{tabular}
+
+The return rules operate identically to the core model, regardless of the target labels.
 
 \definition
 We define \textbf{\em stepwise stack integrity}, \textbf{\em stepwise stack confidentiality},
