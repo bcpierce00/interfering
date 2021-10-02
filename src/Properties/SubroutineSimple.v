@@ -5,7 +5,7 @@ Require Import Bool.
 Require Import ZArith.
 Require Import Nat.
 
-From StackSafety Require Import Trace MachineModule MapModule CtxModule PolicyModule MPC ObsTrace.
+From StackSafety Require Import Trace MachineModule MapModule PolicyModule CtxModule MPC ObsTrace TraceProperties.
 
 Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
   Import M.
@@ -126,11 +126,7 @@ Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
   Definition CtxStateUpdate (m:MachineState) (prev:CtxState) : CtxState :=
     let '(dm, rts) := prev in
     match cdm (vtow (proj m PC)) with
-    | Some call => (* On a call, we check what the sealing convention wants to seal.
-                      If a component is Sealed, it can't be sealed again under the new depth.
-                      Everything else retains its old status, presumably Unsealed. In the standard,
-                      stack pointer-based sealing convention, sc seals everything below the stack
-                      pointer, but previously sealed frames retain their old owners. *)
+    | Some call =>
       let d := length rts in
       let dm' := fun k =>
                     match k, dm k with
@@ -144,8 +140,7 @@ Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
                     end in
       let rts' := rc m :: rts in
       (dm', rts')
-    | Some ret => (* On a return, we unseal everything sealed by the highest sealed depth. That will
-                     always be one less than the current depth. Everything else remains. *)
+    | Some ret =>
       match popTo (fst (step m)) rts with
       | Some rts' =>
 (*        exception "BUT NOT HERE" *)
@@ -188,28 +183,6 @@ Module SimpleProp (M : Machine) (P : Policy M) (MM : MapMaker M).
       fst c k = Sealed d ->
       proj m k = proj m' k.
 
-  (* TODO: Sean, check this corresponds? *)
-  Definition SimpleStackIntegrityStepP fuel m p c :=
-    let fix aux fuel m p c :=
-        match fuel with
-        | O => true
-        | S fuel' => 
-          match mpcstep (m,p,c) with
-          | None => true (* right? *)
-          | Some (m', p', c', o) =>
-            andb
-              (List.forallb (fun k =>
-                            match fst c k with
-                            | Sealed _ =>
-                              weq (vtow (proj m k)) (vtow (proj m' k))
-                            | _ => true
-                            end)
-                            (getComponents m'))
-              (aux fuel' m' p' c')
-          end
-        end in
-    aux fuel m p c.
-  
   (* In addition to integrity, we have a confidentiality property. Consider in our
      example when B called C and then D. Suppose that B has some secret data, say a capability on some
      system critical resource, that A, C and D should not access. Clearly, D should not read
@@ -260,21 +233,45 @@ Module SimpleProp (M : Machine) (P : Policy M) (MM : MapMaker M).
       variantOf (fun k => fst c k = Sealed d) m n ->
       MPCTraceToWhen P (n,p,c) N ->
       Lockstep M N.
+
+  (* Simpler definitions using the generic trace properties in TraceProperties.v *)
+
+  Module TPImp := TraceProps M P Dom.
+  Import TPImp.
   
-  (* ***** Control Flow Properties ***** *)
+  Definition StackIntegrityStep' : Prop :=
+    forall m c p,
+      Reachable (m,p,c) ->
+      StepIntegrity (fun k => exists d, fst c k = Sealed d) (m,p,c).
+    
+  Definition StackConfidentialityStep' : Prop :=
+    forall MCP d m p c,
+      let P := (fun '(m,p,c) => length (snd c) >= d) in
+      let K := (fun k => (exists d, fst c k = Sealed d) \/ (fst c) k = Unsealed) in
+      ReachableSegment P MCP ->
+      head MCP = (m,p,c) ->
+      TraceConfidentialityStep K P MCP.
 
-  (* Do we even value control separation? *)
-(*    Definition ControlSeparation : Prop :=
-    forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,
-      InTrace (m1,p1) (MPTraceOf (minit, pOf minit)) ->
-      mpstep (m1,p1) = Some (m2, p2,o) ->
-      cdm (proj m1  PC) = inFun f1 ann1 ->
-      cdm (proj m2  PC) = inFun f2 ann2 ->
-      f1 <> f2 ->
-      AnnotationOf cdm (proj m1 PC) = Some call \/
-      AnnotationOf cdm (proj m1 PC) = Some ret. *)
+  (* Observational *)
+  Definition StackIntegriityObs : Prop :=
+    forall MCP d m p c,
+      let P := (fun '(m,p,c) => length (snd c) >= d) in
+      let K := (fun k => (exists d, fst c k = Sealed d)) in
+      ReachableSegment P MCP ->
+      head MCP = (m,p,c) ->
+      TraceIntegrityObs K MCP.
+  
+  Definition StackConfidentialityObs : Prop :=
+    forall MCP d m p c,
+      let P := (fun '(m,p,c) => length (snd c) >= d) in
+      let K := (fun k => (exists d, fst c k = Sealed d) \/ (fst c) k = Unsealed) in
+      ReachableSegment P MCP ->
+      head MCP = (m,p,c) ->
+      TraceConfidentialityObs K P MCP.
+  
+  (* ***** Well-bracketed Control Flow ***** *)
 
-  Definition ReturnIntegrity : Prop :=
+  Definition WellBracketedControlFlow : Prop :=
     forall mpc mpc' o,
       Reachable mpc ->
       mpcstep mpc = Some (mpc',o) ->
@@ -282,24 +279,6 @@ Module SimpleProp (M : Machine) (P : Policy M) (MM : MapMaker M).
       exists rt rts,
         snd (cstate mpc) = rt :: rts /\
         snd (cstate mpc') = rts.
-
-(* Think about how/whether we deal with entries here.
-
-  Variable em:EntryMap.
-  
-  Definition EntryIntegrity : Prop :=
-  forall mpc1 mpc2 o,
-    Reachable CtxStateUpdate initCtx mpc1 ->
-    mpcstep CtxStateUpdate mpc1 = Some (mpc2,o) ->
-    AnnotationOf cdm (proj (mstate mpc1) PC) = Some call ->
-    em (proj (mstate mpc2) PC) = true. *)
-
-  Definition WellBracketedControlFlow  : Prop :=
-    (*ControlSeparation /\*)
-    (* EntryIntegrity /\*)
-    ReturnIntegrity.
-  
-  (* Continue to SubroutineShare.v, where we enhance the model with sharing between calls. *)
 
 End SimpleProp.
 

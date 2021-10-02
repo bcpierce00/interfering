@@ -148,13 +148,15 @@ Module ShareProp (M : Machine) (P : Policy M) (MM : MapMaker M).
   Module TPImp := TraceProps M P Dom.
   Import TPImp.
 
-  (* So we can do ultra eager integrity, like before. *)
-  Definition StackIntegrityEager : Prop :=
+  (* From now on we use generic trace properties from
+     TraceProperties.v instantiated with our domains. *)
+  
+  Definition StackIntegrityStep : Prop :=
     forall m c p,
       Reachable (m,p,c) ->
       StepIntegrity (Inaccessible c) (m,p,c).
     
-  Definition StackConfidentialityEager : Prop :=
+  Definition StackConfidentialityStep : Prop :=
     forall MCP d m p c,
       let P := (fun '(m,p,c) => length (snd c) >= d) in
       let K := (fun k => Inaccessible c k \/ (fst c) k = Unsealed) in
@@ -162,6 +164,21 @@ Module ShareProp (M : Machine) (P : Policy M) (MM : MapMaker M).
       head MCP = (m,p,c) ->
       TraceConfidentialityStep K P MCP.
 
-  (* Continued in Coroutine.v *)
+  (* Observational *)
+  Definition StackIntegriityObservational : Prop :=
+    forall MCP d m p c,
+      let P := (fun '(m,p,c) => length (snd c) >= d) in
+      let K := (fun k => Inaccessible c k) in
+      ReachableSegment P MCP ->
+      head MCP = (m,p,c) ->
+      TraceIntegrityObs K MCP.
+  
+  Definition StackConfidentialityObservational : Prop :=
+    forall MCP d m p c,
+      let P := (fun '(m,p,c) => length (snd c) >= d) in
+      let K := (fun k => Inaccessible c k \/ (fst c) k = Unsealed) in
+      ReachableSegment P MCP ->
+      head MCP = (m,p,c) ->
+      TraceConfidentialityObs K P MCP.
   
 End ShareProp.

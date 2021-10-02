@@ -4,7 +4,12 @@ Module MPC (M:Machine) (P:Policy M) (C:Ctx M).
   Import M.
   Import P.
   Import C.
-         
+
+  (* For convenience in distinguishing the core machine state (with registers
+     and memory, to which stack safety applies) from the extra policy state
+     (which is unobservable by definition), we separate them into MachineState
+     and PolicyState. Then we add CtxState as in the paper. *)
+
   Definition MPCState : Type := MachineState * PolicyState * CtxState.
   Definition MPCTrace := TraceOf MPCState.
   Definition mstate : MPCState -> MachineState := fun '(m,p,cs) => m.
@@ -12,30 +17,6 @@ Module MPC (M:Machine) (P:Policy M) (C:Ctx M).
   Definition cstate : MPCState -> CtxState := fun '(m,p,cs) => cs.
   
   (********** Machine Lemmas ************)
-  (* TODO: redo for MPCTraces *)
-  (*Lemma MTraceOfInf :
-    forall m,
-      infinite (MTraceOf m).
-  Proof.  
-    intros m m' H.
-    remember (MTraceOf m) as M.
-    generalize dependent m.
-    induction H; intros m HeqM.
-    - rewrite (idTrace_eq (MTraceOf m)) in HeqM.
-      simpl in *.
-      inversion HeqM.
-    - rewrite (idTrace_eq (MTraceOf m)) in HeqM.
-      simpl in *.
-      inversion HeqM; subst; clear HeqM.
-      eapply IHLast; eauto.
-  Qed.
-
- Lemma MPTraceOfHead: forall mp, mp = head (MPTraceOf mp).
-  Proof.
-    intros. destruct mp.  simpl. 
-    (* destruct (mpstep (m,p)); auto; destruct p0; auto. *)
-    (* Qed. *)
-  Abort. (* FIXME *) *)
 
   Definition mpcstep (mpc:MPCState) : option (MPCState * Observation) :=
     option_map
@@ -127,29 +108,10 @@ Module MPC (M:Machine) (P:Policy M) (C:Ctx M).
       f mpc ->
       SplitInclusive f MPC MPCpre MPCsuff ->
       Segment f MPCsuff MPC' ->
-      Segment f (notfinished mpc MPC) MPC'
-  .
-
-  Definition ReachableSegment (f : MPCState -> Prop) (MPC:MPCTrace) : Prop :=
+      Segment f (notfinished mpc MPC) MPC'.
+ 
+ Definition ReachableSegment (f : MPCState -> Prop) (MPC:MPCTrace) : Prop :=
     exists mpinit,
       WFInitMPState mpinit /\ Segment f (MPCTraceOf (mpinit,initCtx (fst mpinit))) MPC.
-
-  Lemma ReachableStepsToWhenSegment :
-    forall mpc mpc' P,
-      Reachable mpc ->
-      StepsToWhen P mpc mpc' ->
-      exists MPC,
-        ReachableSegment P MPC /\
-        head MPC = mpc /\
-        Last MPC mpc'.
-  Proof.
-  Admitted.
-(*    intros. destruct H0 as [O]. induction H0.
-    - exists (finished mpc).
-      split.
-      + unfold ReachableSegment.
-        unfold Reachable in H.
-        destruct H as [mpinit]; exists mpinit.
-        destruct H. split; auto. *)
         
 End MPC.

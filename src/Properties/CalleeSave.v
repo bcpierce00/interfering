@@ -62,11 +62,7 @@ Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
   Definition CtxStateUpdate (m:MachineState) (prev:CtxState) : CtxState :=
     let '(dm, rts) := prev in
     match cdm (vtow (proj m PC)) with
-    | Some call => (* On a call, we check what the sealing convention wants to seal.
-                      If a component is Sealed, it can't be sealed again under the new depth.
-                      Everything else retains its old status, presumably Unsealed. In the standard,
-                      stack pointer-based sealing convention, sc seals everything below the stack
-                      pointer, but previously sealed frames retain their old owners. *)
+    | Some call =>
       let d := length rts in
       let dm' := fun k =>
                     match k, dm k with
@@ -84,8 +80,7 @@ Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
                     end in
       let rts' := rc m :: rts in
       (dm', rts')
-    | Some ret => (* On a return, we unseal everything sealed by the highest sealed depth. That will
-                     always be one less than the current depth. Everything else remains. *)
+    | Some ret => 
       match popTo (fst (step m)) rts with
       | Some rts' =>
        (let d := length rts' in
@@ -119,7 +114,6 @@ Module SimpleProp (M : Machine) (P : Policy M) (MM : MapMaker M).
   Module TPImp := TraceProps M P Dom.
   Import TPImp.
 
-  (* So we can do ultra eager integrity, like before. *)
   Definition StackIntegrity : Prop :=
     forall MPC d m p c,
       let P := (fun '(m,p,c) => length (snd c) >= d) in
@@ -127,7 +121,7 @@ Module SimpleProp (M : Machine) (P : Policy M) (MM : MapMaker M).
       head MPC = (m,p,c) ->
       TraceIntegrityLazy (Inaccessible c) MPC.
   
-  Definition StackConfidentialityEager : Prop :=
+  Definition StackConfidentiality : Prop :=
     forall MCP d m p c,
       let P := (fun '(m,p,c) => length (snd c) >= d) in
       let K := (fun k => Inaccessible c k \/ fst c k = Unsealed) in
@@ -135,7 +129,7 @@ Module SimpleProp (M : Machine) (P : Policy M) (MM : MapMaker M).
       head MCP = (m,p,c) ->
       TraceConfidentialityLazy K P MCP.
   
-  Definition ReturnIntegrity : Prop :=
+  Definition WellBracketedControlFlow : Prop :=
     forall mpc mpc' o,
       Reachable mpc ->
       mpcstep mpc = Some (mpc',o) ->
@@ -143,10 +137,6 @@ Module SimpleProp (M : Machine) (P : Policy M) (MM : MapMaker M).
       exists rt rts,
         snd (cstate mpc) = rt :: rts /\
         snd (cstate mpc') = rts.
-
-  Definition WellBracketedControlFlow  : Prop :=
-    ReturnIntegrity.
-  
 
 End SimpleProp.
 

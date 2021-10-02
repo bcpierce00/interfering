@@ -101,7 +101,7 @@ Module CoroutineDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
                 end in
     (dm,initRM,fun _ => None,sid).
   
-  (* Once again we need an update function for out context. Note that yields don't
+  (* Once again we need an update function for our context. Note that yields don't
      actually change the domain map, as they don't change which addresses belong to which
      stacks. So we still only consider sharing, calls, and returns. *)
   Definition CtxStateUpdate (m:MachineState) (prev:CtxState) : CtxState :=
@@ -189,7 +189,7 @@ Module CoroutProp (M : Machine) (P : Policy M) (MM : MapMaker M).
   Module TPImp := TraceProps M P Dom.
   Import TPImp.
   
-  Definition StackIntegrityUE : Prop :=
+  Definition StackIntegrityEager : Prop :=
     forall k m c p m' p' c' o,
       Reachable (m,p,c) ->
       mpcstep (m,p,c) = Some (m',p',c',o) ->
@@ -200,14 +200,6 @@ Module CoroutProp (M : Machine) (P : Policy M) (MM : MapMaker M).
     forall m c p,
       Reachable (m,p,c) ->
       StepIntegrity (fun k => sm (projw m k) = activeStack sm m) (m,p,c).
-    
-  (* We can actually do ultra eager confidentiality for coroutines without any more complexity,
-     because coroutine properties don't care about allocation and initialization. That only comes
-     when subroutine properties are layered in. *)
-  Definition SealedConfidentialityEager : Prop :=
-    forall sid m p c,
-      Reachable (m,p,c) ->
-      StepIntegrity (CoroutineInaccessible c sid) (m,p,c).
 
   Definition StackConfidentialityEager : Prop :=
     forall sid MCP d m dm depm p,
@@ -225,21 +217,44 @@ Module CoroutProp (M : Machine) (P : Policy M) (MM : MapMaker M).
       ReachableSegment P MPC ->
       TraceConfidentialityStep K P MPC.
 
+  (* Observational *)
+
+  Definition StackIntegriityObservational : Prop :=
+    forall sid MCP d m dm depm p,
+      let P := (fun '(m,p,c) => length (rmof c sid) >= d) in
+      let K := (fun k => StackInaccessible (cstate (head MCP)) k) in
+      ReachableSegment P MCP ->
+      head MCP = (m,p,(dm,depm)) ->
+      TraceIntegrityObs K MCP.
+  
+  Definition CoroutineIntegrityObervational : Prop :=
+    forall sid MCP m dm depm p,
+      let P := (fun '(m,p,c) => activeStack sm m = Some sid) in
+      let K := (fun k => sm (projw (mstate (head MCP)) k) = activeStack sm (mstate (head MCP))) in
+      ReachableSegment P MCP ->
+      head MCP = (m,p,(dm,depm)) ->
+      TraceIntegrityObs K MCP.
+    
+  Definition StackConfidentialityObservational : Prop :=
+    forall sid MCP d m dm depm p,
+      let P := (fun '(m,p,c) => length (rmof c sid) >= d) in
+      let K := (fun k => StackInaccessible (cstate (head MCP)) k \/
+                         dmof (cstate (head MCP)) k = Instack sid Unsealed) in
+      ReachableSegment P MCP ->
+      head MCP = (m,p,(dm,depm)) ->
+      TraceConfidentialityObs K P MCP.
+  
+  Definition CoroutineConfidentialityObservational : Prop :=
+    forall MPC sid,
+      let P := (fun '(m,p,c) => activeStack sm m = Some sid) in
+      let K := (fun k => sm (projw (mstate (head MPC)) k) = activeStack sm (mstate (head MPC))) in
+      ReachableSegment P MPC ->
+      TraceConfidentialityObs K P MPC.
+
+  
   (* ***** Control Flow Properties ***** *)
 
-  (* Finally, we also need to consider control flow properties. These are included here because
-     they don't really change in interesting ways between the different models. *)
-  
-  (*Definition ControlSeparation : Prop :=
-    forall minit m1 p1 m2 p2 o f1 f2 ann1 ann2,
-      InTrace (m1,p1) (MPTraceOf (minit, pOf minit)) ->
-      mpstep (m1,p1) = Some (m2, p2,o) ->
-      cdm (proj m1 PC) = inFun f1 ann1 ->
-      cdm (proj m2 PC) = inFun f2 ann2 ->
-      f1 <> f2 ->
-      AnnotationOf cdm (proj m1  PC) = Some call \/
-      AnnotationOf cdm (proj m1  PC) = Some ret \/
-      AnnotationOf cdm (proj m1  PC) = Some yield. *)
+  (* Finally, we also need to consider control flow properties. *)
 
   Definition YieldBackIntegrity : Prop :=
     forall mpc1 mpc2,
@@ -261,10 +276,4 @@ Module CoroutProp (M : Machine) (P : Policy M) (MM : MapMaker M).
     ReturnIntegrity /\
     YieldBackIntegrity.
 
-  (* Coming soon: lazy properties. *)
-
 End CoroutProp.
-
-(*
-End Coroutine.
-*)

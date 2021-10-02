@@ -48,7 +48,7 @@ Module TraceProps (M : Machine) (P : Policy M) (C : Ctx M).
     K k ->
     proj (mstate mpc) k = proj (mstate mpc') k.
 
-  Definition TraceIntegrityLazy
+  Definition TraceIntegrityObs
              (K : Component -> Prop)
              (M : MPCTrace) : Prop :=
     forall m p c,
@@ -57,7 +57,7 @@ Module TraceProps (M : Machine) (P : Policy M) (C : Ctx M).
       let P := fun _ => False in
       TraceConfidentialityStep K' P (MPCTraceOf (m,p,c)).
 
-  Definition TraceConfidentialityLazy
+  Definition TraceConfidentialityObs
              (K : Component -> Prop)
              (P : MPCState -> Prop)
              (M : MPCTrace) : Prop :=
@@ -82,9 +82,3 @@ Module TraceProps (M : Machine) (P : Policy M) (C : Ctx M).
           Om' ~=_O On').
 
 End TraceProps.
-
-(*Arguments StepIntegrity {_} _ _.
-Arguments TraceConfidentialityStep {_} _ _ _ _.
-Arguments TraceIntegrityLazy {_} _ _.
-Arguments TraceConfidentialityLazy {_} _ _ _ _.*)
-
