@@ -1614,7 +1614,7 @@ We now show how to implement two kinds of protected
 sharing of stack contents: passing by value on the stack and passing by reference.
 Here we give an example and high level discussion; the formalization can be found in Appendix \ref{app:argpass}.
 
-Example~\ref{fig:passing} shows a sample trace of a program that passes
+Figure~\ref{fig:passing} shows a sample trace of a program that passes
 variables by reference. In this example, written in C++ notation,
 {\tt f} takes a single argument by reference (the diagram displays it in magenta). The function
 {\tt main} calls {\tt f}, passing a reference to {\tt x}, then clears {\tt x} and calls
@@ -1645,18 +1645,18 @@ Our approach provides only limited support for handling fully first-class pointe
 stack frames, e.g., pointers obtained by taking the address of a local variable.
 Unlike with pass-by-reference, there is no obvious way to model the intended
 sharing behavior of such pointers in terms of stack frame activation patterns.
-In general we expect such a pointer to behave similarly to other pointers in
-the system, except that its lifespan is connected to that of the frame that contains
-it. In order to give a satisfactory property, then, we would tie it to an existing (e.g.)
+In general we expect such a pointer to behave similarly to heap pointers, 
+except that its lifespan is connected to that of the frame that contains
+it. In order to give a satisfactory property, then, we should tie it to a broader
 heap safety property.
 
-The default otherwise would be to treat an address-taken variable in the
-same way as a passed argument, with the additional property
+An alternative is to treat every address-taken variable in the
+same way as a passed argument, with the modification 
 that it remains accessible at \emph{all} stack depths above the caller.
-This prevents most violations of temporal safety, although stale pointers
-can still be used in certain corner cases. Callees would be permitted
+Callees would be permitted
 to access the location without having been explicitly given a pointer
-to it.
+to it. This would prevent most violations of temporal safety, but stale pointers
+could still be used in certain corner cases.
 
 \medskip
 
@@ -1692,7 +1692,7 @@ coroutine.
 
 The initial domain map maps each stack address in stack \(\stackid\) to
 \(\instack{\stackid}{\unsealed}\), the initial return map maps all stack identifiers to empty
-return stacks, the initial yield targets are defined above, and the initial stack id matches the initial
+return stacks, the initial yield targets are defined as above, and the initial stack id matches the initial
 coroutine. Together these form the initial context.
 
 In our context update rules, calls and returns work the same as in the subroutine models,
@@ -1723,7 +1723,7 @@ the coroutine-specific properties.
 
 \definition The \emph{yield set} \(\MPCT^\wedge\) of a system is
 \[\begin{aligned}
-\bigcup_{\stackid \in \STACKS} \hspace{-.5em} \{\MPCT, \neg f_\stackid | \MPCT\langle f_\stackid \rangle
+\bigcup_{\stackid \in \STACKS} \hspace{-.5em} \{(\MPCT, \neg f_\stackid) | \MPCT\langle f_\stackid \rangle
 \text{ is a reachable segment}\} \hspace{1em} \\
 \text{where } f_\stackid ~ (\underscore,\underscore,(\underscore,\underscore,\underscore,\stackid')) \triangleq \stackid \not = \stackid' \\
 \end{aligned}\]
@@ -1733,9 +1733,8 @@ Here, we are capturing the entire span that the system spends {\em away} from a 
 coroutine.
 
 \definition
-Let \(\prot_Y(\domMap,\rtm,\yts,\stackid)\) be the set of elements \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\),
-and \(\secret_Y(\domMap,\rtm,\yts,\stackid)\) the same.
+Let both \(\prot_Y(\domMap,\rtm,\yts,\stackid)\) and \(\secret_Y(\domMap,\rtm,\yts,\stackid)\) be the set of elements \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\).
 
 \definition
 We define \textbf{\em stepwise coroutine integrity} in the same way as stepwise stack integrity,
