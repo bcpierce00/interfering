@@ -89,7 +89,7 @@ state in each caller's stack frame is held invariant by the callee''),
 and a confidentiality property (``the callee's behavior is insensitive to the
 caller's private state''), plus an optional control-flow property.
 
-We use these properties to validate the stack-safety micro-policies
+We use these properties to validate the stack safety micro-policies
 proposed by Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}.
 Specifically, we check (with
 property-based random testing) that their ``eager''
@@ -187,7 +187,7 @@ even if it does not prevent every single dangerous read or write.
 
 To demonstrate the utility of our formal characterization, we use these
 properties to validate and improve an existing enforcement mechanism, the
-{\em stack-safety micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, re-implemented
+{\em stack safety micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, re-implemented
 in the Coq proof assistant on top of a RISC-V specification.  We
 use QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
 tool for Coq, to generate random programs and check
@@ -245,7 +245,7 @@ We then offer the following contributions:
 \begin{itemize}
 \item We adapt concepts of integrity and confidentiality from language-based
 security and combine these with an existing notion of well-bracketed
-control flow to formalize a {\em stepwise stack-safety}
+control flow to formalize a {\em stepwise stack safety}
 property that captures the intuitive concept of
 strict stack safety enforced over each step of execution~(\cref{sec:prelim,sec:lse}).
 As a case study, we explore how our properties are enforced
@@ -783,7 +783,7 @@ instructions either before or after the jump.  Similarly, instead of a single
 indirect branch at some point.
 \fi
 
-Since our stack-safety properties are all about protecting ``callers'' from
+Since our stack safety properties are all about protecting ``callers'' from
 their ``callees,'' we need some clear-cut way to recognize when the program
 makes or returns from a call.  Accordingly, we assume we are given a machine
 language program {\em annotated} with the locations of instructions
@@ -1188,11 +1188,11 @@ if \(|\rts'| < |\rts|\), then \(|\rts'| = |\rts|-1\).
 
 We next explore how an \ifspace existing \fi enforcement mechanism called {\em
   Depth Isolation}~\cite{DBLP:conf/sp/RoesslerD18} implements
-the formal stack-safety property described in the previous
+the formal stack safety property described in the previous
 section, and why its optimized form, {\em Lazy Tagging and Clearing}, does not.
 We validate these claims using property-based random testing in \cref{sec:testing}.
 
-\paragraph*{Conservative Stack-Safety Enforcement Mechanism}
+\paragraph*{Conservative Stack Safety Enforcement Mechanism}
 %
 The enforcement policy of Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} relies
 on a programmable, tag-based reference monitor that runs alongside the
@@ -1271,14 +1271,14 @@ using a combination of tags on the instructions
 and an additional tag on the $\PCname$.
 
 There remains the question of how to ensure that the sequences are
-invoked at the right places\ifspace from the perspective of the stack-safety
+invoked at the right places\ifspace from the perspective of the stack safety
 property\fi. For a program to enjoy stack safety
 (with respect to a particular set of call annotations), all we require is that
 the entry sequence immediately follows any instruction marked as a call
 in the call map. This is achieved by giving these instructions (another) special tag,
 and it is easy to check statically that this has been done correctly.
 If the code fails to initiate an exit
-sequence at a point where the stack-safety property expects a return,
+sequence at a point where the stack safety property expects a return,
 the micro-policy will incorrectly behave as if execution
 is continuing in the callee, but since the callee never has stronger access
 rights than the caller, this is harmless.
@@ -1614,7 +1614,7 @@ We now show how to implement two kinds of protected
 sharing of stack contents: passing by value on the stack and passing by reference.
 Here we give an example and high level discussion; the formalization can be found in Appendix \ref{app:argpass}.
 
-Example~\ref{fig:passing} shows a sample trace of a program that passes
+Figure~\ref{fig:passing} shows a sample trace of a program that passes
 variables by reference. In this example, written in C++ notation,
 {\tt f} takes a single argument by reference (the diagram displays it in magenta). The function
 {\tt main} calls {\tt f}, passing a reference to {\tt x}, then clears {\tt x} and calls
@@ -1645,18 +1645,18 @@ Our approach provides only limited support for handling fully first-class pointe
 stack frames, e.g., pointers obtained by taking the address of a local variable.
 Unlike with pass-by-reference, there is no obvious way to model the intended
 sharing behavior of such pointers in terms of stack frame activation patterns.
-In general we expect such a pointer to behave similarly to other pointers in
-the system, except that its lifespan is connected to that of the frame that contains
-it. In order to give a satisfactory property, then, we would tie it to an existing (e.g.)
+In general we expect such a pointer to behave similarly to heap pointers, 
+except that its lifespan is connected to that of the frame that contains
+it. In order to give a satisfactory property, then, we should tie it to a broader
 heap safety property.
 
-The default otherwise would be to treat an address-taken variable in the
-same way as a passed argument, with the additional property
+An alternative is to treat every address-taken variable in the
+same way as a passed argument, with the modification 
 that it remains accessible at \emph{all} stack depths above the caller.
-This prevents most violations of temporal safety, although stale pointers
-can still be used in certain corner cases. Callees would be permitted
+Callees would be permitted
 to access the location without having been explicitly given a pointer
-to it.
+to it. This would prevent most violations of temporal safety, but stale pointers
+could still be used in certain corner cases.
 
 \medskip
 
@@ -1692,7 +1692,7 @@ coroutine.
 
 The initial domain map maps each stack address in stack \(\stackid\) to
 \(\instack{\stackid}{\unsealed}\), the initial return map maps all stack identifiers to empty
-return stacks, the initial yield targets are defined above, and the initial stack id matches the initial
+return stacks, the initial yield targets are defined as above, and the initial stack id matches the initial
 coroutine. Together these form the initial context.
 
 In our context update rules, calls and returns work the same as in the subroutine models,
@@ -1723,7 +1723,7 @@ the coroutine-specific properties.
 
 \definition The \emph{yield set} \(\MPCT^\wedge\) of a system is
 \[\begin{aligned}
-\bigcup_{\stackid \in \STACKS} \hspace{-.5em} \{\MPCT, \neg f_\stackid | \MPCT\langle f_\stackid \rangle
+\bigcup_{\stackid \in \STACKS} \hspace{-.5em} \{(\MPCT, \neg f_\stackid) | \MPCT\langle f_\stackid \rangle
 \text{ is a reachable segment}\} \hspace{1em} \\
 \text{where } f_\stackid ~ (\underscore,\underscore,(\underscore,\underscore,\underscore,\stackid')) \triangleq \stackid \not = \stackid' \\
 \end{aligned}\]
@@ -1733,9 +1733,8 @@ Here, we are capturing the entire span that the system spends {\em away} from a 
 coroutine.
 
 \definition
-Let \(\prot_Y(\domMap,\rtm,\yts,\stackid)\) be the set of elements \(\component\) such that
-\(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\),
-and \(\secret_Y(\domMap,\rtm,\yts,\stackid)\) the same.
+Let both \(\prot_Y(\domMap,\rtm,\yts,\stackid)\) and \(\secret_Y(\domMap,\rtm,\yts,\stackid)\) be the set of elements \(\component\) such that
+\(\domMap ~ \component = \instack{\stackid'}{\underscore}\) where \(\stackid \not = \stackid`\).
 
 \definition
 We define \textbf{\em stepwise coroutine integrity} in the same way as stepwise stack integrity,
@@ -1779,10 +1778,10 @@ Formal proof remains future work.
 We validate the micro-policy of the previous section by
 systematically testing that it satisfies eager stack integrity and
 confidentiality. We use a Coq specification of the RISC-V
-architecture~\cite{Bourgeat2021AMF}.
-and extend it with a runtime monitor implementing a stack-safety
+architecture~\cite{Bourgeat2021AMF},
+and extend it with a runtime monitor implementing a stack safety
 micro-policy. We chose the Coq proof assistant as the setting for our implementation
-to ensure that our coinductive trace definitions are well-formed, and reason about
+to ensure that our coinductive trace definitions are well-formed, to reason about
 them, and to leverage the power of the QuickChick property-based testing framework~\cite{Pierce:SF4}.
 
 To use QuickChick, we build random test-case generators that produce
@@ -1804,8 +1803,7 @@ To write such generators we build on the work of
 Hri\c{t}cu et al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
 introduced {\em generation by execution} to produce progams that lead
 machines towards interesting behaviors. We extend the technique by tracking
-control flow information so that programs will usually --- but not always ---
-return to their call sites.
+control flow information so that programs will usually---but not always---return to their call sites.
 
 %\paragraph*{Generators}
 %
@@ -1828,7 +1826,7 @@ return to their call sites.
 %%to failstop when executed in conjunction with the policy monitor,
 %%but also allows for revealing errors in our setup.\apt{??}
 %
-We need to further extend typical testing to handle the nested
+We need to extend typical testing schemes further to handle the nested
 nature of confidentiality: rather than just generating two
 initial machines that are variants of one another and letting them
 execute to test for noninterference, we generate a new variant
@@ -1898,7 +1896,7 @@ and targeted ARM machine code;
 %\bcp{right?}\leo{yeah}
 we re-implemented it in Coq targeting RISC-V).  These errors range
 from trivial typos to ones that require an intriguingly complex setup
-to appear.  The most interesting bug (included in the table as row
+to provoke.  The most interesting bug (included in the table as row
 {\em HEADER\_NO\_INIT}) was that, on our first try, the blessed call
 sequence %/policy combination\apt{??}
 did not initialize all locations for the
@@ -1918,7 +1916,7 @@ $l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s da
 As for lazy micro-policies and observational properties,
 the original {\em Lazy Tagging and Clearing} micro-policy, implemented as {\em PER\_DEPTH\_TAG},
 fails in testing, in cases where data is leaked between sequential calls.
-To round out our mutations testing we also check {\em LOAD\_NO\_CHECK\_LT},
+To round out our mutation testing we also check {\em LOAD\_NO\_CHECK\_LT},
 equivalent to its counterpart in depth isolation,
 and a version where stores succeed but fail to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
 It turns out that {\em PER\_DEPTH\_TAG} is a comparatively subtle bug,
