@@ -865,12 +865,12 @@ The building blocks of the machine are {\em values}, {\em addresses}, and {\em r
 Values and addresses are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\) and
 \(\addr\), respectively. Register names (\(\reg\)) drawn from some set
 \(\REGS\), which is assumed to include a special-purpose register, the
-program counter {\PCname}. Collectively addresses and registers are {\em components} \(\component\)
+program counter {\PCname}. Collectively addresses and registers are {\em state elements} \(\component\)
 in the set \(\COMPONENTS ::= \WORDS + \REGS\).
 %
-A {\em machine state} \(\mach\) is drawn from a set \(\MACHS\) and supports a mapping
-from components to values, written
-\(\mach[\component] \in \MACHS \rightarrow \COMPONENTS \rightarrow \WORDS \).
+A {\em machine state} \(\mach\) is drawn from a set \(\MACHS\) and defines a mapping
+from state elements to values, written
+\(\mach[.] \in \COMPONENTS \rightarrow \WORDS \).
 
 We have a partial step function between machine states, written \(\mach \stepsto \mach'\), which
 is undefined on input states that correspond to a policy fault. So, a security mechanism is
@@ -903,7 +903,7 @@ function into the machine step:
 
 A {\em machine trace} is a nonempty, finite or infinite sequence
 of MC-states, ranged over by \(\MPCT\) and \(\NPCT\).
-We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces and ``::'' for list-cons.
+We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces, reserving ``::'' for list-cons.
 
 The ``trace-of'' operator, written \(\mpcstatename \hookrightarrow \MPCT\),
 coinductively relates an initial state with the trace of states
@@ -928,7 +928,7 @@ We project out the machine state of an MC-state with \(\pi_\mach\)
 and the context with \(\pi_\context\).
 We extract the first entry from a trace with \(\head(\MPCT)\), which is a total
 function since traces are non-empty, and the final entry (if one exists) with
-\(\last(\MPCT)\), which is partial.
+\(\last(\MPCT)\), which is partial, since traces may be infinite.
 
 \paragraph*{Until}
 The operation \(\PUT ~ f ~ \MPCT\) takes a trace \(\MPCT\)
@@ -961,8 +961,8 @@ This can easily be implemented using \(\PUT\), and we provide special notation
 for convenience.
 %
 If \(f\) is a predicate on machine states, we define \(\mpcstatename
-\hookrightarrow \MPCT | f\) (read ``\(\MPCT\) is the prefix of
-running \(\mpcstatename\) up to \(f\)''):
+\hookrightarrow \MPCT | f\) (pronounced ``\(\MPCT\) is the prefix of
+running \(\mpcstatename\) up to \(f\)'') thus:
 %
 \begin{center}
 \judgmenttwo{\(\mpcstatename \hookrightarrow \MPCT'\)}
@@ -975,9 +975,9 @@ running \(\mpcstatename\) up to \(f\)''):
 In particular, we wish to formulate properties around consecutive subtraces
 in which the context obeys a given predicate. This will commonly be used to extract
 individual calls from a trace by taking subtraces in which the stack is
-at or above a given depth. If \(f\) is still a predicate on states, then
-we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
-``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
+at or above a given depth. If \(f\) is again a predicate on states, then
+we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\) (pronounced
+``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\)'') thus:
 \ifspace{\bcp{Throughout, we could save space and improve beauty by removing some of the
 vertical space between inference rules.}\fi
 
@@ -1002,7 +1002,7 @@ vertical space between inference rules.}\fi
 
 We often want to quantify over all traces from any initial state so that our
 properties apply to the system as a whole. We say that a state \(\mpcstatename'\)
-is {\em reachable} if for some initial state \(\mpcstatename = \mach,\context_0\)
+is {\em reachable} if, for some initial state \(\mpcstatename = \mach,\context_0\)
 where \(\mach\) is well-formed, \(\mpcstatename \hookrightarrow \MPCT\)
 and \(\MPCT\) contains \(\mpcstatename'\).
 A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
@@ -1012,7 +1012,7 @@ such that from some similarly well-formed initial state \(\mpcstatename\),
 \section{Stack Safety, Formally}
 \label{sec:lse}
 
-We are finally ready for our definition of stack safety. We begin
+We are finally ready to give our definition of stack safety. We begin
 by describing how we model knowledge about the program structure,
 then dive into the formal definitions of integrity, confidentiality, and
 well-bracketed control flow, which together constitute stack safety.
@@ -1032,9 +1032,9 @@ this the {\em sealing convention},
 a relation between machine states and the addresses that should be sealed.
 If a state's \(\PCname\) is annotated as a call, the sealing convention tells us
 which addresses must be protected until the return. Similarly, we abstract over what
-it means to return with a {\em return convention},
-\(\retcon ~ (\mach \in \MACHS) \subseteq \MACHS\), a function from states to sets of states,
-which maps call states to the states that can be considered valid returns to that call.
+it means to return using a {\em return convention},
+\(\retcon : \MACHS \rightarrow 2^{\MACHS}\), which maps each call state 
+to the set of states that can be considered valid returns to that call.
 The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
 and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
 
@@ -1049,8 +1049,8 @@ return.
 \[(\domMap,\rts) = \context \in \CONTEXTS ::= (\COMPONENTS \rightarrow \STKDOMS)
   \times \listT (\target) \]
 %
-The initial context \(\context_0 = \domMap_0, []\), where \(\domMap_0\) maps
-the stack to \(\unsealed\) and all other addresses and all registers to \(\outside\).
+The initial context \(\context_0 = (\domMap_0, [])\), where \(\domMap_0\) maps
+the stack to \(\unsealed\) and all other elements to \(\outside\).
 
 
 The rules for \(\stepsto_C\) are given inductively, and apply in the listed order.
@@ -1062,7 +1062,7 @@ we identify a return by looking ahead and checking if we're about to step to a s
 that matches the topmost return target ({\sc ReturnFound}), and unsealing the caller's frame if so.
 If a target is reached anywhere in the return stack, {\sc ReturnRec}
 unseals each frame down to the level that was returned to.
-If none of these rules apply, the default rule leaves context unchanged.
+If none of these rules apply, the context remains unchanged.
 
 \begin{tabular}{l}
   {\sc Call} \\
@@ -1122,6 +1122,7 @@ that the original, {\em primary} traces move in {\em lockstep} with the variant.
 \text{where } f_\depth ~ (\mach,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
 \end{aligned}\]
 
+\noindent
 This is the set of all possible calls that can be reached from any well-formed initial state.
 
 We term \(\neg f_\depth\) the {\em break condition} \(\brk\), a predicate on
@@ -1161,7 +1162,7 @@ set of elements \(\component\) such that \(\domMap ~ \component \not = \outside\
 
 \definition
 A system enjoys \textbf{\textit{stepwise stack confidentiality}} if,
-for any \(\MPCT,\brk \in \MPCT^*\) with \(\head(\MPCT) = \mach,\context\),
+for any \(\MPCT,\brk \in \MPCT^*\) with \(\head(\MPCT) = (\mach,\context\)),
 any \(\nach\) such that \(\mach \approx_{\mathit{secret}(\context)} \nach\), and any trace
 %\(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk\),
 \(\NPCT\) such that \(\nach,\context \hookrightarrow \NPCT | \brk\),
