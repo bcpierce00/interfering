@@ -369,7 +369,7 @@ int f() {
 \end{tabular}
 \addtolength{\tabcolsep}{1em}
 \end{subfigure}
-\caption{Integrity and confidentiality violations
+\caption{Integrity and confidentiality violations with confidentiality violation traces
 \ifaftersubmission\bcp{I wonder if we
     could make the figures easier to read by putting very light, differently
     colored backgrounds under the different parts} \sna{I like the minimalism of this, but the code is now set up to support playing with it}\fi}
@@ -388,19 +388,18 @@ int main() {
   x = f();
   return g();
 }
-
 int f() {
   int y = 5;
   return y;
 }
-
 int g() {
   int z;
   return z;
 }
 \end{lstlisting}
   }
-\caption{Leaking through uninitialized data}
+\vspace*{-1em}
+\caption{Leaking via uninitialized data}
 \vspace*{-1em}
 \label{fig:conf2}
 \end{subfigure}
@@ -441,15 +440,17 @@ int g() {
 \vspace{.5em}
 \end{tabular}
 \end{center}
-\caption{Integrity Trace}
+\caption{Integrity Violation Trace}
 \label{fig:int1}
 \end{subfigure}
+\vspace*{1em}
+\caption{}
 \end{figure}
 
 
 This section explains our formal stack safety properties through a series
 of examples, each presented both in C syntax and in corresponding assembly code for an
-imaginary two-address machine (see Figure~\ref{fig:int1}).
+imaginary two-address machine (e.g., see Figure~\ref{fig:conf1}).
 Each instruction's address is shown to its left.
 The assembly code reflects a simple compilation strategy in which
 local variables are stored in consecutive slots of the stack frame.
@@ -489,7 +490,7 @@ are shaded black and ignored for simplicity for now---they will
 be treated properly later.
 (We will introduce some other parts of the context as needed.)
 
-Figure~\ref{fig:int1} shows a program with simple integrity and confidentiality violations. Function {\tt main}
+Figure~\ref{fig:conf1} shows a program with simple integrity and confidentiality violations. Function {\tt main}
 calls function {\tt f}, which reads and then overwrites {\tt main}'s
 variable {\tt x}. (Of course, this is illegal C, but it is characteristic of what buggy or malicious code might do.)
 
@@ -501,13 +502,13 @@ We state this as a form of {\em noninterference}~\cite{Goguen1982SecurityPA}.
 Noninterference describes knowledge: its standard form states that for state elements
 containing secret values, we can substitute any values whatsoever for the secrets
 without changing the effect of our computation on non-secret values.
-
+%
 If there exists some value for which we see different results, then
 in fact we can learn something about the initial state by observing those results.
 To adapt this to the stack, the notion of ``secret'' must vary with function
 calls and returns.
 
-In Figure~\ref{fig:conf1} we see how noninterference applies to this scenario.
+At the right of Figure~\ref{fig:conf1}, we see how noninterference applies to this scenario.
 At instruction 10, we
 create an imaginary {\em variant}
 state with arbitrary values~%
@@ -541,7 +542,7 @@ variable {\tt x}.  We regard this as a violation of confidentiality as well. In 
 in the primary trace, {\tt z} will have the value 5, but in the variant it can have
 an arbitrary value.
 
-Then, line 12 violates integrity.
+Returning to the code in Figure~\ref{fig:conf1}, line 12 violates integrity.
 In the initial memory layout the entire stack is {\em unsealed},
 meaning that it is eligible to be written to. At the call from {\tt main} to
 {\tt f}, {\tt main}'s locals are {\em sealed} with {\tt main}'s depth,
@@ -550,8 +551,8 @@ by the call instruction.)
 Sealing is the fundamental integrity contract between the caller and callee:
 {\tt main} expects that {\tt f} will not change {\tt x}.
 This leads to a simple, intuitive statement of {\em stepwise integrity}:
-if a element is sealed before a step, it will be unchanged afterward.
-Overwriting {\tt x} violates this property.
+if an element is sealed before a step, it will be unchanged afterward.
+Overwriting {\tt x} violates this property, as shown in Figure~\ref{fig:int1}.
 
 \paragraph*{Control-Flow Attacks}
 \begin{figure*}
@@ -864,12 +865,12 @@ The building blocks of the machine are {\em values}, {\em addresses}, and {\em r
 Values and addresses are drawn from some set of {\em words} \(\WORDS\), ranged over by \(\word\) and
 \(\addr\), respectively. Register names (\(\reg\)) drawn from some set
 \(\REGS\), which is assumed to include a special-purpose register, the
-program counter {\PCname}. Collectively addresses and registers are {\em components} \(\component\)
+program counter {\PCname}. Collectively addresses and registers are {\em state elements} \(\component\)
 in the set \(\COMPONENTS ::= \WORDS + \REGS\).
 %
-A {\em machine state} \(\mach\) is drawn from a set \(\MACHS\) and supports a mapping
-from components to values, written
-\(\mach[\component] \in \MACHS \rightarrow \COMPONENTS \rightarrow \WORDS \).
+A {\em machine state} \(\mach\) is drawn from a set \(\MACHS\) and defines a mapping
+from state elements to values, written
+\(\mach[.] \in \COMPONENTS \rightarrow \WORDS \).
 
 We have a partial step function between machine states, written \(\mach \stepsto \mach'\), which
 is undefined on input states that correspond to a policy fault. So, a security mechanism is
@@ -902,7 +903,7 @@ function into the machine step:
 
 A {\em machine trace} is a nonempty, finite or infinite sequence
 of MC-states, ranged over by \(\MPCT\) and \(\NPCT\).
-We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces and ``::'' for list-cons.
+We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces, reserving ``::'' for list-cons.
 
 The ``trace-of'' operator, written \(\mpcstatename \hookrightarrow \MPCT\),
 coinductively relates an initial state with the trace of states
@@ -925,14 +926,14 @@ produced by repeated application of \(\stepstocon\):
 
 We project out the machine state of an MC-state with \(\pi_\mach\)
 and the context with \(\pi_\context\).
-We take the first element of a trace with \(\head(\MPCT)\), which is a total
-function since traces are non-empty, and the final element (if one exists) with
-\(\last(\MPCT)\), which is partial.
+We extract the first entry from a trace with \(\head(\MPCT)\), which is a total
+function since traces are non-empty, and the final entry (if one exists) with
+\(\last(\MPCT)\), which is partial, since traces may be infinite.
 
 \paragraph*{Until}
 The operation \(\PUT ~ f ~ \MPCT\) takes a trace \(\MPCT\)
 and a predicate on states \(f \subseteq \MPCS\) and gives the prefix of
-\(\MPCT\) ending with the first element on which \(f\) holds.
+\(\MPCT\) ending with the first trace entry on which \(f\) holds.
 
 \vspace{-\medskipamount}
 \begin{center}
@@ -951,7 +952,7 @@ and a predicate on states \(f \subseteq \MPCS\) and gives the prefix of
                 {\(\PUT ~ f ~ (\notfinished{\mpcstatename}{\MPCT}) = \notfinished{\mpcstatename}{\MPCT'}\)}
 
 If the resulting trace is a strict prefix of the parameter, then the
-predicate must hold on its final element. If the predicate never holds, then
+predicate must hold on its final entry. If the predicate never holds, then
 \(\PUT\) is the identity function.
 
 We will frequently take a prefix of the trace from an initial state up
@@ -960,8 +961,8 @@ This can easily be implemented using \(\PUT\), and we provide special notation
 for convenience.
 %
 If \(f\) is a predicate on machine states, we define \(\mpcstatename
-\hookrightarrow \MPCT | f\) (read ``\(\MPCT\) is the prefix of
-running \(\mpcstatename\) up to \(f\)''):
+\hookrightarrow \MPCT | f\) (pronounced ``\(\MPCT\) is the prefix of
+running \(\mpcstatename\) up to \(f\)'') thus:
 %
 \begin{center}
 \judgmenttwo{\(\mpcstatename \hookrightarrow \MPCT'\)}
@@ -974,9 +975,9 @@ running \(\mpcstatename\) up to \(f\)''):
 In particular, we wish to formulate properties around consecutive subtraces
 in which the context obeys a given predicate. This will commonly be used to extract
 individual calls from a trace by taking subtraces in which the stack is
-at or above a given depth. If \(f\) is still a predicate on states, then
-we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\), pronounced
-``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\).''
+at or above a given depth. If \(f\) is again a predicate on states, then
+we define \(\mpcstatename \hookrightarrow \MPCT \langle f \rangle\) (pronounced
+``\(\mpcstatename\) segmented by \(f\) yields a sub-trace \(\MPCT\)'') thus:
 \ifspace{\bcp{Throughout, we could save space and improve beauty by removing some of the
 vertical space between inference rules.}\fi
 
@@ -1001,7 +1002,7 @@ vertical space between inference rules.}\fi
 
 We often want to quantify over all traces from any initial state so that our
 properties apply to the system as a whole. We say that a state \(\mpcstatename'\)
-is {\em reachable} if for some initial state \(\mpcstatename = \mach,\context_0\)
+is {\em reachable} if, for some initial state \(\mpcstatename = \mach,\context_0\)
 where \(\mach\) is well-formed, \(\mpcstatename \hookrightarrow \MPCT\)
 and \(\MPCT\) contains \(\mpcstatename'\).
 A {\it reachable segment} \(\MPCT \langle f \rangle\) is a subtrace
@@ -1011,7 +1012,7 @@ such that from some similarly well-formed initial state \(\mpcstatename\),
 \section{Stack Safety, Formally}
 \label{sec:lse}
 
-We are finally ready for our definition of stack safety. We begin
+We are finally ready to give our definition of stack safety. We begin
 by describing how we model knowledge about the program structure,
 then dive into the formal definitions of integrity, confidentiality, and
 well-bracketed control flow, which together constitute stack safety.
@@ -1031,9 +1032,9 @@ this the {\em sealing convention},
 a relation between machine states and the addresses that should be sealed.
 If a state's \(\PCname\) is annotated as a call, the sealing convention tells us
 which addresses must be protected until the return. Similarly, we abstract over what
-it means to return with a {\em return convention},
-\(\retcon ~ (\mach \in \MACHS) \subseteq \MACHS\), a function from states to sets of states,
-which maps call states to the states that can be considered valid returns to that call.
+it means to return using a {\em return convention},
+\(\retcon : \MACHS \rightarrow 2^{\MACHS}\), which maps each call state 
+to the set of states that can be considered valid returns to that call.
 The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
 and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
 
@@ -1048,8 +1049,8 @@ return.
 \[(\domMap,\rts) = \context \in \CONTEXTS ::= (\COMPONENTS \rightarrow \STKDOMS)
   \times \listT (\target) \]
 %
-The initial context \(\context_0 = \domMap_0, []\), where \(\domMap_0\) maps
-the stack to \(\unsealed\) and all other addresses and all registers to \(\outside\).
+The initial context \(\context_0 = (\domMap_0, [])\), where \(\domMap_0\) maps
+the stack to \(\unsealed\) and all other elements to \(\outside\).
 
 
 The rules for \(\stepsto_C\) are given inductively, and apply in the listed order.
@@ -1061,7 +1062,7 @@ we identify a return by looking ahead and checking if we're about to step to a s
 that matches the topmost return target ({\sc ReturnFound}), and unsealing the caller's frame if so.
 If a target is reached anywhere in the return stack, {\sc ReturnRec}
 unseals each frame down to the level that was returned to.
-If none of these rules apply, the default rule leaves context unchanged.
+If none of these rules apply, the context remains unchanged.
 
 \begin{tabular}{l}
   {\sc Call} \\
@@ -1116,11 +1117,12 @@ that the original, {\em primary} traces move in {\em lockstep} with the variant.
 
 \definition The \emph{call set} \(\MPCT^*\) of a machine is
 \[\begin{aligned}
-\bigcup_{\depth \in \mathbb{Z}} \{\MPCT, \neg f_\depth | \MPCT\langle f_\depth \rangle
+\bigcup_{\depth \in \mathbb{Z}} \{(\MPCT, \neg f_\depth) | \MPCT\langle f_\depth \rangle
 \text{ is a reachable segment}\} \hspace{1em} \\
 \text{where } f_\depth ~ (\mach,(\domMap,\rts)) \triangleq |\rts| \geq \depth \\
 \end{aligned}\]
 
+\noindent
 This is the set of all possible calls that can be reached from any well-formed initial state.
 
 We term \(\neg f_\depth\) the {\em break condition} \(\brk\), a predicate on
@@ -1160,10 +1162,10 @@ set of elements \(\component\) such that \(\domMap ~ \component \not = \outside\
 
 \definition
 A system enjoys \textbf{\textit{stepwise stack confidentiality}} if,
-for any \(\MPCT,\brk \in \MPCT^*\) with \(\head(\MPCT) = \mach,\context\),
+for any \((\MPCT,\brk) \in \MPCT^*\) with \(\head(\MPCT) = (\mach,\context\)),
 any \(\nach\) such that \(\mach \approx_{\mathit{secret}(\context)} \nach\), and any trace
 %\(\NPCT\) such that \(\nach,\pol,\domMap \hookrightarrow \NPCT | \brk\),
-\(\NPCT\) such that \(\nach,\context \hookrightarrow \NPCT | \brk\),
+\(\NPCT\) such that \((\nach,\context) \hookrightarrow \NPCT | \brk\),
 \(\MPCT \doteq \NPCT\) holds.
 
 In short, if we consider a variant of the stack at the start of a call,
@@ -1188,7 +1190,7 @@ We next explore how an \ifspace existing \fi enforcement mechanism called {\em
   Depth Isolation}~\cite{DBLP:conf/sp/RoesslerD18} implements
 the formal stack-safety property described in the previous
 section, and why its optimized form, {\em Lazy Tagging and Clearing}, does not.
-We validate this claim using property-based random testing in \cref{sec:testing}.
+We validate these claims using property-based random testing in \cref{sec:testing}.
 
 \paragraph*{Conservative Stack-Safety Enforcement Mechanism}
 %
@@ -1205,7 +1207,7 @@ set of tags and a
 collection of software-defined rules.
 On each machine step, the relevant rule is applied to the tags on
 the instruction's inputs ($\PCname$, registers, memory) and on the
-\ifspace instruction \fi opcode \ifspace itself\fi, producing
+\ifspace instruction \fi opcode\ifspace itself\fi, producing
 one of two outcomes: either the instruction is permitted to execute (and
 generates tags for the result of the operation and the new $\PCname$), or
 the machine fail-stops with a policy violation.
@@ -1218,10 +1220,10 @@ such as the PUMP architecture~\cite{pump:asplos2015}.
 
 Tags in the PIPE system are not accessible to application code, being separated
 from their associated values at the hardware level. So they are not modeled
-as values, and therefore our properties make no claims about
-their behavior.
+as state elements, and therefore our properties make no claims about
+their values.
 
-The micro-policy we reference here is a variation
+The micro-policy we describe here is a variation
 on the {\em Depth Isolation} policy presented by
 Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}.
 The Depth Isolation micro-policy maintains tags of the form $\tagStackDepth{n}$ for
@@ -1301,7 +1303,7 @@ tag and memory tag to match. Thus, even if a callee illicitly writes to
 a private location in its caller, the caller will eventually detect this
 if it ever tries to read from that location.
 
-This \emph{lazy policy} admits more a efficient implementations, but
+This \emph{lazy policy} admits a more efficient implementation, but
 deliberately allows temporary violations of stack integrity.
 The natural question then is: how do we characterize the
 protections provided by these policies once stepwise stack safety is broken?
@@ -1322,7 +1324,7 @@ These examples call for an abstract mechanism to characterize behaviors that are
 We abstract over an
 observation type \(\obs \in \OBSS\), containing at minimum the silent observation
 \(\tau\). Our machine step function now takes a state and returns a state and an observation,
-which is carried over into the policy and context step functions:
+which is carried over into the policy and context step functions.
 
 \paragraph*{Observations-Of}
 
@@ -1386,10 +1388,11 @@ after the return---instead of preventing dangerous writes from being read, we
 prevent them from being leaked.
 
 \definition
-\textbf{\em Observational integrity} means that for any \(\MPCT,\brk \in \MPCT^*\)
-where \(\head(\MPCT) = \mach\context\) and \(\last(\MPCT) = \mach',\context'\),
-the following holds. Let \(\components\) be the set of protected elements that changed during
-the call, \(\components = \prot(\context) \cap \Delta(\mach, \mach')\),
+\textbf{\em Observational integrity} means that for any \((\MPCT,\brk) \in \MPCT^*\)
+where \(\head(\MPCT) = (\mach,\context\)) and \(\last(\MPCT) = (\mach',\context')\),
+the following holds. Let \(\components = \prot(\context) \cap \Delta(\mach, \mach')\)
+be the set of protected elements that changed during
+the call,
 and let \((\mach',\context') \hookrightarrow \MPCT'\).
 Then for any \(\nach\) such that
 \(\mach' \approx_{\components'} \nach\), and its induced trace
@@ -1405,12 +1408,12 @@ the change-together relation~\(\diamond\).
 \definition Let \(\mach,\mach'\) and \(\nach,\nach'\)
 be pairs of states. Their {\em unsafe set}, written
 \(\bar{\Diamond}(\mach,\mach',\nach,\nach')\), is the set of all elements
-\(\component \in \Delta(\mach,\mach') \cup \Delta(\nach,\nach')\) where
+\(\component \in \Delta(\mach,\mach') \cup \Delta(\nach,\nach')\) such that
 \(\mach'[\component] \not = \nach'[\component]\).
 
 \definition
-A system enjoys \textbf{\em observational confidentiality} if for all
-\(\MPCT,\brk \in \MPCT^*\), with \(\head(\MPCT) = \mach,\context\) and
+A system enjoys \textbf{\em observational confidentiality} if, for all
+\((\MPCT,\brk) \in \MPCT^*\) with \(\head(\MPCT) = (\mach,\context)\) and
 \(\components = \secret(\context)\), the following holds.
 %
 For any \(\nach\) such that \(\mach \approx_\components \nach\) and
@@ -1422,12 +1425,12 @@ For any \(\nach\) such that \(\mach \approx_\components \nach\) and
   meaning that no secrets leak during the call
 \item \(\brk ~ (\last(\MPCT)) \leftrightarrow \brk ~
 (\last(\NPCT))\), i.e. if one call returns, so does the other
-\item Assuming both calls return, let \(\last(\MPCT) = \mach',\context'\)
+\item Assuming both calls return, let \(\last(\MPCT) = (\mach',\context')\)
   and \(\pi_\mach(\last(\NPCT)) = \nach'\),
   let \(\components' = \components \cap \bar{\Diamond}(\mach,\mach',\nach,\nach')\),
   and let \(\nach''\) be a state such that \(\mach' \approx_\components \nach''\).
-  Then if \(\mach',\context' \hookrightarrow \MPCT'\) and
-  \(\nach',\context' \hookrightarrow \NPCT'\), it must be
+  Then if \((\mach',\context') \hookrightarrow \MPCT'\) and
+  \((\nach',\context') \hookrightarrow \NPCT'\), it must be
   that \(\obsof(\MPCT') \simeq \obsof(\NPCT')\)
 \end{itemize}
 
@@ -1466,7 +1469,7 @@ Static Authorities policy of Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18},
 associates a unique \emph{static} identifier to each function, which is shared
 by all activations---but that policy allows leaks between
 instances of the same function.) We validate this repaired micro-policy in
-\ref{sec:testing}.
+\cref{sec:testing}.
 
 \medskip
 \paragraph*{Callee-saves Registers}
@@ -1478,9 +1481,9 @@ return, but it may change during the call, as long as it is restored. We similar
 register to be secret from the callee, except when it is copied to the stack. Both scenarios
 reflect observational rather than stepwise stack safety.
 
-We begin by adding information to Call annotations defining which registers will be {\em saved}
+We model this by adding information to Call annotations defining which registers will be {\em saved}
 and which are {\em unsaved}. The stack pointer and the register containing the return address
-should never be saved. We then extend the set of domains with these values, for the first time applying
+should never be saved. We then extend the set of domains with these values, for the first time associating
 (non-{\em outside}) domains to registers as well as addresses. On each call, we save precisely those
 registers given by the annotation, and the rest are unsaved; {\em saved} registers are treated as part
 of the protected and secret sets for purposes of \textbf{\em Observational stack integrity} and
@@ -1767,7 +1770,7 @@ the semantics of the enforcement-augmented machine.
 However, while there are no fundamental barriers to producing such a proof,
 it would be considerable work to carry out for a full ISA like RISC-V and
 complex enforcement mechanism like the Depth Isolation micro-policy.
-We therefore choose to validate the micro-policy of the previous section by
+We therefore choose to validate the micro-policy of \cref{sec:enforcement} by 
 systematically \emph{testing} that it satisfies our properties.
 This focus on testing is better aligned with our immediate
 goal of evaluating real enforcement mechanisms for real machine architectures.
@@ -1951,12 +1954,12 @@ We improve upon Skorstengaard et al. \cite{SkorstengaardSTKJFP} in two significa
 
 i) Our definition captures the intuition that {\em
   every} caller should be protected from its callees.  By contrast,
-  Skorstengaard et al. \cite{SkorstengaardSTKJFP} describe a class of ``unreasonable'' elements
+  Skorstengaard et al. \cite{SkorstengaardSTKJFP} describe a class of ``unreasonable'' components
   that are not protected, because they are capable of compromising
   their own security. Consider a function that, when called with the wrong
   inputs, behaves unreasonably. Skorstengaard et al. \cite{SkorstengaardSTKJFP} would not consider this a
-  {\em reasonable element} (as defined in their section 4.3.3), as a reasonable
-  element is always reasonable. In our setting, individual
+  {\em reasonable component} (as defined in their section 4.3.3), as a reasonable
+  component is always reasonable. In our setting, individual
   well-behaved activations of the buggy function would be protected.
 
 ii) Skorstengaard et al. \cite{SkorstengaardSTKJFP}'s fully
@@ -1964,7 +1967,7 @@ ii) Skorstengaard et al. \cite{SkorstengaardSTKJFP}'s fully
   abstract machine that is closely tied to the underlying machine architecture.
   While the approach can no doubt be ported to other architectures and enforcement
   schemes, each such port will require a new abstract machine definition whose
-  safety-by-construction must be checked afresh.
+  safety-by-construction must be argued afresh.
   Since we abstract over most of the machine state as well as the sealing and return conventions, and
   can support further enhancements such as coroutines,
   our properties apply directly to a range of architectures, code features, and enforcement mechanisms.
@@ -2043,9 +2046,9 @@ stack safety, and we proposed a fix.
 
 \paragraphx{Heap Safety as a Security Property}
 %
-Heap safety, like stack safety, may be framed as a security property using
-the language of
-noninterference~\cite{DBLP:conf/post/AmorimHP18}. Their paper was a significant inspiration
+Azevedo de Amorim et al.~\cite{DBLP:conf/post/AmorimHP18} show that 
+heap safety may be framed as a security property using
+the language of noninterference. Their paper was a significant inspiration
 for the present work, and we believe that the two safety conditions should
 combine smoothly.
 
@@ -2070,7 +2073,7 @@ and others that propose entirely new types of capabilities, such as linear
 Of these, uninitialized capabilities seem particularly promising---they naturally enforce
 write-before-read behavior and therefore will enable confidentiality without the need
 to clear large swaths of the stack. We plan to implement a model of the stack safety
-system described in Georges et al. \cite{Georges+21} and test it against our properties using
+system described by Georges et al. \cite{Georges+21} and test it against our properties using
 QuickChick.
 
 \paragraphx{A Program Logic for Stacks}
