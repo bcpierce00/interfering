@@ -83,7 +83,11 @@ Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
      and attempting to re-seal already sealed addresses is a no-op. *)
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
   Definition sc : SealingConvention :=
-    fun m a => wlt a (projw m (Reg SP)).
+    fun m a =>
+      match wtoa (projw m (Reg SP)) with
+      | Some a' => alt a a'
+      | None => false
+      end.
 
   (* Likewise, we need to describe what it means to return properly from a call. We parameterize
      this as well, but the standard of course is that the stack pointer must match the original
@@ -123,9 +127,15 @@ Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
                 end in
     (dm, []).
 
+  Definition flatten {A} (o:option (option A)) : option A :=
+    match o with
+    | Some (Some o') => Some o'
+    | _ => None
+    end.
+  
   Definition CtxStateUpdate (m:MachineState) (prev:CtxState) : CtxState :=
     let '(dm, rts) := prev in
-    match cdm (vtow (proj m PC)) with
+    match flatten (option_map cdm (wtoa (projw m PC))) with
     | Some call =>
       let d := length rts in
       let dm' := fun k =>
@@ -140,10 +150,9 @@ Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
                     end in
       let rts' := rc m :: rts in
       (dm', rts')
-    | Some ret =>
+    | Some retrn =>
       match popTo (fst (step m)) rts with
       | Some rts' =>
-(*        exception "BUT NOT HERE" *)
        (let d := length rts' in
         let dm' := fun k =>
                      match dm k with
@@ -275,7 +284,7 @@ Module SimpleProp (M : Machine) (P : Policy M) (MM : MapMaker M).
     forall mpc mpc' o,
       Reachable mpc ->
       mpcstep mpc = Some (mpc',o) ->
-      cdm (vtow (proj (mstate mpc) PC)) = Some retrn ->
+      flatten (option_map cdm (wtoa (projw (mstate mpc) PC))) = Some retrn ->
       exists rt rts,
         snd (cstate mpc) = rt :: rts /\
         snd (cstate mpc') = rts.

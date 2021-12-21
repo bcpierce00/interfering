@@ -11,31 +11,43 @@ Module Type Machine.
 
 
   Parameter Word : Type.
+  Parameter Addr : Type.
+  Parameter Value : Type.
 
+  Parameter wtoa : Word -> option Addr.
+  Parameter vtow : Value -> Word.
+  
   Parameter wlt : Word -> Word -> bool.
+  Parameter alt : Addr -> Addr -> bool.
 
   Parameter weq : Word -> Word -> bool.
+  Parameter aeq : Addr -> Addr -> bool.
 
   Parameter WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2}.
+  Parameter AddrEqDec : forall (a1 a2 : Addr), {a1 = a2} + {a1 <> a2}.
 
   Parameter weq_implies_eq :
     forall w1 w2,
       weq w1 w2 = true -> w1 = w2.
+  Parameter aeq_implies_eq :
+    forall a1 a2,
+      aeq a1 a2 = true -> a1 = a2.
 
-  Parameter not_weq_implies_neq :
-    forall w1 w2,
-      weq w1 w2 = false -> w1 <> w2.
+  Parameter not_aeq_implies_neq :
+    forall a1 a2,
+      aeq a1 a2 = false -> a1 <> a2.
 
   Parameter wle : Word -> Word -> bool.
+  Parameter ale : Addr -> Addr -> bool.
   
   Parameter wplus : Word -> nat -> Word.
+  Parameter aplus : Addr -> nat -> Addr.
 
   Parameter wminus : Word -> nat -> Word.
-
+  Parameter aminus : Addr -> nat -> Addr.
+  
   Parameter wplus_neq : forall w (n : nat),
       (n > O)%nat -> w <> wplus w n.
-
-  Definition Addr := Word.
 
   Parameter Register : Type.
 
@@ -49,9 +61,6 @@ Module Type Machine.
   | PC.
 
   Parameter keqb : Component -> Component -> bool.
-
-  Parameter Value : Type.
-  Parameter vtow : Value -> Word.
 
   Parameter MachineState : Type.
   Definition View := Component -> Value.

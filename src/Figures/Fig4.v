@@ -19,7 +19,7 @@ Require Import riscv.Utility.Words32Naive.
 Require Import riscv.Utility.DefaultMemImpl32.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
 
-From StackSafety Require Import Trace MachineImpl EagerInitGlobal.
+From StackSafety Require Import Trace RISCVMachine EagerInitGlobal.
 Import RISCV.
 Import EagerInitGlobal.
 
