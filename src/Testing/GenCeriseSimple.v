@@ -22,7 +22,9 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
   Import PrintCeriseSimple.
   
   Definition defFuel := 42%nat.
-  
+
+  Declare Instance chooseReg : (ChoosableFromInterval Register).
+
   Definition r0 : Register.
   Proof.
     assert ((0 <=? RegNum)%nat = true) by auto. 
@@ -42,9 +44,20 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
   Defined.
     
   (*- TODO: Sometimes we might want to use/target ra and sp to inject/find bugs? *)
-  Definition minReg : nat := 8%nat.
-  Definition noRegs : nat := 3%nat.
-  Definition maxReg : nat := minReg + noRegs - 1.
+  Definition minRegN : nat := 3%nat.
+  Definition minReg : Register.
+  Proof.
+    assert ((minRegN <=? RegNum)%nat = true) by auto.
+    eexact (R 2 H).
+  Defined.
+  
+  Definition noRegs  : nat := 8%nat.
+  Definition maxRegN : nat := minRegN + noRegs - 1.
+  Definition maxReg : Register.
+  Proof.
+    assert ((maxRegN <=? RegNum)%nat = true) by auto.
+    eexact (R 2 H).
+  Defined.
   
   Record PtrInfo := { pID     : RegName
                     ; pVal    : Z
@@ -88,14 +101,10 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
     aux lo len.
 
   (*TODO: InstructionI -> instr *)
-  Definition setInstrI addr (m : MachineState) (i : InstructionI) : MachineState :=
-    let prog := [encode i] in
-    withXAddrs
-      (addXAddrRange addr (4 * Datatypes.length prog)
-                     (getXAddrs m))
-      (withMem
-         (unchecked_store_byte_list addr
-                                    (Z32s_to_bytes prog) (getMem m)) m).
+  Definition setInstrI addr (m : MachineState) (i : instr) : MachineState :=
+    let '(regs,mem) := m in
+    let mem' := gmap.gmap_partial_alter (fun _ => Some (machine_parameters.encodeInstrW i)) addr mem in
+    (regs, mem').
 
   (*
     -- dataP, codeP : Predicates over the tagset to establish potential invariants for code/data pointers.
@@ -104,10 +113,6 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
     --                 integer registers
    *)
 
-    Definition listify1 {A} (m : Zkeyed_map A)
-    : list (Z * A) :=
-    List.rev (map.fold (fun acc z v => (z,v) :: acc) nil m).
-  
   Fixpoint combine_match {A B} `{Show A} `{Show B}
            (l1 : list (Z * A)) (l2 : list (Z * B))
     : list (Z * A * B) :=
@@ -119,13 +124,8 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
     | nil, nil => nil
     | _, _ => exception ("combine_match: " ++ (show (l1,l2)))%string
     end.
-
-  Definition listify2 {A B} `{Show A} `{Show B}
-             (m1 : Zkeyed_map A)
-             (m2 : Zkeyed_map B) : list (Z * A * B) :=
-    combine_match (listify1 m1) (listify1 m2).
   
-  Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
+(*  Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
              (m : MachineState) (p : PolicyState)
              (dataP codeP : TagSet -> bool)
     : RegInfo :=
@@ -222,13 +222,12 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
      ; arith   := arithRegs
      ; loadPtr := loadRegs
      ; badPtr  := badRegs                  
-    |}.
+    |}. *)
 
   Definition genImm (n : Z) : G Z :=
     bindGen (choose (0, Z.div n 4))
             (fun n' => ret (Z.mul 4 n')).
-
-  (* TODO: RegName generator *)
+  
   Definition genTargetReg (m : MachineState) : G Register :=
     choose (minReg, maxReg).
 
@@ -236,6 +235,7 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
     freq [ (1%nat, ret r0)
          ; (noRegs, choose (minReg, maxReg))
          ].
+
   (*
     -- TODO: This might need to be further generalized in the future
     genInstr :: PolicyPlus -> Machine_State -> PIPE_State ->
@@ -243,11 +243,10 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
     (Instr_I -> Gen TagSet) -> Gen (Instr_I, TagSet)
    *)
   (* TODO: InstructionI -> instr *)
-  Definition genInstr (i : LayoutInfo) (t : TagInfo)
+  Definition genInstr (i : LayoutInfo)
              (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
-             (dataP codeP : TagSet -> bool) (f : FunID)
-             (genInstrTag : InstructionI -> G TagSet)
-    : G (InstructionI * TagSet * FunID * CodeAnnotation) :=
+             (f : FunID)
+    : G (FunID * CodeAnnotation) :=
     let groups := groupRegisters i t m p dataP codeP in
     let a := arith groups in
     let d := dataPtr groups in
