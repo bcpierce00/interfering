@@ -1,20 +1,25 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
      CeriseMachine CeriseLayout TestSubroutineSimple PrintCeriseSimple.
 
-From QuickChick Require Import QuickChick.
-Import QcNotation.
-
 Require Coq.Strings.String. Open Scope string_scope.
 Require Import Coq.Lists.List.
 
 Require Import ZArith. Open Scope Z.
-Require Import cap_machine.addr_reg.
+From stdpp Require Import gmap.
+Require Import addr_reg.
+Require Import cap_lang.
 Require Import machine_base.
 
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
+Require Import coqutil.Map.Interface.
 
 Import ListNotations.
+
+From QuickChick Require Import QuickChick.
+Import QcNotation.
+
+Open Scope Z.
 
 Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefault.
   Module MPC := TestMPC DefCerise CerisePolicy CeriseLayout TSSCeriseDefault.
@@ -124,105 +129,6 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
     | nil, nil => nil
     | _, _ => exception ("combine_match: " ++ (show (l1,l2)))%string
     end.
-  
-(*  Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
-             (m : MachineState) (p : PolicyState)
-             (dataP codeP : TagSet -> bool)
-    : RegInfo :=
-    let regs := getRegs m in
-    let tags := regtags p in
-
-    (* Given range limits (low / high) for when something
-       is valid, calculate the immediates involved. *)
-    let getInfo (regTagP : TagSet -> bool) lo hi rID rVal rTag :=
-        if andb (regTagP rTag) (rVal <=? hi) then
-          let minToAdd :=
-              if rVal <=? lo then lo - rVal else 0 in
-          Some {| pID := rID; pVal := rVal
-                ; pMinImm := minToAdd
-                ; pMaxImm := hi - rVal
-                ; pTag := rTag 
-               |}
-        else None
-    in
-
-    let noSp p t :=
-        andb (p t) (negb (existsb (tag_eqb Tsp) t)) in
-    let getDataInfo :=
-        getInfo (noSp dataP) (stackLo i) (stackHi i) in 
-    let getCodeInfo :=
-        getInfo (noSp codeP) (instLo i) (instHi i) in
-    let isStackLoc p t :=
-        (*      trace ("Testing Loc: " ++ show t ++ nl)%string *)
-        (
-          andb (p t) (match t with
-                      | [Tstack _] => true
-                      | _ => false
-                      end)) in
-    let loadLocs :=
-        List.fold_right
-          (fun (i : Z) '(acc1,acc2) =>
-             match pctags p, map.get (memtags p) i with
-             | [Tpc pcdepth], Some (cons (Tstack depth) nil) =>
-               (* TODO: Likely to load bad stuff? *)
-               if Nat.leb pcdepth depth  then 
-                 (i :: acc1, acc2)
-               else (acc1, i::acc2)
-             | _, _ => (acc1, acc2)
-             end
-          ) (nil,nil) (Zseq (stackLo i) (stackHi i)) in
-                         
-    let getLoadInfo proj (regTagP : TagSet -> bool)
-                    rID rVal rTag :=
-        (*      trace ("Getting load info: " ++ show rID ++ " " ++ show (regTagP rTag) ++ " " ++ show loadLocs ++ nl)%string *)
-        (if (regTagP rTag) then
-           List.map (fun loc =>
-                       {| pID := rID; pVal := rVal
-                        ; pMinImm := 0
-                        ; pMaxImm :=  loc - rVal
-                        ; pTag := rTag 
-                       |}) (proj loadLocs)
-         else nil)
-    in
-    let processRegs f :=
-        List.fold_right
-          (fun '(rID, rVal, rTag) acc =>
-             (*           trace ("Processing: " ++ show (rID, rVal, rTag) ++ nl)*) (
-               match f rID (word.signed rVal) rTag with
-               | Some pi =>
-                 pi :: acc
-               | None => acc
-               end)) nil (listify2 regs tags) in
-    
-    let processRegsList f :=
-        List.fold_right
-          (fun '(rID, rVal, rTag) acc =>
-             (*           trace ("Processing: " ++ show (rID, rVal, rTag) ++ nl)%string *)
-             (
-               if Z.eqb rID 2 then
-                 f rID (word.signed rVal) rTag ++ acc
-                   
-               else acc
-                   
-          )) nil (listify2 regs tags) in
-
-    let dataRegs := processRegs getDataInfo in
-    let loadRegs := processRegsList (getLoadInfo fst dataP) in
-    let badRegs  := processRegsList (getLoadInfo snd dataP) in  
-    let codeRegs := processRegs getCodeInfo in
-    let arithRegs :=
-        List.fold_right
-          (fun '(rID, rVal, rTag) acc =>
-             if noSp (fun _ => true) rTag then
-               {| aID := rID |} :: acc
-             else acc) nil (listify2 regs tags) in
-  
-    {| codePtr := codeRegs
-     ; dataPtr := dataRegs
-     ; arith   := arithRegs
-     ; loadPtr := loadRegs
-     ; badPtr  := badRegs                  
-    |}. *)
 
   Definition genImm (n : Z) : G Z :=
     bindGen (choose (0, Z.div n 4))
@@ -236,157 +142,65 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
          ; (noRegs, choose (minReg, maxReg))
          ].
 
-  (*
-    -- TODO: This might need to be further generalized in the future
-    genInstr :: PolicyPlus -> Machine_State -> PIPE_State ->
-    (TagSet -> Bool) -> (TagSet -> Bool) ->
-    (Instr_I -> Gen TagSet) -> Gen (Instr_I, TagSet)
-   *)
-  (* TODO: InstructionI -> instr *)
+  Definition if_true_n (b:bool) (n:nat) :=
+    if b then n else 0%nat.
+
+  (* TODO: Cheri-specific instructions *)
   Definition genInstr (i : LayoutInfo)
              (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
              (f : FunID)
-    : G (FunID * CodeAnnotation) :=
-    let groups := groupRegisters i t m p dataP codeP in
-    let a := arith groups in
-    let d := dataPtr groups in
-    let c := codePtr groups in
-    let l := loadPtr groups in
-    (*  trace ("Grouped loads: " ++ show l ++ nl)%string *)
-    (  
-      let def_a := {| aID := 0 |} in
-      let def_dp := {| pID := 0; pVal := 0;
-                       pMinImm := 0; pMaxImm := 0;
-                       pTag := dataTag t
-                    |} in
-
-      (*  trace (show (l, badPtr groups)%string) *)
-      (
-        let onNonEmpty {A} (l : list A) n :=
-            match l with
-            | [] => O
-            | _  => n
-            end in
-        freq [ (onNonEmpty a 1%nat,
-                bindGen (elems_ def_a a) (fun ai =>
-                bindGen (genTargetReg m) (fun rd =>
-                bindGen (genImm (dataHi i)) (fun imm =>
-                let instr := Addi rd (aID ai) imm in
-                bindGen (genInstrTag instr) (fun tag =>
-                ret (instr, tag, f, normal))))))
-             ;  (3%nat, match map.get (getRegs m) sp with
-                        | Some spVal' =>
-                          let spVal := word.unsigned spVal' in
-                          let minImm := spVal - stackLo i in
-                          let maxImm := stackHi i - spVal in
-                          bindGen (genImm (maxImm - minImm)) (fun imm' =>
-                          let imm := minImm + imm' in
-                          bindGen (genTargetReg m) (fun rd =>
-                          let instr := Lw rd sp imm in
-                          bindGen (genInstrTag instr) (fun tag =>
-                          ret (instr, tag, f, normal))))
-
-                        | _ => exception "No sp?"
-                        end)
-  (*         ; (onNonEmpty l 3%nat,
-            trace (show (l, badPtr groups))
-         (bindGen (elems_ l ([l; badPtr groups])) (fun l' =>
-          bindGen (elems_ def_dp l') (fun pi =>
-          bindGen (genTargetReg m) (fun rd =>
-          let imm := pMaxImm pi in 
-          (*trace ("Generating... " ++ show (imm, pMaxImm pi))%string *)
-          (let instr := Lw rd (pID pi) imm in
-          bindGen (genInstrTag instr) (fun tag =>
-          ret (instr, tag, f, normal))))))))
-*)
-             ;  ((onNonEmpty d 3 * onNonEmpty a 1)%nat,
-                 bindGen (elems_ def_dp d) (fun pi =>
-                 bindGen (genSourceReg m) (fun rs =>
-                 bindGen (genImm (pMaxImm pi - pMinImm pi)) (fun imm' =>
-                 let imm := pMinImm pi + imm' in
-                 let instr := Sw (pID pi) rs imm in
-                 bindGen (genInstrTag instr) (fun tag => 
-                 ret (instr, tag, f, normal)))))) 
-             ;   (onNonEmpty a 1%nat,
-                  bindGen (elems_ def_a a) (fun ai1 =>
-                  bindGen (elems_ def_a a) (fun ai2 =>
-                  bindGen (genTargetReg m) (fun rd =>
-                  let instr := Add rd (aID ai1) (aID ai2) in
-                  bindGen (genInstrTag instr) (fun tag => 
-                  ret (instr, tag, f, normal))))))
-    ])).
-(*
--- TODO: Uncomment this and add stack.dpl rule
---            , (onNonEmpty arithInfo 1,
---               do -- BLT
---                  AI rs1 <- elements arithInfo
---                  AI rs2 <- elements arithInfo
---                  imm <- (8+) <$> genImm 12 --TODO: More principled relative jumps
---                  -- BLT does multiples of 2
---                  let instr = BLT rs1 rs2 imm
---                  tag <- genInstrTag instr
---                  return (instr, tag)
---              )
-            ]
- *)
-
-  Definition headerHead offset f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) := [(Jal ra offset , [Tinstr; Tcall], f    , call)].
+    : G (instr * FunID * CodeAnnotation) :=
+    freq [ (1%nat, ret (Fail, f, normal))
+         (*TODO ; (prob, ret (legal offset from sp, f, normal)*)
+         (*TODO ; (prob, ret (illegal offset from sp, f, normal)*)
+         (*TODO ; (prob, ret (load, f, normal)*)
+         (*TODO ; (prob, ret (store, f, normal)*)
+         ].
 
   (* TODO: Cheri specific header sequence *)
-  Definition headerSeq offset f nextF :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    headerHead offset f ++
-               [ (Addi sp sp 12 , [Tinstr; Th1]  , nextF, normal)
-               ; (Sw sp ra 0    , [Tinstr; Th2]  , nextF, normal)
-               ; (Sw sp 8 (-8) , [Tinstr; Th3]  , nextF, normal)
-               ; (Sw sp 9 (-4) , [Tinstr; Th4]  , nextF, normal)        
-               ].
+  Definition headerSeq (offset : Z) (f nextF: FunID) :
+    list (instr * FunID * CodeAnnotation) :=
+    [ ].
+
+  Axiom addrs_in_range_1 : forall z : Z, (z <=? MemNum) = true.
+  Axiom addrs_in_range_2 : forall z : Z, (0 <=? z) = true.
   
-  (* Based on Rob's 
-     (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
-     (* 12 *) IInstruction (Addi SP SP 12); (* H2 *)
-   *)
-  Definition genCall (l : LayoutInfo) (t : TagInfo)
+  Definition genCall (l : LayoutInfo)
              (m : MachineState) (p : PolicyState)
              (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
-             (callP :  TagSet -> bool) :
-    option (G (list (InstructionI * TagSet * FunID * CodeAnnotation)))
+             :
+    option (G (list (instr * FunID * CodeAnnotation)))
     :=
-      (*  
-          genCall :: PolicyPlus -> Machine_State -> PIPE_State ->
-          (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
-          (Instr_I -> Gen TagSet) ->
-          (Integer -> [(Instr_I, TagSet)]) ->
-          Gen [(Instr_I, TagSet)]
-          genCall pplus ms ps dataP codeP callP genInstrTag headerSeq = do
-          let m = ms ^. fmem
-          t = Map.assocs $ ps ^. pmem
-       *)
-      let existingSites :=
-          List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
-                   (List.filter (fun '(i,t) => callP t)
-                                (listify1 (memtags p))) in
+(* TODO: repeat calls
+   let existingSites :=
+   List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
+   (List.filter (fun '(i,t) => callP t)
+   (listify1 (memtags p))) in *)
       let newCallSites :=
           let offset_choices :=
               Zseq 20 (instHi l - instLo l - 50) in
           let valid_offsets :=
-              List.filter (fun i => Z.leb (word.unsigned (getPc m) + i) (instHi l - 50)) offset_choices in
+              List.filter (fun i =>
+                             let pcval := flatten (option_map wtoa (gmap.gmap_lookup addr_reg.PC (fst m))) in
+                             match pcval with
+                             | Some a => Z.leb (a + i) (instHi l - 50)
+                             | None => false
+                             end) offset_choices in
           let not_used :=
               List.filter (fun i =>
-                             match map.get (getMem m) (word.of_Z i) with
+                             match gmap.gmap_lookup (A i (addrs_in_range_1 i) (addrs_in_range_2 i)) (snd m) with
                              | Some _ => false
                              | None => true
                              end) valid_offsets in
           not_used in
-      let exOpts :=
+(*      let exOpts :=
           (* Existing callsites, lookup fun id *)
           List.map (fun i => 
                       match map.get cm (word.unsigned (getPc m) + i) with
                       | Some _ =>
                         (headerHead i f) 
                       | _ => exception ("genCall - nofid: " ++ show (word.unsigned (getPc m) + i) ++ nl)%string
-                      end) existingSites  in
+                      end) existingSites  in *)
       let newOpts :=
           List.map (fun i => headerSeq i f nextF) newCallSites in
       (* TODO: re-call *)
@@ -396,35 +210,26 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
         Some (elems_ x (x :: xs))
       end.
 
-  
-  Definition returnSeq (f rf : FunID) :=
-    [ (Lw   ra sp 0     , [Tinstr; Tr1], f, normal)
-    ; (Addi sp sp (-12) , [Tinstr; Tr2], f, normal)
-    ; (Jalr ra ra 0     , [Tinstr; Tr3], rf, retrn)
-    ].
+  (* TODO: CHERI return sequence *)
+  Definition returnSeq (f : FunID) :=
+    [ (Fail, f, retrn) ].
 
   Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
-    match map.get (getRegs m) sp with
+    match gmap.gmap_lookup sp (fst m) with
     | Some spv =>
       (* See if spv - 12 is indeed a pc_depth *)
-      match map.get (memtags p) (word.unsigned spv) with
-      | Some (cons (Tpc depth) nil) =>
-        Some (returnGen (returnSeq f depth))
-      | _ => None
-      end
+      Some (returnGen (returnSeq f))
     | _ => None
     end.
   
   Definition genInstrSeq
-             (l : LayoutInfo) (t : TagInfo)
+             (l : LayoutInfo)
              (m : MachineState) (p : PolicyState)
-             (dataP codeP callP : TagSet -> bool)
-             (cm : CodeMap_Impl) (f nextF : FunID)
-             (genInstrTag : InstructionI -> G TagSet) :=
+             (cm : CodeMap_Impl) (f nextF : FunID) :=
     let fromInstr :=
-        bindGen (genInstr l t m p cm dataP codeP f genInstrTag)
+        bindGen (genInstr l m p cm f)
                 (fun itf => returnGen ([itf])) in
-    match genCall l t m p cm f nextF callP,
+    match genCall l m p cm f nextF,
           genRetSeq m p cm f with
     | None, None => fromInstr
     | None, Some g2 =>
@@ -445,14 +250,12 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
              (c : CtxState) (m : MachineState)
   : G MachineState :=
     foldGen (fun macc k =>
-               (*trace (show ("Varying:", k, fst c k)) *)
                (match fst c k with
                 | Outside =>
                   returnGen macc
                 | _ =>
                   bindGen (genImm 40) (fun z =>
-                                         (*               trace ("Trying to set: " ++ show k ++ " to " ++ show z ++ " which was " ++ show (fst c k) ++ nl ++ "Previous value was: " ++ show (proj macc k) ++ nl ++ " Next value will be: " ++ show (proj (jorp macc k z) k) ++ nl ++ "Nearby values are: " ++ show (kplus k) ++ " : " ++ show (proj macc (kplus k)) ++ " and " ++ show (ksub k) ++ " : " ++ show (proj macc (ksub k)) ++ nl)%string *)
-                                         (returnGen (jorp macc k z)))
+                                         (ret (jorp macc k (inl z))))
                 end)
             )
             (getComponents m) m .
@@ -469,22 +272,20 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
     Gen (Machine_State, PIPE_State)
    *)
   Fixpoint gen_exec_aux (steps : nat)
-           (i : LayoutInfo) (t : TagInfo)
+           (i : LayoutInfo)
            (m0 : MachineState) (p0 : PolicyState)
            (m  : MachineState) (p  : PolicyState)
            (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
-           (its : list (InstructionI * TagSet * FunID * CodeAnnotation))
-           (dataP codeP callP : TagSet -> bool)
-           (genInstrTag : InstructionI -> G TagSet)
+           (its : list (instr * FunID * CodeAnnotation))
     (* num calls? *)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
     (*  trace (show ("GenExec...", steps, its, printPC m p) ++ nl)%string *)
     (match steps with
-     | O =>
+     | 0%nat =>
        (* Out-of-fuel: End generation. *)
        ret (m0, p0, cm)
      | S steps' =>
-       match map.get (getMem m) (getPc m) with
+       match option_map (fun a => (snd m) !m! a) (wtoa ((fst m) !r! addr_reg.PC)) with
        | Some _ =>
          match its with
          | nil =>
@@ -494,7 +295,7 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
              match mpstep (m,p) with
              | Some ((m',p'),o) =>
                (* ...and recurse. *)
-               gen_exec_aux steps' i t m0 p0 m' p' cm f nextF its codeP dataP callP genInstrTag
+               gen_exec_aux steps' i m0 p0 m' p' cm f nextF its
              | _ =>
                (* ... something went wrong. Trace something? *)
                ret (m0, p0, cm)
@@ -511,53 +312,54 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
                    | [] =>
                      (* Generate an instruction sequence. *)
                      (* TODO: Sequences, calls. *)
-                     bindGen (genInstrSeq i t m p dataP codeP callP cm f nextF genInstrTag)
-                             (fun itfas =>
-                                match itfas with
-                                | (i,t,f',a) :: itfs' =>
+                     bindGen (genInstrSeq i m p cm f nextF)
+                             (fun ifas =>
+                                match ifas with
+                                | (i,f',a) :: ifs' =>
                                   (*                              trace (show (f',ist, ists') ++ nl)%string*)
-                                  (returnGen (a, f', (i,t), itfs'))
+                                  (returnGen (a, f', i, ifs'))
                                 | _ => exception "EmptyInstrSeq"
                                 end)
-                   | ((i,t,f',a)::itfs') =>
-                     returnGen (a, f', (i,t), itfs')
+                   | ((i,f',a)::ifs') =>
+                     returnGen (a, f', i, ifs')
                    end)
-                  (fun '(a, f', (is,it), its) =>
+                  (fun '(a, f', is, ifs) =>
                      let nextF' := if Nat.eqb f' nextF then
                                      S nextF else nextF in
-                     let m0' := setInstrI (getPc m) m0 is in
-                     let m'  := setInstrI (getPc m) m  is in
-                     let p0' := setInstrTagI (word.unsigned (getPc m)) p0 it in
-                     let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
-                     let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
-                     match mpstep (m', p') with
-                     | Some ((m'', p''), o) =>
-                       (*            trace ("PC after mpstep: " ++ show (word.unsigned (getPc m'')) ++ nl)%string  *)
-                       (gen_exec_aux steps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP genInstrTag)
-                     | _ =>
-                       (*           trace ("Couldn't step" ++ nl ++  printMachine m' p' cm' ++ nl)%string *)
-                       (ret (m0', p0', cm'))
-                     end))
+                     let m0' := option_map (fun a' => setInstrI a' m0 is) (wtoa (fst m !r! addr_reg.PC)) in
+                     let m'  := option_map (fun a' => setInstrI a' m is) (wtoa (fst m !r! addr_reg.PC)) in
+                     let cm' := option_map (fun a' => map.put cm (z_of a') (Some a)) (wtoa (fst m !r! addr_reg.PC)) in
+                     match m0', m', cm' with
+                     | Some m0', Some m', Some cm' =>
+                       match mpstep (m', p) with
+                       | Some ((m'', p''), o) =>
+                         (gen_exec_aux steps' i m0' p0 m'' p'' cm' f' nextF' its )
+                       | _ =>
+                         (ret (m0', p0, cm'))
+                       end
+                     | _, _, _ => exception "no step"
+                     end
+         ))
        end
      end).
 
   Definition replicateGen {A} (n : nat) (g : G A) : G (list A) :=
     let fix aux n :=
         match n with
-        | O => returnGen nil
+        | 0%nat => returnGen nil
         | S n' => liftGen2 cons g (aux n')
         end in
     aux n.
   
-  Definition genGPRs (t : TagInfo)
+  Definition genGPRs
              (m : MachineState) (p : PolicyState)
     : G (MachineState * PolicyState) :=
     bindGen (replicateGen 3 (genImm 40)) (fun ds =>
     bindGen (replicateGen 3 (returnGen (regTag t))) (fun ts =>
     let regs :=
         List.fold_left (fun '(i,m) r =>
-                          (i+1, map.put m i (word.of_Z r)))
-                       ds (minReg, getRegs m) in
+                          (i+1, map.put m i (of_Z r)))
+                       ds (minReg, fst m) in
     let tags : Z * TagMap :=
         List.fold_left (fun '(i,m) (t : TagSet) =>
                           (i+1, map.put m i t))

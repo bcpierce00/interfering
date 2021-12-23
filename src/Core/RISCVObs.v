@@ -99,6 +99,18 @@ Extract Constant exception =>
     w - Z.of_nat n.
 
   Definition Addr : Type := Word.
+
+  Definition wtoa (w:Word) : option Addr := Some w.
+
+  Definition alt := wlt.
+  Definition aeq := weq.
+  Definition AddrEqDec := WordEqDec.
+  Definition aeq_implies_eq := weq_implies_eq.
+  Definition not_aeq_implies_neq := not_weq_implies_neq.
+  Definition ale := wle.
+  Definition aplus := wplus.
+  Definition aplus_neq := wplus_neq.
+  Definition aminus := wminus.
   
   Definition Register : Type := Word.
 

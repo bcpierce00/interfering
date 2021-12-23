@@ -13,8 +13,8 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Map.Interface.
 Require Import Coq.Lists.List. Import ListNotations.
 
-Module PrintRISCVEager : Printing RISCVObs TPEager DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPEager DLObs TSS.
+Module PrintRISCVEager : Printing RISCVObs TPEager DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPEager DLObs TSSRiscvDefault.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".
@@ -158,8 +158,8 @@ Module PrintRISCVEager : Printing RISCVObs TPEager DLObs TSS.
 
 End PrintRISCVEager.
 
-Module PrintRISCVEagerNLC : Printing RISCVObs TPEagerNLC DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPEagerNLC DLObs TSS.
+Module PrintRISCVEagerNLC : Printing RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".
@@ -303,8 +303,8 @@ Module PrintRISCVEagerNLC : Printing RISCVObs TPEagerNLC DLObs TSS.
 
 End PrintRISCVEagerNLC.
 
-Module PrintRISCVEagerNSC : Printing RISCVObs TPEagerNSC DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPEagerNSC DLObs TSS.
+Module PrintRISCVEagerNSC : Printing RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".
@@ -448,8 +448,8 @@ Module PrintRISCVEagerNSC : Printing RISCVObs TPEagerNSC DLObs TSS.
 
 End PrintRISCVEagerNSC.
 
-Module PrintRISCVEagerNI : Printing RISCVObs TPEagerNI DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPEagerNI DLObs TSS.
+Module PrintRISCVEagerNI : Printing RISCVObs TPEagerNI DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPEagerNI DLObs TSSRiscvDefault.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".

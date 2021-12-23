@@ -13,8 +13,8 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Map.Interface.
 Require Import Coq.Lists.List. Import ListNotations.
 
-Module PrintRISCVLazyFixed : Printing RISCVObs TPLazyFixed DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPLazyFixed DLObs TSS.
+Module PrintRISCVLazyFixed : Printing RISCVObs TPLazyFixed DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPLazyFixed DLObs TSSRiscvDefault.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".
@@ -158,8 +158,8 @@ Module PrintRISCVLazyFixed : Printing RISCVObs TPLazyFixed DLObs TSS.
 
 End PrintRISCVLazyFixed.
 
-Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPLazyOrig DLObs TSS.
+Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".
@@ -303,8 +303,8 @@ Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSS.
 
 End PrintRISCVLazyOrig.
 
-Module PrintRISCVLazyNoCheck : Printing RISCVObs TPLazyNoCheck DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPLazyNoCheck DLObs TSS.
+Module PrintRISCVLazyNoCheck : Printing RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".
@@ -448,8 +448,8 @@ Module PrintRISCVLazyNoCheck : Printing RISCVObs TPLazyNoCheck DLObs TSS.
 
 End PrintRISCVLazyNoCheck.
 
-Module PrintRISCVLazyNoDepth : Printing RISCVObs TPLazyNoDepth DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPLazyNoDepth DLObs TSS.
+Module PrintRISCVLazyNoDepth : Printing RISCVObs TPLazyNoDepth DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPLazyNoDepth DLObs TSSRiscvDefault.
   Import MPC.
 
   Definition printObsType (o:ObsType) := "".

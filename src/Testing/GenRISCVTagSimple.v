@@ -23,8 +23,8 @@ Import RecordSetNotations.
 
 Import ListNotations.
 
-Module GenRISCVLazyFixed <: Gen RISCVObs TPLazyFixed DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPLazyFixed DLObs TSS.
+Module GenRISCVLazyFixed <: Gen RISCVObs TPLazyFixed DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPLazyFixed DLObs TSSRiscvDefault.
   Import MPC.
   Import PrintRISCVLazyFixed.
 
@@ -704,8 +704,8 @@ Module GenRISCVLazyFixed <: Gen RISCVObs TPLazyFixed DLObs TSS.
              dataP codeP callP.
 End GenRISCVLazyFixed.
 
-Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPLazyOrig DLObs TSS.
+Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
   Import MPC.
   Import PrintRISCVLazyOrig.
 
@@ -1385,8 +1385,8 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSS.
              dataP codeP callP.
 End GenRISCVLazyOrig.
 
-Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPLazyNoCheck DLObs TSS.
+Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
   Import MPC.
   Import PrintRISCVLazyNoCheck.
 
@@ -2066,8 +2066,8 @@ Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSS.
              dataP codeP callP.
 End GenRISCVLazyNoCheck.
 
-Module GenRISCVLazyNoDepth <: Gen RISCVObs TPLazyNoDepth DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPLazyNoDepth DLObs TSS.
+Module GenRISCVLazyNoDepth <: Gen RISCVObs TPLazyNoDepth DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPLazyNoDepth DLObs TSSRiscvDefault.
   Import MPC.
   Import PrintRISCVLazyNoDepth.
 

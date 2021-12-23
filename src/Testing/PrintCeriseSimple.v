@@ -234,6 +234,6 @@ Module PrintCeriseSimple : Printing DefCerise CerisePolicy CeriseLayout TSSCeris
     end.
 
   Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl):=
-    {| show := fun '(m,p,cm) => "" (*printMachine m p cm (initC (defstackmap defLayoutInfo) m) *) |}.
+    {| show := fun '(m,p,cm) => printMachine m p cm (initCtx defLayoutInfo) |}.
 
 End PrintCeriseSimple.

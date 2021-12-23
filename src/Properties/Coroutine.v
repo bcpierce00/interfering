@@ -206,7 +206,7 @@ Module CoroutProp (M : Machine) (P : Policy M) (MM : MapMaker M).
   Definition CoroutineIntegrityEager : Prop :=
     forall m c p,
       Reachable (m,p,c) ->
-      StepIntegrity (fun k => sm (projw m k) = activeStack sm m) (m,p,c).
+      StepIntegrity (fun k => option_map sm (wtoa (projw m k)) = Some (activeStack sm m)) (m,p,c).
 
   Definition StackConfidentialityEager : Prop :=
     forall sid MCP d m dm depm p,
@@ -238,7 +238,7 @@ Module CoroutProp (M : Machine) (P : Policy M) (MM : MapMaker M).
   Definition CoroutineIntegrityObervational : Prop :=
     forall sid MCP m dm depm p,
       let P := (fun '(m,p,c) => activeStack sm m = Some sid) in
-      let K := (fun k => sm (projw (mstate (head MCP)) k) = activeStack sm (mstate (head MCP))) in
+      let K := (fun k => option_map sm (wtoa (projw (mstate (head MCP)) k)) = Some (activeStack sm (mstate (head MCP)))) in
       ReachableSegment P MCP ->
       head MCP = (m,p,(dm,depm)) ->
       TraceIntegrityObs K MCP.
@@ -255,7 +255,7 @@ Module CoroutProp (M : Machine) (P : Policy M) (MM : MapMaker M).
   Definition CoroutineConfidentialityObservational : Prop :=
     forall MPC sid,
       let P := (fun '(m,p,c) => activeStack sm m = Some sid) in
-      let K := (fun k => sm (projw (mstate (head MPC)) k) = activeStack sm (mstate (head MPC))) in
+      let K := (fun k => option_map sm (wtoa (projw (mstate (head MPC)) k)) = Some (activeStack sm (mstate (head MPC)))) in
       ReachableSegment P MPC ->
       TraceConfidentialityObs K P MPC.
 

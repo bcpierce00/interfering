@@ -23,8 +23,8 @@ Import RecordSetNotations.
 
 Import ListNotations.
 
-Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPEager DLObs TSS.
+Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPEager DLObs TSSRiscvDefault.
   Import MPC.
   Import PrintRISCVEager.
 
@@ -702,8 +702,8 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSS.
              dataP codeP callP.
 End GenRISCVEager.
 
-Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPEagerNLC DLObs TSS.
+Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
   Import MPC.
   Import PrintRISCVEagerNLC.
 
@@ -1381,8 +1381,8 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSS.
              dataP codeP callP.
 End GenRISCVEagerNLC.
 
-Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPEagerNSC DLObs TSS.
+Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
   Import MPC.
   Import PrintRISCVEagerNSC.
 
@@ -2060,8 +2060,8 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSS.
              dataP codeP callP.
 End GenRISCVEagerNSC.
 
-Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSS.
-  Module MPC := TestMPC RISCVObs TPEagerNI DLObs TSS.
+Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
+  Module MPC := TestMPC RISCVObs TPEagerNI DLObs TSSRiscvDefault.
   Import MPC.
   Import PrintRISCVEagerNI.
 
