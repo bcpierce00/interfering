@@ -29,7 +29,7 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
   Definition defFuel := 42%nat.
 
   Declare Instance chooseReg : (ChoosableFromInterval Register).
-
+  
   Definition r0 : Register.
   Proof.
     assert ((0 <=? RegNum)%nat = true) by auto. 
@@ -133,6 +133,10 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
   Definition genImm (n : Z) : G Z :=
     bindGen (choose (0, Z.div n 4))
             (fun n' => ret (Z.mul 4 n')).
+
+  Definition genWord (n : Z) : G Word :=
+    bindGen (genImm n)
+            (fun n' => ret (inl n')).
   
   Definition genTargetReg (m : MachineState) : G Register :=
     choose (minReg, maxReg).
@@ -145,6 +149,8 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
   Definition if_true_n (b:bool) (n:nat) :=
     if b then n else 0%nat.
 
+  Print instr.
+  
   (* TODO: Cheri-specific instructions *)
   Definition genInstr (i : LayoutInfo)
              (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
@@ -260,88 +266,86 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
             )
             (getComponents m) m .
 
+  Definition genVariantByList (ks : list Component) (m : MachineState) : G MachineState :=
+    foldGen (fun macc k =>
+               match List.find (fun k' => keqb k k') ks with
+               | Some _ => bindGen (genWord 40) (fun z => returnGen (jorp macc k z))
+               | None => returnGen macc
+               end)
+            ks m.
+  
+  Definition get_cur_instr (m:MachineState) : option instr :=
+    match option_map (fun a => (snd m) !m! a) (wtoa ((fst m) !r! addr_reg.PC)) with
+    | Some (inl z) => Some (decodeInstr z)
+    | _ => None
+    end.
+
+  Definition update_with_ifa (m0 m : MachineState) (cm : CodeMap_Impl)
+             (inst : instr) (f : FunID) (a : CodeAnnotation) :
+    (MachineState * MachineState * CodeMap_Impl) :=
+    let m0' := option_map (fun a' => setInstrI a' m0 inst) (wtoa (fst m !r! addr_reg.PC)) in
+    let m' := option_map (fun a' => setInstrI a' m inst) (wtoa (fst m !r! addr_reg.PC)) in
+    let cm' := option_map (fun a' => map.put cm (z_of a') (Some a)) (wtoa (fst m !r! addr_reg.PC)) in
+    match m0', m', cm' with
+    | Some m0', Some m', Some cm' =>
+      (m0', m', cm')
+    | _, _, _ =>
+      (m0, m, cm)
+    end.
+  
   (*
-    -- | Generation by execution receives an initial machine X PIPE state and
+    -- | Generation by execution receives an initial machine state and
     -- | generates instructions until n steps have been executed.
     -- | Returns the original machines with just the instruction memory locations
     -- | updated.
-    genByExec :: PolicyPlus -> Int -> Machine_State -> PIPE_State ->
-    (TagSet -> Bool) -> (TagSet -> Bool) -> (TagSet -> Bool) ->
-    (Integer -> [(Instr_I, TagSet)]) -> [(Instr_I, TagSet)] ->
-    (Instr_I -> Gen TagSet) -> 
-    Gen (Machine_State, PIPE_State)
    *)
   Fixpoint gen_exec_aux (steps : nat)
            (i : LayoutInfo)
-           (m0 : MachineState) (p0 : PolicyState)
-           (m  : MachineState) (p  : PolicyState)
+           (m0 : MachineState)
+           (m  : MachineState)
            (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
-           (its : list (instr * FunID * CodeAnnotation))
-    (* num calls? *)
+           (ifaseq : list (instr * FunID * CodeAnnotation))
     : G (MachineState * PolicyState * CodeMap_Impl) :=
-    (*  trace (show ("GenExec...", steps, its, printPC m p) ++ nl)%string *)
-    (match steps with
-     | 0%nat =>
-       (* Out-of-fuel: End generation. *)
-       ret (m0, p0, cm)
-     | S steps' =>
-       match option_map (fun a => (snd m) !m! a) (wtoa ((fst m) !r! addr_reg.PC)) with
-       | Some _ =>
-         match its with
-         | nil =>
-           (*      trace ("Existing instruction found: " ++ nl)%string *)
-           (            
-             (* Instruction already exists, step... *)
-             match mpstep (m,p) with
-             | Some ((m',p'),o) =>
-               (* ...and recurse. *)
-               gen_exec_aux steps' i m0 p0 m' p' cm f nextF its
-             | _ =>
-               (* ... something went wrong. Trace something? *)
-               ret (m0, p0, cm)
-             end
-           )
-         | _ =>
-           (*trace ("Existing instruction mid-sequence" ++ nl)%string*)
-           (ret (m0, p0, cm))
-         end
-       | _ =>
-         (*      trace ("No instruction found " ++ nl)%string *)
-         (* Check if there is anything left to put *)
-         (bindGen (match its with
-                   | [] =>
-                     (* Generate an instruction sequence. *)
-                     (* TODO: Sequences, calls. *)
-                     bindGen (genInstrSeq i m p cm f nextF)
-                             (fun ifas =>
-                                match ifas with
-                                | (i,f',a) :: ifs' =>
-                                  (*                              trace (show (f',ist, ists') ++ nl)%string*)
-                                  (returnGen (a, f', i, ifs'))
-                                | _ => exception "EmptyInstrSeq"
-                                end)
-                   | ((i,f',a)::ifs') =>
-                     returnGen (a, f', i, ifs')
+    match steps with
+    | 0%nat =>
+      (* Out-of-fuel: End generation. *)
+      ret (m0, tt, cm)
+    | S steps' =>
+      match get_cur_instr m, ifaseq with
+      | Some _, _::_ =>
+        (* instr seq overlaps with previous instr: End generation *)
+        ret (m0, tt, cm)
+      | Some _, [] =>
+        (* Instruction already exists, step... *)
+        match mpstep (m,tt) with
+        | Some ((m',_),o) =>
+          (* ...and recurse. *)
+          gen_exec_aux steps' i m0 m' cm f nextF ifaseq
+        | _ =>
+          (* Failstop: End generation *)
+          ret (m0, tt, cm)
+        end
+      | _, [] =>
+        bindGen (genInstrSeq i m tt cm f nextF)
+                (fun ifaseq =>
+                   match ifaseq with
+                   | ((inst,f,a)::ifaseq) =>
+                     let '(m0',m',cm') := update_with_ifa m0 m cm inst f a in
+                     gen_exec_aux steps' i m0' m' cm f nextF ifaseq
+                   | _ => ret (m0, tt, cm)
                    end)
-                  (fun '(a, f', is, ifs) =>
-                     let nextF' := if Nat.eqb f' nextF then
-                                     S nextF else nextF in
-                     let m0' := option_map (fun a' => setInstrI a' m0 is) (wtoa (fst m !r! addr_reg.PC)) in
-                     let m'  := option_map (fun a' => setInstrI a' m is) (wtoa (fst m !r! addr_reg.PC)) in
-                     let cm' := option_map (fun a' => map.put cm (z_of a') (Some a)) (wtoa (fst m !r! addr_reg.PC)) in
-                     match m0', m', cm' with
-                     | Some m0', Some m', Some cm' =>
-                       match mpstep (m', p) with
-                       | Some ((m'', p''), o) =>
-                         (gen_exec_aux steps' i m0' p0 m'' p'' cm' f' nextF' its )
-                       | _ =>
-                         (ret (m0', p0, cm'))
-                       end
-                     | _, _, _ => exception "no step"
-                     end
-         ))
-       end
-     end).
+      | _, (inst,f,a)::ifaseq' =>
+        let '(m0',m',cm') := update_with_ifa m0 m cm inst f a in
+        match mpstep (m', tt) with
+        | Some ((m'', p''), o) =>
+          let nextF' := if f =? nextF then nextF else (S nextF) in
+          (gen_exec_aux steps' i m0' m'' cm' f nextF' ifaseq' )
+        | _ =>
+          (* Failstop: End generation *)
+          (ret (m0', tt, cm'))
+        end
+      end
+    end.
 
   Definition replicateGen {A} (n : nat) (g : G A) : G (list A) :=
     let fix aux n :=
@@ -350,49 +354,41 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
         | S n' => liftGen2 cons g (aux n')
         end in
     aux n.
-  
+
   Definition genGPRs
-             (m : MachineState) (p : PolicyState)
+             (m : MachineState)
     : G (MachineState * PolicyState) :=
-    bindGen (replicateGen 3 (genImm 40)) (fun ds =>
-    bindGen (replicateGen 3 (returnGen (regTag t))) (fun ts =>
-    let regs :=
-        List.fold_left (fun '(i,m) r =>
-                          (i+1, map.put m i (of_Z r)))
-                       ds (minReg, fst m) in
-    let tags : Z * TagMap :=
-        List.fold_left (fun '(i,m) (t : TagSet) =>
-                          (i+1, map.put m i t))
-                       ts (minReg, regtags p) in
-    returnGen (withRegs (snd regs) m,
-               p <| regtags := snd tags |>))).
+    bindGen (replicateGen (maxRegN - minRegN) (genWord 40)) (fun ds =>
+    let '(i, m') :=
+        List.fold_left (fun '(i,m) v =>
+                          match n_to_regname i with
+                          | Some r =>
+                            (S i, update_reg m r v)
+                          | None =>
+                            (S i, m)
+                          end)
+                       ds (minRegN, m) in
+    returnGen (m', tt)).
 
-  Definition genDataMemory
-             (i : LayoutInfo) (t : TagInfo)
-             (m : MachineState) (p : PolicyState)
-    : G (MachineState * PolicyState) :=
+  Definition genDataMemory (i : LayoutInfo) (m : MachineState) : G (MachineState * PolicyState) :=
     let idx := Zseq (dataLo i) (dataHi i) in
-    bindGen (replicateGen (List.length idx) (genImm (dataHi i))) (fun vals =>           
-    bindGen (replicateGen (List.length idx) (returnGen (dataTag t))) (fun tags =>           
-    returnGen (withXAddrs
-                 (addXAddrRange (word.of_Z (dataLo i))
-                                (4 * Datatypes.length vals)
-                                (getXAddrs m))
-                 (withMem
-                    (unchecked_store_byte_list (word.of_Z (dataLo i))
-                                               (Z32s_to_bytes vals) (getMem m)) m),
-               p <| memtags := 
-                 List.fold_right
-                   (fun '(z,t) pmem => map.put pmem z t)
-                   (memtags p) (List.combine idx tags) |>))).
-
+    bindGen (replicateGen (List.length idx) (genWord 40))
+            (fun vals =>
+               let '(i, m') :=
+                   List.fold_left (fun '(i,m) v =>
+                                     match z_to_addr i with
+                                     | Some a =>
+                                       (i+1, update_mem m a v)
+                                     | None =>
+                                       (i+1, m)
+                                     end)
+                                  vals (dataLo i, m) in
+               ret (m', tt)).
   
   Definition genMachine
-             (i : LayoutInfo) (t : TagInfo)
-             (m0 : MachineState) (p0 : PolicyState)
+             (i : LayoutInfo)
+             (m0 : MachineState)
              (cm0 : CodeMap_Impl)
-             (dataP codeP callP : TagSet -> bool)
-             (genInstrTag : InstructionI -> G TagSet)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
     (*  
         genMachine :: PolicyPlus -> (PolicyPlus -> Gen TagSet) -> (PolicyPlus -> Gen TagSet) ->
@@ -402,70 +398,19 @@ Module GenCeriseSimple <: Gen DefCerise CerisePolicy CeriseLayout TSSCeriseDefau
         Gen RichState
         genMachine pplus genMTag genGPRTag dataP codeP callP headerSeq retSeq genITag spTag = do
      *)
-    bindGen (genDataMemory i t m0 p0)
+    bindGen (genDataMemory i m0)
             (fun '(ms,ps) =>
-               bindGen (genGPRs t ms ps)
+               bindGen (genGPRs ms)
                        (fun '(ms', ps') =>
                           (* Something about sp?
                              let ms'' = ms' & fgpr . at sp ?~ (instrHigh pplus + 4)
                              ps' <- genGPRTs pplus ps (genGPRTag pplus)
                              let ps'' = ps' & pgpr . at sp ?~ spTag
                            *)
-                          (gen_exec_aux defFuel i t ms' ps' ms' ps' cm0 O (S O)
-                                        nil dataP codeP callP genInstrTag))).
-
-  Definition zeroedRiscvMachine: RiscvMachine := {|
-    getRegs :=
-      List.fold_right (fun '(i,v) m => map.put m i (word.of_Z v))
-                      map.empty
-                      ([ (0, 0)
-                         ; (1, 0)   (* ra *)
-                         ; (2, 500) (* sp *)
-                      ]);
-    getPc := ZToReg 0;
-    getNextPc := ZToReg 4;
-    getMem := unchecked_store_byte_list
-                (word.of_Z 500)
-                (Z32s_to_bytes (repeat 0 125))
-                map.empty;
-    (*unchecked_store_byte_list (word.of_Z 500)
-      (Z32s_to_bytes (cons 0 nil))
-      (map.empty); *)
-    getXAddrs := nil; 
-    getLog := nil;
-                                                |}.
-
-  
-  Definition zeroedPolicyState : PolicyState :=
-    {| nextid := 0
-       ; pctags := [Tpc 0]
-       ; regtags :=
-           List.fold_right (fun '(i,v) m => map.put m i v)
-                           map.empty
-                           ([ (0, [])
-                              ; (1, [])   (* ra *)
-                              ; (2, [Tsp]) (* sp *)
-                           ])
-       ; memtags :=
-           (map.put 
-              (snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
-                                    (repeat nil 125)))
-              500
-              ([Tstack 0]))
-             (*map.empty (* map.put map.empty 500 (cons Tsp nil) *)*)
-    |}. 
+                          (gen_exec_aux defFuel i ms' ms' cm0 0%nat 1%nat
+                                        nil))).
   
   Definition genMach :=
-  let codeP := fun tt => true in
-  let dataP := fun tt => true in
-  (* Fix this *)
-  let callP := fun tt =>
-                 existsb (fun t => match t with
-                                   | Th1 => true
-                                   | _ => false
-                                   end) tt in  
-  let genInstrTag : InstructionI -> G TagSet :=
-      fun i => returnGen (cons Tinstr nil) in
-  genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState map.empty
-             dataP codeP callP genInstrTag.
-End GenRISCVTagSimple.
+    genMachine defLayoutInfo (empty,empty) map.empty.
+
+End GenCeriseSimple.
