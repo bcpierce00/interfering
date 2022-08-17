@@ -85,199 +85,6 @@
 
 \maketitle
 
-\begin{abstract}
-
-``Stack safety'' is a term associated with a
-variety of compiler, run-time, and hardware mechanisms for protecting stack
-memory. But unlike heap memory, the stack does not correspond to any single
-high-level language concept. The result is that
-these mechanisms typically lack precise specifications,
-relying instead on informal descriptions and examples of the bad
-behaviors that they prevent. Such a specification is especially desirable
-for an unusual enforcement mechanism, like the ``lazy'' stack safety
-micro-policies proposed by Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}.
-
-We propose a formal characterization of ``observable'' stack safety based on
-concepts from language-based security. Stack safety is a
-combination of an integrity property (``the private
-state in each caller's stack frame is held invariant by the callee'')
-and a confidentiality property (``the callee's behavior is insensitive to the
-caller's private state''), both compatible with lazy tagging, plus a control-flow property.
-
-The stack governs a large number of language features that are often excluded
-from discussion of stack safety. Our stack safety property targets a system with
-both caller- and callee-saved registers, coroutines, arguments passed on the stack,
-exceptions, [tail call elimination, heaps, and concurrency.]
-
-We use these properties to validate Roessler and DeHon's micro-policies
-via property-based random testing. Our testing successfully detects violations
-in several broken variants, including Roessler and DeHon's original lazy policy.
-
-\end{abstract}
-
-\newcommand{\paragraphx}[1]{\emph{#1.}}
-
-\section{Introduction}
-
-The call stack is a perennial target for low-level attacks, leading to a
-range of dire consequences, from leakage or corruption of private stack data
-to control-flow hijacking. To foil such attacks, a profusion of
-software and hardware protections have been proposed,
-%
-including stack canaries~\cite{Cowan+98},
-bounds checking~\cite{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
-split stacks~\cite{Kuznetsov+14},
-shadow stacks~\cite{Dang+15,Shanbhogue+19},
-capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJFP,Georges+21},
-and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18}.
-  \ifaftersubmission\apt{Mostly from
-  nick; there could be more}\bcp{Yes, going back to MIT days---we should
-  include several more of these, if only to give readers the impression that
-this is a well-studied mechanism (so formalizing its protections is
-useful).}
-\fi
-
-The protections offered by such mechanisms are commonly described in terms
-of concrete examples of attacks that they can prevent---corruption of return
-addresses, buffer overflows, use of uninitialized variables, etc.---leaving
-a more abstract characterization to the reader's intuition.  But these
-mechanisms can be quite intricate, and the behaviors they aim to prevent are
-subtle and varied. It can be hard to guess, based only on informal
-intuitions, whether a given mechanism actually blocks all potential
-attacks---or, conversely, whether it is overly conservative and disallows
-system behaviors that are actually safe.
-To settle such questions with confidence,
-we need a precise, generic, and formal specification for stack
-safety, as a basis both for comparing the security claims of different
-enforcement techniques and for validating that these claims
-are met by particular implementations. With the notable exception of the model used
-in Skorstengaard et al.'s StkTokens work~\cite{SkorstengaardSTKJFP}, which we
-discuss in Section \ref{sec:relwork}, there is a dearth of such properties in
-the literature.
-
-We propose a novel characterization of stack safety using the tools of language-based
-security~\cite{sabelfeld2003language}. The informal claim that
-``stack safety protects a caller
-from its callee'' amounts to saying that it guarantees the {\em integrity} and
-{\em confidentiality} of the caller’s local state until it regains control after the call.
-
-A key technical novelty in these definitions,
-compared to standard formulations of confidentiality and integrity from the
-security literature, is that they
-are ``nested'': {\em each} caller is guaranteed protection from its
-immediate callees (which, in turn, need protection from their immediate
-callees, etc.).
-Confidentiality is especially interesting. It is based on a traditional
-notion of noninterference, but whereas ordinary noninterference
-is an end-to-end hyper-property on whole program runs, stack
-confidentiality is a nested form of noninterference applied to
-subtraces of the whole program trace delimited by call instructions
-and corresponding returns, requiring that the callee’s behavior is
-invariant under hypothetical scrambling of the caller’s stack frame.
-
-Our threat model is very strong, allowing the attacker (i.e., the
-callee) to execute arbitrary code, including attempting to smash
-the stack to disrupt the program’s control flow. Our stack safety
-properties demand that, even in the presence of such attackers, confidentiality
-and integrity still apply to data in suspended stack frames
-until the callee returns.
-%
-We can also, optionally, enforce {\em well-bracketed control
-flow (WBCF)}~\cite{SkorstengaardSTKJFP}---a global requirement that
-each callee must always return to its immediate caller, if it returns
-at all.
-
-For confidentiality and integrity, we consider both {\em stepwise}
-and {\em observational} variants.  The simpler stepwise
-variants formalize the intuition that a caller's local data is {\em never}
-read or modified during a call. The observational variants
-allow a callee to read from and write to its caller's stack frame, as
-long as nothing that it reads affects its observable behavior and nothing
-that it writes affects the observable behavior of the caller after it returns.
-The observational properties are more extensional, and represent a baseline
-that any reasonable protection mechanism ought to enforce,
-even if it does not prevent every single dangerous read or write.
-
-To demonstrate the utility of our formal characterization, we use these
-properties to validate and improve an existing enforcement mechanism, the
-{\em stack safety micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, re-implemented
-in the Coq proof assistant on top of a RISC-V specification.  We
-use QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
-tool for Coq, to generate random programs and check
-that Roessler and DeHon's micro-policies correctly abort the ones that
-attempt to violate one of our properties. Furthermore, we
-%
-check that the testing framework is able to generate counterexamples
-that violate our properties but are \emph{not} halted by incorrect
-enforcement variants---both variants that we accidentally created
-during our re-implementation of the micro-policy and ones that we
-intentionally crafted to be broken in order to increase our confidence
-in testing and the enforcement mechanism itself.
-
-We find that Roessler and DeHon's {\em Depth Isolation} micro-policy, in
-which memory within each stack frame is tagged with the depth of
-the function activation that owns the frame and access is
-permitted only when an activation at that depth is currently executing, validates our
-stepwise properties. On the other hand, our testing reveals that \emph{Lazy Tagging and Clearing}
-violates the temporal aspect of confidentiality in
-cases where data can leak across repeated calls to the same callee,
-and also violates integrity if the leak uses the caller's frame. We
-propose a variant of {\em Lazy Tagging and Clearing} that testably enforces
-confidentiality, albeit at some performance cost.
-%
-\ifaftersubmission
-\bcp{Did Nick and Andre know about this deficiency?  Did they mention
-  it in their paper?  (If neither, we should make a bigger deal out of the
-  fact that we discovered it.)\apt{Their paper is a little vague on this subject.
-    They refer to ``temporal security properties'' as something to do with dangling
-    pointers, but they don't define it.
-    Then they say that Depth Isolation has weaker temporal security
-    guarantees than Static Authorities (tag=function name), but they don't explain why
-    (and I don't see why). They don't say anything explicit about the temporal
-    security properties of Lazy Tagging and Clearing, but they consider it to enforce
-    a completely different (and generally weaker) policy anyway (``data flow
-    integrity'' vs. ``memory safety'').}}\bcp{Sigh.  OK, I propose that we
-  leave this issue to deal with later (in consultation with them, which we
-  don't have time to do a good job of today).  At any rate, by my reading we
-are not saying anything incorrect at the moment.}
-\fi
-
-For ease of exposition, we initially assume a single simple
-stack with no sharing between callers and callees: all parameters and return
-values are passed in registers.  Later, we will introduce enhanced versions
-supporting
-(1) passing of scalar stack data,
-(2) callee-saves registers calling conventions, and
-(3) a coroutine system with a static layout.
-
-We begin with an informal overview of our key ideas via
-examples (\cref{sec:running-example}), followed by a description of our
-assumptions about the machine environment and threat model (\cref{sec:setup}).
-We then offer the following contributions:
-
-\begin{itemize}
-\item We adapt concepts of integrity and confidentiality from language-based
-security and combine these with an existing notion of well-bracketed
-control flow to formalize a {\em stepwise stack safety}
-property that captures the intuitive concept of
-strict stack safety enforced over each step of execution~(\cref{sec:prelim,sec:lse}).
-As a case study, we explore how our properties are enforced
-by the {\em Depth Isolation} micro-policy
-of Roessler and DeHon\cite{DBLP:conf/sp/RoesslerD18}, but not by some of its optimized variants~(\cref{sec:enforcement}).
-\item We formalize weaker but more extensional \emph{observational} variants of
-  confidentiality and integrity. Both are parameterized over a notion of external
-  observation, and are violated only if accessing secrets or overwriting
-  data causes a visible change in the system behavior (\cref{sec:lazy}).
-\item We show that our definitions can be
-extended to describe argument passing on the stack, callee-saves registers, exceptions, and a simple coroutine system (\cref{sec:ext}).
-\item We use property-based random testing to validate the relationship between
-  our properties and micro-policies (\cref{sec:testing})
-\end{itemize}
-\Cref{sec:relwork,sec:future} discuss related and future work.
-
-Our artifact contains Coq formalizations of our properties for illustrative purposes
-as well as the testing implementation.
-
 \section{Threat Model, Machines, and Enforcement }
 
 Before introducing our formal model of stack safety, we describe
@@ -307,25 +114,38 @@ instruction that does all the required manipulation of the program counter
 whose constituent opcodes may be used in some places for other purposes.
 Our RISC-V machine is the latter, so calls must be explicitly designated
 as such by the compiler, by identifying them as macro-instructions.
+The same goes for other operations, such as exceptions and coroutine yields.
 Macro-instructions connect the enforcement mechanism to the property: we don't
 expect the enforcement mechanism to provide any guarantees for code sequences
 that resemble calls or returns, but which are not macro-instructions.
 
-\paragraph*{Enforcement Model and Properties}
+Because macro-instructions must be generated by the compiler, they only
+carry data that can be known by the compiler at compile-time. For example,
+the \(\mathbf{call}\) macro-instruction identifies the register \(r\) containing
+the address of the function to be called, as well as a {\it type record} identifying
+the registers and addresses in which the callee expects to find arguments,
+and a {\it public set}.
+Let \(tr \in TR\) be a type record; then \(tr.args\) is a set of those registers
+that will be used for arguments, and \(tr.stack\_args\) defines a set of
+offsets from the stack pointer that are expected to contain additional
+arguments.The public set \(pubs\) defines a similar set of offsets in
+the caller that are declared public and not to be protected.
 
-A machine state consists of the standard addresses and registers, as well as
-additional policy state used by the enforcement mechanism. Our properties
-refer only to addresses and registers; they do not constrain the behavior
-of policy state. We model an execution step as a partial function on states:
-when the machine does not step from a given state, this
-is a {\em failstop}, halting the program before it can perform an
-action that would violate the security property.
-our properties are therefore naturally \emph{termination insensitive.}
+%\paragraph*{Enforcement Model and Properties}
+
+%A machine state consists of the standard addresses and registers, as well as
+%additional policy state used by the enforcement mechanism. Our properties
+%refer only to addresses and registers; they do not constrain the behavior
+%of policy state. We model an execution step as a partial function on states:
+%when the machine does not step from a given state, this
+%is a {\em failstop}, halting the program before it can perform an
+%action that would violate the security property.
+%our properties are therefore naturally \emph{termination insensitive.}
 
 \paragraph*{Threat Model}
 
 We trust the compiler has correctly placed macro-instructions according to
-the semantics of the source language, but we do not assume that the compiler
+the semantics of the source language, but we do not assume that the code
 is otherwise reasonable. In particular, while we are agnostic as to the source
 language, C is very plausible, and so any source function might contain undefined
 behavior resulting in its compilation to arbitrary machine code.
@@ -335,24 +155,42 @@ we assume nothing about the intent of the source code, except that it makes call
 and returns, and guarantee that the caller and callee are protected from one
 another.
 
-This is quite a strong threat model, but hardware and timing attacks are out of scope,
-and our properties are termination insensitive as described above.
+This is a strong threat model, but hardware and timing attacks are out of scope,
+and our properties are termination insensitive as a result of the enforcement mechanism
+(below).
 
 \paragraph*{Limitations}
 
 We do not support dynamic code generation or concurrency---we can handle a
 limited form of coroutines, but not full-blown preemptive concurrency.
-
-\paragraph*{Heap Safety}
+[Say something about Heap Safety]
   
 \subsection{The Machine in Detail}
 \label{sec:prelim}
 
 The building blocks of the machine are {\em words} and {\em registers}.
 Words are 64-bit integers ranged over by \(w\) and, when used as addresses,
-\(a\). Registers are written \(r_i\) for \(0 \leq i < 32\), and generally
-ranged over by \(r\). The program counter \(pc\) is a special register,
-while the stack pointer is \(sp = r_1\), as in the RISC-V ABI.
+\(a\). There are 32 registers, ranged over in general by \(r\),
+plus a program counter (\(\PCname\)). The following table divides
+the registers into metavariables, some belonging to caller- or callee- sets:
+
+\vspace{\abovedisplayskip}
+\begin{tabular}{| l | l | l |}
+  \hline
+  Set & Names & Purpose \\
+  \hline
+  CLR\_SV & \(rt_0 - rt_6\) & Caller-saved temps \\
+  & \(ra_0 - ra_1\) & Caller-saved args / return vals \\
+  & \(ra_2 - ra_7\) & Caller-saved args \\
+  \hline
+  CLE\_SV & \(rs_0 - rs_7\) & Callee-saved \\
+  \hline
+  PUBLIC & \(rra\) & Return Address \\
+  & \(rsp\) & Stack Pointer \\
+  & \(pc\) & Program Counter \\
+  \hline
+\end{tabular}
+\vspace{\abovedisplayskip}
 
 Collectively addresses and registers are {\em state elements} \(\component\)
 in the set \(\COMPONENTS ::= \WORDS + \REGS\).
@@ -379,9 +217,9 @@ And a security context is a stack of pairs of targets and views:
 \[\context \in \CONTEXTS ::= \mathit{list} ~ (TAR \times SEC)\]
 
 The set of instructions, \(I\), contains the RISC-V ISA. There is additionally a set
-of macro-instructions \(J\), defined in detail in Figure \ref{fig:macros}.
+of macro-instructions \(J\), described in detail in Figure \ref{fig:macros}.
 Every macro-instruction \(j \in J\) has a
-size \(\mathit{size}(j)\) and can be decomposed into a sequence of fragmanets
+size \(\mathit{size}(j)\) and can be decomposed into a sequence of fragments
 \(j_0 \dots j_{\mathit{size}(J)}\), where \(j_n \in J^*\).
 The partial function \(\mathit{decode} : \WORDS \rightharpoonup I + J^*\) may decode a value
 into either an instruction or a macro-instruction fragment.
@@ -391,22 +229,22 @@ into either an instruction or a macro-instruction fragment.
     \hline
     Macro & \multicolumn{2}{|l|}{Parameters} \\
     \hline
-    \multirow{4}{*}{\(\mathbf{call}\)}
+    \multirow{3}{*}{\(\mathbf{call}\)}
     & \(\reg\) & Register containing destination \\
-    & \(args\) & Set of argument registers \\
-    & \(sarg\) & Set of stack object bounds \\
-    & \(pub\) & Set of public object bounds \\
+    & \(tr\) & Type record \\
+    & \(pubs\) & Public set \\
     \hline
     \multirow{3}{*}{\(\mathbf{tailcall}\)}
     & \(\reg\) & Register containing destination \\
-    & \(args\) & Set of argument registers \\
+    & \(tr\) & Type record \\
+    & \(pubs\) & Public set \\
     \hline
     \multirow{2}{*}{\(\mathbf{enter}\)}
-    & \(\funid\) & Function identifier \\
+    & \(tr\) & Type record \\
     & \(n\) & Size of locals \\
     \hline
     \(\mathbf{return}\)
-    & \(\overline{obj}\) & Public objects \\
+    & \(pubs\) & Public set \\
     \hline
     \(\mathbf{yield}\) & & \\
     \(\mathbf{setex}\) & & \\
@@ -420,7 +258,8 @@ into either an instruction or a macro-instruction fragment.
 Execution is modeled by a partial step function between machine states,
 written \(\mach, \context \stepsto \mach', \context'\).
 If \(\mach[\PCname]\) decodes to an instruction, then
-\(\mach, \context \stepsto \mach', \context\) if \(\mach \stepsto_{\mathit{RISC-V}} \mach'\).
+\(\mach, \context \stepsto \mach', \context\) if \(\mach\) steps to \(\mach'\)
+under the RISC-V semantics.
 If, for some \(j\), \(\mach[\PCname + i]\) decodes to \(j_i\) for all \(i\) between 0 and
 \(\mathit{size}(j)\), then the step is via a special multi-step. We present these steps
 as separate step relations: \(\cdot \harpoonunder{j}_M \cdot \in \MACHS \times J \times \MACHS\)
@@ -433,86 +272,49 @@ for the security context. We then combine them:
             {\(m',c \stepstounder{j}_C c'\)}
             {\(m,c \stepsto m',c'\)}
 
+\paragraph*{Macro-step machine steps}
+
+Here we give the semantics of the machine side of the macro step for calls and returns.
 The machine multi-step for a call (\ref{fig:callmacro}) updates the stack pointer
 and program counter, and zeros non-argument, caller-save registers. (This means that
 the caller should have saved them before initiating the call.)
 
-For the context step, the macro-instruction additionally identifies which objects
-(contiguous regions defined relative to the stack pointer) have been placed there
-as: arguments that overflowed to the stack (\(sargs\)), which are existing objects
-passed by reference (\(pbrs\)), and which are marked public (\(pubs\)). We use this
-information to construct the callee's security view.
-\[obj \in OBJ ::= \mathbb{Z} \times \mathbb{Z}\]
-\[in\_obj ~ a_{sp} ~ (lo, hi) ~ a \triangleq a_{sp} - lo \leq a < a_{sp} - hi\]
+\vspace{\abovedisplayskip}
+\judgmentbrbr[CallM]
+             {\(j = \mathit{decode}^* ~ m ~ m[pc] = \mathbf{call} ~ r ~ tr ~ pubs\)}
+             {\(m' = m[rra \mapsto m[pc] + 4]\)}
+             {\(m'' = m' \llbracket r \mapsto 0 | r \in CLR\_SV - tr.args \rrbracket\)}
+             {\(m \harpoonunder{j}_M m''[pc \mapsto m[r]]\)}
+\vspace{\belowdisplayskip}
 
-\begin{figure*}
-\judgmenttwobrlong[]
-                  {\(m' = m[r_0 \mapsto m[pc] + 4]\)}
-                  {\(m'' = m' \llbracket r_i \mapsto 0 | i \geq 5 \land r \not \in args \land r \in caller \rrbracket\)}
-                  {\(j = \mathit{decode}^* ~ m ~ pc = \mathit{call} ~ f ~ args ~ sargs ~ pubs\)}
-                  {\(m \harpoonunder{j}_M m''[pc \mapsto f]\)}
-\[\begin{split}
-& \mathit{update\_view} ~ V ~ a_{sp} ~ args ~ sargs ~ pubs \triangleq
- \lambda \component .
-\begin{cases}
-  \mathit{public} & \textnormal{if } \component \in \WORDS \textnormal{ and }
-  in\_obj ~ a_{sp} ~ pub ~ \component \textnormal{ for some } pub \textnormal{ in } pubs \\
-%  \passed & \textnormal{else if } \component \in \WORDS \textnormal{ and }
-%  in\_obj ~ a_{sp} ~ pbr ~ \component \textnormal{ for some } pbr \textnormal{ in } pbrs \\
-  V ~ \component & \textnormal{else if } \component \in \WORDS \textnormal{ and }
-  in\_obj ~ a_{sp} ~ sarg ~ \component \textnormal{ for some } sarg \textnormal{ in } sargs \\
-  \sealed & \textnormal{else if } \component \in \WORDS \textnormal{ and } \component < a_{sp} \\
-  \unsealed & \textnormal{else if } \component \in \REGS \textnormal{ and }
-  \component \textnormal{ is in } args \textnormal{ or is } \PCname \textnormal{ or } sp \\
-  \sealed & \textnormal{otherwise} \\
-\end{cases} \\
-\end{split}\]
+Then, on enter, the callee stores the stack pointer and allocates new stack space.
+[TODO: also have it do the saving of other callee-save, little complicated.]
 
-\begin{minipage}{.49\textwidth}
-\judgmentbr[]
-           {\(V' = \mathit{update\_view} ~ V ~ m[sp] ~ args ~ sargs ~ pubs\)}
-           {\(j = \mathit{call} ~ f ~ args ~ sargs ~ pubs\)}
-           {\(m, V::tars \stepstounder{j}_C ((m[pc] + 4, m[sp]), V')::V::tars\)}
-\end{minipage}
-\begin{minipage}{.49\textwidth}
-\judgmentbr[]
-           {\(V' = \mathit{update\_view} ~ (\lambda \component . \unsealed) ~ m[sp] ~ args ~ sargs ~ pubs\)}
-           {\(j = \mathit{call} ~ f ~ args ~ sargs ~ pubs\)}
-           {\(m, [] \stepstounder{j}_C ((m[pc] + 4, m[sp]),V')::[]\)}
-\end{minipage}
-           
-\judgmenttwobrlong[]
-                  {\(m' = m[m[sp] \mapsto m[r_0]]\)}
-                  {\(m'' = m' \llbracket a \mapsto 0 | m[sp+1] \leq a < m[sp+n+1] \rrbracket\)}
-                  {\(\mathit{decode}^* ~ m ~ pc = \mathit{enter} ~ f ~ n\)}
-                  {\(m \harpoonunder{Enter}_M m''[sp \mapsto m[sp]+n+1]\)}
-                  
-\judgment[]
-         {}
-         {\(m,c \stepstounder{Enter}_M c\)}
+\vspace{\abovedisplayskip}
+\judgmentbrbr[EnterM]
+           {\(j = \mathit{decode}^* ~ m ~ m[pc] = \mathit{enter} ~ tr\)}
+           {\(m' = m[m[sp] \mapsto m[rra]]\)}
+           {\(m'' = m'[sp \mapsto m[sp]+n+1]]\)}
+           {\(m \harpoonunder{j}_M m''[pc \mapsto m[pc]+4*\mathit{size}(j)]\)}
+\vspace{\belowdisplayskip}
 
-\judgmenttwobrlong[]
-                  {\(m' = m[sp \mapsto m[sp]-n-1]\)}
-                  {\(m'' = m' \llbracket r_i \mapsto 0 | 5 \leq r < 10 \lor 12 \leq r < 32 \rrbracket\)}
-                  {\(\mathit{decode}^* ~ m ~ pc = \mathit{return} ~ n\)}
-                  {\(m \harpoonunder{Return}_M m''[pc \mapsto m[sp]]\)}
+Finally, on return, the program counter is restored from the stack, and the callee's
+frame is deallocated.
 
-\begin{minipage}{.49\textwidth}
-\judgmentbr[]
-           {\(\)}
-           {\(\mathit{decode}^* ~ m ~ pc = \mathit{return} ~ f ~ args ~ sargs ~ pubs\)}
-           {\(m, V::tars \stepstounder{Return}_C ((m[pc] + 4, m[sp]), V')::tars\)}
-\end{minipage}
-\begin{minipage}{.49\textwidth}
-\judgmentbr[]
-           {\(V' = \mathit{update\_view} ~ (\lambda \component . \unsealed) ~ m[sp] ~ args ~ sargs ~ pubs\)}
-           {\(\mathit{decode}^* ~ m ~ pc = \mathit{call} ~ f ~ args ~ sargs ~ pubs\)}
-           {\(m, [] \stepstounder{Return}_C ((m[pc] + 4, m[sp]),V')::[]\)}
-\end{minipage}
+\vspace{\abovedisplayskip}
+\judgmentbr[ReturnM]
+             {\(j = \mathit{decode}^* ~ m ~ m[pc] = \mathit{return} ~ n\)}
+             {\(m' = m[sp \mapsto m[sp]-n-1]\)}
+             {\(m \harpoonunder{j}_M m'[pc \mapsto m'[sp]]\)}
+\vspace{\belowdisplayskip}
 
-\caption{Call, enter, and return macro-instructions}
-\label{fig:callmacro}
-\end{figure*}
+%For the context step, the macro-instruction additionally identifies which objects
+%(contiguous regions defined relative to the stack pointer) have been placed there
+%as: arguments that overflowed to the stack (\(sargs\)), which are existing objects
+%passed by reference (\(pbrs\)), and which are marked public (\(pubs\)). We use this
+%information to construct the callee's security view.
+%\[obj \in OBJ ::= \mathbb{Z} \times \mathbb{Z}\]
+%\[in\_obj ~ a_{sp} ~ (lo, hi) ~ a \triangleq a_{sp} - lo \leq a < a_{sp} - hi\]
            
 %\judgmenttwobrlong[Return]
 %                    {\(m' = m[sp \mapsto m[sp] - \mathit{size}(frsize)]\)}
@@ -520,12 +322,16 @@ information to construct the callee's security view.
 %                    {\(\mathit{decode}^* ~ m ~ pc = \mathit{return} ~ frsize\)}
 %                    {\(m \stepsto_M m'[pc \mapsto f]\)}
 
-If \(\mathit{decode}\) is undefined on that value, \(\mach \stepsto \mach\). The
-only times \(\stepsto\) is undefined is when there is a policy fault,
-(and the machine ``failstops'') or when it attempts to begin executing a
-macro-instruction out of order. The latter represents a failstop in a lower-level
-policy in the underlying ISA, which guarantees that the macro-instruction
-executes in order.
+%If \(\mathit{decode}\) is undefined on that value, \(\mach \stepsto \mach\). The
+%only times \(\stepsto\) is undefined is when there is a policy fault,
+%(and the machine ``failstops'') or when it attempts to begin executing a
+%macro-instruction out of order. The latter represents a failstop in a lower-level
+%policy in the underlying ISA, which guarantees that the macro-instruction
+%executes in order.
+
+\paragraph*{Compiling Macro-instructions}
+
+[TODO]
 
 \paragraph*{Machine Traces}
 \label{sec:traces}
@@ -642,87 +448,67 @@ such that from some similarly well-formed initial state \(\mpcstatename\),
 \section{Stack Safety, Formally}
 \label{sec:lse}
 
-We are finally ready to give our definition of stack safety. We begin
-by describing how we model knowledge about the program structure,
-then dive into the formal definitions of integrity, confidentiality, and
-well-bracketed control flow, which together constitute stack safety.
+Now we can give our definition of stack safety. Each macro-instruction defines a
+context step; in turn, the context at the point of a call or return defines a trace
+property each for integrity, confidentiality, and well-bracketed control flow.
+The context updates involved in calls and returns are given in \ref{fig:callcontexts}.
+First, we define a function, {\it update view}, that defines the view of a callee.
+Addresses that, offset from stack pointer, are in public regions are marked
+\(\mathit{public}\). Those that are being passed on the stack are marked
+\(\mathit{passed}\). [When we add pass-by-reference arguments, we wil use
+\(V\)]
 
-We will focus on a simple stack model, with a single stack
-that doesn't share between caller and callee: arguments and results are passed
-in registers. The code map just marks the locations of calls:
-$\codemap \in \CODEMAPS ::= \WORDS \rightharpoonup \callmap$.
+To update the context, we pair the updated view with the return target of the
+call: the 
 
-To accommodate different machine architectures and different calling
-conventions, we parameterize over the structure of the stack, particularly
-the means by
-which a caller identifies the data that should be protected during a call. We term
-this the {\em sealing convention},
-%\(\sealcon ~ (\mach \in \MACHS) ~ (\component \in \COMPONENTS)\),
-\(\sealcon \subseteq (\MACHS \times \COMPONENTS)\),
-a relation between machine states and the addresses that should be sealed.
-If a state's \(\PCname\) is annotated as a call, the sealing convention tells us
-which addresses must be protected until the return. Similarly, we abstract over what
-it means to return using a {\em return convention},
-\(\retcon : \MACHS \rightarrow 2^{\MACHS}\), which maps each call state 
-to the set of states that can be considered valid returns to that call.
-The usual return convention is that \(\mach\) and \(\mach'\) agree on the stack pointer,
-and \(\mach'\) has its program counter advanced by one instruction from \(\mach\).
+\begin{figure*}
+\[\begin{split}
+& \mathit{update\_view} ~ V ~ a_{sp} ~ tr ~ pubs \triangleq
+ \lambda \component .
+\begin{cases}
+  \mathit{public} & \textnormal{if } \component \in \WORDS \textnormal{ and }
+  (a_{sp} - \component) \in pubs \\
+%  \passed & \textnormal{else if } \component \in \WORDS \textnormal{ and }
+%  in\_obj ~ a_{sp} ~ pbr ~ \component \textnormal{ for some } pbr \textnormal{ in } pbrs \\
+  \passed & \textnormal{else if } \component \in \WORDS \textnormal{ and }
+  (a_{sp} - \component) \in tr.sargs \\
+  \sealed & \textnormal{else if } \component \in \WORDS \textnormal{ and } \component < a_{sp} \\
+  \mathit{public} & \textnormal{else if } \component \in \REGS \textnormal{ and }
+  \component \in tr.args \textnormal{ or } \component \in \mathit{PUBLIC} \\
+  \unsealed & \textnormal{otherwise} \\
+\end{cases} \\
+\end{split}\]
 
-Each state element is assigned to a {\em domain} \(\stackDom \in \STKDOMS\), which may be \(\outside\)
-of the stack entirely, \(\unsealed\) and therefore accessible, or \(\sealed{\depth}\)
-at a particular depth \(\depth\). Each caller registers a {\em target}
-condition, \(\target \subseteq \MACHS\), which is a predicate on machine states that means it
-has been returned to.
-A context is a pair of a ``domain map'' from elements to domains, and a
-``return target list,'' which is a stack of targets, one for each caller awaiting
-return.
-\[(\domMap,\rts) = \context \in \CONTEXTS ::= (\COMPONENTS \rightarrow \STKDOMS)
-  \times \listT (\target) \]
-%
-The initial context \(\context_0 = (\domMap_0, [])\), where \(\domMap_0\) maps
-the stack to \(\unsealed\) and all other elements to \(\outside\).
+\judgmenttwobrlong[CallCCons]
+           {\(V' = \mathit{update\_view} ~ V ~ m[sp] ~ tr ~ pubs\)}
+           {\(j = \mathbf{call} ~ r ~ tr\)}
+           {\(\context' = (\mathit{Return} ~ (m[pc] + 4) ~ m[sp], V')::(tar,V)::\context\)}
+           {\(m, (tar,V)::\context \stepstounder{j}_C \context'\)}
 
+\judgmenttwobrlong[CallCNil]
+           {\(V' = \mathit{update\_view} ~ (\lambda \component . \unsealed) ~ m[sp] ~ tr ~ pubs\)}
+           {\(j = \mathbf{call} ~ r ~ tr ~ pubs\)}
+           {\(\context' = (\mathit{Return} ~ (m[pc] + 4) ~ m[sp], V')::[]\)}
+           {\(m, [] \stepstounder{j}_C \context'\)}
+                             
+\judgment[]
+         {\(j = \mathbf{enter} ~ tr ~ n\)}
+         {\(m,c \stepstounder{j}_M c\)}
 
-The rules for \(\stepsto_C\) are given inductively, and apply in the listed order.
-A call annotation tells us to push the return target onto the return stack and
-seal all elements with the depth of the previous return stack.
-(Recall that the code map \(\codemap\) is a partial function, and we can use its domain
-as a predicate on addresses.) If we aren't making a call,
-we identify a return by looking ahead and checking if we're about to step to a state
-that matches the topmost return target ({\sc ReturnFound}), and unsealing the caller's frame if so.
-If a target is reached anywhere in the return stack, {\sc ReturnRec}
-unseals each frame down to the level that was returned to.
-If none of these rules apply, the context remains unchanged.
+\judgmentbr[ReturnCCons]
+           {\(\)}
+           {\(j = \mathbf{return} ~ pubs\)}
+           {\(m, V::tars \stepstounder{j}_C ((m[pc] + 4, m[sp]), V')::tars\)}
 
-\begin{tabular}{l}
-  {\sc Call} \\
-  \judgmenttwobrlong[]
-                    {\(\codemap ~ (\mach ~ \PCname) = \callmap\)}
-                    %             {\(\components = \sealcon ~ \mach\)}
-                    {\(\components = \{\component | \sealcon ~ \mach[\component]\}\)}
-                    {\(\domMap' = \domMap[\components \mapsto \sealed{|\rts|}]\)}
-                    {\(\mach,(\domMap,\rts) \stepsto_C \domMap',(\retcon ~ \mach)::\rts\)} \\
-\end{tabular}
+\judgmentbr[ReturnCNil]
+           {\(V' = \lambda \component . \textnormal{if } \component = \PCname \textnormal{ then }
+             \unsealed)\)}
+           {\(\mathit{decode}^* ~ m ~ pc = \mathit{call} ~ f ~ args ~ sargs ~ pubs\)}
+           {\(m, [] \stepstounder{j}_C ((m[pc] + 4, m[sp]),V')::[]\)}
 
-\begin{tabular}{l}
-  {\sc ReturnFound} \\
-  \judgmenttwo[]
-              {\(\mach \stepsto \mach' \in \target\)}
-              {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
-              {\(\mach,(\domMap,\target::\rts) \stepsto_C \domMap[\components \mapsto \unsealed],\rts\)} \\
-              {\sc ReturnRec} \\
-\end{tabular}
-
-\begin{tabular}{l}
-  \judgmentbr[]
-             {\(\mach,(\domMap,\rts) \stepsto_C \domMap',\rts'\)}
-             {\(\components = \{\component | \domMap ~ \component = \sealed{|\rts|}\}\)}
-             {\(\mach,(\domMap,\underscore::\rts) \stepsto_C \domMap'[\components \mapsto \unsealed],\rts'\)} \\
-\end{tabular}
-
-\noindent
-When we build machine traces with this step function, we always know how deep in the
-call stack we are and which elements are sealed.
+\caption{Call, enter, and return macro-instructions}
+\label{fig:callcontexts}
+\end{figure*}
 
 We now state our properties.
 The first is {\em stepwise stack integrity}, where ``stepwise'' means that the property is
