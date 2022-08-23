@@ -207,26 +207,36 @@ are fomulae with free variables bound to sets in \(C\).
 The machine is equipped with additional state representing the tag-based hardware.
 We represent this as a policy state, \(\pol \in \POLS ::= \COMPONENTS \rightarrow \mathcal{T}\),
 where \(\mathcal{T}\) is the set of tags, discussed [in the section on security.]
-We represent a {\it policy} via the partial function
-\(\cdot, \cdot \rightharpoonup_P \cdot \in \MACHS \rightarrow \POLS \rightharpoonup \POLS\),
-where the function being undefined represents a {\it failstop}.
+We represent a {\it policy} via the step relation
+\(\cdot, \cdot \rightharpoonup_P \cdot \subseteq \MACHS \times \POLS \times \POLS\).
+Steps are deterministic and  undefined represents a {\it failstop}.
 
 Separate from the machine state, we keep track of additional security context
 information over the course of the run. This data is not relevant to execution,
 it is only used to define the stack safety property. We define a set of
 {\it security classes}:
 \[sc \in SEC ::= \sealed | \passed | \mathit{public} | \unsealed\]
-And of {\it targets}:
+And of {\it targets}, which identify the addresses of the program counter or
+stack pointer at a return or catch point:
 \[\begin{split}
-tar \in TAR ::= & \mathit{Return} ~ a_1 ~ a_2 \\
-| & \mathit{Catch} ~ a_1 ~ a_2 \\
+tar \in TAR ::= & \mathit{Return} ~ a_{pc} ~ a_{sp} \\
+| & \mathit{Catch} ~ a_{pc} ~ a_{sp} \\
 \end{split}\]
-A {\it security view} \(V \in \COMPONENTS \rightarrow SEC\) divides the machine
+A {\it security view} \(V \in \mathit{VIEW} ::= \COMPONENTS \rightarrow SEC\) divides the machine
 elements in terms of their purpose relative to the active function.
 And a security context is a stack of pairs of targets and views:
-\[\context \in \CONTEXTS ::= \mathit{list} ~ (TAR \times SEC)\]
+\[\context \in \CONTEXTS ::= \mathit{list} ~ (\mathit{TAR} \times \mathit{VIEW})\]
 
-The set of instructions, \(I\), contains the RISC-V ISA. There is additionally a set
+The set of instructions, \(I\), contains the RISC-V ISA. We further introduce a set
+a set \(J\) of {\it overlay sequences}: sequences of instructions that operate as if
+they were single, atomic pseudoinstructions in a larger machine. 
+
+execute atomically
+via a special {\it overlay step} and which carry additional source-level information
+that designates their purpose, and which therefore comes with security obligations.
+An overlay sequence has two parts, a {\it pseudo-instruction} drawn from those
+
+There is additionally a set
 of macro-instructions \(J\), described in detail in Figure \ref{fig:macros}.
 Every macro-instruction \(j \in J\) has a
 size \(\mathit{size}(j)\) and can be decomposed into a sequence of fragments
