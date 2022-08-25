@@ -173,7 +173,7 @@ limited form of coroutines, but not full-blown preemptive concurrency.
 
 The building blocks of the machine are {\em words} and {\em registers}.
 Words are 64-bit integers ranged over by \(w\) and, when used as addresses,
-\(a\). There are 32 registers, ranged over in general by \(r\),
+\(a\). Each processor has 32 registers, ranged over in general by \(r\),
 plus a program counter (\(\PCname\)). The following table divides
 the registers into metavariables, some belonging to caller- or callee- sets:
 
@@ -195,6 +195,10 @@ the registers into metavariables, some belonging to caller- or callee- sets:
 \end{tabular}
 \vspace{\abovedisplayskip}
 
+We specify that a register belongs to processor \(\rho \in \mathcal{R}\) by writing
+it \(r^\rho\), but will omit this notation when the active
+processor is unambiguous from context.
+
 Collectively addresses and registers are {\em state elements} \(\component\)
 in the set \(\COMPONENTS ::= \WORDS + \REGS\).
 %
@@ -203,19 +207,22 @@ is a mapping from state elements to values. For convenience, we abbreviate
 multiple updates \(m[\component_0 \mapsto \word_0][\component_1 \mapsto \word_1]\dots\)
 as \(m \llbracket A \mapsto B | C \rrbracket\), where \(A\) and \(B\)
 are fomulae with free variables bound to sets in \(C\).
+The base machine step relation 
+\(\mach \harpoonunder{\rho}_M \mach' \subseteq \MACHS \times \mathcal{R} \times \MACHS\)
+represents a single step of the processor \(\rho\).
 
 The machine is equipped with additional state representing the tag-based hardware.
 We represent this as a policy state, \(\pol \in \POLS ::= \COMPONENTS \rightarrow \mathcal{T}\),
 where \(\mathcal{T}\) is the set of tags, discussed [in the section on security.]
 We represent a {\it policy} via the step relation
-\(\cdot, \cdot \rightharpoonup_P \cdot \subseteq \MACHS \times \POLS \times \POLS\).
+\(\mach, \pol \harpoonunder{\rho}_P \pol' \subseteq \MACHS \times \POLS \times \mathcal{R} \times \POLS\).
 Steps are deterministic and  undefined represents a {\it failstop}.
 
 Separate from the machine state, we keep track of additional security context
 information over the course of the run. This data is not relevant to execution,
 it is only used to define the stack safety property. We define a set of
 {\it security classes}:
-\[sc \in SEC ::= \sealed | \passed | \mathit{public} | \unsealed\]
+\[sc \in SEC ::= \sealed | \mathit{object}(\phi) | \unsealed\]
 And of {\it targets}, which identify the addresses of the program counter or
 stack pointer at a return or catch point:
 \[\begin{split}
@@ -224,147 +231,96 @@ tar \in TAR ::= & \mathit{Return} ~ a_{pc} ~ a_{sp} \\
 \end{split}\]
 A {\it security view} \(V \in \mathit{VIEW} ::= \COMPONENTS \rightarrow SEC\) divides the machine
 elements in terms of their purpose relative to the active function.
-And a security context is a stack of pairs of targets and views:
+And a {\it stack context} is a stack of pairs of targets and views:
 \[\context \in \CONTEXTS ::= \mathit{list} ~ (\mathit{TAR} \times \mathit{VIEW})\]
 
-The set of instructions, \(I\), contains the RISC-V ISA. We further introduce a set
-a set \(J\) of {\it overlay sequences}: sequences of instructions that operate as if
-they were single, atomic pseudoinstructions. Overlay sequences are {\it calls},
-{\it returns}, {\it tailcalls}, exception {\it catches} and {\it throws},
-and object {\it allocs}, and each carries a sequence of instructions
-that implements the operation. When 
+Our properties additionally depend on a rudimentary model of memory-safe
+objects and pointer provenance. A provenance \(\phi \in \mathbb{N}\)
+identifies a value derived from the \(\phi\)th object allocated since
+the beginning of execution. A provenance map
+\(\prov \in \PROVS ::= \COMPONENTS \rightarrow 2^{\mathbb{N}}\)
+designates, for every machine element, which provenances its current
+value contains. We define a step relation on provenance maps
+\(\mach, \prov \harpoonunder{\rho}_{pm} \prov' \subseteq \MACHS \times
+\PROVS \times \mathcal{R} \times \PROVS\),
+exerpted in Figure \ref{fig:provenance} [TODO].
+
+The set of instructions, \(I \subseteq \WORDS\), corresponds to the RISC-V ISA.
+We further introduce {\it overlay sequences}: sequences of
+instructions that operate as if they were single, atomic pseudoinstructions.
+An overlay sequence consists of both a list
+of instructions and a pseudoinstruction that identifies its purpose in the
+property. The pseudoinstructions, and the data that they carry, are as follows.
+[TODO: still handle stack args by offset.]
+
+\[\begin{align*}
+\psi \in \Psi ::= & \mathbf{call} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
+| & \mathbf{tailcall} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
+| & \mathbf{return} & \\
+| & \mathbf{alloc} ~ size ~ public & size \in \mathbb{N}, public \in \mathbb{B} \\
+| & \mathbf{setex} \\
+| & \mathbf{throwex} \\
+\end{align*}\]
+
+An overlay sequence \(j \in J\) is a pair of a pseudoinstruction and
+a non-empty list of instructions.
+
+We define a step relation over triples of a machine state,
+a policy state, and a provenance map:
+
+\judgmentthree{\(\mach \harpoonunder{\rho}_M \mach'\)}
+              {\(\mach, \pol \harpoonunder{\rho}_P \pol'\)}
+              {\(\mach, \prov \harpoonunder{\rho}_{pm} \prov'\)}
+              {\((\mach,\pol,\prov) \stepstounder{\rho} (\mach',\pol',\prov')\)}
+
+And we define a {\it ranged-step} relation that, given a pair of addresses
+\(a_{low}\) and \(a_{high}\), steps as long the program counter is between them.
 
 
+\judgment[Done]
+         {\(\mach[\PCname] < a_{low} \lor \mach[\PCname] > a_{high}\)}
+         {\(a_{low},a_{high} \vdash (\mach,\pol,\prov) \manystepstounder{\rho} (\mach,\pol,\prov)\)}
 
-\begin{figure}
-  \begin{tabular}{| l | l l |}
-    \hline
-    Macro & \multicolumn{2}{|l|}{Parameters} \\
-    \hline
-    \multirow{3}{*}{\(\mathbf{call}\)}
-    & \(\reg\) & Register containing destination \\
-    & \(tr\) & Type record \\
-    \hline
-    \multirow{3}{*}{\(\mathbf{tailcall}\)}
-    & \(\reg\) & Register containing destination \\
-    & \(tr\) & Type record \\
-    \hline
-    \multirow{2}{*}{\(\mathbf{enter}\)}
-    & \(tr\) & Type record \\
-    \hline
-    \(\mathbf{return}\)
-    & \(pubs\) & Public set \\
-    \hline
-    \(\mathbf{yield}\) & & \\
-    \(\mathbf{setex}\) & & \\
-    \(\mathbf{throwex}\) & & \\
-    \hline
-  \end{tabular}
-  \caption{Macro-instructions}
-  \label{fig:macros}
-\end{figure}
+\judgmenttwobrlong[Step]
+                  {\(a_{low} \leq \mach[\PCname] < a_{high}\)}
+                  {\((\mach,\pol,\prov) \stepstounder{\rho} (\mach',\pol',\prov')\)}
+                  {\(a_{low},a_{high} \vdash (\mach',\pol',\prov') \manystepstounder{\rho} (\mach'',\pol'',\prov'')\)}
+                  {\(a_{low},a_{high} \vdash (\mach,\pol,\prov) \manystepstounder{\rho} (\mach'',\pol'',\prov'')\)}
 
-Each of these types of state is combined in to a triple called an
-MPC-state, \(\mpcstatename \in \MPCS ::= \MACHS \times \POLS \times \CONTEXTS\).
-Execution is modeled by a partial step function between MPC-states,
-written \(\mach, \pol, \context \harpoonunder{} \mach', \pol', \context'\),
-optionally annotated with a macro-instruction \(\harpoonunder{j}\).
-If \(\mach[\PCname]\) decodes to an instruction, then execution follows
-the RISC-V semantics and the policy, without touching the security context.
+Now we're finally ready to introduce the overlay semantics.
+A {\it full state} \(\sigma\) consists of a 4-tuple of a machine state,
+a policy state, a provenance map, and a stack context:
+\[\sigma \in \mathcal{S} ::=
+\MACHS \times \POLS \times \PROVS \times \CONTEXTS\]
 
-\judgmentthree[]
-              {\(\mathit{decode} ~ \mach ~ \mach[\PCname] \in I\)}
-              {\(\mach \stepstounderfull \mach'\)}
-              {\(\mach,\pol \rightharpoonup_P \pol'\)}
-              {\(\mach,\pol,\context \harpoonunder{} \mach',\pol',\context\)}
+The execution relation for full states
+\(\sigma \stepstounder{\rho;\psi?} \sigma' \subseteq
+\mathcal{S} \times \mathcal{R} \times (\Psi + \bot) \times \mathcal{S}\)
+proceeds by an {\it overlay step}
+if the program counter points to the start of an overlay sequence.
+Otherwise, it proceeds by the default step. The definitions of context steps
+\(\harpoonunder{\rho;\psi}_C\) will be defined as we go.
 
-If, for some \(j\), \(\mach[\PCname + i]\) decodes to \(j_i\) for all \(i\) between 0 and
-\(\mathit{size}(j)\), written \(\mathit{decode*} = j\), then the step is via a special
-multi-step. We present these steps as separate step relations:
-\(\cdot \harpoonunder{\cdot}_M \cdot \in \MACHS \times J \times \MACHS\) to step
-the machine state,
-\(\cdot, \cdot \harpoonunder{\cdot}_P \cdot \in \MACHS \times \POLS \times J \times \POLS\)
-for the policy state, and
- \(\cdot, \cdot \stepstounder{j}_C \cdot \in \MACHS \times \CONTEXTS \times J \times \CONTEXTS\)
-for the security context. We then combine them:
+\judgmenttwobrlongbrlong[Overlay]
+                        {\(j = (\psi, \bar{i})\)}
+                        {\(\mach',\prov',\context \harpoonunder{\rho;\psi}_C \context'\)}
+                        {\((\mach,\pol,\prov) \manystepstounder{\rho} (\mach',\pol',\prov')\)}
+                        {\(\mach[\PCname+n] = \bar{i}[n]\) for each \(n\) where \(0 \leq n < |\bar{i}|\)}
+                        {\((\mach,\pol,\prov,\context) \stepstounder{\rho;j} (\mach',\pol',\prov',\context')\)}
 
-\judgmenttwobr[]
-               {\(\mathit{decode*} = j\)}
-               {\(\mach \harpoonunder{j}_M \mach'\)}
-               {\(\mach,\pol \rightharpoonup_P \pol'\)}
-               {\(\mach',\context \stepstounder{j}_C \context'\)}
-               {\(\mach,\pol,\context \harpoonunder{j} \mach',\pol',\context'\)}
+\judgment[Default]
+         {\((\mach,\pol,\prov) \stepstounder{\rho} (\mach',\pol',\prov')\)}
+         {\((\mach,\pol,\prov,\context) \stepstounder{\rho; \bot} (\mach',\pol',\prov',\context)\)}
 
-In this section we will define \(\harpoonunder{j}_M\) for our machine; \(\harpoonunder{j}_P\)
-for the relevant policies will be discussed in [enforcement section], and \(\stepstounder{j}_C\)
-in Section \ref{sec:properties}.
+\paragraph*{Concurrency}
 
-\paragraph*{Macro-step machine steps}
+Thus far, we have defined the step relation of a single processor.
+We model multiple processors able to step independently by a global step relation,
+\(\stepsto\), which simply steps an arbitrary processor:
 
-Here we give the semantics of the machine side of the macro step for calls and returns.
-The machine multi-step for a call (\ref{fig:callmacro}) updates the stack pointer
-and program counter, and zeros non-argument, caller-save registers. (This means that
-the caller should have saved them before initiating the call.)
-
-\vspace{\abovedisplayskip}
-\judgmentbrbr[CallM]
-             {\(j = \mathit{decode}^* ~ m ~ m[pc] = \mathbf{call} ~ r ~ tr ~ pubs\)}
-             {\(m' = m[rra \mapsto m[pc] + 4]\)}
-             {\(m'' = m' \llbracket r \mapsto 0 | r \in CLR\_SV - tr.args \rrbracket\)}
-             {\(m \harpoonunder{j}_M m''[pc \mapsto m[r]]\)}
-\vspace{\belowdisplayskip}
-
-Then, on enter, the callee stores the stack pointer and callee-save registers,
-and allocates new stack space.
-
-\vspace{\abovedisplayskip}
-\judgmentbrbrbr[EnterM]
-               {\(j = \mathit{decode}^* ~ m ~ m[pc] = \mathit{enter} ~ tr\)}
-               {\(m' = m[m[sp] \mapsto m[rra]]\)}
-               {\(m'' = m\llbracket m[m[sp]+i+1 \mapsto m[rs_i] | 0 \leq i < 8 \rrbracket\)}
-               {\(m''' = m''[sp \mapsto m[sp]+n+9]]\)}
-               {\(m \harpoonunder{j}_M m'''[pc \mapsto m[pc]+4*\mathit{size}(j)]\)}
-\vspace{\belowdisplayskip}
-
-Finally, on return, the program counter and register contents are restored from the stack,
-and the callee's frame is deallocated.
-
-\vspace{\abovedisplayskip}
-\judgmentbrbr[ReturnM]
-             {\(j = \mathit{decode}^* ~ m ~ m[pc] = \mathit{return} ~ n\)}
-             {\(m' = m[sp \mapsto m[sp]-n-9]\)}
-             {\(m'' = m\llbracket m[rs_i] \mapsto m[m[sp]+i+1 | 0 \leq i < 8 \rrbracket\)}
-             {\(m \harpoonunder{j}_M m''[pc \mapsto m''[sp]]\)}
-\vspace{\belowdisplayskip}
-
-%For the context step, the macro-instruction additionally identifies which objects
-%(contiguous regions defined relative to the stack pointer) have been placed there
-%as: arguments that overflowed to the stack (\(sargs\)), which are existing objects
-%passed by reference (\(pbrs\)), and which are marked public (\(pubs\)). We use this
-%information to construct the callee's security view.
-%\[obj \in OBJ ::= \mathbb{Z} \times \mathbb{Z}\]
-%\[in\_obj ~ a_{sp} ~ (lo, hi) ~ a \triangleq a_{sp} - lo \leq a < a_{sp} - hi\]
-           
-%\judgmenttwobrlong[Return]
-%                    {\(m' = m[sp \mapsto m[sp] - \mathit{size}(frsize)]\)}
-%                    {\(m'' = m \llbracket r \mapsto 0 | r \not \in args \land r \in caller \rrbracket\)}
-%                    {\(\mathit{decode}^* ~ m ~ pc = \mathit{return} ~ frsize\)}
-%                    {\(m \stepsto_M m'[pc \mapsto f]\)}
-
-%If \(\mathit{decode}\) is undefined on that value, \(\mach \stepsto \mach\). The
-%only times \(\stepsto\) is undefined is when there is a policy fault,
-%(and the machine ``failstops'') or when it attempts to begin executing a
-%macro-instruction out of order. The latter represents a failstop in a lower-level
-%policy in the underlying ISA, which guarantees that the macro-instruction
-%executes in order.
-
-\paragraph*{Compiling Macro-instructions}
-
-Every macro-instruction is associated with a sequence of normal RISC-V instructions
-of the appropriate length, so compiling from the macro-instruction machine to normal
-RISC-V is as simple as replacing \(j_i\) with its corresponding instruction, tagged
-as a ``blessed sequence'' -- a standard tag-based enforcement mechanism that guarantees
-that instructions may {\it only} step in the appropriate order.
+\judgment[]
+         {\(\sigma \stepstounder{\rho} \sigma'\)}
+         {\(\sigma \stepsto \sigma'\)}
 
 \paragraph*{Machine and Observation Traces}
 \label{sec:traces}
