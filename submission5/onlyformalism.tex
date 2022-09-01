@@ -192,13 +192,16 @@ the registers into metavariables, some belonging to caller- or callee- sets:
 Collectively addresses and registers are {\em state elements} \(\component\)
 in the set \(\COMPONENTS ::= \WORDS + \REGS\).
 %
-A {\em machine state} \(\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\)
-is a mapping from state elements to values. For convenience, we abbreviate
+A {\em machine state} \(\mach \in \MACHS\) is a type that exposes a mapping
+\(\mach[\component]\) from state elements to values, and may also contain additional
+security state. For convenience, we abbreviate
 multiple updates \(m[\component_0 \mapsto \word_0][\component_1 \mapsto \word_1]\dots\)
 as \(m \llbracket A \mapsto B | C \rrbracket\), where \(A\) and \(B\)
 are fomulae with free variables bound to sets in \(C\).
 The base machine step function
-\(\mach \stepstounder{} \mach' \in \MACHS \rightarrow \MACHS\) represents a single step.
+\(\mach \stepstounder{} \mach' \in \MACHS \rightharpoonup \MACHS\) represents a single step.
+It is partial to represent the capacity of the machine to failstop.
+In order to accommodate failstop behavior, our properties will be {\it termination insensitive}.
 
 The set of instructions, \(I \subseteq \WORDS\), corresponds to the RISC-V ISA.
 We further introduce {\it macro-instructions}: sequences of
@@ -212,8 +215,8 @@ property. The pseudoinstructions, and the data that they carry, are as follows.
 | & \mathbf{tailcall} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
 | & \mathbf{return} & \\
 | & \mathbf{alloc} ~ size & size \in \mathbb{N} \\
-| & \mathbf{setex} \\
-| & \mathbf{throwex} \\
+| & \mathbf{setex} ~ \addr_{buf} \\
+| & \mathbf{throwex} ~ \addr_{buf} \\
 \end{align*}
 
 An macro-instruction \((\bar{i},\psi) \in J\) is a pair of a pseudoinstruction and
@@ -247,13 +250,13 @@ A set of {\it targets} identify the addresses of the program counter or
 stack pointer at a return point:
 \[\begin{split}
 tar \in TAR ::= & \mathit{Return} ~ a_{pc} ~ a_{sp} \\
-& \mathit{Catch} ~ a_{pc} ~ a_{sp} \\
+& \mathit{Catch} ~ a_{buf} ~ a_{pc} ~ a_{sp} \\
 & \mathit{Done} \\
 \end{split}\]
 And a {\it stack context} is a non-empty stack of pairs of targets and views:
 \[\context \in \CONTEXTS ::= \mathit{list} ~ (\mathit{TAR} \times \mathit{VIEW})\]
 
-The initial stack context \(\context_0\) is \(\lbracket (\mathit{Done}, V_0) \rbracket\).
+The initial stack context \(\context_0\) is \(\left[ (\mathit{Done}, V_0) \right]\).
 
 An {\it overlay state} \(\sigma\) consists of a pair of a machine state
 and a stack contexts.
@@ -323,6 +326,9 @@ for list-cons.
 We write that execution from a state produces an observation trace \(\sigma \hookrightarrow \obsT\)
 as follows, coinductively:
 
+\judgment{\(\not \exists \mach' ~ \context'. (\mach,\context) \stepstounder{\psi?} (\mach',\context')\)}
+         {\((\mach,\context) \hookrightarrow \tau\)}
+
 \judgmenttwo{\((\mach,\context) \stepstounder{\psi?} (\mach',\context')\)}
             {\((\mach',\context') \hookrightarrow \obsT\)}
             {\((\mach,\context) \hookrightarrow \notfinished{\mathit{observe} ~ \psi? ~ \mach}{\obsT}\)}
@@ -341,7 +347,7 @@ is the context of the caller.
 \judgmenttwobrlong{\((\mach,\context) \stepstounder{\psi?} (\mach',\context')\)}
                   {\(|\context'| > |\context''|\)}
                   {\(\context'' \downarrow (\mach',\context') \hookrightarrow \obsT\)}
-                  {\(\context'' \downarrow (\mach,\context) \hookrightarrow \notfinished{(\mathit{observe} ~ \psi? ~ \mach}{\obsT}\)}
+                  {\(\context'' \downarrow (\mach,\context) \hookrightarrow \notfinished{\mathit{observe} ~ \psi? ~ \mach}{\obsT}\)}
 
 \paragraph*{Observational Similarity}
 
@@ -397,11 +403,10 @@ call and push it to the stack. The return target will tell us whether a future
 return is to the proper location with the stack pointer restored.
 The view tells us how to treat the security of the callee's state, and as
 it becomes more complicated, will benefit from the history that we maintain.
-We take the head of a list, \(\mathit{hd}\), in the usual way, here a
-total function because the context will never be empty.
 
 On a return, we pop the topmost pair from the context that has
-a \(\mathit{return}\), along with any other pairs we pass.
+a \(\mathit{return}\), along with any other pairs (catch points,
+for instance) that we pass.
 
 \begin{figure*}
 \[\begin{split}
@@ -418,9 +423,9 @@ a \(\mathit{return}\), along with any other pairs we pass.
 
 \judgmenttwobrlong[CallC]
                   {\(\psi = \mathbf{call} ~ r_{target} ~ \overline{r_{args}}\)}
-                  {\(\context' = (\mathit{Return} ~ (m[pc] + 4) ~ m[sp], V)::\context\)}
-                  {\(V = \mathit{update\_view} ~ (snd ~ (hd ~ \context)) ~ m[sp] ~ \overline{r_{args}}\)}
-                  {\(\mach, \context \constep{\psi} \context'\)}
+                  {\(T' = \mathit{Return} ~ (m[pc] + 4) ~ m[sp]\)}
+                  {\(V' = \mathit{update\_view} ~ V ~ m[sp] ~ \overline{r_{args}}\)}
+                  {\(\mach, (T,V)::\context \constep{\psi} (T',V')::\context\)}
 
 \judgment[ReturnCRet]
          {\(\psi = \mathbf{return}\)}
@@ -435,7 +440,7 @@ a \(\mathit{return}\), along with any other pairs we pass.
             {\(\mach, \context \constep{\psi} \context'\)}
             {\(\mach, (\_::\context) \constep{\psi} \context'\)}
          
-\caption{Call, enter, and return macro-instructions}
+\caption{Call and return context updates}
 \label{fig:callcontexts}
 \end{figure*}
 
@@ -456,503 +461,53 @@ this is perfectly legal -- as long as it either restores it, or has some guarant
 that its changes will impact the caller.
 
 We start by defining a second-order logical operator
-\(\context \uparrow P\), read ``\(P\) holds on return to \(\context\),''
+\(\context_{ret} \uparrow P\), read ``\(P\) holds on return to \(\context_{ret}\),''
 where \(P\) is a predicate on machine states. This is a coinductive relation
 similar to ``weak until'' in temporal logic -- it holds if the condition
 is never reached.
 
-\judgment{\(P ~ \mach\)}
-         {\((\context \uparrow P) ~ (\mach, \pol, \prov, \context)\)}
-
-\judgmenttwobrlong{\(\context_0 \not = \context\)}
-                  {\((\context_0 \uparrow P) ~ (\mach', \pol', \prov', \context')\)}
-                  {\((\mach, \pol, \prov, \context) \stepstounder{\rho,\psi?}
-                    (\mach', \pol', \prov', \context')\)}
-                  {\((\context_0 \uparrow P) ~ (\mach, \pol, \prov, \context)\)}
-
-Similarly, in {\it caller confidentiality}, we will want to compare future states,
-so we give a binary equivalent, \(\context \Uparrow R\), so that
-\(\sigma (\context \Uparrow R) \sigma'\) holds if \(R\) holds on the
-first return states of after \(\sigma\) and \(\sigma'\).
-
-\judgment[Returned]
-         {\(\mach ~ R ~ \mach'\)}
-         {\((\mach,\pol,\prov,\context) ~ (\context \Uparrow R) ~ (\mach',\pol',\prov',\context)\)}
-
-\judgmentthree[Left]
-              {\(\context \not = \pi_c(\sigma_1)\)}
-              {\(\sigma_1 \stepstounder{\rho;\psi?} \sigma_1'\)}
-              {\(\sigma_1' ~ (\context \Uparrow R) ~ \sigma_2\)}     
-              {\(\sigma_1 ~ (\context \Uparrow R) ~ \sigma_2\)}
-
-\judgmentthree[Right]
-              {\(\context \not = \pi_c(\sigma_2)\)}
-              {\(\sigma_2 \stepstounder{\rho;\psi?} \sigma_2'\)}
-              {\(\sigma_1 ~ (\context \Uparrow R) ~ \sigma_2'\)}     
-              {\(\sigma_1 ~ (\context \Uparrow R) ~ \sigma_2\)}
-
-\paragraph*{Variants and Safe Elements}
-              
-One or more elements of a given state are {\it safe} if their values
-in that state have no observable influence on future execution. We define this
-formally as a sort of non-interference: for a state \(\sigma\) and
-a set of elements \(\components\), \(\mathit{safe} ~ \sigma ~ \components\)
-holds if we can replace the contents of \(\components\) with arbitrary values
-and have the resulting state produce an equivalent trace. The state created
-by modifying \(\components\) in this way is termed a variant.
-
-\definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
-written \(\mach \approx_\components \nach\), if, for
-all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]\).
-
-\definition Full states \((\mach,\pol,\prov,\context)\) and \((\nach,\pol,\prov,\context)\)
-are also {\em \(\components\)-variants} if \(\mach\) and \(\nach\) are.
-
-\definition An element set \(\components\) is safe in state \(\sigma)\),
-written \(\components ~ \mathit{SAFE} ~ \sigma\), if for all
-\(\sigma'\) such that \(\sigma \approx_{\components'} \sigma'\), if 
-\(\sigma \hookrightarrow \obsT\) and
-\(\sigma' \hookrightarrow \obsT'\), then
-\(\obsT \eqsim \obsT'\).
-
-\paragraph*{Property Definitions}
-
-And with the preliminary definitions out the way, we can define integrity.
-
-\definition Let \(\Delta(\mach,\mach')\) be the set of elements \(\component\)
-such that \(\mach[\component] \not = \mach'[\component]\).
-
-\definition Let \(\sigma = (\mach,\pol,\prov,\context)\) and
-\(\components = \{\component | \mathit{hd\_def} ~ \context ~ \component = \sealed\}\).
-Let \(P\) be a predicate on states \(\sigma'\) that holds if
-\(\Delta(\mach, \pi_m(\sigma')) \cap \components ~ \mathit{SAFE} ~ \sigma'\).
-Then \(\sigma\) enjoys {\it return-time integrity} if \(\context \downarrow P\) holds.
-
-\definition A system enjoys {\it stack integrity} if, for all reachable states \(\sigma\) such that
-\(\sigma \stepstounder{\rho;\mathbf{Call}\dots} \sigma'\),
-\(\sigma'\) enjoys return-time integrity.
-
-\paragraph*{Caller Confidentiality}
-
-Confidentiality properties are also modeled as non-interference, but with a twist:
-the caller's confidential data should be kept secret from the callee, but after return,
-will naturally be accessible to the caller once again. So, we must model confidentiality
-in terms of events inside the callee. But confidentiality violations might not become
-visible during the callee's lifetime -- the callee might read a secret and stash it somewhere
-that it will be accessed later. So we must also consider the machine state at the end
-of the call.
-
-We could define a natural, strict form of confidentiality that requires that the final
-states be identical. However, as with integrity, this is stricter than we need -- there
-may be some conditions in which a secret is copied, but never used again. So, we once
-again wish for our final condition to make the values {\it safe}. Which values?
-
-\definition Let \(\mach,\mach'\) and \(\nach,\nach'\)
-be pairs of machine states. Their {\em corrupted set}, written
-\(\bar{\Diamond}(\mach,\mach',\nach,\nach')\), is the set of all elements
-\(\component \in \Delta(\mach,\mach') \cup \Delta(\nach,\nach')\) such that
-\(\mach'[\component] \not = \nach'[\component]\).
-
-\definition Let \(\sigma = (\mach,\pol,\prov,\context)\) be a state and
-\(\components = \{\component | \mathit{hd\_def} ~ \context ~ \component \in
-\{\sealed, \unsealed\}\}\).
-
-Then \(\sigma\) enjoys {\it caller confidentiality} if, for any \(\sigma'\)
-that is a \(\components\)-variant of \(\sigma\), we can take
-\(\context \uparrow \sigma \hookrightarrow \obsT\) and
-\(\context \uparrow \sigma' \hookrightarrow \obsT'\) and have that
-\(\obsT \simeq \obsT'\). And if, additionally, \(\sigma ~ (\context \Uparrow R) ~ \sigma'\),
-where \(\sigma_1 ~ R ~ \sigma_2\) if
-\(\bar{\Diamond}(\mach,\pi_m(\sigma_1),\pi_m(\sigma'),\pi_m(\sigma_2)) ~ \mathit{SAFE} ~ \sigma_1\).
-
-\definition A system enjoys {\it universal caller confidentiality} if, for all reachable states
-\(\sigma\) such that \(\sigma \stepstounder{\rho;\mathbf{Call}\dots} \sigma'\),
-\(\sigma'\) enjoys caller confidentiality.
-
-\subsection{The Machine in Detail}
-\label{sec:prelim}
-
-The building blocks of the machine are {\em words} and {\em registers}.
-Words (\(\WORDS\)) are 64-bit integers ranged over by \(w\) and, when used as addresses,
-\(a\). Each processor has 32 registers, ranged over in general by \(r\),
-plus a program counter (\(\PCname\)). The following table divides
-the registers into metavariables, some belonging to caller- or callee- sets:
-
-\vspace{\abovedisplayskip}
-\begin{tabular}{| l | l | l |}
-  \hline
-  Set & Names & Purpose \\
-  \hline
-  CLR\_SV & \(rt_0 - rt_6\) & Caller-saved temps \\
-  & \(ra_0 - ra_1\) & Caller-saved args / return vals \\
-  & \(ra_2 - ra_7\) & Caller-saved args \\
-  \hline
-  CLE\_SV & \(rs_0 - rs_7\) & Callee-saved \\
-  \hline
-  PUBLIC & \(rra\) & Return Address \\
-  & \(rsp\) & Stack Pointer \\
-  & \(pc\) & Program Counter \\
-  \hline
-\end{tabular}
-\vspace{\abovedisplayskip}
-
-We specify that a register belongs to processor \(\rho \in \PROCS\) by writing
-it \(r^\rho\), but will omit this notation when the active
-processor is unambiguous from context. The set of all registers across all processors
-is \(\REGS\).
-
-Collectively addresses and registers are {\em state elements} \(\component\)
-in the set \(\COMPONENTS ::= \WORDS + \REGS\).
-%
-A {\em machine state} \(\mach \in \MACHS ::= \COMPONENTS \rightarrow \WORDS\)
-is a mapping from state elements to values. For convenience, we abbreviate
-multiple updates \(m[\component_0 \mapsto \word_0][\component_1 \mapsto \word_1]\dots\)
-as \(m \llbracket A \mapsto B | C \rrbracket\), where \(A\) and \(B\)
-are fomulae with free variables bound to sets in \(C\).
-The base machine step relation 
-\(\mach \machstep{\rho} \mach' \subseteq \MACHS \times \PROCS \times \MACHS\)
-represents a single step of the processor \(\rho\).
-
-The machine is equipped with additional state representing the tag-based hardware.
-We represent this as a policy state, \(\pol \in \POLS ::= \COMPONENTS \rightarrow \mathcal{T}\),
-where \(\mathcal{T}\) is the set of tags, discussed [in the section on security.]
-We represent a {\it policy} via the step relation
-\(\mach, \pol \harpoonunder{\rho}_P \pol' \subseteq \MACHS \times \POLS \times \PROCS \times \POLS\).
-Steps are deterministic and  undefined represents a {\it failstop}.
-
-Our properties additionally depend on a rudimentary model of memory-safe
-objects and pointer provenance. A provenance \(\phi \in \mathbb{N}\)
-identifies a value derived from the \(\phi\)th object allocated since
-the beginning of execution. A provenance map
-\(\prov \in \PROVS ::= \COMPONENTS \rightarrow 2^{\mathbb{N}}\)
-designates, for every machine element, which provenances its current
-value contains. We define a step relation on provenance maps
-\(\mach, \prov \harpoonunder{\rho}_{pm} \prov' \subseteq \MACHS \times
-\PROVS \times \PROCS \times \PROVS\),
-exerpted in Figure \ref{fig:provenance} [TODO].
-
-We define a step relation over triples of a machine state,
-a policy state, and a provenance map:
-
-\judgmentthree{\(\mach \machstep{\rho} \mach'\)}
-              {\(\mach, \pol \polstep{\rho} \pol'\)}
-              {\(\mach, \prov \provstep{\rho} \prov'\)}
-              {\((\mach,\pol,\prov) \stepstounder{\rho} (\mach',\pol',\prov')\)}
-
-As the last piece of state, we keep track of security context information
-specific to each stack
-over the course of the run. This data is not relevant to execution,
-it is only used to define the stack safety property. We define a set of
-{\it security classes}:
-\[sc \in SEC ::= \public | \sealed | \mathit{object}(\phi) | \unsealed\]
-And of {\it targets}, which identify the addresses of the program counter or
-stack pointer at a return or catch point:
-\[\begin{split}
-tar \in TAR ::= & \mathit{Return} ~ a_{pc} ~ a_{sp} \\
-| & \mathit{Catch} ~ a_{pc} ~ a_{sp} \\
-\end{split}\]
-A {\it security view} \(V \in \mathit{VIEW} ::= \COMPONENTS \rightarrow SEC\) divides the machine
-elements in terms of their purpose relative to the active function.
-And a {\it stack context} is a stack of pairs of targets and views:
-\[\context \in \CONTEXTS ::= \mathit{list} ~ (\mathit{TAR} \times \mathit{VIEW})\]
-
-The set of instructions, \(I \subseteq \WORDS\), corresponds to the RISC-V ISA.
-We further introduce {\it macro-instructions}: sequences of
-instructions that operate as if they were single, atomic pseudoinstructions.
-A macro-instruction consists of both a list
-of instructions and a pseudoinstruction that identifies its purpose in the
-property. The pseudoinstructions, and the data that they carry, are as follows.
-[TODO: still handle stack args by offset.]
-
-\begin{align*}
-\psi \in \Psi ::= & \mathbf{call} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
-| & \mathbf{tailcall} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
-| & \mathbf{return} & \\
-| & \mathbf{alloc} ~ size & size \in \mathbb{N} \\
-| & \mathbf{setex} \\
-| & \mathbf{throwex} \\
-\end{align*}
-
-An macro-instruction \((\bar{i},\psi) \in J\) is a pair of a pseudoinstruction and
-a non-empty list of instructions. In order to implement the atomic nature of
-executing macro-instructions,
-we define a {\it ranged-step} relation that, given a pair of addresses
-\(a_{low}\) and \(a_{high}\), steps as long the program counter is between them.
-
-\judgment[Done]
-         {\(\mach[\PCname] < a_{low} \lor \mach[\PCname] > a_{high}\)}
-         {\(a_{low},a_{high} \vdash (\mach,\pol,\prov) \manystepstounder{\rho} (\mach,\pol,\prov)\)}
+\judgmenttwo[Returned]
+            {\(P ~ (\mach,\context)\)}
+            {\(|\context| \leq |\context_{ret}|\)}
+            {\((\context_{ret} \uparrow P) ~ (\mach, \context)\)}
 
 \judgmenttwobrlong[Step]
-                  {\(a_{low} \leq \mach[\PCname] < a_{high}\)}
-                  {\((\mach,\pol,\prov) \stepstounder{\rho} (\mach',\pol',\prov')\)}
-                  {\(a_{low},a_{high} \vdash (\mach',\pol',\prov') \manystepstounder{\rho} (\mach'',\pol'',\prov'')\)}
-                  {\(a_{low},a_{high} \vdash (\mach,\pol,\prov) \manystepstounder{\rho} (\mach'',\pol'',\prov'')\)}
-
-Now we're finally ready to introduce the overlay semantics.
-A {\it full state} \(\sigma\) consists of a 4-tuple of a machine state,
-a policy state, a provenance map, and a map from processors to stack contexts:
-\[\sigma = (\mach, \pol, \prov, ctxs) \in \mathcal{S} ::=
-\MACHS \times \POLS \times \PROVS \times (\PROCS \rightarrow \CONTEXTS)\]
-
-The execution relation for full states
-\(\sigma \stepstounder{\rho;\psi?} \sigma' \subseteq
-\mathcal{S} \times \PROCS \times (\Psi + \bot) \times \mathcal{S}\)
-proceeds by an {\it overlay step}
-if the program counter points to the start of a macro-instruction.
-Otherwise, it proceeds by the default step. The definitions of context steps
-\(\constep{\rho;\psi}\) will be defined for each pseudoinstruction as we introduce
-topics.
-
-\judgmenttwobrlongbrlong[Overlay]
-                        {\((\bar{i}, \psi) \in J\)}
-                        {\(\mach',\prov',(ctxs ~ \rho) \constep{\rho;\psi} \context\)}
-                        {\((\mach,\pol,\prov) \manystepstounder{\rho} (\mach',\pol',\prov')\)}
-                        {\(\mach[\PCname+n] = \bar{i}[n]\) for each \(n\) where \(0 \leq n < |\bar{i}|\)}
-                        {\((\mach,\pol,\prov,ctxs) \stepstounder{\rho;\psi} (\mach',\pol',\prov',ctxs[\rho \mapsto \context])\)}
-
-\judgment[Default]
-         {\((\mach,\pol,\prov) \stepstounder{\rho} (\mach',\pol',\prov')\)}
-         {\((\mach,\pol,\prov,ctxs) \stepstounder{\rho; \bot} (\mach',\pol',\prov',ctxs)\)}
-
-\paragraph*{Macro-instruction definitions}
-
-[TBD]
-
-Note that there can be multiple macro-instructions with different instructions
-that represent the same pseudoinstruction.
-[This is less likely when we have smaller pseudoinstructions.]
-
-\paragraph*{Concurrency and Traces}
-
-So far we have defined the execution steps of single processors. Processors
-have their own register banks, but share memory, and may step independently
-in any order. We can represent sequences of these steps as traces.
-Some steps of execution can be interpreted as {\it events} that can be observed
-from outside the system. We define events \(\obs \in \OBSS\) as calls, labeled
-with the target address and the values of the arguments, or else as the silent
-event \(\tau\):
-\[\begin{split}
-\obs \in \OBSS ::= & ~ \mathbf{callE} ~ a_{target} ~ \overline{w_{args}} \\
-| & ~ \tau \\
-\end{split}\]
-
-A {\em trace} is a nonempty, finite or infinite sequence
-of pairs of processors and events, ranged over by \(\obsT\).
-We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces, reserving ``::''
-for list-cons.
-
-We convert macro-instructions into events via the \(\mathit{observe}\)
-function, observing the values of relevant registers, defined in Figure \ref{fig:observe}.
-
-\begin{figure*}
-\[\mathit{observe} ~ \rho ~ \psi? ~ m =
-\begin{cases}
-  (\rho, \mathbf{callE} ~ m[\PCname] ~ m \llbracket r | r \in \overline{r_{args}} \rrbracket)
-  & \textnormal{when } ~ \psi = \mathbf{call} ~ r_{target} ~ \overline{r_{args}} \\
-%  (\rho, \mathbf{returnE} ~ m[\PCname] & \textnormal{when } \psi = \mathbf{return} \\
-  (\rho, \tau) & \textnormal{otherwise} \\
-\end{cases}\]
-\caption{Converting overlay steps to events}
-\label{fig:observe}
-\end{figure*}
-
-We write that execution from a state produces an observation trace \(\sigma \hookrightarrow \obsT\)
-as follows, coinductively:
-
-\judgment{\(\not \exists \sigma' . \sigma \stepstounder{} \sigma'\)}
-         {\(\sigma \hookrightarrow \tau\)}
-
-\judgmenttwo{\(\sigma \stepstounder{\rho; \psi?} \sigma'\)}
-            {\(\sigma' \hookrightarrow \obsT\)}
-            {\(\sigma \hookrightarrow \notfinished{(\rho,\mathit{observe} ~ \rho ~ \psi? ~ \pi_m(\sigma'))}{\obsT}\)}
-
-Naturally, most states will admit many possible traces, depending on the order in which
-processors step.
-
-We define another relation that takes a trace of a callee up to its return, if one occurs.
-In this case we must specify that we are considering a single processor.
-We write this \(\rho,\context \downarrow \sigma \hookrightarrow \obsT\), where \(\context\)
-is the context of the caller.
-
-\judgment{\(\context = \pi_c(\sigma) ~ \rho\)}
-         {\(\rho, \context \downarrow \sigma \hookrightarrow \tau\)}
-
-\judgmentthree{\(\sigma \stepstounder{\rho',\psi?} \sigma'\)}
-              {\(\rho \not = \rho'\)}
-              {\(\rho, \context \downarrow \sigma' \hookrightarrow \obsT\)}
-              {\(\rho, \context \downarrow \sigma \hookrightarrow \obsT\)}
-
-\judgmentthree{\(\sigma \stepstounder{\rho,\psi?} \sigma'\)}
-              {\(\context \not = \pi_c(\sigma') ~ \rho\)}
-              {\(\context \downarrow \sigma' \hookrightarrow \obsT\)}
-              {\(\context \downarrow \sigma \hookrightarrow \notfinished{(\mathit{observe} ~ \rho ~ \psi? (\pi_m{\sigma'}))}{\obsT}\)}
-
-\paragraph*{Observational Similarity}
-
-We say that two event traces $\obsT_1$ and $\obsT_2$ are {\em similar}
-from the perspective of processor \(\rho\), written \(\obsT_1 \eqsim_\rho
-\obsT_2\), if the sequence of non-silent \(\rho\) events is the same. That is, we
-compare up to deletion of \(\tau\) events and events from other processors, coinductively:
-
-\begin{minipage}{.4\columnwidth}
-  \judgment{}{\(\obsT \eqsim_\rho \obsT\)}
-\end{minipage}
-\begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim_\rho \obsT_2\)}
-           {\(\notfinished{(\rho, \obs)}{\obsT_1} \eqsim_\rho \notfinished{(\rho, \obs)}{\obsT_2}\)}
-\end{minipage}
-
-\begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim_\rho \obsT_2\)}
-           {\(\notfinished{(\rho,\tau)}{\obsT_1} \eqsim_\rho \obsT_2\)}
-\end{minipage}
-\begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim_\rho \obsT_2\)}
-           {\(\obsT_1 \eqsim_\rho \notfinished{(\rho,\tau)}{\obsT_2}\)}
-\end{minipage}
-
-\begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim_\rho \obsT_2\)}
-           {\(\notfinished{(\rho',\obs)}{\obsT_1} \eqsim_\rho \obsT_2\)}
-\end{minipage}
-\begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim_\rho \obsT_2\)}
-           {\(\obsT_1 \eqsim_\rho \notfinished{(\rho',\obs)}{\obsT_2}\)}
-\end{minipage}
-
-\section{Stack Safety With Calls and Returns}
-
-In this section we will present the context steps for allocations,
-calls, and returns, and show how they
-translate into properties. They are given formally in Figure \ref{fig:callcontexts}.
-Allocations are simple: from the current stack pointer, a range up to the size of
-the allocation is marked \(\mathit{object}(\phi)\) for a fresh identifier \(\phi\).
-[TODO: actually generate fresh \(\phi\) by keeping counter...]
-[TODO: need to put the original \(\phi\) somewhere. Maybe macro-instruction
-  for offsetting from stack pointer? Ugh.]
-
-Alloc macro-instructions model allocations that might, or might not, be
-shared. A function can always allocate more opjects by adjusting its
-stack pointer outside of a macro-instruction, but this will not be reflected
-in the context.
-
-First, we define a function, {\it update view}, that defines the view of a callee
-in terms of that of the callee, together with the provenance map.
-First, all stack locations below the stack pointer
-are \(\unsealed\) -- fair game for the callee to allocate or write to, and
-to read after writing. Above the stack pointer, anything that is not an object
-becomes \(\sealed\). Argument and system registers are automatically marked
-\(\mathit{public}\), and all others are \(\sealed\).
-Finally, we must address stack objects: we recursively identify all objects
-that are reachable via pointer provenances found in \(\mathit{public}\)
-registers and in reachable objects, and these retain their view, while
-all others become \(\sealed\). [TODO: implement \(\mathit{reach}\) to do this.]
-
-To update the context, we pair the updated view with the return target of the
-call: the return target tells us whether a return is to the proper location
-which the stack pointer restored, and the view tells us how to treat the
-security of the callee's state. We define \(\mathit{hd\_def}\) as taking
-a context and returning its head, or \(((0,0),\lambda \component.\unsealed)\)
-if the context is empty. [TODO: structure it so that we don't need to return
-  a dummy target.]
-
-\begin{figure*}
-\judgmenttwobrlong[AllocC]
-                  {\(\psi = \mathbf{alloc} ~ size\)}
-                  {\((T,V) = (hd\_def ~ \context)\)}
-                  {\(V' = V\llbracket m[sp]+i \mapsto \mathit{object}(\phi) | 0 < i \leq size \rrbracket\)}
-                  {\(\mach, \prov, \context \constep{\rho;\psi} ctxs[\rho \mapsto (T,V')::(tl\_def ~ \context]\)}
-
-\[\begin{split}
-& \mathit{update\_view} ~ V ~ \prov ~ a_{sp} ~ \overline{r_{args}} \triangleq
-\lambda \component .
-\begin{cases}
-  \mathit{public} & \textnormal{else if } \component \in \REGS \textnormal{ and }
-  \component \in \overline{r_{args}} \textnormal{ or } \component \in \mathit{PUBLIC} \\
-  \mathit{object}(\phi) & \textnormal{else if } (V ~ \component) = \mathit{object}(\phi)
-  \textnormal{ and } \phi \in \mathit{reach} ~ \prov ~ V ~ \overline{r_{args}} \\
-  \sealed & \textnormal{else if } \component \in \WORDS \textnormal{ and } a_{sp} < \component \leq a_{sbase} \\
-  \unsealed & \textnormal{otherwise} \\
-\end{cases} \\
-\end{split}\]
-
-\judgmenttwobrlong[CallC]
-                  {\(\psi = \mathbf{call} ~ r_{target} ~ \overline{r_{args}}\)}
-                  {\(\context' = (\mathit{Return} ~ (m[pc] + 4) ~ m[sp], V)::\context\)}
-                  {\(V = \mathit{update\_view} ~ (snd ~ \context) ~ m[sp] ~ \overline{r_{args}}\)}
-                  {\(\mach, \prov, \context \constep{\rho;\psi} \context'\)}
-
-\judgment[ReturnCCons]
-         {\(j = \mathbf{return}\)}
-         {\(m, (\mathit{return} ~ a_{pc} ~ a_{sp}, V)::\context \constep{\rho;\psi} \context\)}
-
-\judgment[ReturnCNil]
-         {\(j = \mathbf{return}\)}
-         {\(m, [] \constep{\rho;\psi} []\)}
-           
-\caption{Call, enter, and return macro-instructions}
-\label{fig:callcontexts}
-\end{figure*}
-
-Now we can give our definition of stack safety in terms of the context at the point of a call.
-
-\subsection{Facts Abouts Calls and Returns}
-
-Here we define some logical operations to reason about the behavior of the
-system over time. These have a temporal-logic flavor, as they reflect
-the expected behavior of the system in the future, after a possible return.
-
-\paragraph*{On-return}
-
-The intuition behind {\it return-time integrity} (below) is that a caller may expect its
-sealed data to be unchanged when control returns to it. In fact, the callee
-may overwrite such data -- when the data are found in callee-saved registers
-this is perfectly legal -- as long as it either restores it, or has some guarantee
-that its changes will impact the caller.
-
-We start by defining a second-order logical operator
-\(\context \uparrow P\), read ``\(P\) holds on return to \(\context\),''
-where \(P\) is a predicate on machine states. This is a coinductive relation
-similar to ``weak until'' in temporal logic -- it holds if the condition
-is never reached.
-
-\judgment{\(P ~ \mach\)}
-         {\((\context \uparrow P) ~ (\mach, \pol, \prov, \context)\)}
-
-\judgmenttwobrlong{\(\context_0 \not = \context\)}
-                  {\((\context_0 \uparrow P) ~ (\mach', \pol', \prov', \context')\)}
-                  {\((\mach, \pol, \prov, \context) \stepstounder{\rho,\psi?}
-                    (\mach', \pol', \prov', \context')\)}
-                  {\((\context_0 \uparrow P) ~ (\mach, \pol, \prov, \context)\)}
+                  {\(|\context| > |\context_{ret}|\)}
+                  {\((\mach, \context) \stepstounder{\psi?} (\mach', \context')\)}
+                  {\((\context_{ret} \uparrow P) ~ (\mach', \context')\)}
+                  {\((\context_{ret} \uparrow P) ~ (\mach, \context)\)}
 
 Similarly, in {\it caller confidentiality}, we will want to compare future states,
 so we give a binary equivalent, \(\context \Uparrow R\), so that
-\(\sigma (\context \Uparrow R) \sigma'\) holds if \(R\) holds on the
-first return states of after \(\sigma\) and \(\sigma'\).
+\((\mach,\context) ~ (\context'' \Uparrow R) ~ (\mach',\context')\) holds if \(R\) holds on the
+first return states after \((\mach,\context)\) and \((\mach',\context')\).
 
-\judgment[Returned]
-         {\(\mach ~ R ~ \mach'\)}
-         {\((\mach,\pol,\prov,\context) ~ (\context \Uparrow R) ~ (\mach',\pol',\prov',\context)\)}
+\judgmentthree[Returned]
+              {\((\mach,\context) ~ R ~ (\mach',\context')\)}
+              {\(|\context| \leq |\context_{ret}|\)}
+              {\(|\context'| \leq |\context_{ret}|\)}
+              {\((\mach,\context) ~ (\context_{ret} \Uparrow R) ~ (\mach',\context')\)}
 
-\judgmentthree[Left]
-              {\(\context \not = \pi_c(\sigma_1)\)}
-              {\(\sigma_1 \stepstounder{\rho;\psi?} \sigma_1'\)}
-              {\(\sigma_1' ~ (\context \Uparrow R) ~ \sigma_2\)}     
-              {\(\sigma_1 ~ (\context \Uparrow R) ~ \sigma_2\)}
+\judgmenttwobr[Left]
+              {\(\context_1 > \context_{ret}\)}
+              {\((\mach_1,\context_1) \stepstounder{\psi?} (\mach_1',\context_1')\)}
+              {\(\context_2 > \context_{ret}\)}
+              {\((\mach_1',\context_1') ~ (\context_{ret} \Uparrow R) ~ (\mach_2,\context_2)\)}
+              {\((\mach_1,\context_1) ~ (\context_{ret} \Uparrow R) ~ (\mach_2,\context_2)\)}
 
-\judgmentthree[Right]
-              {\(\context \not = \pi_c(\sigma_2)\)}
-              {\(\sigma_2 \stepstounder{\rho;\psi?} \sigma_2'\)}
-              {\(\sigma_1 ~ (\context \Uparrow R) ~ \sigma_2'\)}     
-              {\(\sigma_1 ~ (\context \Uparrow R) ~ \sigma_2\)}
+\judgmenttwobr[Right]
+              {\(\context_1 > \context_{ret}\)}
+              {\((\mach_2,\context_2) \stepstounder{\psi?} (\mach_2',\context_2')\)}
+              {\(\context_2 > \context_{ret}\)}
+              {\((\mach_1,\context_1) ~ (\context_{ret} \Uparrow R) ~ (\mach_2',\context_2')\)}
+              {\((\mach_1,\context_1) ~ (\context_{ret} \Uparrow R) ~ (\mach_2,\context_2)\)}
 
-\paragraph*{Variants and Safe Elements}
-              
-One or more elements of a given state are {\it safe} if their values
+\paragraph*{Variants and Vestigial Elements}
+
+One or more elements of a given state are {\it vestigial} if their values
 in that state have no observable influence on future execution. We define this
-formally as a sort of non-interference: for a state \(\sigma\) and
-a set of elements \(\components\), \(\mathit{safe} ~ \sigma ~ \components\)
+formally as a sort of non-interference: for a state \((\mach,\context)\) and
+a set of elements \(\components\), \((\mach,\context) \parallel \components\)
 holds if we can replace the contents of \(\components\) with arbitrary values
 and have the resulting state produce an equivalent trace. The state created
 by modifying \(\components\) in this way is termed a variant.
@@ -961,14 +516,11 @@ by modifying \(\components\) in this way is termed a variant.
 written \(\mach \approx_\components \nach\), if, for
 all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]\).
 
-\definition Full states \((\mach,\pol,\prov,\context)\) and \((\nach,\pol,\prov,\context)\)
-are also {\em \(\components\)-variants} if \(\mach\) and \(\nach\) are.
-
-\definition An element set \(\components\) is safe in state \(\sigma)\),
-written \(\components ~ \mathit{SAFE} ~ \sigma\), if for all
-\(\sigma'\) such that \(\sigma \approx_{\components'} \sigma'\), if 
-\(\sigma \hookrightarrow \obsT\) and
-\(\sigma' \hookrightarrow \obsT'\), then
+\definition An element set \(\components\) is vestigial in state \(\sigma)\),
+written \((\mach,\context) \parallel \components\), if for all
+\(\nach\) such that \(\mach \approx_{\components'} \mach'\), if 
+\((\mach,\context) \hookrightarrow \obsT\) and
+\((\nach,\context) \hookrightarrow \obsT'\), then
 \(\obsT \eqsim \obsT'\).
 
 \paragraph*{Property Definitions}
@@ -978,15 +530,16 @@ And with the preliminary definitions out the way, we can define integrity.
 \definition Let \(\Delta(\mach,\mach')\) be the set of elements \(\component\)
 such that \(\mach[\component] \not = \mach'[\component]\).
 
-\definition Let \(\sigma = (\mach,\pol,\prov,\context)\) and
-\(\components = \{\component | \mathit{hd\_def} ~ \context ~ \component = \sealed\}\).
-Let \(P\) be a predicate on states \(\sigma'\) that holds if
-\(\Delta(\mach, \pi_m(\sigma')) \cap \components ~ \mathit{SAFE} ~ \sigma'\).
-Then \(\sigma\) enjoys {\it return-time integrity} if \(\context \downarrow P\) holds.
+\definition Let \((\mach,(T,V)::\context)\) be a state and
+\(\components = \{\component | V ~ \component = \sealed\}\).
+Let \(P\) be a predicate that holds on a state \((\mach',\context')\) if
+\(\mach' ~ \parallel ~ \Delta(\mach,\mach') \cap \components\).
+Then \(\mach\) enjoys {\it return-time integrity} if \(\context \downarrow P\) holds.
 
-\definition A system enjoys {\it stack integrity} if, for all reachable states \(\sigma\) such that
-\(\sigma \stepstounder{\rho;\mathbf{Call}\dots} \sigma'\),
-\(\sigma'\) enjoys return-time integrity.
+\definition A system enjoys {\it universal stack integrity} if, for all reachable states
+\((\mach,\context)\) such that
+\((\mach,\context) \stepstounder{\psi} (\mach',\context')\) with \(\psi = \mathbf{Call} ~ \_ ~ \_\),
+\((\mach',\context')\) enjoys return-time integrity.
 
 \paragraph*{Caller Confidentiality}
 
@@ -1001,7 +554,7 @@ of the call.
 We could define a natural, strict form of confidentiality that requires that the final
 states be identical. However, as with integrity, this is stricter than we need -- there
 may be some conditions in which a secret is copied, but never used again. So, we once
-again wish for our final condition to make the values {\it safe}. Which values?
+again wish for our final condition to allow values to be vestigial. Which values?
 
 \definition Let \(\mach,\mach'\) and \(\nach,\nach'\)
 be pairs of machine states. Their {\em corrupted set}, written
@@ -1009,21 +562,108 @@ be pairs of machine states. Their {\em corrupted set}, written
 \(\component \in \Delta(\mach,\mach') \cup \Delta(\nach,\nach')\) such that
 \(\mach'[\component] \not = \nach'[\component]\).
 
-\definition Let \(\sigma = (\mach,\pol,\prov,\context)\) be a state and
-\(\components = \{\component | \mathit{hd\_def} ~ \context ~ \component \in
-\{\sealed, \unsealed\}\}\).
+\definition Let \((\mach,(T,V)::\context)\) be a state and
+\(\components = \{\component | V ~ \component \in \{\sealed, \unsealed\}\}\).
 
-Then \(\sigma\) enjoys {\it caller confidentiality} if, for any \(\sigma'\)
-that is a \(\components\)-variant of \(\sigma\), we can take
-\(\context \uparrow \sigma \hookrightarrow \obsT\) and
-\(\context \uparrow \sigma' \hookrightarrow \obsT'\) and have that
-\(\obsT \simeq \obsT'\). And if, additionally, \(\sigma ~ (\context \Uparrow R) ~ \sigma'\),
-where \(\sigma_1 ~ R ~ \sigma_2\) if
-\(\bar{\Diamond}(\mach,\pi_m(\sigma_1),\pi_m(\sigma'),\pi_m(\sigma_2)) ~ \mathit{SAFE} ~ \sigma_1\).
+Then \((\mach,\context)\) enjoys {\it caller confidentiality} with respect to
+some \(\context_{ret}\) if, for any \(\nach\)
+that is a \(\components\)-variant of \(\mach\), we can take
+\(\context \uparrow (\mach,\context) \hookrightarrow \obsT\) and
+\(\context \uparrow (\nach,\context) \hookrightarrow \obsT'\) and have that
+\(\obsT \simeq \obsT'\);
+and additionally if \((\mach,\context) ~ (\context_{ret} \Uparrow R) ~ (\nach,\context)\),
+where \((\mach_1,\context_1) ~ R ~ (\nach_2,\context_2)\) if
+\((\mach_1 \parallel \bar{\Diamond}(\mach,\mach_1,\nach,\nach_2)\).
 
 \definition A system enjoys {\it universal caller confidentiality} if, for all reachable states
-\(\sigma\) such that \(\sigma \stepstounder{\rho;\mathbf{Call}\dots} \sigma'\),
-\(\sigma'\) enjoys caller confidentiality.
+\((\mach,\context)\) such that \((\mach,\context) \stepstounder{\psi} (\mach',\context')\)
+with \(\psi = \mathbf{Call} ~ \_ ~ \_\),
+\((\mach',\context')\) enjoys caller confidentiality with respect to \(\context\).
+
+\section{Allocating Memory}
+
+We now introduce the context step for the \(\mathbf{alloc} ~ \mathit{size}\)
+macro-instruction. Without \(\mathbf{alloc}\), our system already allowed a function
+to allocate as much private memory as it liked by moving the stack pointer. With
+\(\mathbf{alloc}\) it can now also allocate public objects that can be accessed
+freely by its callees. Later we will refine this system to restrict public objects
+to be accessed only via capabilities.
+
+\judgmentbr[AllocC]
+           {\(\psi = \mathbf{alloc} ~ size\)}
+           {\(V' = V\llbracket m[sp]+i \mapsto \public | 0 < i \leq size \rrbracket\)}
+           {\((\mach, (T,V)::\context) \constep{\psi} (T,V')::\context\)}
+
+The remainder of our property definitions are unchanged. The \(\mathit{update\_view}\)
+function preserves the public status of allocated objects, and they are exempt from
+integrity and confidentiality properties.
+
+\section{Exceptions}
+
+We implement exceptions via another pair of macro-instructions:
+\(\mathbf{setex} ~ a_{buf}\), akin to \(\mathit{setjmp}\), with the
+jump buffer stored at \(a_{buf}\), and \(\mathbf{throwex} ~ a_{buf}\),
+akin to \(\mathit{longjmp}\). The context updates for exceptions are given
+in Figure \ref{fig:excontexts}. The update for \(\mathbf{setex}\) pushes
+a \(\mathit{Catch}\) target onto the stack, identified by \(\addr_{buf}\),
+with the same view as the current function. For \(\mathbf{throwex}\),
+we pop the stack until we find a \(\mathit{Catch} ~ a_{buf} ~ \_ ~ \_\),
+popping it as well. Rules apply in order.
+
+\begin{figure*}
+
+\judgmenttwo[SetExC]
+            {\(\psi = \mathbf{setex} ~ \addr_{buf}\)}
+            {\(T' = \mathit{Catch} ~ \addr_{buf} ~ (\mach[pc] + 4) ~ \mach[sp]\)}
+            {\(\mach, (T,V)::\context \constep{\psi} (T',V)::(T,V)::\context\)}
+
+\judgment[ThrowExCCatch]
+         {\(\psi = \mathbf{throwex} ~ \addr_{buf}\)}
+         {\(\mach, (\mathit{Catch} \addr_{buf} ~ a_{pc} ~ a_{sp}, V)::\context \constep{\psi} \context\)}
+
+\judgment[ThrowExCDone]
+         {\(\psi = \mathbf{throwex} ~ \addr_{buf}\)}
+         {\(m, [\mathit{Done},V] \constep{\psi} [\mathit{Done},V]\)}
+
+\judgmenttwo[ThrowExCSkip]
+         {\(\psi = \mathbf{throwex} ~ \addr_{buf}\)}
+         {\(\mach, \context \constep{\psi} \context'\)}
+         {\(\mach, (\_::\context) \constep{\psi} \context'\)}
+         
+\caption{Exception context updates}
+\label{fig:excontexts}
+\end{figure*}
+
+\section{Tail Call Elimination}
+
+I submit that tail calls will work perfectly fine with all of our definitions
+using the context update in Figure \ref{fig:tailcallcontexts}. All of the
+``until return'' stuff works fine, because all the calls return at once.
+We need to define callee confidentiality still.
+
+\begin{figure*}
+
+\judgmenttwo[TailCallC]
+            {\(\psi = \mathbf{tailcall} ~ r_{target} ~ \overline{r_{args}}\)}
+            {\(V' = \mathit{update\_view} ~ V ~ m[sp] ~ \overline{r_{args}}\)}
+            {\(\mach, (T,V)::\context \constep{\psi} (T,V')::\context\)}
+
+\caption{Tailcall context updates}
+\label{fig:tailcallcontexts}
+\end{figure*}
+
+\section{Provenance, Capabilities, and Protecting Objects}
+
+So far, we have given functions the ability to allocate completely unprotected
+objects. What if we want to express a finer-grained notion of safety, in which
+such objects are protected unless the function that owns them intentionally
+passes a pointer to them?
+
+In order to express such a property, we need our machine to carry some notion
+of {\it pointer provenance} -- a distinction between a pointer that is intended to
+point to a given object, and non-pointer integers as well as pointers to other objects.
+
+\section{Simple Concurrency}
 
 \bibliographystyle{IEEEtran}
 \bibliography{bcp.bib,local.bib}
