@@ -1,0 +1,137 @@
+\documentclass{article}
+
+\usepackage{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{mathtools}
+
+\begin{document}
+
+\section{Security Overlay Semantics (Concrete)}
+
+A {\it security overlay semantics} divides a program's execution into
+{\it principals}, and specifies what it means for such principals to be
+protected from one another by a high-level abstraction implemented
+in a concrete machine. Specifications may take the form of predicates on
+future states: statements of the form, ``When control returns to me...'',
+or of relations on traces of future execution (hyper-properties.)
+
+What this means in practice is that we augment a concrete machine with
+additional {\it overlay state}, which tracks information related to the
+principals and their privileges, as well as which is active.
+We identify some sequences of instructions
+as implementing {\it overlay operations}. An overlay operation either
+transfers control between principals, or modifies the active principal's
+privileges. And we enrich the underlying machine with an {\it overlay step}
+that modifies the overlay state accordingly.
+
+Let \(\Psi\) be the set of overlay operations ranged over by \(\psi\).
+
+We begin with the base machine, whose states are drawn from a set \(\mathcal{M}\),
+and which transitions via partial step function \(\rightharpoonup\).
+We define several operations on states. \(m[k]\) accesses the word in register
+or address \(k\). \(m\langle PC \rangle\) maps a state to a pair of a word
+and an optional indexed transition \((\psi,i)?\) found at the address pointed to by the
+program counter.
+
+If \(m\langle PC \rangle = (w, \bot)\) or \((w, (\psi,i))\) for \(i > 0),
+then we step by \(\rightharpoonup\).
+If \(m\langle PC \rangle = (w, (\psi,0))\), we instead step by \(\xRightarrow{\psi}\),
+which executes until it reaches a state \(m'\) such that \(m\langle PC \rangle = (w',\psi?)\)
+where \(\psi? = \bot\) or \((\psi',i)\) for \(\psi \not = \psi'\).
+
+\subsection{Starting Overlay Operations in the Middle}
+
+An overlay operation can contain multiple instructions, and its security guarantees
+may not hold if they are executed out of order. In fact, they almost certainly will not!
+So we do not treat such executions as overlay operations, and our properties can be
+statisfied even if such executions behave insecurely. It is the responsibility of the
+enforcement mechanism to guarantee that this does not happen, for instance by tagging
+the operation as a blessed sequence.
+
+\subsection{The Compiler's Responsibility}
+
+The code that is acted on by a security overlay semantics is precisely that code
+that the compiler provides, down to any instruction tags that are needed to enforce
+the associated micro-policy. The compiler is also responsible for labeling overlay
+operations as such. As noted above, this puts the burden on the compiler to be aware
+of the available overlay operations and use them intentionally.
+
+In fact, in the strictest sense, the overlay semantics has {\it nothing} to say
+about which sequences make up an operation. It is for the compiler to determine that
+when it constructs the sequence. So, the compiler can make the sequence as short or
+as long as it wants; there ends up not being much reason for a sequence longer than
+a single instruction, except in the very strange case where the same sequence might be
+entered from the start {\it or} in the middle, and the compiler wants to assert protections
+only in the former case.
+
+\subsection{Further Compilation}
+
+The overlay semantics makes absolutely no changes to the behavior of the system,
+so further compilation is not necessary.
+
+\section{Security Overlay Semantics (Abstract)}
+
+A {\it security overlay semantics} implements a high-level abstraction
+using the instructions available to a concrete machine, and makes assertions
+about its security. These assertions divide a program's execution into
+{\it principals} and specify what it means for such principals to be
+protected from one another by the high-level abstraction.
+Specifications may take the form of predicates on
+future states: statements of the form, ``When control returns to me...'',
+or of relations on traces of future execution (hyper-properties.)
+
+What this means in practice is that we augment a concrete machine with
+additional {\it overlay state}, which tracks information related to the
+principals and their privileges, as well as which is active.
+We identify some sequences of instructions
+as implementing {\it overlay transitions}. An overlay transition either
+transfers control between principals, or modifies the active principal's
+privileges. And we enrich the underlying machine with an {\it overlay step}
+that executes the instructions of an overlay transition atomically
+and modifies the overlay state accordingly.
+
+Let \(\Psi\) be the set of overlay transitions ranged over by \(\psi\).
+
+We begin with the base machine, whose states are drawn from a set \(\mathcal{M}\),
+and which transitions via partial step function \(\rightharpoonup\).
+We define several operations on states. \(m[k]\) accesses the word in register
+or address \(k\). \(m\langle PC \rangle\) maps a state to a pair of a word
+and an optional transition \(\psi?\) found at the address pointed to by the
+program counter.
+
+If \(m\langle PC \rangle = (w, \bot)\), then we step by \(\rightharpoonup\).
+If \(m\langle PC \rangle = (w, (\psi,0))\), we instead step by \(\xRightarrow{\psi}\),
+which executes until it reaches a state \(m'\) such that \(m\langle PC \rangle = (w',\psi?)\)
+where \(\psi? = \bot\) or \((\psi',i)\) for \(\psi \not = \psi'\). We do not step
+from any state where \(m\langle PC \rangle = (w, (\psi,i))\) for \(i > 0\).
+
+\subsection{Starting Overlay Operations in the Middle}
+
+An overlay operation can contain multiple instructions, and its security guarantees
+may not hold if they are executed out of order. In fact, they almost certainly will not!
+So we do not treat such executions as overlay operations, and our properties can be
+statisfied even if such executions behave insecurely. It is the responsibility of the
+enforcement mechanism to guarantee that this does not happen, for instance by tagging
+the operation as a blessed sequence.
+
+\subsection{The Compiler's Responsibility}
+
+\subsection{Further Compilation / Protection}
+
+A security overlay semantics uses the same instructions as the base machine,
+with the same semantics, and protected by the same security mechanism. But it
+is a more abstract machine in that it is also 
+
+\section{A Barely Abstract Stack Machine}
+
+\subsection{The Compiler's Responsibility}
+
+\subsection{Further Compilation / Protection}
+
+\section{A Slightly More Abstract Stack Machine}
+
+\subsection{The Compiler's Responsibility}
+
+\subsection{Further Compilation / Protection}
+
+\end{document}
