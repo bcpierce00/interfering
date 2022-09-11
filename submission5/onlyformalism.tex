@@ -282,7 +282,7 @@ if there is one, and otherwise maintains it.
          {\(\mach \harpoonunder{\bot} \mach'\)}
          {\((\mach,\context) \stepstounder{} (\mach',\context)\)}
 
-\section{Context Updates With Calls and Returns}
+\section{Context Updates With Calls, Returns, and Private Allocations}
 
 In this section we will present the overlay steps for calls and returns.
 They are given formally in Figure \ref{fig:callcontexts}.
@@ -333,8 +333,9 @@ in order.
   \[\mathit{update\_view} ~ V ~ \overline{r_{args}} \triangleq \lambda \component
   \begin{cases}
     \mathit{reg\_view} ~ \overline{r_{args}} ~ \component & \textnormal{if } \component \in \REGS \\
-    \sealed & \textnormal{else if } V ~ \component = \mathit{object} ~ \mathbf{F} \\
-    V ~ \component & \textnormal{otherwise} \\
+    \sealed & \textnormal{else if } V ~ \component = \mathit{object} \\
+    
+      V ~ \component & \textnormal{otherwise} \\
   \end{cases}\]
 
   \judgmenttwobr[CallC]
@@ -366,9 +367,7 @@ in order.
 \label{fig:callcontexts}
 \end{figure*}
 
-Now we can give our definition of stack safety in terms of the context at the point of a call.
-
-\subsection{Events and Traces}
+\section{Events and Traces}
 
 Some macro-instructions may be interpreted as {\it events} that can be observed
 from outside the system. For now we define events \(\obs \in \OBSS\) as calls, labeled
@@ -414,8 +413,8 @@ as follows, coinductively:
 Naturally, most states will admit many possible traces, depending on the order in which
 processors step.
 
-We define another relation that takes a trace of an activation until it is dead -- neither
-active, nor inactive and waiting for return.
+We define another relation that takes a trace until we have returned to a particular
+activation, or past it (as might occur when we add exceptions.)
 We write this \(\context' \downarrow (\mach,\context) \hookrightarrow \obsT\), where \(\context'\)
 is the context of the caller.
 
@@ -450,7 +449,7 @@ is the same. That is, we compare up to deletion of \(\tau\) events.
            {\(\obsT_1 \eqsim \notfinished{\tau}{\obsT_2}\)}
 \end{minipage}
 
-\subsection{Facts Abouts Calls and Returns}
+\section{Facts Abouts Calls and Returns}
 
 Here we define some logical operations to reason about the behavior of the
 system over time. These have a temporal-logic flavor, as they reflect
@@ -465,44 +464,49 @@ this is perfectly legal -- as long as it either restores it, or has some guarant
 that its changes will impact the caller.
 
 We start by defining a second-order logical operator
-\(\alpha \uparrow P\), read ``\(P\) holds on return to \(\alpha\),''
+\(\context \uparrow P\), read ``\(P\) holds on return to \(\context\),''
 where \(P\) is a predicate on machine states. This is a coinductive relation
 similar to ``weak until'' in temporal logic -- it holds if the condition
 is never reached.
 
-\judgment[Returned]
-         {\(P ~ (\mach,(\alpha,T,V)::\context)\)}
-         {\((\alpha \uparrow P) ~ (\mach, (\alpha,T,V)::\context)\)}
+\judgmenttwo[Returned]
+            {\(|\context| \leq |\context_{ret}| }
+            {\(P ~ (\mach,\context)\)}
+            {\((\context_{ret} \uparrow P) ~ (\mach, \context)\)}
 
 \judgmenttwobrlong[Step]
-                  {\(\alpha \not = \alpha'\)}
-                  {\((\alpha \uparrow P) ~ (\mach', \context')\)}
-                  {\((\mach, (\alpha',T,V)::\context) \stepstounder{\psi?} (\mach', \context')\)}
-                  {\((\alpha \uparrow P) ~ (\mach, (\alpha',T,V)::\context)\)}
+                  {\(|\context| \leq |\context_{tar}|\)}
+                  {\((\context_{ret} \uparrow P) ~ (\mach', \context')\)}
+                  {\((\mach, \context) \stepstounder{\psi?} (\mach', \context')\)}
+                  {\((\context_{ret} \uparrow P) ~ (\mach, \context)\)}
 
 Similarly, in {\it caller confidentiality}, we will want to compare future states,
-so we give a binary equivalent, \(\alpha \Uparrow R\), so that
-\((\mach,\context) ~ (\alpha \Uparrow R) ~ (\mach',\context')\) holds if \(R\) holds on the
+so we give a binary equivalent, \(\context \Uparrow R\), so that
+\((\mach,\context) ~ (\context_{ret} \Uparrow R) ~ (\mach',\context')\) holds if \(R\) holds on the
 first return states after \((\mach,\context)\) and \((\mach',\context')\).
 
-\judgment[Returned]
-         {\((\mach,(\alpha,T,V)::\context) ~ R ~ (\mach',(\alpha,T',V')::\context')\)}
-         {\((\mach,(\alpha,T,V)::\context) ~ (\alpha \Uparrow R) ~ (\mach',(\alpha,T',V')::\context')\)}
+\judgmenttwobrlong[Returned]
+            {\(|\context| \leq |\context_{ret}|\)}
+            {\(|\context'| \leq |\context_{ret}|\)}
+            {\((\mach,\context) ~ R ~ (\mach',\context')\)}
+            {\((\mach,\context) ~ (\context_{ret} \Uparrow R) ~ (\mach',\context')\)}
 
 \judgmenttwobrlong[Left]
-              {\(\alpha \not = \alpha'\)}
-              {\((\mach_1',\context_1') ~ (\alpha \Uparrow R) ~ (\mach_2,\context_2)\)}
-              {\((\mach_1,(\alpha',T,V)::\context_1) \stepstounder{\psi?} (\mach_1',\context_1')\)}
-              {\((\mach_1,(\alpha',T,V)::\context_1) ~ (\alpha \Uparrow R) ~ (\mach_2,\context_2)\)}
+              {\(|\context_1| \leq |\context_{ret}|\)}
+              {\((\mach_1,\context_1) \stepstounder{\psi?} (\mach_1',\context_1')\)}
+              {\((\mach_1',\context_1') ~ (\context_{ret} \Uparrow R) ~ (\mach_2,\context_2)\)}
+              {\((\mach_1,\context_1) ~ (\context_{ret} \Uparrow R) ~ (\mach_2,\context_2)\)}
 
 \judgmenttwobrlong[Right]
-              {\(\alpha \not = \alpha'\)}
-              {\((\mach_1,\context_1) ~ (\alpha \Uparrow R) ~ (\mach_2',\context_2')\)}
-              {\((\mach_2,(\alpha',T,V)::\context_2) \stepstounder{\psi?} (\mach_2',\context_2')\)}
-              {\((\mach_1,\context_1) ~ (\alpha \Uparrow R) ~ (\mach_2,(\alpha',T,V)::\context_2)\)}
+              {\(|\context_2| \leq |\context_{ret}|\)}
+              {\((\mach_2,\context_2) \stepstounder{\psi?} (\mach_2',\context_2')\)}
+              {\((\mach_1,\context_1) ~ (\context_{ret} \Uparrow R) ~ (\mach_2',\context_2')\)}
+              {\((\mach_1,\context_1) ~ (\context_{ret} \Uparrow R) ~ (\mach_2,\context_2)\)}
 
-\paragraph*{Variants and Vestigial Elements}
+\section{Properties}
 
+We now finally have everything we need to offer our definitions for stack safety.
+We need one preliminary definition first.
 One or more elements of a given state are {\it vestigial} if their values
 in that state have no observable influence on future execution. We define this
 formally as a sort of non-interference: for a state \((\mach,\context)\) and
@@ -517,30 +521,30 @@ all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]
 
 \definition An element set \(\components\) is vestigial in state \((\mach,\context)\),
 written \((\mach,\context) \parallel \components\), if for all
-\(\nach\) such that \(\mach \approx_{\components'} \mach'\), if 
+\(\nach\) such that \(\mach \approx_{\components} \mach'\), if 
 \((\mach,\context) \hookrightarrow \obsT\) and
 \((\nach,\context) \hookrightarrow \obsT'\), then
 \(\obsT \eqsim \obsT'\).
 
-\paragraph*{Property Definitions}
+\subsection{Integrity}
 
 And with the preliminary definitions out the way, we can define integrity.
 
 \definition Let \(\Delta(\mach,\mach')\) be the set of elements \(\component\)
 such that \(\mach[\component] \not = \mach'[\component]\).
 
-\definition Let \((\mach,(T,V)::\context)\) be a state and
+\definition Let \((\mach,(\alpha,T,V)::\context)\) be a state and
 \(\components = \{\component | V ~ \component = \sealed\}\).
 Let \(P\) be a predicate that holds on a state \((\mach',\context')\) if
 \(\mach' ~ \parallel ~ \Delta(\mach,\mach') \cap \components\).
 Then \(\mach\) enjoys {\it return-time integrity} if \(\context \downarrow P\) holds.
 
-\definition A system enjoys {\it universal stack integrity} if, for all reachable states
+\definition A system enjoys {\it stack integrity} if, for all reachable states
 \((\mach,\context)\) such that
 \((\mach,\context) \stepstounder{\psi} (\mach',\context')\) with \(\psi = \mathbf{Call} ~ \_ ~ \_\),
 \((\mach',\context')\) enjoys return-time integrity.
 
-\paragraph*{Caller Confidentiality}
+\subsection{Caller Confidentiality}
 
 Confidentiality properties are also modeled as non-interference, but with a twist:
 the caller's confidential data should be kept secret from the callee, but after return,
@@ -561,36 +565,63 @@ be pairs of machine states. Their {\em corrupted set}, written
 \(\component \in \Delta(\mach,\mach') \cup \Delta(\nach,\nach')\) such that
 \(\mach'[\component] \not = \nach'[\component]\).
 
-\definition Let \((\mach,(T,V)::\context)\) be a state and
+\definition Let \((\mach,(\alpha,T,V)::\context)\) be a state and
 \(\components = \{\component | V ~ \component \in \{\sealed, \unsealed\}\}\).
 
-Then \((\mach,\context)\) enjoys {\it caller confidentiality} with respect to
+Then \((\mach,\context)\) enjoys {\it internal confidentiality} with respect to
 some \(\context_{ret}\) if, for any \(\nach\)
 that is a \(\components\)-variant of \(\mach\), we can take
 \(\context_{ret} \uparrow (\mach,\context) \hookrightarrow \obsT\) and
 \(\context_{ret} \uparrow (\nach,\context) \hookrightarrow \obsT'\) and have that
-\(\obsT \simeq \obsT'\);
-and additionally if \((\mach,\context) ~ (\context_{ret} \Uparrow R) ~ (\nach,\context)\),
+\(\obsT \simeq \obsT'\).
+
+\definition Let \((\mach,(\alpha,T,V)::\context)\) be a state and
+\(\components = \{\component | V ~ \component \in \{\sealed, \unsealed\}\}\).
+
+Then \((\mach,\context)\) enjoys {\it return-time confidentiality} with respect to
+some \(\context_{ret}\) if \((\mach,\context) ~ (\context_{ret} \Uparrow R) ~ (\nach,\context)\),
 where \((\mach_1,\context_1) ~ R ~ (\nach_2,\context_2)\) if
 \((\mach_1 \parallel \bar{\Diamond}(\mach,\mach_1,\nach,\nach_2)\).
 
-\definition A system enjoys {\it universal caller confidentiality} if, for all reachable states
+\definition A system enjoys {\it caller confidentiality} if, for all reachable states
 \((\mach,\context)\) such that \((\mach,\context) \stepstounder{\psi} (\mach',\context')\)
 with \(\psi = \mathbf{Call} ~ \_ ~ \_\),
-\((\mach',\context')\) enjoys caller confidentiality with respect to \(\context\).
+\((\mach',\context')\) enjoys both internal and return-time confidentiality
+with respect to \(\context\).
 
-\section{Allocating Memory}
+\subsection{Callee Confidentiality}
 
-We now introduce the context step for the \(\mathbf{alloc} ~ \mathit{size}\)
-macro-instruction. Without \(\mathbf{alloc}\), our system already allowed a function
-to allocate as much private memory as it liked by moving the stack pointer. With
-\(\mathbf{alloc}\) it can now also allocate public objects that can be accessed
-freely by its callees. Later we will refine this system to restrict public objects
-to be accessed only via capabilities.
+Callees can have secrets too. The question is, what do we consider a callee's secrets?
+Anything in its frame? Anything that {\it could} be in its frame (i.e. above the stack pointer)?
+These are plausible options, but they will also capture data that has been written to those
+locations before the call. To get a narrower property specific to the data that is actually
+derived from the callee, we focus instead on those values that the callee has written.
 
-The remainder of our property definitions are unchanged. The \(\mathit{update\_view}\)
-function preserves the public status of allocated objects, and they are exempt from
-integrity and confidentiality properties.
+\definition Let \((\mach,(\alpha,T,V)::\context)\) be a state and
+\(\components = \{\component | V ~ \component \in \{\sealed,\unsealed\}\}\).
+Let \(P\) be a predicate that holds on a state \((\mach',\context')\) if
+\(\mach' ~ \parallel ~ \Delta(\mach,\mach') \cap \components\).
+Then \(\mach\) enjoys {\it post-return confidentiality} if \(\context \downarrow P\) holds.
+
+\definition A system enjoys {\it callee confidentiality} if, for all reachable states
+\((\mach,\context)\) such that \((\mach,\context) \stepstounder{\psi} (\mach',\context')\)
+with \(\psi = \mathbf{Call} ~ \_ ~ \_\),
+\((\mach',\context')\) enjoys post-return confidentiality
+with respect to \(\context\).
+
+Interestingly, callee confidentiality subsumes caller integrity. This makes sense:
+one way for the callee's secrets to leak is by overwriting the caller's sealed data
+with them.
+
+\section{Public Memory}
+
+We can extend our basic machine to support public memory allocations that can
+be accessed by anyone until they are deallocated on their owner's return.
+We replace \(\mathbf{alloc} ~ \mathit{sizes}\) with \(\mathbf{alloc} ~ \mathit{objs}\),
+where \(\mathit{objs}\) is a list of pairs of sizes and booleans, representing whether
+the object in question should be public. The \(\mathit{update\_view}\)
+function only seals private objects, and the remained maintain their \(\mathit{object}\)
+class, making them exempt from both integrity and confidentiality properties.
 
 \section{Exceptions}
 
@@ -603,6 +634,7 @@ a \(\mathit{Catch}\) target onto the stack, identified by \(\addr_{buf}\),
 with the same view as the current function. For \(\mathbf{throwex}\),
 we pop the stack until we find a \(\mathit{Catch} ~ a_{buf} ~ \_ ~ \_\),
 popping it as well. Rules apply in order.
+[TODO: update these for the new \(\alpha\) stuff.]
 
 \begin{figure*}
 
@@ -639,8 +671,8 @@ We need to define callee confidentiality still.
 
 \judgmenttwo[TailCallC]
             {\(\psi = \mathbf{tailcall} ~ r_{target} ~ \overline{r_{args}}\)}
-            {\(V' = \mathit{update\_view} ~ V ~ m[sp] ~ \overline{r_{args}}\)}
-            {\(\mach, (T,V)::\context \constep{\psi} (T,V')::\context\)}
+            {\(V' = \mathit{update\_view} ~ V ~ \overline{r_{args}}\)}
+            {\(\mach, (\alpha,\mathit{Active},V)::\context \constep{\psi} (\alpha,\mathit{Active},V')::\context\)}
 
 \caption{Tailcall context updates}
 \label{fig:tailcallcontexts}
@@ -656,6 +688,9 @@ passes a pointer to them?
 In order to express such a property, we need our machine to carry some notion
 of {\it pointer provenance} -- a distinction between a pointer that is intended to
 point to a given object, and non-pointer integers as well as pointers to other objects.
+Then, in \(\mathit{update\_view}\), we recursively identify all public objects that
+are reachable transitively from capabilities in registers; these keep their
+\(\mathit{object}\) status, while those that are not reachable become \(\sealed\).
 
 \section{Simple Concurrency}
 
