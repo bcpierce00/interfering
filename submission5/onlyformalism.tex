@@ -91,10 +91,10 @@ Before introducing our formal model of stack safety, we describe
 our machine exemplar, enforcement mechanism, and threat model.
 
 We begin with a RISC-V-like machine enhanced with PIPE, a tag-based reference
-monitor. We extend this machine with a {\it security overlay semantics},
+monitor. We extend this machine with a {\it security semantics},
 which divides a program into dynamic {\it principals} that ought to be
 protected from one another, and specifies that protection over a set
-of abstract {\it overlay operations}. Specifications may take the form of
+of abstract {\it security operations}. Specifications may take the form of
 predicates on future states: statements of the form,
 ``When control returns to me...'', or of relations on traces of future execution
 (hyper-properties.)
@@ -102,7 +102,7 @@ predicates on future states: statements of the form,
 As opposed to a fully-abstract overlay semantics, in which overlay operations
 are given safe-by-construction semantics then proven fully abstract,
 our machine is not safe unless the monitor is correctly instantiated;
-the overlay gives us the means to distinguish a monitor that implements
+the security semantics gives us the means to distinguish a monitor that implements
 stack safety from one that does not.
 
 The underlying machine is a standard RISC-V ISA as modeled in [MIT-RISCV].
@@ -141,50 +141,24 @@ stacks can be used however the compiler likes, including as a heap, but no prote
 built in and our properties assume that if a pointer to a stack object is stored there,
 it is permanently compromised.
 
-\subsection{Security Overlay Semantics}
+\subsection{Security Semantics}
 
-A security overlay semantics divides a program's execution into principals,
-in this case function activations, and identifies which principal is active
-in a given state. Overlay operations can generate new principals, transition
+We begin with a machine that supports a number of security operations,
+defined above. For purposes of specifying security, we do not need to
+know the semantics of these operations; we only need the machine to
+distinguish them from normal execution. We model the machine as
+a transition system in which some transitions are marked with
+security operations. We then define a security semantics for stack safety
+in terms of those steps.
+
+The security semantics divides a program's execution into principals,
+namely function activations, and identifies which principal is active
+in a given state. Security operations can generate new principals, transition
 which principal is active, and allocate stack objects belonging to the active
 principal. From this information, we derive the specifications that make up
 stack safety. Specifications may take the form of predicates on
 future states: statements of the form, ``When control returns to me...'',
 or of relations on traces of future execution (hyper-properties.)
-
-What this means in practice is that the compiler that generates a piece of
-code must identify some instructions as implementing the overlay operations.
-In the likely event that the operation requires multiple instructions,
-typically the {\it last} instruction will be labeled.
-
-Let \(\Psi\) be the set of overlay operations ranged over by \(\psi\).
-We begin with the base machine, whose states are drawn from a set \(\mathcal{M}\),
-and which transitions via partial step function \(\rightharpoonup\).
-We define the operation \(m[k]\) as accessing the word in register
-or at address \(k\) in state \(m\). The compiler provides a partial map
-\(\mathit{over} \in \mathcal{W} \rightharpoonup \Psi\).
-We lift \(\rightharpoonup\) into a labeled transition
-\(\harpoonunder{\psi?} \in \mathcal{M} \rightharpoonup
-\mathcal{M} \times (\Psi + \bot)\) by labeling each
-transition \(\mach \harpoonunder{\psi?} \mach'\) where
-\(\psi = \mathit{over} ~ \mach[\PCname]\) if it is defined and \(\bot\) if not.
-
-\paragraph{Starting Overlay Operations in the Middle}
-
-The concrete implementation of an overlay operation might contain multiple instructions,
-and its security guarantees may not hold if they are executed out of order.
-In fact, they almost certainly will not! But only one instruction is labeled.
-It is the responsibility of the monitor to guarantee that this instruction is
-executed at the appropriate place in its sequence.
-
-\paragraph{The Compiler's Responsibility}
-
-The code that is acted on by a security overlay semantics is precisely that code
-that the compiler provides, down to any instruction tags that are needed to enforce
-the associated micro-policy. The compiler is also responsible for labeling overlay
-operations as such. This puts the burden on the compiler to be aware
-of the available overlay operations and use them intentionally. We give a
-concrete example of one such labeling scheme in [Testing Section.]
 
 \subsection{The Basic Machine}
 
@@ -215,55 +189,62 @@ the registers into metavariables, some belonging to caller- or callee- sets:
 Collectively addresses and registers are {\em state elements} \(\component\)
 in the set \(\COMPONENTS ::= \WORDS + \REGS\).
 %
-A {\em machine state} \(\mach \in \MACHS\) is a type that exposes a mapping
-\(\mach[\component]\) from state elements to values, and may also contain additional
-security state. For convenience, we abbreviate
-multiple updates \(m[\component_0 \mapsto \word_0][\component_1 \mapsto \word_1]\dots\)
+{\em Machine states} are drawn from a set \(\MACHS\) ranged over by \(\mach\)
+that defines a mapping \(\mach[\component]\) from state elements to values.
+The machine step relation
+\(\mach \harpoonunder{\psi?} \mach' \in \MACHS \times (\psi+\bot) \times \MACHS\)
+is left-total and may be labeled by a security operation, defined below.
+While the tag-based enforcement mechanism may cause the machine to
+failstop, we model this as the machine silently diverging by returning to the
+same state. Since failstops are not distinguished from normal execution,
+our properties will necessarily be {\it termination insensitive}.
+
+For convenience, we will abbreviate multiple updates of a mapping
+\(m[\component_0 \mapsto \word_0][\component_1 \mapsto \word_1]\dots\)
 as \(m \llbracket A \mapsto B | C \rrbracket\), where \(A\) and \(B\)
 are fomulae with free variables bound to sets in \(C\).
-The base machine step function
-\(\mach \stepstounder{\psi?} \mach' \in \MACHS \rightharpoonup \MACHS\) is partial to
-represent the capacity of the machine to failstop, and may be labeled with an overlay
-operation.
-In order to accommodate failstop behavior, our properties will be {\it termination insensitive}.
 
-\subsection{Overlay Operations, Principals, and Overlay State}
+\subsection{Security Operations, Principals, and Security State}
 
-Overlay operations are drawn from a set \(\Psi\), as follows:
-
+Security operations are split into two categories: {\it privilege operations}
+and {\it control operations}. Privilege operations are those that adjust the
+privileges of future callees by allocating private or public data and by saving
+catch points for possible exceptions. Allocations specify the offset from
+the stack pointer and size of the object. Exceptions are tied to the address
+of the buffer that will contain saved state.
+%
 \begin{align*}
-\psi \in \Psi ::= & \mathbf{call} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
-| & \mathbf{tailcall} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
-| & \mathbf{return} & \\
-| & \mathbf{setex} ~ \addr_{buf} \\
-| & \mathbf{throwex} ~ \addr_{buf} \\
-| & \mathbf{alloc} ~ sizes & sizes \in \mathit{list} ~ \mathbb{N} \\
+  \mathit{pop} \in \mathit{POPS} ::= & \mathbf{alloc} ~ \mathit{off} ~ sz & \mathit{off}, sz \in \mathbb{N} \\
+  | & \mathbf{alloc\_pub} ~ \mathit{off} ~ sz & \mathit{off}, sz \in \mathbb{N} \\
+  | & \mathbf{setex} ~ \addr_{buf} \\
 \end{align*}
 
-Calls and tailcalls identify the target of the call, and the argument registers.
-[Still a todo: stack arguments.] Return needs no further information. The operations
-that setup and then throw to an exception handler take the address at which it is
-stored. Alloc takes a list of sizes of objects to be allocated, because if allocating
-objects means simply moving the function pointer, multiple
-objects may be allocated at once.
+Control operations are those that exchange
+control between principals: calls (including tailcalls), returns, and thrown
+exceptions. Calls and tailcalls identify the target of the call, and the argument registers.
+[Still a todo: stack arguments.] Return needs no further information. Throwing
+an exception specifies the address of the saved buffer.
+%
+\begin{align*}
+  \mathit{cop} \in \mathit{COPS} ::= & \mathbf{call} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
+  | & \mathbf{tailcall} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
+  | & \mathbf{return} & \\
+  | & \mathbf{throw} ~ \addr_{buf} \\
+\end{align*}
+%
+Security principals are function activations, which we model as an {\em activation record}.
+Such a record will track the status of the principals data and the ways in which its callees
+may return to it. To track the former, we define a set of {\it security classes}:
+\[sc \in SEC ::= \sealed | \mathit{object} | \unsealed | \public\]
 
-Principals are function activations \(\alpha \in A\), with an operation
-\(\mathit{fresh}\) that always generates a unique \(\alpha\).
-Overlay state consists of a context stack, which contains the security-relevant
-information associated with the active principal, and with inactive principals
-waiting for control to return to them.
-
-We define a set of {\it security classes}:
-\[sc \in SEC ::= \public | \sealed | \unsealed | \mathit{object}\]
-
-These indicate, from the perspective of the active principal, whether an element is
-always accessible (\(\public\)), claimed by an inactive principal (\(\sealed\)),
-available to be allocated and later sealed (\(\unsealed\)), or allocated by
-the active principal (\(\mathit{object}\)).
+These indicate, from the perspective of a given principal, whether an element is
+private to an inactive principal (\(\sealed\)),
+in an allocated object that is accessible to the current principal (\(\mathit{object}\)),
+available to be allocated (\(\unsealed\)), or
+always accessible (\(\public\)).
 
 A {\it security view} \(V \in \mathit{VIEW} ::= \COMPONENTS \rightarrow SEC\)
 assigns each element a security class.
-
 The {\it initial view} \(V_0\) maps all stack locations and non-public registers
 to \(\unsealed\) and all other locations and public registers to \(\public\).
 
@@ -333,7 +314,7 @@ in order.
   \judgment[AllocCNil]
            {\(\psi = \mathbf{alloc} ~ [ ~ ]\)}
            {\(\mach, \context \constep{\psi} \context\)}
-  
+
   \judgmentthreebrtwo[AllocCCons]
                      {\(\psi = \mathbf{alloc} ~ s::sizes\)}
                      {\(\mach, (\alpha,T,V')::\context \constep{\psi'} \context'\)}
@@ -353,8 +334,7 @@ in order.
   \begin{cases}
     \mathit{reg\_view} ~ \overline{r_{args}} ~ \component & \textnormal{if } \component \in \REGS \\
     \sealed & \textnormal{else if } V ~ \component = \mathit{object} ~ \mathbf{F} \\
-    
-      V ~ \component & \textnormal{otherwise} \\
+    V ~ \component & \textnormal{otherwise} \\
   \end{cases}\]
 
   \judgmenttwobr[CallC]
