@@ -191,17 +191,17 @@ in the set \(\COMPONENTS ::= \WORDS + \REGS\).
 %
 {\em Machine states} are drawn from a set \(\MACHS\) ranged over by \(\mach\)
 that defines a mapping \(\mach[\component]\) from state elements to values.
-The machine step relation
-\(\mach \xrightarrow{\psi?} \mach' \in \MACHS \times (\psi+\bot) \times \MACHS\)
-is left-total and may be labeled by a security operation, defined below.
+The machine step function
+\(\mach \xrightarrow{\psi} \mach' \in \MACHS \rightarrow \MACHS \times \Psi\)
+may be labeled by a security operation, defined below.
 While the tag-based enforcement mechanism may cause the machine to
 failstop, we model this as the machine silently diverging by returning to the
 same state. Since failstops are not distinguished from normal execution,
 our properties will necessarily be {\it termination insensitive}.
 
 For convenience, we will abbreviate multiple updates of a mapping
-\(m[\component_0 \mapsto \word_0][\component_1 \mapsto \word_1]\dots\)
-as \(m \llbracket A \mapsto B | C \rrbracket\), where \(A\) and \(B\)
+\(\mach[\component_0 \mapsto \word_0][\component_1 \mapsto \word_1]\dots\)
+as \(\mach \llbracket A \mapsto B | C \rrbracket\), where \(A\) and \(B\)
 are fomulae with free variables bound to sets in \(C\).
 
 \subsection{Security Operations, Principals, and Security State}
@@ -216,7 +216,6 @@ of the buffer that will contain saved state.
 \begin{align*}
   \phi \in \Phi ::= & \mathbf{alloc} ~ \mathit{off ~ sz} & \mathit{off, sz} \in \mathbb{N} \\
   | & \mathbf{alloc\_pub} ~ \mathit{off ~ sz} & \mathit{off, sz} \in \mathbb{N} \\
-  | & \mathbf{setex} ~ \addr_{buf} \\
 \end{align*}
 
 Control operations are those that exchange
@@ -226,48 +225,37 @@ exceptions. Calls and tailcalls identify the target of the call, and the argumen
 an exception specifies the address of the saved buffer.
 %
 \begin{align*}
-  \chi \in X ::= & \mathbf{call} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
+  \chi \in \mathcal{X} ::= & \mathbf{call} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
   | & \mathbf{tailcall} ~ \reg_{target} ~ \overline{\reg_{args}} & \\
   | & \mathbf{return} & \\
-  | & \mathbf{throw} ~ \addr_{buf} \\
 \end{align*}
 %
 A security operation may consist of any number of privilege operations and at most
 one control operation.
 %
-\[\psi \in \Psi ::= \mathit{list ~ \Phi} | (X \times \mathit{list ~ \Phi})\]
+\[\psi \in \Psi ::= \mathit{list ~ \Phi} | (\mathcal{X} \times \mathit{list ~ \Phi})\]
 
-Security principals are function activations, which we model as an {\em activation record}.
-Such a record will track the status of the principal's data and the ways in which its callees
-may return to it. To track the former, we define a set of {\it security classes}:
+Security principals are function activations: at any given time, the current
+activation, and some number of pending ones. Each activation will have a {\it view}
+of the system that maps each element to one of a set of {\it security classes}:
 \[sc \in SEC ::= \sealed | \unsealed | \public\]
+\[V \in \mathit{VIEW} ::= \COMPONENTS \rightarrow SEC\]
 
 These indicate, from the perspective of a given principal, whether an element is
 private to an inactive principal (\(\sealed\)),
 %in an allocated object that is accessible to the current principal (\(\mathit{object}\)),
 available to be allocated (\(\unsealed\)), or
 always accessible (\(\public\)).
-
-A {\it security view} \(V \in \mathit{VIEW} ::= \COMPONENTS \rightarrow SEC\)
-assigns each element a security class.
 The {\it initial view} \(V_0\) maps all stack locations and non-public registers
 to \(\unsealed\) and all other locations and public registers to \(\public\).
 
-An single principal might register multiple exception handlers over the
-course of its execution, each of which will identify the value that the
-program counter ought to have when an exception is thrown to it. We model
-this as a partial map from addresses to addresses.
-So an the activation record for the current activation is a pair of a view
-and such a map:
-\[(V,ex) \in \mathit{ACT} ::= \mathit{VIEW \times (\WORDS \rightharpoonup \WORDS)}\]
-
-An inactive principal additional carries the address at which the program counter
-should point in the event of a normal return.
-\[(V, \addr_{ret}, ex) \in \mathit{INACT} ::= \mathit{VIEW \times \WORDS \times (\WORDS \rightharpoonup \WORDS)}\]
-
-We represent a {\it call stack} as a pair of one active record and a list of inactive ones.
-The initial call stack is \(\context_0 = ((V_0,[ ~ ]), [ ~ ])\).
-\[(\alpha, \sigma) = \context \in \CONTEXTS ::= \mathit{ACT \times list ~ INACT}\]
+A pending activation additional carries the addresses at which the program counter
+and stack pointer should point in the event of a return.
+We represent a {\it call stack} as a pair of the current activation's view
+and a list of pending ones.
+The initial call stack is \(\context_0 = (V_0, [ ~ ])\).
+\[(V, \addr_{ret}, \addr_{sp}) \in \mathit{PEND} ::= \mathit{VIEW \times \WORDS \times \WORDS}\]
+\[\context \in \CONTEXTS ::= \mathit{VIEW \times list ~ PEND}\]
 
 Every security operation manipulates the call stack: privilege operations act on
 the active principal, and control operations push or pop the active principal.
@@ -284,7 +272,7 @@ They are combined in \(Op\), which acts on full operations as follows.
   Pop ~ \phi \circ Op ~ \overline{\phi} & \textnormal{when } \psi = \phi::\overline{\phi} \\
   Cop ~ \chi \circ Op ~ \overline{\phi} & \textnormal{when } \psi = (\chi,\overline{\phi}) \\
 \end{cases}\]
-         
+
 A control operation may additionally produce an observable event, drawn
 from a set \(\mathit{EVENTS}\) and ranged over by \(e\).
 A function \(Ev\) maps operations and machine states to events. The
@@ -306,15 +294,11 @@ Rules apply in order.
               {\(\mach \xrightarrow{\psi} \mach'\)}
               {\(\psi = (\chi, \overline{\phi})\)}
               {\(e = Ev ~ \chi ~ \mach\)}
-              {\((\mach,\context) \stepstounder{e} (\mach',Op ~ \psi ~ \mach ~ \context)\)}
+              {\((\mach,\context) \stepstounder{e} (\mach',Op ~ \psi ~ \context ~ \mach)\)}
 
 \judgment[NonControl]
          {\(\mach \xrightarrow{\psi} \mach'\)}
-         {\((\mach,\context) \stepstounder{\tau} (\mach',Op ~ \psi ~ \mach ~ \context)\)}
-              
-\judgment[Default]
-         {\(\mach \xrightarrow{\bot} \mach'\)}
-         {\((\mach,\context) \stepstounder{\tau} (\mach',\context)\)}
+         {\((\mach,\context) \stepstounder{\tau} (\mach',Op ~ \psi ~ \context ~ \mach)\)}
 
 \section{Calls, Returns, and Private Allocations}
 
@@ -359,7 +343,7 @@ its sensitive data.
   \end{subfigure}
   \begin{subfigure}[t]{.5\textwidth}
     {\tt
-      0: addi sp,sp,20
+      0: addi sp,sp,-20
 
       4: sw a1,16(sp)
 
@@ -392,17 +376,16 @@ its sensitive data.
   \label{fig:example}
 \end{figure*}
 
-At the start of execution (PC 0) the initial call stack is \(((V_0, [~]), [~])\).
+At the start of execution (PC 0) the initial call stack is \((V_0, [~])\).
 Instruction 0 allocates 20 bytes starting at the stack pointer. This will have the
 effect of marking those twenty bytes \(\sealed\), assuming they were previously
 \(\unsealed\):
 
-\judgmenttwobrlong{\(b = \mach[sp] - \mathit{off}\)}
-                  {\(\context = ((V, ex), \sigma)\)}
-                  {\(V' = V \llbracket \addr \mapsto \sealed |
-                    b \leq a < b+\mathit{sz} \land V ~ \addr = \unsealed \rrbracket\)}
-                  {\(Pop ~ (\mathbf{alloc} ~ \mathit{off, sz}) ~ \context ~ \mach \triangleq
-                    ((V',ex), \sigma)\)}
+\judgmentbr{\(b = \mach[\SP] - \mathit{off}\)}
+           {\(V' = V \llbracket \addr \mapsto \sealed |
+             b \leq a < b+\mathit{sz} \land V ~ \addr = \unsealed \rrbracket\)}
+           {\(Pop ~ (\mathbf{alloc} ~ \mathit{off, sz}) ~ (V,\sigma) ~ \mach \triangleq
+             (V',\sigma)\)}
 
 This memory being \(\sealed\) has no effect on the current activation --
 the security guarantees apply at the start of the call. Our next security operation
@@ -424,13 +407,12 @@ V & \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR\_SV} \rrbracket \\
 
 \judgmenttwo{\(\chi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}}\)}
             {\(V' = \mathit{reg\_view} ~ V ~ \overline{\reg_{args}}\)}
-            {\(Cop ~ \chi ~ ((V,ex),\sigma) ~ \mach \triangleq
-              ((V',[~]),(V, \mach[\PCname]+4, ex)::\sigma)\)}
+            {\(Cop ~ \chi ~ (V,\sigma) ~ \mach \triangleq
+              (V',(V, \mach[\PCname]+4, \mach[\SP])::\sigma)\)}
 
             
 After the call step, we have a new activation, and {\tt main} is now pending.
 {\tt main}'s pending record tracks its return address.
-[TODO: add stack pointer; SP being callee-save only works if we aren't factoring WBCF.]
 Everything that {\tt main} allocated, both {\tt secret} and {\tt sensitive},
 {\tt f} views as \(\sealed\), along with its callee-saved registers.
 Informally, the meaning of \(\sealed\) is: ``when control returns to
@@ -449,22 +431,21 @@ the main function returning.
 
 \judgmenttwo[Ret]
             {\(\chi = \mathbf{return}\)}
-            {\(\sigma = (V,\addr_{ret},ex)::\sigma'\)}
+            {\(\sigma = (V,\addr_{ret},\addr_{sp})::\sigma'\)}
             {\(Cop ~ \chi ~ (\_, \sigma) ~ \mach \triangleq
-              ((V,ex), \sigma)\)}
+              (V, \sigma)\)}
 
 \judgment[RetDef]
          {\(\chi = \mathbf{return}\)}
-         {\(Cop ~ \chi ~ (\alpha, [~]) ~ \mach \triangleq
-           (\alpha, [~])\)}
+         {\(Cop ~ \chi ~ (V, [~]) ~ \mach \triangleq
+           (V, [~])\)}
 
 We are ready to define our first stack safety property for this system:
 {\it well-bracketed control flow}.
 
 \definition A system enjoys well-bracketed control flow if, for all states
-\((\mach,(\_,(\_,\addr_{ret},\_)) \stepstounder{\mathbf{return}} (\mach',\context)\),
-\(\mach'[\PCname] = \addr_{ret}\).
-[TODO: again, need SP here.]
+\((\mach,(\_,(\_,\addr_{ret},\addr_{sp})) \stepstounder{\mathbf{return}} (\mach',\context)\),
+\(\mach'[\PCname] = \addr_{ret}\) and \(\mach'[\SP] = \addr_{sp}\).
 
 \section{Events and Traces}
 
@@ -511,12 +492,12 @@ We write this \(d \downarrow (\mach,\context) \hookrightarrow \obsT\), where
 \(d\) is the depth of the current call.
 
 \judgment{\(|\sigma| < d\)}
-         {\(d \downarrow (\mach,(\alpha,\sigma)) \hookrightarrow \tau\)}
+         {\(d \downarrow (\mach,(V,\sigma)) \hookrightarrow \tau\)}
 
-\judgmenttwobrlong{\((\mach,(\alpha,\sigma)) \stepstounder{e} (\mach',\context')\)}
+\judgmenttwobrlong{\((\mach,(V,\sigma)) \stepstounder{e} (\mach',\context')\)}
                   {\(|\sigma| \geq d\)}
                   {\(d \downarrow (\mach',\context') \hookrightarrow \obsT\)}
-                  {\(d \downarrow (\mach,(\alpha,\sigma)) \hookrightarrow \notfinished{e}{\obsT}\)}
+                  {\(d \downarrow (\mach,(V,\sigma)) \hookrightarrow \notfinished{e}{\obsT}\)}
 
 \paragraph*{Observational Similarity}
 
@@ -563,14 +544,14 @@ returns from depth \(d\).
 
 \judgmenttwo[Returned]
             {\(|\sigma| < d\)}
-            {\(P ~ (\mach,(\alpha,\sigma))\)}
-            {\((d \uparrow P) ~ (\mach, (\alpha,\sigma))\)}
+            {\(P ~ (\mach,(V,\sigma))\)}
+            {\((d \uparrow P) ~ (\mach, (V,\sigma))\)}
 
 \judgmenttwobrlong[Step]
                   {\(|\sigma| \geq d\)}
                   {\((d \uparrow P) ~ (\mach', \context')\)}
-                  {\((\mach, (\alpha,\sigma)) \stepstounder{e} (\mach', \context')\)}
-                  {\((d \uparrow P) ~ (\mach, (\alpha,\sigma))\)}
+                  {\((\mach, (V,\sigma)) \stepstounder{e} (\mach', \context')\)}
+                  {\((d \uparrow P) ~ (\mach, (V,\sigma))\)}
 
 Similarly, in {\it caller confidentiality}, we will want to compare future states,
 so we give a binary equivalent, \(d \Uparrow R\), so that
@@ -580,20 +561,20 @@ first states that return from depth \(d\) after \((\mach,\context)\) and \((\mac
 \judgmenttwobrlong[Returned]
             {\(|\sigma_1| < d\)}
             {\(|\sigma_2| < d\)}
-            {\((\mach_1,(\alpha_1,\sigma_1)) ~ R ~ (\mach_2,(\alpha_2,\sigma_2))\)}
-            {\((\mach_1,(\alpha_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(\alpha_2,\sigma_2))\)}
+            {\((\mach_1,(V_1,\sigma_1)) ~ R ~ (\mach_2,(V_2,\sigma_2))\)}
+            {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
 \judgmenttwobrlong[Left]
               {\(|\sigma_1| \geq d\)}
-              {\((\mach_1,(\alpha_1,\sigma_1)) \stepstounder{e} (\mach_1',\context_1')\)}
-              {\((\mach_1',\context_1') ~ (d \Uparrow R) ~ (\mach_2,(\alpha_2,\sigma_2))\)}
-              {\((\mach_1,(\alpha_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(\alpha_2,\sigma_2))\)}
+              {\((\mach_1,(V_1,\sigma_1)) \stepstounder{e} (\mach_1',\context_1')\)}
+              {\((\mach_1',\context_1') ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
+              {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
 \judgmenttwobrlong[Right]
               {\(|\sigma_2| \geq d\)}
-              {\((\mach_2,(\alpha_2,\sigma_2)) \stepstounder{e} (\mach_2',\context_2')\)}
-              {\((\mach_1,(\alpha_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,\context_2')\)}
-              {\((\mach_1,(\alpha_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(\alpha_2,\sigma_2))\)}
+              {\((\mach_2,(V_2,\sigma_2)) \stepstounder{e} (\mach_2',\context_2')\)}
+              {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,\context_2')\)}
+              {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
 \section{Properties}
 
@@ -626,7 +607,7 @@ And with the preliminary definitions out the way, we can define integrity.
 such that \(\mach[\component] \not = \mach'[\component]\).
 
 \definition Let \((\mach,\context)\) be a combined state with
-\(\context = ((V,ex),\sigma)\), and
+\(\context = (V,\sigma)\), and
 \(\components = \{\component | V ~ \component = \sealed\}\).
 Let \(P\) be a predicate that holds on a state \((\mach',\context')\) if
 \(\mach' ~ \parallel ~ \Delta(\mach,\mach') \cap \components\).
@@ -660,7 +641,7 @@ be pairs of machine states. Their {\em corrupted set}, written
 \(\component \in \Delta(\mach,\mach') \cup \Delta(\nach,\nach')\) such that
 \(\mach'[\component] \not = \nach'[\component]\).
 
-\definition Let \((\mach,\context)\) be a state with \(\context = ((V,ex),\sigma)\), and
+\definition Let \((\mach,\context)\) be a state with \(\context = (V,\sigma)\), and
 \(\components = \{\component | V ~ \component \in \{\sealed, \unsealed\}\}\).
 
 Then \((\mach,\context)\) enjoys {\it internal confidentiality} with respect to
@@ -669,7 +650,7 @@ if, for any \(\nach\) that is a \(\components\)-variant of \(\mach\), we can tak
 \(|\sigma| \uparrow (\nach,\context) \hookrightarrow \obsT'\) and have that
 \(\obsT \simeq \obsT'\).
 
-\definition Let \((\mach,\context)\) be a state with \(\context = ((V,ex),\sigma)\),
+\definition Let \((\mach,\context)\) be a state with \(\context = (V,\sigma)\),
 and \(\components = \{\component | V ~ \component \in \{\sealed, \unsealed\}\}\).
 Then \((\mach,\context)\) enjoys {\it return-time confidentiality}
 if, for any \(\nach\) that is a \(\components\)-variant of \(\mach\),
@@ -690,7 +671,7 @@ These are plausible options, but they will also capture data that has been writt
 locations before the call. To get a narrower property specific to the data that is actually
 derived from the callee, we focus instead on those values that the callee has written.
 
-\definition Let \((\mach,\context)\) be a state with \(\context = ((V,ex),\sigma)\), and
+\definition Let \((\mach,\context)\) be a state with \(\context = (V,\sigma)\), and
 \(\components = \{\component | V ~ \component \in \{\sealed,\unsealed\}\}\).
 Let \(P\) be a predicate that holds on a state \((\mach',\context')\) if
 \(\mach' ~ \parallel ~ \Delta(\mach,\mach') \cap \components\).
@@ -716,44 +697,6 @@ We should give an example of this, as it may also require us to use multiple
 allocations simultaneously to interleave public and private allocations with a
 single increase of the stack pointer.
 
-\section{Exceptions}
-[Note: everything below this point is old.]
-
-We implement exceptions via another pair of macro-instructions:
-\(\mathbf{setex} ~ a_{buf}\), akin to \(\mathit{setjmp}\), with the
-jump buffer stored at \(a_{buf}\), and \(\mathbf{throwex} ~ a_{buf}\),
-akin to \(\mathit{longjmp}\). The context updates for exceptions are given
-in Figure \ref{fig:excontexts}. The update for \(\mathbf{setex}\) pushes
-a \(\mathit{Catch}\) target onto the stack, identified by \(\addr_{buf}\),
-with the same view as the current function. For \(\mathbf{throwex}\),
-we pop the stack until we find a \(\mathit{Catch} ~ a_{buf} ~ \_ ~ \_\),
-popping it as well. Rules apply in order.
-[TODO: update these for the new \(\alpha\) stuff.]
-
-\begin{figure*}
-
-\judgmenttwo[SetExC]
-            {\(\psi = \mathbf{setex} ~ \addr_{buf}\)}
-            {\(T' = \mathit{Catch} ~ \addr_{buf} ~ (\mach[pc] + 4) ~ \mach[sp]\)}
-            {\(\mach, (T,V)::\context \constep{\psi} (T',V)::(T,V)::\context\)}
-
-\judgment[ThrowExCCatch]
-         {\(\psi = \mathbf{throwex} ~ \addr_{buf}\)}
-         {\(\mach, (\mathit{Catch} \addr_{buf} ~ a_{pc} ~ a_{sp}, V)::\context \constep{\psi} \context\)}
-
-\judgment[ThrowExCDone]
-         {\(\psi = \mathbf{throwex} ~ \addr_{buf}\)}
-         {\(m, [\mathit{Done},V] \constep{\psi} [\mathit{Done},V]\)}
-
-\judgmenttwo[ThrowExCSkip]
-         {\(\psi = \mathbf{throwex} ~ \addr_{buf}\)}
-         {\(\mach, \context \constep{\psi} \context'\)}
-         {\(\mach, (\_::\context) \constep{\psi} \context'\)}
-         
-\caption{Exception context updates}
-\label{fig:excontexts}
-\end{figure*}
-
 \section{Tail Call Elimination}
 
 I submit that tail calls will work perfectly fine with all of our definitions
@@ -764,9 +707,9 @@ We need to define callee confidentiality still.
 \begin{figure*}
 
 \judgmenttwo[TailCallC]
-            {\(\psi = \mathbf{tailcall} ~ r_{target} ~ \overline{r_{args}}\)}
+            {\(\chi = \mathbf{tailcall} ~ r_{target} ~ \overline{r_{args}}\)}
             {\(V' = \mathit{update\_view} ~ V ~ \overline{r_{args}}\)}
-            {\(\mach, (\alpha,\mathit{Active},V)::\context \constep{\psi} (\alpha,\mathit{Active},V')::\context\)}
+            {\(Cop ~ \chi ~ (V,\sigma) ~ (V',\sigma)\)}
 
 \caption{Tailcall context updates}
 \label{fig:tailcallcontexts}
