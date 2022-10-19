@@ -790,18 +790,59 @@ so far.
 \((\mach,(\_,(\_,\addr_{ret},\addr_{sp})) \stepstounder{\mathbf{return}} (\mach',\context,\obs)\),
 \(\mach'[\PCname] = \addr_{ret}\) and \(\mach'[\SP] = \addr_{sp}\).
 
+\vspace{\abovedisplayskip}
+
+Consider again the attack in Figure \ref{subfig:WBCF}: the attacker adds
+20 to the return address and then returns, thus bypassing the check and publishing
+{\tt secret}. During the call step, we record in the context that the return to the
+caller should have the program counter at the next instruction (address 20) and the
+stack pointer restored to address -20. When the return occurs, we see that in the
+state following it, the program counter is 40 -- a violation of WBCF.
+
+To demonstrate why WBCF also cares about the stack pointer, consider an attack which
+returns with the stack pointer at -12. Now, compare the layout of the stack relative
+to the stack pointer as it should be (top) to the one that results by increasing the
+stack pointer before return (bottom):
+
+\begin{tabular}{| l | l | l | l | l | l | l |}
+  \multicolumn{3}{r}{\(\SP \downarrow\)} \\
+  \hline
+  & & res & sens & secr & ra & ra \\
+  \hline
+  \hline
+  res & sens & secr & ra & ra & & \\
+  \hline
+\end{tabular}
+
+\vspace{\abovedisplayskip}
+
+In this scenario, when attempting to read {\tt sensitive}, {\tt main} will
+read part of the return address, and then it will attempt to publish
+{\tt res}, but instead will publish {\tt secret}!
+
 Alternatively, we can formalize well-bracketed control flow using \(\uparrow\).
 
 \definition For a machine state \(\mach\), let
-\(ret(\mach) = \{\mach' | \mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]\}\).
-A system enjoys well-bracketed control flow (alternate) if, for all states 
-\((\mach,(V,\sigma)) \stepstounder{\overline{\psi}} (\mach',\context',\obs)\) with
+\(ret ~ (\mach,\context) = \{\mach' | \mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]\}\).
+A system enjoys well-bracketed control flow if, for all states 
+\((\mach,\context) \stepstounder{\overline{\psi}} (\mach',(V,\sigma),\obs)\) with
 \(\mathbf{call} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\) or
 \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\),
-\(|\sigma| \uparrow ret(\mach)\).
+\(|\sigma| \uparrow ret(\mach')\).
 
-Consider again the attack in Figure \ref{subfig:WBCF}: the attacker adds
-20 to the return address and then returns.
+\vspace{\abovedisplayskip}
+
+Once again we can think about our example attack. When the call occurs,
+we define a predicate \(ret ~ (\mach,\context)\) on states that holds when the program counter
+and stack pointer have the appropriate values. Then we use apply the \(\uparrow\)
+operator to this predicate with the depth of the call stack {\it after the call} and
+the machine state {\it before the call}.
+
+After the call, the call stack is one higher than it was before the call,
+and if the callee makes further calls, it will continue to be incremented.
+Each return will similarly decrement it, until it is finally lower than the
+initial state. This is the return that matches the original call, and so
+the resulting state is when we require \(ret(\mach)\) to hold.
 
 \subsection{Integrity}
 
@@ -811,8 +852,8 @@ such that \(\mach[\component] \not = \mach'[\component]\).
 \definition Let \((\mach,\context)\) be a combined state with
 \(\context = (V,\sigma)\), and
 \(\components = \{\component | V ~ \component = \sealed\}\).
-Let \(P\) be a predicate that holds on a state \((\mach',\context')\) if
-\(\mach' ~ \parallel ~ \Delta(\mach,\mach') \cap \components\).
+Let \(P ~ (\mach',\context')\) be a predicate that holds on a state
+\(\Delta(\mach,\mach')\) is irrelevant in \((\mach', \context')\).
 Then \(\mach\) enjoys {\it return-time integrity} if \(|\sigma| \uparrow P\) holds
 on \((\mach,\context)\).
 
@@ -822,6 +863,23 @@ on \((\mach,\context)\).
 \(\mathbf{call} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\) or
 \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\),
 \((\mach',\context')\) enjoys return-time integrity.
+
+\vspace{\abovedisplayskip}
+
+The example in Figure \ref{subfig:integrity} modifies the value of {\tt sensitive},
+which is \(\sealed\). At the call, we define the predicate \(P\), which holds on states
+where any \(\sealed\) elements that changed since the call are all irrelevant.
+As {\tt sensitive} is such an element (conveniently, the only one), the property
+has not yet been violated at the returned state \((\mach,\context)\). To determine whether this
+attack has violated stack integrity, we must consider an arbitrary variant state
+\(\nach = \mach[\addr_{\mathtt{sensitive}} \mapsto \word]\) for some \(\word\).
+The property is violated if the traces of \((\mach,\context)\) and \((\nach,\context)\)
+differ.
+
+In our case, {\tt publish} produces an observation, and if \(\word \not = 42\),
+that observation in the trace from \((\nach,\context)\) will be {\tt res}, which is 0.
+On the other hand, \((\mach,\context)\) will produce an event from {\tt secret},
+which may differ. So, integrity is indeed violated.
 
 \subsection{Caller Confidentiality}
 
@@ -855,6 +913,35 @@ if, for any such \(\nach\), \((\mach,\context) ~ (|\sigma| \Uparrow R) ~ (\nach,
 with \(\mathbf{call} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\) or
 \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} \in \psi\),
 \((\mach',\context')\) enjoys both internal and return-time confidentiality.
+
+\vspace{\abovedisplayskip}
+
+Confidentiality is more complicated. We begin with a state immediately following
+a call. Let that be \((\mach,\context)\). We suppose an arbitrary variant state,
+\((\nach,\context)\), which may vary any element that is \(\sealed\) or \(\unsealed\).
+That is, any element that is not used legitimately to pass arguments. Caller confidentiality
+therefore can be thought of as the callee's insensitivity to parts of its initial states
+that are not part of the caller-callee interface.
+
+In the example in Figure \ref{subfig:direct}, this variation will quickly result
+in differing events, as {\tt publish} is called with arguments that may have different
+values. This is clearly a violation of confidentiality, in the form of internal
+confidentiality.
+
+When the variants return, however, the situation becomes more complicated.
+Consider Figure \ref{subfig:indirect}. The value of {\tt secret} is been extracted
+and placed in {\tt a0}, the return value register. Suppose that we have \(\mach\)
+and \(\nach\) as above, and they step, respectively, to \(\mach'\) and \(\nach'\),
+which each follow a return. We must identify which elements of the state
+contain leaked confidential data.
+
+An element contains confidential data, according to the definition of non-interference, 
+if it differs between the states. But some of those data belong to the original
+elements which are accessible to the caller and may now influence future execution
+legitimately. We are looking specifically for those elements that have {\it changed}
+from call to return, and that vary between the variants. As with integrity, we then
+must determine whether those leaks actually translate into events. If the set of
+such elements is not irrelevant, confidentiality is violated.
 
 \subsection{Callee Confidentiality}
 
