@@ -59,7 +59,7 @@
   }
   \linebreakand
   \IEEEauthorblockN{
-    Benjamin C. Pierce,
+    Benjamin C. Pierce
   }
   \IEEEauthorblockA{
     University of Pennsylvania\\
@@ -93,8 +93,9 @@ a tag-based reference monitor. Importantly, such a machine has no explicit ``cal
 instruction, only {\tt jal} instructions which may be used for that purpose or potentially
 other purposes. Similarly, there is no ``return'', only {\tt jalr}, and so on.
 We therefore define our properties under the assumption that we can distinguish the
-steps that represent these abstract operations from those that do not -- for instance,
-by labeling instructions as calls, returns, etc. Such a labeling scheme appears in
+steps that represent these abstract operations from those that do not---for instance,
+by labeling instructions as calls, returns, etc.\apt{note proper way to do punctuating dashes}
+Such a labeling scheme appears in
 our testing environment (Section [TBD]) and is already necessary
 to correctly apply tag-based enforcement in practice (cite something about this.)
 
@@ -137,11 +138,11 @@ In section (TBD) we discuss the extension of this model into a simple concurrenc
 We must trust that our method of distinguishing security operations is accurate; if it
 involves labels placed on code by a compiler, that means trusting that the compiler placed
 those labels correctly. If operations occur that are not recognized, those operations
-might not be guaranteed to protect their principals -- for instance, an unlabeled call
+might not be guaranteed to protect their principals---for instance, an unlabeled call
 might not protect the caller's data from the callee. On the flip side, applying an incorrect
 label most likely means that the property becomes too strong to be enforced.
 
-Otherwise, we do not assume that the code is reasonable or derived from any particular
+Otherwise, we do not assume that the code is reasonable\apt{still vague} or adheres to any particular
 calling convention or source construct. In particular, while we are agnostic as to the source
 language, we certainly aim to support C, and so any source function might contain undefined
 behavior resulting in its compilation to arbitrary machine code. A given enforcement
@@ -244,7 +245,7 @@ Security principals are function activations: at any given time, pending activat
 have security requirements that are recorded in a call stack, and the current
 activation tracks context information that will inform its requirements when
 it makes a call. Each activation has a {\it view}
-of the system that maps each state element to a{\it security classe}:
+of the system that maps each state element to a {\it security class}:
 \[sc \in SEC ::= \sealed | \unsealed | \object | \public\]
 \[V \in \mathit{VIEW} ::= \COMPONENTS \rightarrow SEC\]
 
@@ -276,18 +277,25 @@ labeled with the same operations. Note that \(Op\) takes as its state argument
 
 \judgmenttwo{\(\mach \xrightarrow{\overline{\psi}} \mach', \obs \)}
             {\(\mathit{foldl} ~ (Op ~ \mach) ~ \context ~ \overline{\psi} = \context'\)}
-            {\((\mach,\context) \stepstounder{\overline{\psi}} (\mach', \context'' \obs)\)}
+            {\((\mach,\context) \stepstounder{\overline{\psi}} (\mach', \context', \obs)\)}
 
-\section{Calls, Returns, and Private Allocations}
+%\section{Calls, Returns, and Private Allocations}
+\section{Examples}
 
 In this section we consider a simple setting with calls, returns, and private allocations.
 Figure \ref{fig:main} gives a C function {\tt main}, and its compiled RISC-V code,
 that takes a secret in its arguments and initializes a variable to contain
-potentially sensitive data.
+potentially sensitive data.\apt{Arguments to {\tt main} are overly complicated.
+  There's no need to match reality (and in fact {\tt argv} is really a {\tt char*}
+  anyway).}\apt{As we discussed, it would be simpler to represent ``publish'' by
+  writing to a specified global rather than with a call.}
 It then calls another function {\tt f},
 and afterward may decide to {\tt publish} its secret based on the contents of
 its sensitive data. In this case, since {\tt sensitive} is initialized to 0,
-it should not -- instead it will publish the results of {\tt f}.
+it should not---instead it will publish the results of {\tt f}.
+\apt{Would be better to use symbolic names instead of inetegers for {\tt jal}
+  targets. Figure at bottom is good, but also needs additional labelling to
+  show addresses relative to the new sp within {\tt f}.}
 
 \begin{figure}
   \begin{subfigure}{\columnwidth}
@@ -344,6 +352,11 @@ it should not -- instead it will publish the results of {\tt f}.
 Suppose that {\tt f} is not a (valid) C function at all, but an attacker seeking
 to leak {\tt secret}! It might do so in a number of ways, shown as snippets of
 assembly code in Figure \ref{fig:f}.
+\apt{In (a,b), {\tt 12(sp)} maps to {\tt sensitive}, not {\tt secret} (I think!).
+  It would be nice if (a) didn't have to push a frame (i.e. again by making publication
+  just a global write) and if all the examples of {\tt f} were the same length, e.g.
+  by adding {\tt nop}s.}
+
 In Figure \ref{subfig:direct}, {\tt f} takes an offset from the stack
 pointer, access {\tt secret}, and directly call {\tt publish} itself. But more
 subtly, even if somehow prevented from outputting {\tt secret} directly, {\tt f}
@@ -407,14 +420,18 @@ violating the program's {\it well-bracketed control flow} (WBCF.)
   \label{fig:f}
 \end{figure}
 
-At the start of execution the program counter is 0 and the stack pointer -4, with the
-stack growing down. The functions {\tt f} and {\tt publish}
+\apt{This para is a bit of an orphan.}
+At the start of execution the program counter is 0 and the stack pointer -4 \apt{or is it 0?},
+with the stack growing down. The functions {\tt f} and {\tt publish}
 are at addresses 100 and 200, respectively.
+
+\apt{Need a smoother transition here. Be explicit that we are now going to start considering the security
+  state.}
 
 Figure \ref{fig:exec1} shows how the program counter, stack pointer, and context
 develop over several steps, with labels on the steps that allocate space and then make
-a call. \(\downarrow \overline{\psi}\) in this diagram is a sideways
-\(\xrightarrow{\overline{\psi}}\). Events are omitted.
+a call. \(\xrightarrow{\overline{\psi}}\) transitions are written \(\downarrow \overline{\psi}\) in this diagram;
+events are omitted.\apt{graphics on right of figure need to be keyed to corresponding steps.}
 
 The first step  allocates words for {\tt secret}, {\tt sensitive}, and {\tt res}, as well
 as two words for the return address. This will have the
@@ -469,18 +486,22 @@ Its return target is the return address of the call,
 and the stack pointer target is the stack pointer at the moment of call.
 The callee's view is updated from the caller's such that all \(\object\) locations
 become \(\sealed\). (In more complex settings, objects that are intentionally passed
-to the callee will not get sealed, but for now we assume no sharing of memory.)
+to the callee will not get sealed, but for now we assume no sharing of memory between activations.)
 For registers, \(\overline{\reg_{args}}\) tells us which registers are used as arguments,
 in this case {\tt a0}. These are mapped to \(\public\), while any non-argument, caller-saved
 registers are mapped to \(\unsealed\). All callee-save registers are always \(\sealed\) and
 the program counter \(\public\), as they were initialized.
 
 On step \(n\), {\tt f} returns, and we restore the topmost inactive principal,
-{\tt main}'s principal.
+{\tt main}'s principal. \apt{This $n$ is a bit mysterious. Again, if all the snippets
+  were the same length, you could use a concrete number here.}
          
+\apt{Need a bridging sentence here, along the lines of: ``Now we consider how to define desirable
+  stack safety properties that rule out various kinds of bad behavior.''}
+
 \paragraph*{Well-bracketed Control Flow}
 
-But what if {\tt f} returns to an unexpected place (i.e. \(\PCname \neq 20\) or \(\SP \neq -24\)),
+But what if {\tt f} returns to an unexpected place (i.e. \(\PCname \neq 20\) or \(\SP \neq -24\))\apt{-20?},
 as would be the case in attack (d)? Then it has violated the WBCF property.
 This property can be phrased in terms of a single step: for every transition
 labeled as a return, the program counter and stack pointer at the next state
@@ -497,12 +518,15 @@ to be identical to when it made the call.
 In the case of the call from {\tt main} to {\tt f}, the \(\sealed\) elements are the
 addresses -20 through -1 (allocated as private data) and callee-saved registers such as
 the stack pointer and return address.
-Note that the callee-saved registers may well have changed during the call -- but if
+Note that the callee-saved registers may well have changed during the call---but if
 so, the callee is obligated to restore them to their prior value.
 
 One further caveat: it is possible that {\tt f} might overwrite {\tt main}'s data
-in a way that is harmless -- or that is rendered harmless by the enforcement mechanism!
-This is the case in a lazy micro-policy: the monitor permits the caller to write into the
+in a way that is harmless---or that is rendered harmless by the enforcement mechanism!
+\apt{This is still confusing, because the ``rendered harmless'' part applies just as much
+  to the strict integrity we've been discussing up to now.}
+This is the case in a lazy micro-policy\apt{presumes we've described these a bit in the introduction
+  (which we should)}: the monitor permits the caller to write into the
 callee's frame, but taints that write so that the callee cannot read it later without
 triggering a failstop. In such a scenario we will consider a value {\it irrelevant}
 if it could be replaced with any other value without changing the observable behavior
@@ -523,13 +547,14 @@ the call stack in the context is empty. It makes its call, and at step 5, {\tt m
 frame, including {\tt secret} and {\tt sensitive}, is mapped to \(\sealed\) from the
 perspective of {\tt f}. So, the next time the call stack is empty (implicitly, when
 we have returned to {\tt main}), elements of that frame must either match their
-values at step 4, or be irrelevant to future computation.
+values at step 4, or be irrelevant to future computation.\apt{picture?}
 
 \paragraph*{Caller Confidentiality}
 
 We treat confidentiality as a form of non-interference as well: the confidentiality of a caller
 means that its callee's behavior is dependent only on publicly visible data,
-not the caller's private state. As we saw in the examples, we must consider both the observable events
+not the caller's private state. \apt{Spell out the implications of this for initialization.}
+As we saw in the examples, we must consider both the observable events
 that the callee produces during the call and the changes that the callee makes to the state that might
 affect the caller after the callee returns.
 
@@ -549,7 +574,7 @@ This difference, found by comparing the initial and final states of both executi
 indicates that {\tt a0} is corrupted. Return-time confidentiality means that
 an element that is corrupted in this way must be irrelevant.
 
-Together, these definitions encompass the confidentiality of the caller from the callee.
+Together, these definitions encompass the confidentiality of the caller from the callee.\apt{picture?}
 
 \paragraph*{Callee Confidentiality}
 
@@ -568,7 +593,7 @@ callee's view either retains its original value or is irrelevant.
 
 The forms of stack safety described above are largely independent of one another, and
 can potentially be enforced separately in various combinations. This is important, because
-many enforcement mechanisms already in existence only enforce some of the stack safety
+many existing enforcement mechanisms enforce only some of the stack safety
 properties. Stricter enforcement may have greater performance impacts, leading to decisions
 about trade-offs between different degrees of stack safety.
 
@@ -582,7 +607,7 @@ Others combine this protection with some degree of memory protection,
 chiefly focusing on integrity. Skorstengaard et al. \cite{SkorstengaardSTK} characterize stack
 safety as the combination of WBCF and {\it local state encapsulation} (LSE), and prove that their
 capability-based enforcement satisfies both. LSE corresponds to integrity, plus some degree of
-confidentiality. They offer a fully abstract overlay semantics, which formalizes WBCF and LSE
+confidentiality.\apt{Be more explicit.}  They offer a fully abstract overlay semantics, which formalizes WBCF and LSE
 together as a safe-by-construction abstract machine. That machine does not allow a callee to
 read or write its caller's frame, but might allow it to read data that is left behind below
 the caller's frame, which is weaker than our full caller confidentiality and rules out
@@ -680,14 +705,14 @@ the expected behavior of the system in the future, after a possible return.
 
 The intuition behind integrity (below) is that a caller may expect its
 sealed data to be unchanged when control returns to it. In fact, the callee
-may overwrite such data -- when the data are found in callee-saved registers
-this is perfectly legal -- as long as it either restores it, or has some guarantee
+may overwrite such data---when the data are found in callee-saved registers
+this is perfectly legal---as long as it either restores it, or has some guarantee
 that its changes will not impact the caller.
 
 We start by defining a second-order logical operator
-\(d \uparrow P\), read ``\(P\) holds on return from depth \(d\),''
+\(d \uparrow P\), pronounced ``\(P\) holds on return from depth \(d\),''
 where \(P\) is a predicate on machine states. This is a coinductive relation
-similar to ``weak until'' in temporal logic -- it holds if the program never
+similar to ``weak until'' in temporal logic---it also holds if the program never
 returns from depth \(d\).
 
 \judgmenttwo[Returned]
@@ -701,11 +726,11 @@ returns from depth \(d\).
                   {\((\mach, (V,\sigma)) \stepstounder{\overline{\psi}} (\mach', \context',\obs)\)}
                   {\((d \uparrow P) ~ (\mach, (V,\sigma))\)}
 
-Similarly, in confidentiality, we will want to compare pairs of future states,
-so we give a binary equivalent, \(d \Uparrow R\), so that
+Similarly, for confidentiality, we will want to compare pairs of future states,
+so we give a binary equivalent, \(d \Uparrow R\), where
 \((\mach,\context) ~ (d \Uparrow R) ~ (\mach',\context')\) holds if \(R\) holds on the
-first states that return from depth \(d\) after \((\mach,\context)\) and \((\mach',\context')\).
-Once again, \(\Uparrow\) is coinductive.
+first states that return from depth \(d\) after \((\mach,\context)\) and \((\mach',\context')\),
+respectively. Once again, \(\Uparrow\) is coinductive.
 
 \judgmenttwobrlong[Returned]
             {\(|\sigma_1| < d\)}
@@ -728,7 +753,7 @@ Once again, \(\Uparrow\) is coinductive.
 \section{Properties}
 \label{sec:props}
 
-We now finally have everything we need to offer our definitions for stack safety.
+We now finally have everything we need to formalize our definitions for stack safety.
 Figure \ref{fig:oprules} gives the operation rules for all of the operations we've described
 so far.
 
@@ -762,21 +787,25 @@ so far.
 
 \subsection{Well-bracketed Control Flow}
 
-\definition A system enjoys well-bracketed control flow if, for all states
-\((\mach,(\_,(\_,\addr_{ret},\addr_{sp})) \stepstounder{\mathbf{return}} (\mach',\context,\obs)\),
-\(\mach'[\PCname] = \addr_{ret}\) and \(\mach'[\SP] = \addr_{sp}\).
+\definition A system enjoys {\it well-bracketed control flow} if 
+\((\mach,(\_,(\_,\addr_{ret},\addr_{sp})) \stepstounder{\mathbf{return}} (\mach',\context,\obs)\)
+implies \(\mach'[\PCname] = \addr_{ret}\) and \(\mach'[\SP] = \addr_{sp}\).
 
 \vspace{\abovedisplayskip}
 
+\apt{These explanations that relate the definitions back to the example snippets are
+  great. They would be even better if you can find a way to put them in Section II,
+  based on (less formal) definitions of the terms introduced here.}
+  
 Consider again the attack in Figure \ref{subfig:WBCF}: the attacker adds
 20 to the return address and then returns, thus bypassing the check and publishing
 {\tt secret}. During the call step, we record in the context that the return to the
 caller should have the program counter at the next instruction (address 20) and the
 stack pointer restored to address -20. When the return occurs, we see that in the
-state following it, the program counter is 40 -- a violation of WBCF.
+state following it, the program counter is 40---a violation of WBCF.
 
 To demonstrate why WBCF also cares about the stack pointer, consider an attack which
-returns with the stack pointer at -12. Now, compare the layout of the stack relative
+returns with the stack pointer at -12 instead of -20. Now, compare the layout of the stack relative
 to the stack pointer as it should be (top) to the one that results by increasing the
 stack pointer before return (bottom):
 
@@ -790,33 +819,38 @@ stack pointer before return (bottom):
   \hline
 \end{tabular}
 
+\apt{I think it might be clearer just to have one row with the two different SP pointers
+  (the proper one and the bad one) marked.}
+
 \vspace{\abovedisplayskip}
 
 In this scenario, when attempting to read {\tt sensitive}, {\tt main} will
 read part of the return address, and then it will attempt to publish
 {\tt res}, but instead will publish {\tt secret}!
 
-Alternatively, we can formalize well-bracketed control flow using \(\uparrow\).
+There is an alternative foramlization of well-bracketed control flow using \(\uparrow\).
 
 \definition For a machine state \(\mach\), let
-\(ret ~ (\mach,\context) = \{\mach' | \mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]\}\).
-A system enjoys well-bracketed control flow if, for all states 
-\((\mach,\context) \stepstounder{\overline{\psi}} (\mach',(V,\sigma),\obs)\) with
+\(ret ~ (\mach,\context) = \{\mach' \mid \mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]\}\).
+\apt{Note: you'll get better spacing by using $\mid$ rather than $|$ in set comprehensions.}
+A system enjoys  well-bracketed control flow if
+\((\mach,\context) \stepstounder{\overline{\psi}} (\mach',(V,\sigma),\obs)\) where 
 \(\mathbf{call} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\) or
-\(\mathbf{tailcall} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\),
-\(|\sigma| \uparrow ret(\mach')\).
+\(\mathbf{tailcall} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\)
+implies \(|\sigma| \uparrow ret(\mach')\).
 
 \vspace{\abovedisplayskip}
 
+\apt{Sudden appearance of $\mathbf{tailcall}$??}
 Once again we can think about our example attack. When the call occurs,
 we define a predicate \(ret ~ (\mach,\context)\) on states that holds when the program counter
 and stack pointer have the appropriate values. Then we use apply the \(\uparrow\)
 operator to this predicate with the depth of the call stack {\it after the call} and
 the machine state {\it before the call}.
 
-After the call, the call stack is one higher than it was before the call,
+After the call, the size of the call stack, \(|\sigma|\), is one greater than it was before the call,
 and if the callee makes further calls, it will continue to be incremented.
-Each return will similarly decrement it, until it is finally lower than the
+Similarly, each return will decrement it, until it is finally lower than in the
 initial state. This is the return that matches the original call, and so
 the resulting state is when we require \(ret(\mach)\) to hold.
 
@@ -827,9 +861,9 @@ such that \(\mach[\component] \not = \mach'[\component]\).
 
 \definition Let \((\mach,\context)\) be a combined state with
 \(\context = (V,\sigma)\), and
-\(\components = \{\component | V ~ \component = \sealed\}\).
+\(\components = \{\component \mid V ~ \component = \sealed\}\).
 Let \(P ~ (\mach',\context')\) be a predicate that holds on a state
-\(\Delta(\mach,\mach')\) is irrelevant in \((\mach', \context')\).
+\(\Delta(\mach,\mach')\) is irrelevant in \((\mach', \context')\).\apt{Something is broken here!}
 Then \(\mach\) enjoys {\it return-time integrity} if \(|\sigma| \uparrow P\) holds
 on \((\mach,\context)\).
 
@@ -864,19 +898,18 @@ of four states treats \(\mach\) and \(\nach\) as the initial states and
 \(\mach'\) and \(\nach'\) as their corresponding final states, and is the
 set of elements that were corrupted between them. That is, the set of all elements
 \(\component \in \Delta(\mach,\mach') \cup \Delta(\nach,\nach')\) such that
-\(\mach'[\component] \not = \nach'[\component]\).
+\(\mach'[\component] \not = \nach'[\component]\). ]\apt{Define first, explain after.}
 
 \definition Let \((\mach,\context)\) be a state with \(\context = (V,\sigma)\), and
-\(\components = \{\component | V ~ \component \in \{\sealed, \unsealed\}\}\).
-
-Then \((\mach,\context)\) enjoys {\it internal confidentiality} with respect to
+\(\components = \{\component \mid V ~ \component \in \{\sealed, \unsealed\}\}\).
+Then \((\mach,\context)\) enjoys {\it internal confidentiality} with respect to \apt{??}
 if, for any \(\nach\) that is a \(\components\)-variant of \(\mach\), we can take
 \(|\sigma| \uparrow (\mach,\context) \hookrightarrow \obsT\) and
 \(|\sigma| \uparrow (\nach,\context) \hookrightarrow \obsT'\) and have that
 \(\obsT \simeq \obsT'\).
 
 \definition Let \((\mach,\context)\) be a state with \(\context = (V,\sigma)\),
-and \(\components = \{\component | V ~ \component \in \{\sealed, \unsealed\}\}\).
+and \(\components = \{\component \mid V ~ \component \in \{\sealed, \unsealed\}\}\).
 Let \(\nach\) be a \(\components\)-variant of \(\mach\).
 Let \(R\) be a relation such that \((\mach_1,\context_1) ~ R ~ (\mach_2,\context_2)\)
 if \(\bar{\Diamond}(\mach,\mach_1,\nach,\mach_2)\) is irrelevant in \((\mach_1,\context_1)\).
@@ -922,7 +955,7 @@ such elements is not irrelevant, confidentiality is violated.
 \subsection{Callee Confidentiality}
 
 \definition Let \((\mach,\context)\) be a state with \(\context = (V,\sigma)\), and
-\(\components = \{\component | V ~ \component = \unsealed\}\).
+\(\components = \{\component \mid V ~ \component = \unsealed\}\).
 Let \(P\) be a predicate that holds on a state \((\mach',\context')\) if
 \(\mach' ~ \parallel ~ \Delta(\mach,\mach') \cap \components\).
 Then \(\mach\) enjoys {\it post-return confidentiality} if \(|\sigma| \downarrow P\) holds.
@@ -1047,7 +1080,7 @@ the called function which register it expects to hold the address of a given obj
 and the size of that object. In this case the offset will always be 0.
 
 When the callee in such a scenario makes a call of its own, the objects passed to it
-will in turn be sealed -- unless it passes them on, which can happen with pass-by-reference
+will in turn be sealed---unless it passes them on, which can happen with pass-by-reference
 arguments!
 
 \subsection{Provenance, Capabilities, and Protecting Objects}
@@ -1057,7 +1090,7 @@ such objects are protected unless the function that owns them intentionally
 passes a pointer to them?
 
 In order to express such a property, we need our machine to carry some notion
-of {\it pointer provenance} -- a distinction between a pointer that is intended to
+of {\it pointer provenance}---a distinction between a pointer that is intended to
 point to a given object, and non-pointer integers as well as pointers to other objects.
 Then \(\mathit{passed}\) should recursively identify all objects that
 are reachable transitively from valid pointers in registers and accessible memory;
