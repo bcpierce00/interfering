@@ -320,4 +320,4 @@ Module Properties (M:Machine).
       P = (fun '(m'',c) => irrelevant (intersect K (Delta m m'')) (m'',c)) ->
       on_return (m',c) (length σ) P.
   
-End Traces.
+End Properties.
