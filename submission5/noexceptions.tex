@@ -258,23 +258,23 @@ our testing environment (Section [TBD]) and is already necessary
 to correctly apply tag-based enforcement in practice (cite something about this.)
 
 The set of special operations that are recognized in this way are termed
-{\it security operations}. Our properties are phrased as a {\it security semantics},
+{\it security-relevant operations}. Our properties are phrased as a {\it security semantics},
 which extends the underlying machine with additional context about its
 security principals and which registers and memory they require to be secure.
-This context evolves dynamically through the execution of security operations.
+This context evolves dynamically through the execution of security-relevant operations.
 This notion of security may be phrased as
 predicates on future states, e.g. assertions of the form
 ``When control returns to me...'', or relations on traces of future execution
 (hyper-properties).
 
 Unlike approaches that give a safe-by-construction semantics
-for various security operations and then prove secure compilation to the underlying
+for various security-relevant operations and then prove secure compilation to the underlying
 enforcement mechanism, our machine is explicitly not safe unless the enforcement
 is correctly instantiated; the security semantics gives us the means to judge whether
 an enforcement scheme implements stack safety or not. 
 
 We will first give a detailed example of a security semantics for a simple setting
-in which our security operations are restricted to making calls and returns, and allocating
+in which our security-relevant operations are restricted to making calls and returns, and allocating
 private memory within the current function activation. We then extend this model
 to the full system that we test, which features:
 \begin{itemize}
@@ -293,7 +293,7 @@ In section (TBD) we discuss the extension of this model into a simple concurrenc
 
 \paragraph*{Threat Model}
 
-We must trust that our method of distinguishing security operations is accurate; if it
+We must trust that our method of distinguishing security-relevant operations is accurate; if it
 involves labels placed on code by a compiler, that means trusting that the compiler placed
 those labels correctly. If operations occur that are not recognized, those operations
 might not be guaranteed to protect their principals---for instance, an unlabeled call
@@ -346,16 +346,16 @@ example code, and their default security class (explained below).
     \(\mathit{CLR}\) / & {\tt t0} -- {\tt t6} & Caller-saved temps \\
     \(\unsealed\) & {\tt a0} -- {\tt a1} & Caller-saved args / return vals \\
     & {\tt a2} -- {\tt a7} & Caller-saved args \\
+    & {\tt ra} & Return Address \\
     \hline
-    \(\mathit{CLE}\) / & {\tt s0} -- {\tt s7} & Callee-saved \\
-    \(\sealed\) & {\tt ra} & Return Address \\
-    & {\tt sp} & Stack Pointer \\  
+    \(\mathit{CLE}\) / & {\tt s0} -- {\tt s11} & Callee-saved \\
+    \(\sealed\) & {\tt sp} & Stack Pointer \\  
     \hline
-    \(\mathit{PUBLIC}\) / & {\tt pc} & Program Counter \\
-    \(\public\) & & \\
+    \(\mathit{PUBLIC}\) / & {\tt gp} & Global Pointer  \\
+    \(\public\) & {\tt tp} & Thread Pointer \\
     \hline
   \end{tabular}
-  \caption{RISC-V register set}
+  \caption{RISC-V integer register set}
   \label{fig:RISCVregs}
 \end{figure}
 
@@ -369,7 +369,7 @@ special silent event \(\tau\).
 The machine step function
 \(\mach \xrightarrow{\overline{\psi},\obs} \mach' \in \MACHS \rightarrow
 \MACHS \times \mathit{list} ~ \Psi \times \OBSS\)
-is labeled by an ordered list of security operations, defined below,
+is labeled by an ordered list of security-relevant operations, defined below,
 and an event.
 While the tag-based enforcement mechanism may cause the machine to
 failstop, we model this as the machine silently diverging by remaining in the
@@ -377,11 +377,12 @@ same state. Since failstops are not distinguished from normal execution,
 our properties will suffer the limitations typical of
 {\it termination insensitive} systems \cite{}. TODO: more detailed explanation later.
 
-\subsection{Security Operations, Principals, and Security State}
+\subsection{Security-Relevant Operations, Principals, and Security State}
 
-Security operations consist of calls (including tailcalls), returns,
-allocations and deallocations. Calls and tailcalls identify the address of the call's target,
-and the argument registers. Allocations and deallocations are phrased in terms of a pair
+\apt{Maybe should drop the math displays from this section, and keep to words.}
+Security-relevant operations consist of calls (including tailcalls), returns,
+allocations and deallocations. \apt{No tailscalls for now?} Calls and tailcalls identify the address of the call's target,
+and the argument registers. \apt{Either explain $\overline{sa}$ or omit it.} Allocations and deallocations are phrased in terms of a pair
 of an offset from the stack pointer and a size. Returns don't require any additional information.
 %
 \begin{align*}
@@ -416,13 +417,17 @@ For convenience, we will abbreviate multiple updates of a mapping
 \(V[\component_0 \mapsto sc_0][\component_1 \mapsto sc_1]\dots\)
 as \(V \llbracket A \mapsto B | C \rrbracket\), where \(A\) and \(B\)
 are fomulae with free variables bound to sets in \(C\).
+\apt{can omit this para}
 
-We represent the call stack with a list of views representing pending inactive
-principals, ranged over by \(\sigma\). A {\it context} is a pair of the current
-activation's view and that list. The initial context is \(\context_0 = (V_0, \emplist)\).
+A {\it context} is a pair of the current activation's view and 
+a list of views representing the call stack (pending inactive
+principals), ranged over by \(\sigma\).  
 \[\context \in \CONTEXTS ::= \mathit{VIEW \times list ~ VIEW}\]
+The initial context is \(\context_0 = (V_0, \emplist)\).
 
-Every security operation manipulates the call  stack via a function
+\apt{Maybe don't need to describe $Op$ or $\stepstounder{\overline{\psi}}$ here, 
+  and maybe not even combined states, although they are used at the moment.}
+  Every security-relevant operation manipulates the call stack via a function
 \(Op : \MACHS \rightarrow \CONTEXTS \rightarrow \psi \rightarrow \CONTEXTS\).
 
 From a machine state and a context, we create a {\it combined state}
@@ -436,15 +441,18 @@ labeled with the same operations. Note that \(Op\) takes as its state argument
 
 \subsection{Policy State}
 
+\apt{As we discussed at length, it would certainly be nice to avoid separate policy state if possible.}
 In addition to its elements, a system may contain additional ``policy'' state that carries
 information relevant to a hardware enforcement mechanism. We assume that policy state
-does not influence execution, except to cause the system to failstop, which is modeled
+cannot influence execution, except possibly to cause the system to failstop, which is modeled
 as a state stepping to itself. A failstop is therefore indistinguishable from silent
 divergence.
 
 Formally, we can treat our machine state as
-\(\mach = (\mach[\cdot],\langle) \mach \rangle \in \MACHS
+\(\mach = (\mach[\cdot],\langle \mach \rangle) \in \MACHS
 ::= (\COMPONENTS \rightarrow \WORDS) \times \POLS\) for some \(\POLS\).
+\apt{This overloaded notation doesn't work. $\mach$ can be either a pair or a map, not both.
+Note that earlier text strongly implies that it is a map.}
 Then \(\langle \mach \rangle\) is the security state. We assume that if
 \(\mach[\component] = \nach[\component]\) for all \(\component\),
 \(\mach \stepstounder{\bar{\psi_1}} \mach'\), and \(\nach \stepstounder{\bar{\psi_2}} \nach'\),
@@ -456,12 +464,15 @@ for all \(\component\).
 \section{Examples}
 
 In this section we consider a simple setting with calls, returns, and private allocations.
-Figure \ref{fig:main} gives a C function {\tt main}, and its compiled RISC-V code,
-that takes a secret as its argument and initializes a variable to contain
-potentially sensitive data. We will assume for this system that events are stores
-to a special address, called {\tt out}.
+Figure \ref{fig:main} gives the C code and corresponding compiled RISC-V code
+for a function {\tt main}. (Code is compiled using the standard RISC-V
+calling conventions~\cite{??}; the stack grows towards lower addresses. We assume that
+{\tt main} begins at address 0 and its callee {\tt f} at address 100.)
 
-{\tt main} then calls another function {\tt f},
+{\tt main} takes a secret as its argument and initializes a variable to contain
+potentially sensitive data. We assume that observable events are stores
+to a special address, called {\tt out}. 
+{\tt main} calls another function {\tt f},
 and afterward may decide to output its secret based on the contents of
 its sensitive data. In this case, since {\tt sensitive} is initialized to 0,
 it should not---instead it will publish the results of {\tt f}.
@@ -469,21 +480,21 @@ it should not---instead it will publish the results of {\tt f}.
 \begin{figure}
   \begin{subfigure}{\columnwidth}
     {\tt
+      volatile int out;
+      
       void main(int secret) \{
 
       ~ ~ int sensitive = 0;
 
       ~ ~ int res = f();
 
-      ~ ~ if (sensitive == 42) \{
+      ~ ~ if (sensitive == 42) 
 
-      ~ ~ ~ ~ *out = secret;
+      ~ ~ ~ ~ out = secret;
 
-      ~ ~ \} else \{
+      ~ ~ else 
 
-      ~ ~ ~ ~ *out = res;
-
-      ~ ~ \}
+      ~ ~ ~ ~ out = res;
 
       \}}
   \end{subfigure}
@@ -494,14 +505,14 @@ it should not---instead it will publish the results of {\tt f}.
       \labeledrow{8:}{sw a1,8(sp)}{}
       \labeledrow{12:}{sw zero,4(sp)}{}
       \labeledrow{16:}{jal f,ra}{\(\mathbf{call} ~ \mathtt{f} ~ \emplist ~ \emplist\)}
-      \labeledrow{20:}{sw r0,0(sp)}{}
+      \labeledrow{20:}{sw a0,0(sp)}{}
       \labeledrow{24:}{lw a4,4(sp)}{}
       \labeledrow{28:}{li a5,42}{}
       \labeledrow{32:}{bne a4,a5,L1}{}
       \labeledrow{36:}{lw a0,8(sp)}{}
       \labeledrow{40:}{sw a0,out}{}
       \labeledrow{44:}{j L2:}{}
-      \labeledrow{L1, 48:}{lw r0,0(sp)}{}
+      \labeledrow{L1, 48:}{lw a0,0(sp)}{}
       \labeledrow{52:}{sw a0,out}{}
       \labeledrow{L2, 56:}{ld ra,12(sp)}{}
       \labeledrow{60:}{addi sp,sp,20}{\(\mathbf{dealloc} ~ (0,20)\)}
@@ -518,20 +529,21 @@ it should not---instead it will publish the results of {\tt f}.
 
 Suppose that {\tt f} is not a (valid) C function at all, but an attacker seeking
 to leak {\tt secret}! It might do so in a number of ways, shown as snippets of
-assembly code in Figure \ref{fig:f}.
-
+assembly code in Figure \ref{fig:f}.\footnote{We arrange that all the snippets
+have the same length just to simplify some later explanations.}
+%
 In Figure \ref{subfig:direct}, {\tt f} takes an offset from the stack
 pointer, accesses {\tt secret}, and directly outputs it. But more
 subtly, even if somehow prevented from outputting {\tt secret} directly, {\tt f}
 can instead return that value so that {\tt main} stores it to {\tt out},
 as in Figure \ref{subfig:indirect}.
-
+%
 Beyond simply reading {\tt secret}, the attacker might overwrite {\tt sensitive}
 with 42, guaranteeing that {\tt main} publishes its own secret unintentionally
 (Figure \ref{subfig:integrity})!
 Attacks of this kind do not violate {\tt main}'s confidentiality, but its
 {\it integrity}.
-And in Figure \ref{subfig:WBCF}, the attacker attempts to return to the
+And in Figure \ref{subfig:WBCF}, the attacker arranges to return to the
 wrong instruction, thereby bypassing the check and publishing {\tt secret} regardless,
 violating the program's {\it well-bracketed control flow} (WBCF.)
 
@@ -572,7 +584,7 @@ violating the program's {\it well-bracketed control flow} (WBCF.)
   \begin{subfigure}[b]{\columnwidth}
     \vspace{\abovedisplayskip}
     \begin{tabular}{r l | l}
-      \labeledrow{100:}{addi ra,ra,20}{}
+      \labeledrow{100:}{addi ra,ra,16}{}
       \labeledrow{104:}{nop}{}
       \labeledrow{108:}{nop}{}
       \labeledrow{112:}{jalr ra}{\(\mathbf{return}\)}
@@ -585,46 +597,54 @@ violating the program's {\it well-bracketed control flow} (WBCF.)
   \label{fig:f}
 \end{figure}
 
-Figure \ref{fig:exec1} shows how the security context
-develops over several steps, with labels on the steps that allocate space and then make
-a call. Both program counter and stack pointer are initially 0, and the stack pointer
-is shown for convenience.
-\(\xrightarrow{\overline{\psi}}\) transitions are written \(\downarrow \overline{\psi}\)
-in this diagram; events are omitted.
+The security semantics for this program is based
+on the security-relevant events noted in the right columns of Figures~\ref{fig:main}
+and~\ref{fig:f}, namely execution of instructions that allocate or deallocate space,
+make a call, or make a return.
+Figure \ref{fig:exec1} shows how the corresponding security context
+develops over the first few steps of the program. We assume execution begins
+at the start of {\tt main} (\(\PCname = 0\)) and that the stack pointer is initially at
+address 1000. %  the \(PC\) and \(SP\) at each step are shown for clarity.
+\(\xrightarrow{\overline{\psi}}\) transitions are numbered and
+written \(\downarrow \overline{\psi}\) in this diagram; events are omitted.
 
-The first step  allocates words for {\tt secret}, {\tt sensitive}, and {\tt res}, as well
+Step 1 allocates a word each for {\tt secret}, {\tt sensitive}, and {\tt res}, as well
 as two words for the return address. This will have the
 effect of marking those bytes \(\object\), assuming they were previously
-\(\unsealed\).
-
+\(\unsealed\). (We use \(V\llbracket\cdot\rrbracket\) to denote updates to \(V\).\apt{To avoid confusion with list brackets.} )
+%
 \begin{figure*}
-  \begin{subfigure}[t]{.5\textwidth}
+  \begin{subfigure}[t]{.55\textwidth}
     \vskip 0pt
-    \begin{tabular}{| l | l || l |}
+    \begin{tabular}{|r|r||l|}
       \hline
-      Step & \(\SP\) & \(\context\) \\
+      \(\PCname\) & \(\SP\) & \(\context\) \\
       \hline
-      0 & 0 & \(V_0, \emplist\) \\
+      0 & 1000 & \(V_0, \emplist\) \\
       \hline
-      \multicolumn{3}{l}{\(\downarrow [\mathbf{alloc} ~ (-20,20)]\)} \\
+      \multicolumn{3}{l}{\(1 \downarrow [\mathbf{alloc} ~ (-20,20)]\)} \\
       \hline
-      1 & -20 & \(V_1 = V_0 \llbracket -20 \ldots -1, \mapsto \object \rrbracket, \emplist\) \\
+      4 & 980 & \(V_1 = V_0 \llbracket 980..999 \mapsto \object\rrbracket, \emplist\) \\
       \hline
-      \multicolumn{3}{l}{\(\vdots\)} \\
+      \multicolumn{3}{l}{\(2 \downarrow []\)} \\
+      \multicolumn{3}{l}{\(\ \ \vdots\)} \\
+      \multicolumn{3}{l}{\(4 \downarrow []\)} \\
       \hline
-      4 & -20 & \(V_1, \emplist\) \\
+      16 & 980 & \(V_1, \emplist\) \\
       \hline
-      \multicolumn{3}{l}{\(\downarrow [\mathbf{call} ~ 100 ~ \emplist ~ \emplist]\)} \\
+      \multicolumn{3}{l}{\(5 \downarrow [\mathbf{call} ~ 100 ~ \emplist ~ \emplist]\)} \\
       \hline
-      5 & -20 & \(V_2 = V_1 [\mathtt{a0} \mapsto \unsealed],[V_1]\) \\
+      100 & 980 & \(V_2 = V_1 \llbracket 980..999 \mapsto \sealed, \mathtt{a0} \mapsto \unsealed\rrbracket,[V_1]\) \\
       \hline
-      \multicolumn{3}{l}{\(\vdots\)} \\
+      \multicolumn{3}{l}{\(6 \downarrow []\)} \\
+      \multicolumn{3}{l}{\(\ \ \vdots\)} \\
+      \multicolumn{3}{l}{\(8 \downarrow []\)} \\
       \hline
-      8 & -20 & \(V_2,[V_1]\) \\
+      112 & 980 & \(V_2,[V_1]\) \\
       \hline
-      \multicolumn{3}{l}{\(\downarrow [\mathbf{return}]\)} \\
+      \multicolumn{3}{l}{\(9 \downarrow [\mathbf{return}]\)} \\
       \hline
-      9 & -20 & \(V_1, \emplist\) \\
+      20(?) & 980  & \(V_1, \emplist\) \\
       \hline
     \end{tabular}
   \end{subfigure}
@@ -636,53 +656,54 @@ effect of marking those bytes \(\object\), assuming they were previously
     \includegraphics[width=\columnwidth]{stack4.png}
   \end{subfigure}
 
-\caption{Execution through return from {\tt f}}
+\caption{Execution up through the return from {\tt f}\apt{Label rows on right. Also show registers?}}
 \label{fig:exec1}
 \end{figure*}
-
-On a call, the formerly active principal's record is pushed onto the inactive list.
+%
+At step 5, the formerly active principal's record is pushed onto the inactive list.
 Its return target is the return address of the call, 
 and the stack pointer target is the stack pointer at the moment of call.
 The callee's view is updated from the caller's such that all \(\object\) locations
 become \(\sealed\). (In more complex settings, objects that are intentionally passed
 to the callee will not get sealed, but for now we assume no sharing of memory between activations.)
 For registers, \(\overline{\reg_{args}}\) tells us which registers are used as arguments,
-in this case {\tt a0}. These are mapped to \(\public\), while any non-argument, caller-saved
-registers are mapped to \(\unsealed\). All callee-save registers are always \(\sealed\) and
-the program counter \(\public\), as they were initialized.
+in this case just {\tt a0}. These are mapped to \(\public\), while any non-argument, caller-saved
+registers remain \apt{right?} mapped to \(\unsealed\). All callee-save registers are always \(\sealed\)
+as they were initialized\apt{???}.
+At step 9, {\tt f} returns, and the topmost inactive principal, for {\tt main}, is restored.
 
-On step 8, {\tt f} returns, and we restore the topmost inactive principal,
-{\tt main}'s principal. Now we will discuss the intuition behind how this
-structure translates into stack safety properties that rule out different
-classes of bad behavior.
+We now show how this security semantiy can be used define notions of confidentiality,
+integrity, and correct control flow in such a way that many classes of
+bad behavior, including the attacks in Figure~\ref{fig:f}, are 
+are detected as security violations. 
 
 \paragraph*{Well-bracketed Control Flow}
 
-But what if {\tt f} returns to an unexpected place (i.e. \(\PCname \neq 20\) or
-\(\SP \neq -20\)), as would be the case in attack (d)? We consider this to
+To begin with, what if {\tt f} returns to an unexpected place (i.e. \(\PCname \neq 20\) or
+\(\SP \neq 980\)). We consider this to
 violate well-bracketed control flow (WBCF). WBCF is a relationship between
-call steps and their corresponding return steps: after the return, the program
-counter should be at the instruction following the state before the call,
+call steps and their corresponding return steps: just after the return, the program
+counter should be at the next instruction following the call,
 and the stack pointer should be the same as it was before the call.
 
 Consider the attack in Figure \ref{subfig:WBCF}: the attacker adds
-20 to the return address and then returns, thus bypassing the check and outputting
-{\tt secret}. Before the call, the program counter is 16 and the stack pointer is 20,
-so we define a predicate on states \(ret\) that holds when the
-program counter and stack pointer are both 20.
+16 to the return address and then returns, thus bypassing the {\tt if}-test in the code and outputting
+{\tt secret}. Before the call, the program counter is 16 and the stack pointer is 980,
+so we define a predicate \(ret\) \apt{suggest capitalizing these predicates}
+on states that should hold just after the return, namely, the program counter
+should be 20 and the stack pointer should be 980. \apt{Maybe write this symbolically.}
 
-Then we identify the state immediately following the return, if one occurs ---
-this will be the first state in which the pending call stack is smaller than it was
-inside of the call.
-WBCF requires that if \(s\) after that return, \(ret ~ s\) will hold.
-For nested calls, where the pending stack is initial larger, the same principal
+We can identify the point just after the return (if a return occurs)
+as the first state in which the pending call stack is smaller than it was
+just after the call.
+WBCF requires that if \(s\) is the state at that point, then \(ret ~ s\) holds.
+For nested calls, where the pending stack is initially larger, the same principle
 applies: \(ret ~ s\) must hold the next time the pending stack is the same size or smaller.
 
-To demonstrate why WBCF also cares about the stack pointer, consider an attack which
-returns with the stack pointer at -12 instead of -20. Now, compare the layout of the
-stack relative to the stack pointer as it should be (\(\SP\)) to the one that results by
-increasing the stack pointer before return (\(\SP'\)):
-
+To see why WBCF also cares about the stack pointer, consider an attack \apt{should this
+  be shown as a fifth attack in the figure?} which
+returns with \(\SP' = 998\) instead of the correct \(\SP = 980\), and recall
+the layout of {\tt main}'s frame: 
 \begin{tabular}{| l | l | l | l | l |}
   \multicolumn{1}{r}{\(\SP \downarrow\)} &
   \multicolumn{2}{r}{\(\SP' \downarrow\)} \\
@@ -693,6 +714,7 @@ increasing the stack pointer before return (\(\SP'\)):
 
 \vspace{\abovedisplayskip}
 
+\noindent
 In this scenario, when attempting to read {\tt sensitive}, {\tt main} will
 read part of the return address, and then it will attempt to output
 {\tt res}, but instead output {\tt secret}! Even absent other
@@ -701,41 +723,42 @@ for the program to behave predictably.
 
 \paragraph*{Stack Integrity}
 
-Stack integrity applies a similar notion to all of the memory that a function has
+Stack integrity applies a similar \apt{to what?} notion to all of the memory that a function has
 allocated. In Figure \ref{fig:exec1} we see the lifecycle of an allocated frame:
 upon allocation, the view labeled is \(\object\), and when a call is made, it instead
 becomes \(\sealed\). In more sophisticated systems discussed later, we will distinguish
-sealed objects from those that are intentionally passed to the callee.
+sealed objects from those that are intentionally passed to the callee. \apt{already said this}
 Intuitively, the integrity of {\tt main}
 is preserved if, when control returns to it, it can rely on any \(\sealed\) elements
 to be identical to when it made the call.
-
+%
+Again, we need to know when a caller has been returned to,
+and we use the same mechanism of checking the depth of the call stack.
+%
 In the case of the call from {\tt main} to {\tt f}, the \(\sealed\) elements are the
-addresses -20 through -1 (allocated as private data) and callee-saved registers such as
-the stack pointer and return address. Note that callee-saved registers often change
+addresses 980 through 999 (allocated as private\apt{??} data) and callee-saved registers such as
+the stack pointer. Note that callee-saved registers often change
 during the call---but if so, the callee is obligated to restore them to their prior value.
 
-One further caveat: it is possible that {\tt f} might overwrite {\tt main}'s data
-in a way that is harmless. Or, an enforcement mechanism might defer the checking
-for illegal writes until later in the execution, entering an error state at some
-point after return but before the illegal write is able to damage the system.
-This is the case in a lazy micro-policy: the monitor permits the caller to write into the
+While this notion of integrity is simple, it is stricter than necessary for many purposes.
+For example, it arguably doesn't matter if {\tt f} overwrites {\tt main}'s data provided that {\tt main} never
+reads that corrupted data.  This is the justification behind the lazy micro-policy~\cite{??}:
+the monitor permits the caller to write into the
 callee's frame, but taints that write so that the callee cannot read it later without
-triggering a failstop. In such a scenario we will consider a value {\it irrelevant}
-if it could be replaced with any other value without changing the observable behavior
+triggering a failstop. More generally, the corruption can be considered acceptable
+as long as it does not affect {\tt main}'s observable behavior. \apt{Maybe justify this
+  point of view by appeal to standard security notions?}
+To characterize this situation, we define a state element to be \emph{irrelevant}
+if its value can be replaced with any other value without changing the observable behavior
 of the machine. More precisely, for a set of elements \(\components\),
 a pair of states \(\mach\) and \(\nach\)
-are {\em \(\components\)-variants} if they agree on the value of every
-element except those in \(\components\), and share the same policy state.
-The elements of \(\components\) are said to be
-irrelevant in \(\mach\) if every variant state produces an equivalent trace
-(see Section \ref{sec:events}.)
-
-So, to define integrity, we again need to know when a caller has been returned to,
-and we use the same mechanism of checking the depth of the call stack.
-Integrity holds if, at that returned state,
-any element that is \(\sealed\) under the callee's view is either restored
-to its original value or is irrelevant.
+are {\em \(\components\)-variants} if t nhey agree on the value of every
+element except those in \(\components\), and share the same policy state\apt{hopefully can remove this last}.
+The elements of \(\components\) are \emph{irrelevant} in \(\mach\) if every variant state produces an equivalent trace
+(see Section \ref{sec:events}); all other elements are \emph{relevant}.
+We characterize \emph{observational integrity} as the property that
+every \emph{relevant} element that is \(\sealed\) under the callee's view is restored
+to its original value at the return point.
 
 \begin{figure}
   \includegraphics[width=\columnwidth]{variants.png}
@@ -744,18 +767,17 @@ to its original value or is irrelevant.
 \end{figure}
 
 The example in Figure \ref{subfig:integrity} modifies the value of {\tt sensitive},
-which is \(\sealed\). Figure \ref{fig:variant} shows the state at step 5, just after the call,
+which is \(\sealed\). Figure \ref{fig:variant} shows the state just after the all at step 5,
 assuming that {\tt sec} is 5. Similar to WBCF, we will define
-\(int ~ s\) as a predicate on states that holds if, of the sealed
-addresses in state 5, all values that differ in \(s\) are irrelevant. We once again
-require that \(int\) hold on the state following the matching return.
-
-That state is reached at step 9. Since {\tt sensitive} has changed, we must determine whether
-it is irrelevant. We consider a variant state in which it has any other value, arbitrarily
+\(int\) \apt{suggest $Int$} as a predicate on states that holds if
+all relevant sealed addresses in \(s\) are the same as after step 5.
+We once again require that \(int\) hold on the state following the matching return.
+That state is reached by step 9. Although {\tt sensitive} has changed, it might be
+irrelevant. Consider a variant state in which {\tt sensitive} has any other value, arbitrarily
 choosing 43. As execution continues after the return from the original state, it
-passes the check on {\tt sensitive}, while the execution from the variant does not, resulting
-in differing outputs. Therefore {\tt sensitive} is not irrelevant, so \(int\) does not hold,
-and integrity has been violated.
+passes the {\tt if}-test on {\tt sensitive}, whereas the execution from the variant does not, resulting
+in differing outputs. Therefore {\tt sensitive} is relevant, so \(int\) does not hold,
+and integrity has indeed been violated.
 
 \paragraph*{Caller Confidentiality}
 
@@ -767,7 +789,7 @@ As we saw in the examples, we must consider both the observable events
 that the callee produces during the call and the changes that the callee makes to the state that might
 affect the caller after the callee returns.
 
-Consider again the state \((\mach, (V_2,\sigma))\) at step 5, this time with the attacker from
+Consider again the state \((\mach, (V_2,\sigma))\) after step 5, this time with the attacker from
 Figure \ref{subfig:direct}. We take a variant state over the set of element(s) that are
 \(\sealed\) or \(\unsealed\) in \(V_2\), which happens to be the entire stack (see
 Figure \ref{fig:variant2}.) If we take a trace of execution from each state until it returns,
@@ -777,24 +799,27 @@ the traces may differ, in this case outputting 5 (the original value of {\tt sec
 
 \begin{figure}
   \includegraphics[width=\columnwidth]{variants2.png}
-  \caption{Internal Confidentiality Violation}
+  \caption{Internal Confidentiality Violation\apt{needs key cells to be colored}}
   \label{fig:variant2}
 \end{figure}
 
 But, in Figure \ref{subfig:indirect}, we also saw an attacker that exfiltrated the secret
 by reading it and then returning it, in a context where the caller would output the returned
-value. Figure \ref{subfig:variant3} shows the behavior of the same variants under this attacker,
+value. Figure \ref{fig:variant3} shows the behavior of the same variants under this attacker,
 but in this case, there is no output during the call. Instead the value of {\tt secret} is
-extracted and placed in {\tt a0}, the return value register. To illustrate the subtlety
-of identifying a leak, {\tt f} has also stored a 0 below the stack pointer.
+extracted and placed in {\tt a0}, the return value register. We wish to identify this as
+a confidentiality violation, again by considering variants of the \(\sealed\) and \(\unsealed\)
+elements in \(V_2\), but capturing the required property is subtle.  
 
+To illustrate the issues, note that {\tt f} has also stores a 0 below the stack pointer.
+%
 \begin{figure}
   \includegraphics[width=\columnwidth]{variants3.png}
   \caption{Return-time Confidentiality Violation}
   \label{fig:variant3}
 \end{figure}
-
-Consider three elements: the address \(\SP - 4\) (blue), the address \(\SP + 12\) (yellow),
+%
+Now consider three elements: the address \(\SP - 4\) (blue), the address \(\SP + 12\) (yellow),
 and the register {\tt a0} (red). In the first case, the execution from the variant state
 has changed the value at \(\SP - 4\). But both return states agree on that value. Therefore,
 while the address was updated, it does not depend on a secret value.
@@ -805,29 +830,30 @@ the original variation, and does not depend on a secret value either. This matte
 following the return, the caller is allowed to access its stack frame, so those addresses
 may influence future execution legitimately.
 
-But in the case of {\tt a0}, the value has changed during the call (on both sides,
-although only one would be necessary.) And its final value differs between the variants.
-Therefore, it must depend on a secret. Indeed, we happen to know that it depends on {\tt secret}
-itself. We must therefore insist that {\tt a0} be irrelevant in the original trace.
-We term this property {\it return-time confidentiality}.
+But in the case of {\tt a0}, the value has changed during the call (in both the original
+and the variant, although only one of these would be necessary), and its final value differs between the variants.
+Therefore, it must depend on a secret (in fact, the variable {\tt secret}).
+Unless {\tt a0} happens to be irrelevant in the original trace, this is a violation of what
+we term {\it return-time confidentiality}.
 
 Structurally, return-time confidentiality resembles integrity, but now dealing with
 variants. We begin with a state immediately following
-a call. Let that be \((\mach,\context)\). We suppose an arbitrary variant state,
-\((\nach,\context)\), which may vary any element that is \(\sealed\) or \(\unsealed\).
-That is, any element that is not used legitimately to pass arguments. Caller confidentiality
-therefore can be thought of as the callee's insensitivity to parts of its initial states
+a call. Let that be \((\mach,\context)\). \apt{do we need the $\context$ part??} We consider an arbitrary variant state,
+\((\nach,\context)\), which may vary any element that is \(\sealed\) or \(\unsealed\), 
+i.e., any element that is not used legitimately to pass arguments. Caller confidentiality
+therefore can be thought of as the callee's insensitivity to elements in its initial state
 that are not part of the caller-callee interface.
 
-In place of a predicate we define \(\mathit{conf}\) as a binary relation on states.
-\(\mathit{conf}\) will hold on eventual return states \((\mach',\context')\) and
+In place of a predicate we define \(\mathit{conf}\) as a binary relation on states, 
+which holds on eventual return states \((\mach',\context')\) and
 \((\nach',\context'')\)
-if all elements that changed between \(\mach\) and \(\mach'\) or \(\nach\) and \(\nach'\),
-and which differ between \(\mach\) and \(\nach\), are irrelevant. We then define
-return-time confidentiality as holding if \(conf\) holds on the matching return states
+iff all relevant elements that changed between \(\mach\) and \(\mach'\) or \(\nach\) and \(\nach'\)
+are the same in \(\mach\) and \(\nach\). We then define
+return-time confidentiality as holding if \(\mathit{conf}\) holds on the matching return states
 from \(\mach\) and \(\nach\), respectively.
 
-Together, these definitions encompass the confidentiality of the caller from the callee.
+Finally, we define caller confidentiality as the 
+combination of internal and return-time confidentiality.
 
 \paragraph*{Callee Confidentiality}
 
