@@ -430,39 +430,6 @@ As the machine takes a step that executes a particular operation, it updates the
 corresponding context, as described informally in the following section, and formally
 in Section \ref{sec:props}.
 
-%  Every security-relevant operation manipulates the call stack via a function
-%\(Op : \MACHS \rightarrow \CONTEXTS \rightarrow \psi \rightarrow \CONTEXTS\).
-
-%From a machine state and a context, we create a {\it combined state}
-%\(s = (\mach,\context)\) and a transition \(\stepstounder{}\) on combined states,
-%labeled with the same operations. Note that \(Op\) takes as its state argument
-%\(\mach\), the state before the step.
-
-%\judgmenttwo{\(\mach \xrightarrow{\overline{\psi}} \mach', \obs \)}
-%            {\(\mathit{foldl} ~ (Op ~ \mach) ~ \context ~ \overline{\psi} = \context'\)}
-%            {\((\mach,\context) \stepstounder{\overline{\psi}} (\mach', \context', \obs)\)}
-
-%\subsection{Policy State}
-
-%\apt{As we discussed at length, it would certainly be nice to avoid separate policy state if possible.}
-%In addition to its elements, a system may contain additional ``policy'' state that carries
-%information relevant to a hardware enforcement mechanism. We assume that policy state
-%cannot influence execution, except possibly to cause the system to failstop, which is modeled
-%as a state stepping to itself. A failstop is therefore indistinguishable from silent
-%divergence.
-
-%Formally, we can treat our machine state as
-%\(\mach = (\mach[\cdot],\langle \mach \rangle) \in \MACHS
-%::= (\COMPONENTS \rightarrow \WORDS) \times \POLS\) for some \(\POLS\).
-%\apt{This overloaded notation doesn't work. $\mach$ can be either a pair or a map, not both.
-%Note that earlier text strongly implies that it is a map.}
-%Then \(\langle \mach \rangle\) is the security state. We assume that if
-%\(\mach[\component] = \nach[\component]\) for all \(\component\),
-%%\(\mach \stepstounder{\bar{\psi_1}} \mach'\), and \(\nach \stepstounder{\bar{\psi_2}} \nach'\),
-%then \(\bar{\psi_1} = \bar{\psi_2}\) and either
-%\(\mach = \mach'\), \(\nach = \nach'\), or \(\mach'[\component] = \nach'[\component]\)
-%for all \(\component\).
-
 %\section{Calls, Returns, and Private Allocations}
 \section{Examples}
 
@@ -886,8 +853,7 @@ therefore can be thought of as the callee's insensitivity to elements in its ini
 that are not part of the caller-callee interface.
 
 In place of a predicate we define \(\conf\) as a binary relation on states, 
-which holds on eventual return states \((\mach',\context')\) and
-\((\nach',\context'')\)
+which holds on eventual return states \(\mach'\) and \(\nach'\)
 iff all relevant elements that changed between \(\mach\) and \(\mach'\) or \(\nach\) and \(\nach'\)
 are the same in \(\mach\) and \(\nach\). We then define
 return-time confidentiality as holding if \(\conf\) holds on the matching return states
@@ -943,7 +909,45 @@ Then in Section \ref{sec:facts} we will define a mechanism to make assertions
 about what will happen on a future return, and Section \ref{sec:props} will use these
 to give the formal definitions of integrity and confidentiality.
 
-\section{Events and Traces}
+\section{Property Formalisms}
+
+We have described informally how the security context develops as the system performs
+security-relevant operations. Formally, we combine each machine state with a context
+to create a {\it combined state} \(s = (\mach,\context)\) and a lift the transition
+transition \(\stepstounder{}\) on combined states, labeled with the same operations.
+with each step, the context updates based on the function
+\(Op : \MACHS \rightarrow \CONTEXTS \rightarrow \psi \rightarrow \CONTEXTS\).
+Note that \(Op\) takes as its first argument the state {\it before} the step.
+Since a single step might correspond to multiple operations, we apply
+\(Op\) as many times as is needed.
+
+\judgmenttwo{\(\mach \xrightarrow{\overline{\psi}} \mach', \obs \)}
+            {\(\mathit{foldl} ~ (Op ~ \mach) ~ \context ~ \overline{\psi} = \context'\)}
+            {\((\mach,\context) \stepstounder{\overline{\psi}} (\mach', \context', \obs)\)}
+
+The definition of \(Op\) is most convenient to present decomposed into
+rules for each operation. In the simple system, the operations affect the
+context as follows:
+
+\judgmentbr[Alloc]
+           {\(b = \mach[\SP] + \mathit{off}\)}
+           {\(V' = V \llbracket \addr \mapsto \sealed |
+             b \leq a < b+\mathit{sz} \land V ~ \addr = \unsealed \rrbracket\)}
+           {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
+
+\judgmentbr[Call]
+           {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}}\)}
+           {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
+             \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
+           {\(Op ~ \mach ~ \psi ~ (V,\sigma) =
+             (V',V::\sigma)\)}
+
+\judgment[Ret]
+         {\(\sigma = (V,\addr_{ret},\addr_{sp})::\sigma'\)}
+         {\(Op ~ \mach ~ \mathbf{return} ~ (\_, \sigma) = (V, \sigma)\)}
+
+            
+\subsection{Events and Traces}
 \label{sec:events}
 
 We abstract over the events that can be observed in the system, defining them
@@ -1016,7 +1020,7 @@ irrelevant values, written \((\mach,\context) \parallel \components\), if for al
 \((\nach,\context) \hookrightarrow \obsT'\), then
 \(\obsT \eqsim \obsT'\).
 
-\section{Facts Abouts Calls and Returns}
+\subsection{Facts Abouts Calls and Returns}
 \label{sec:facts}
 
 Here we define some logical operations to reason about the behavior of the
@@ -1072,42 +1076,10 @@ respectively. Once again, \(\Uparrow\) is coinductive.
               {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,\context_2')\)}
               {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
-\section{Properties}
+\subsection{Properties}
 \label{sec:props}
 
-We now finally have everything we need to formalize our definitions for stack safety.
-Figure \ref{fig:oprules} gives the operation rules for all of the operations we've described
-so far.
-
-\begin{figure}
-
-  \judgmentbr[Alloc]
-             {\(b = \mach[\SP] + \mathit{off}\)}
-             {\(V' = V \llbracket \addr \mapsto \sealed |
-               b \leq a < b+\mathit{sz} \land V ~ \addr = \unsealed \rrbracket\)}
-             {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
-
-  \judgmentbr[Call]
-             {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
-             {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
-               \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
-             {\(Op ~ \mach ~ \psi ~ (V,\sigma) =
-               (V',V::\sigma)\)}
-
-  \judgment[Ret]
-           {\(\sigma = (V,\addr_{ret},\addr_{sp})::\sigma'\)}
-           {\(Op ~ \mach ~ \mathbf{return} ~ (\_, \sigma) = (V, \sigma)\)}
-           
-%\judgment[RetDef]
-%         {\(\chi = \mathbf{return}\)}
-%         {\(Cop ~ \chi ~ (V, \emplist) ~ \mach \triangleq
-%           (V, \emplist)\)}
-
-  \caption{Core operation rules for the simple system}
-  \label{fig:oprules}
-\end{figure}
-
-\subsection{Well-bracketed Control Flow}
+\paragraph*{Well-bracketed Control Flow}
 
 \definition We define a correct return from \(\mach\) as:
 %
@@ -1119,7 +1091,7 @@ A system enjoys  well-bracketed control flow if, whenever
 \(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\),
 \(|\sigma| \uparrow \ret(\mach)\) holds on \((\mach',(V,\sigma))\).
 
-\subsection{Integrity}
+\paragraph*{Integrity}
 
 \definition Let \(\Delta(\mach,\mach')\) be the set of elements \(\component\)
 such that \(\mach[\component] \not = \mach'[\component]\).
@@ -1134,7 +1106,7 @@ is irrelevant in \((\mach', \context')\).
 we have:
 \[(|\sigma'| \uparrow \intProp(\mach',V)) ~ (\mach',(V,\sigma))\]
 
-\subsection{Caller Confidentiality}
+\paragraph*{Caller Confidentiality}
 
 \definition Let \((\mach,\context)\) be a state with \(\context = (V,\sigma)\), and
 \(\components = \{\component \mid V ~ \component \in \{\sealed, \unsealed\}\}\).
@@ -1165,7 +1137,7 @@ and any \(\nach\) that is a \(\components\)-variant of \(\mach\), we have:
 with \(\mathbf{call} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\),
 \((\mach',\context')\) enjoys both internal and return-time confidentiality.
 
-\subsection{Callee Confidentiality}
+\paragraph*{Callee Confidentiality}
 
 \definition We define \(\cconf(\mach,V)\), to hold on a state \((\mach',\context')\) when
 \(\{\component \mid V ~ \component = \unsealed\} \cap \Delta(\mach,\mach')\)
@@ -1180,9 +1152,15 @@ we have:
 
 \section{Advanced Machine}
 
-The advanced machine defines additional operations, and adds a field \(\overline{sa}\) to
-the \(\mathbf{call}\) operation, which is a set of triples of a register, a base offset, and a size,
-and denotes that the object at the offset from the given register is to be passed as an argument.
+The advanced machine defines additional operations, and extends some of the old ones.
+It adds a field \(\overline{sa}\) to the \(\mathbf{call}\) operation, which is a set of
+triples of a register, a base offset, and a size, and denotes that the object at the offset
+from the given register is to be passed as an argument. The new \(\mathbf{tailcall}\) operation
+has the same fields, but deals with tail call optimizations in which the callee will reuse
+the caller's stack. The \(\mathbf{alloc}\) operation
+gains a boolen flag indicating whether the allocation is to be public, accessible to
+all functions until deallocated. And, we add the corresponding \(\mathbf{dealloc}\)
+operation.
 
 \begin{align*}
   \psi \in \Psi ::= & \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa} &
@@ -1190,55 +1168,67 @@ and denotes that the object at the offset from the given register is to be passe
   | & \mathbf{tailcall} ~ \addr_{target}  ~ \overline{\reg_{args}} ~ \overline{sa} &
   sa \in \REGS \times \mathbb{Z} \times \mathbb{N} \\
   | & \mathbf{return} & \\
-  | & \mathbf{alloc} ~ \mathit{off ~ sz} & \mathit{off, sz} \in \mathbb{N} \\
+  | & \mathbf{alloc} ~ \mathit{pub} ~ \mathit{off ~ sz} & \mathit{off, sz} \in \mathbb{N}, \mathit{pub} \in \mathbb{B} \\
   | & \mathbf{dealloc} ~ \mathit{off ~ sz} & \mathit{off, sz} \in \mathbb{N} \\
 \end{align*}
 
-%We can extend our basic machine to support public memory allocations that can
-%be accessed by anyone until they are deallocated on their owner's return,
-%using the \(\mathbf{alloc\_pub}\) operation. This behaves identically to
-%\(\mathbf{alloc\_priv}\) except that it marks the locations \(\public\).
-%For example, consider the following code:
+\subsection{Public Allocations}
 
-%{\tt
-%  void g() \{
+The advanced machine supports public stack allocations that can
+be accessed by anyone until they are deallocated on their owner's return,
+represented by \(\mathbf{alloc} ~ \mathbf{t} \dots\).
+For example, consider the following code:
 
-%  ~ ~ int x[3];
+{\tt
+  void g() \{
 
-%  ~ ~ int y;
+  ~ ~ int x[3];
 
-%  ~ ~ h(\&x);
+  ~ ~ int y;
+
+  ~ ~ h(\&x);
     
-%  \}
-%}
+  \}
+}
 
-%Here we have allocated several arrays and variables; {\tt y}
-%will behave as normal with \(\mathit{alloc\_priv}\), but {\tt x} has its
-%address taken and passed to another function. That function might do anything at
-%all to {\tt x}, and we have to decide whether it can be said to violate stack
-%safety. A reasonable default is to assume that any address-taken local should be
-%public, while {\tt y} is still private.
+Here we have allocated several arrays and variables; {\tt y}
+will behave as normal with \(\mathbf{alloc} ~ \mathbf{f} \dots\), but
+{\tt x} has its address taken and passed to another function. That
+function might do anything at all to {\tt x}, and might store its pointer
+elsewhere (in the heap, for instance) so that the scope of legitimate accesses
+to {\tt x} are uncertain. We default to assuming that any address-taken local
+should be public. Meanwhile {\tt y} is still private.
 
-%In the likely event that the space for the return address, {\tt x}, and {\tt y}
-%are all allocated in a single step, that step needs multiple labels to capture
-%that they are not all private. Its label would instead be:
-%\[\begin{split}
-%& \psi = [\mathbf{alloc\_priv} ~ (20,4); \\
-%  & \mathbf{alloc\_pub} ~ (16,12) ; \mathbf{alloc\_priv} ~ (4,4)]
-%\end{split}\]
+In the likely event that the space for the return address, {\tt x}, and {\tt y}
+are all allocated in a single step, that step makes multiple allocation operations:
+\[\bar{\psi} = [\mathbf{alloc} ~ \mathbf{f} ~ (-20,4);
+ \mathbf{alloc} ~ \mathbf{t} ~ (-16,12) ; \mathbf{alloc} ~ \mathbf{f} ~ (-4,4)]\]
 
-%Allocating public objects affects the call stack very similarly to private ones,
-%but instead of treating them as \(\sealed\) they become \(\public\). This makes these
-%regions of memory able to transmit information between caller and callee without
-%violating the stack safety properties. Note that there is no way to seal a location
-%once it has become \(\public\); only when {\tt g} returns will the memory allocated
-%to {\tt x} be available for private use.
+Allocating public objects affects the call stack very similarly to private ones,
+but instead of labeling them \(\object\) they become \(\public\), so they are
+not sealed at a call. This makes these
+regions of memory able to transmit information between caller and callee without
+violating the stack safety properties. Note that there is no way to seal a location
+once it has become \(\public\); only when {\tt x} is deallocated will its region
+be available to allocate privately.
 
-%\judgmentbr{\(b = \mach[\SP] - \mathit{off}\)}
-%           {\(V' = V \llbracket \addr \mapsto \public |
-%             b \leq a < b+\mathit{sz} \land V ~ \addr = \unsealed \rrbracket\)}
-%           {\(Pop ~ (\mathbf{alloc\_pub} ~ \mathit{off, sz}) ~ (V,\sigma) ~ \mach \triangleq
-%             (V',\sigma)\)}
+\judgmentbr[AllocPriv]
+           {\(b = \mach[\SP] + \mathit{off}\)}
+           {\(V' = V \llbracket \addr \mapsto \sealed |
+             b \leq a < b+\mathit{sz} \land V ~ \addr = \unsealed \rrbracket\)}
+           {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{f} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
+
+\judgmentbr[AllocPub]
+           {\(b = \mach[\SP] + \mathit{off}\)}
+           {\(V' = V \llbracket \addr \mapsto \public |
+             b \leq a < b+\mathit{sz} \land V ~ \addr = \unsealed \rrbracket\)}
+           {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{t} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
+
+\judgmentbr[Dealloc]
+           {\(b = \mach[\SP] + \mathit{off}\)}
+           {\(V' = V \llbracket \addr \mapsto \unsealed |
+             b \leq a < b+\mathit{sz} \land V ~ \addr \in \{\object, \public\} \rrbracket\)}
+           {\(Op ~ \mach ~ (\mathbf{dealloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
 
 \subsection{Stack Arguments}
 
@@ -1294,20 +1284,58 @@ as \(\object\) and seal everything else.
                \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
              {\(V'' = V'\llbracket \addr \mapsto \sealed | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \rrbracket\)}
              {\(Op ~ \mach ~ \psi ~ (V,\sigma) =
-               (V',V::\sigma)\)}
+               (V'',V::\sigma)\)}
 
 The remaining definitions are unchanged. Now a stack-spilled argument can be allocated
 and remain accessible in the callee, while its memory is sealed for calls that do not
 use that memory as an argument.
 
-This same structure works for pass-by-reference arguments: we know from the type of
-the called function which register it expects to hold the address of a given object,
-and the size of that object. In this case the offset will always be 0.
+This same structure works for pass-by-reference arguments. In this case {\tt main}
+passes an array {\tt x} directly, which is compiled as a pass-by-reference.
 
-When the callee in such a scenario makes a call of its own, the objects passed to it
-will in turn be sealed---unless it passes them on, which can happen with pass-by-reference
-arguments!
+{\tt
+  int main() \{
+  
+  ~ int x[1];
 
+  ~ f(x);
+
+  ~ g();
+
+  ~ return x[0];
+
+  \}
+}
+
+Unlike the address-taken array, we can clearly delineate the scope in which {\tt x} may be
+accessed without violating stack safety: {\tt f} should be allowed to access it, but further
+calls from {\tt f} should not (unless {\tt f} passes it to them) and {\tt g} certainly
+should not. Say the compiler opts to pass the pointer to {\tt x} in register {\tt a0}.
+The {\tt f} is specifically being given access to the four bytes starting at that address.
+The call operation is \(\mathbf{call} ~ \emplist ~ \{(\mathtt{a0},0,4)\}\).
+
+\subsection{Tailcalls}
+
+The operation rule for a tailcall is similar to that for a normal call.
+We do not push the caller's view onto the stack,
+but replace it outright. This means that a tailcall does not increase the size of
+the call stack, and therefore for purposes of our properties, all tailcalls will
+be considered to return simultaneously when the eventual {\bf return} operation
+pops the top of the stack.
+
+Since the caller will not be returned to, it does not need integrity, though
+it should still enjoy confidentiality. We set its frame to \(\unsealed\) rather
+than \(\sealed\) to express this. Of course, some objects may be passed in place,
+easily modeled by including them in \(\overline{sa}\).
+
+\judgmentbrbr[]
+             {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
+             {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
+               \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
+             {\(V'' = V'\llbracket \addr \mapsto \unsealed | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \rrbracket\)}
+             {\(Op ~ \mach ~ \psi ~ (V,\sigma) =
+               (V',\sigma)\)}
+             
 \subsection{Provenance, Capabilities, and Protecting Objects}
 
 What if we want to express a finer-grained notion of safety, in which
@@ -1329,7 +1357,14 @@ State beyond registers and memory is always considered \(\public\), and in a PIP
 includes tags. That does not mean that functions should be modifying them! It just means that we
 do not consider them to be part of the state being protected. It is less obvious that a function
 should be prevented reading a tag, and our properties do not rule it out, although in practice
-PIPE does not allow such reads.
+PIPE does not allow such reads. It would be quite possible to implement
+the properties so that they would forbid these activities, for instance by structuring \(\mathcal{P}\)
+to treat tags separately and apply stack safety to the tags on the stack, but there is no obvious
+application for such a stringent property---the enforcement state must be protected in order that
+enforcement not be subverted, not for its own sake.
+
+I have a sketch of an argument that we would not gain anything meaningful from confidentiality
+of tags, but it still needs some work. Still, I think it's correct not to vary the policy state.
 
 \bibliographystyle{IEEEtran}
 \bibliography{bcp.bib,local.bib}
