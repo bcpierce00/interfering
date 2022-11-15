@@ -365,10 +365,16 @@ that is used for security enforcement. We treat this as a set \(\mathcal{P}\) wi
 \end{figure}
 
 Collectively addresses and registers are {\em state elements} \(\component\)
-in the set \(\COMPONENTS ::= \WORDS + \REGS + \mathcal{P}\).
-%
-The set of {\em machine states} \(\MACHS\) (ranged over by \(\mach\) and \(\nach\))
-defines the mapping \(\mach[\component]\) from state elements to words defined.
+in the set \(\COMPONENTS ::= \WORDS + \REGS + \mathcal{P}\). A {\em machine state}
+\(\mach\) is a map from components to words, written \(\mach[\component]\).
+
+\sna{It occurs to me, based on some of your comments further down, that the old machine
+  states were unclear. My intention was not for \(\mach\) to be a map, but for
+  it to be an arbitrary type on which \(\cdot[\cdot]\) was defined. (Akin to
+  the coq idiom of a record with a field t:Type and proj:t\(\rightarrow\)k\(\rightarrow\)w.)
+  Therefore, implicitly, there could be additional state for enforcement and other
+  purposes. The new presentation with P makes that explicit but is less elegant.
+}
 
 {\em Events} are drawn from a set \(\OBSS\) and ranged over by \(\obs\), with a
 special silent event \(\tau\).
@@ -380,7 +386,7 @@ and an event.
 
 While some enforcement mechanisms may cause a machine to
 failstop, we model this as the machine silently diverging by remaining in the
-same state. Since failstops are not distinguished from normal execution,
+same state. Since failstops are not distinguished from normal divergence,
 our properties will suffer the limitations typical of
 {\it termination insensitive} systems \cite{}. TODO: more detailed explanation later.
 
@@ -409,7 +415,10 @@ always accessible (\(\public\)). The {\it initial view} \(V_0\) maps all stack l
 all other locations to \(\public\), and registers based on which set they
 belong to (Figure \ref{fig:RISCVregs}): \(\sealed\) for callee-saved,
 \(\unsealed\) for caller-saved, and \(\public\) otherwise. Elements of \(\mathcal{P}\),
-such as the program counter, are always \(\public\).
+such as the program counter, are always \(\public\). Even if they might deserve their
+own protection, that protection is orthogonal to stack safety.
+
+\sna{And the payoff of \(\mathcal{P}\) being explicit: we can just state this.}
 
 A {\it context} is a pair of the current activation's view and 
 a list of views representing the call stack (pending inactive
@@ -586,6 +595,17 @@ violating the program's {\it well-bracketed control flow} (WBCF.)
     \subcaption{Attacking control flow}
     \label{subfig:WBCF}
   \end{subfigure}
+  \begin{subfigure}[b]{\columnwidth}
+    \vspace{\abovedisplayskip}
+    \begin{tabular}{r l | l}
+      \labeledrow{100:}{addi sp,sp,8}{}
+      \labeledrow{104:}{nop}{}
+      \labeledrow{108:}{nop}{}
+      \labeledrow{112:}{jalr ra}{\(\mathbf{return}\)}
+    \end{tabular}
+    \subcaption{Relative address attack}
+    \label{subfig:WBCF2}
+  \end{subfigure}
 
   \caption{Assembly code for {\tt f} as an attacker}
   \label{fig:f}
@@ -646,7 +666,8 @@ effect of marking those bytes \(\object\), assuming they were previously
   \begin{subfigure}[t]{.4\textwidth}
     \vskip 0px
 
-    \includegraphics[width=\columnwidth]{stack1.png}
+    \(\underbrace{~ ~ ~}_\unsealed \uparrow \SP \)
+
     \includegraphics[width=\columnwidth]{stack2.png}
     \includegraphics[width=\columnwidth]{stack3.png}
     \includegraphics[width=\columnwidth]{stack4.png}
@@ -695,10 +716,9 @@ WBCF requires that if \(\mach\) is the state at that point, then \(\ret ~ \mach\
 For nested calls, where the pending stack is initially larger, the same principle
 applies: \(\ret ~ \mach\) must hold the next time the pending stack is the same size or smaller.
 
-To see why WBCF also cares about the stack pointer, consider an attack \apt{should this
-  be shown as a fifth attack in the figure?} which
-returns with \(\SP' = 998\) instead of the correct \(\SP = 980\), and recall
-the layout of {\tt main}'s frame: 
+To see why WBCF also cares about the stack pointer, consider the attack in
+Figure \ref{subfig:WBCF2}. Here the attacker returns with \(\SP' = 998\) instead of the
+correct \(\SP = 980\). Given the layout of {\tt main}'s frame: 
 \begin{tabular}{| l | l | l | l | l |}
   \multicolumn{1}{r}{\(\SP \downarrow\)} &
   \multicolumn{2}{r}{\(\SP' \downarrow\)} \\
@@ -732,23 +752,28 @@ and we use the same mechanism of checking the depth of the call stack.
 In the case of the call from {\tt main} to {\tt f}, the \(\sealed\) elements are the
 addresses 980 through 999 and callee-saved registers such as
 the stack pointer. Note that callee-saved registers often change
-during the call---but if so, the callee is obligated to restore them to their prior value.
+during the call---but if the caller accesses them after the call, it should find them
+restored to their prior value.
 
-While this notion of integrity is simple, it is stricter than necessary for many purposes.
-For example, it arguably doesn't matter if {\tt f} overwrites {\tt main}'s data provided that {\tt main} never
-reads that corrupted data.  This is the justification behind the lazy micro-policy~\cite{??}:
+While it would be simple to define integrity as ``all sealed elements retain their
+values after the call,'' this would be stricter than necessary for many purposes.
+For example, it arguably doesn't matter if {\tt f} overwrites {\tt main}'s data provided
+that {\tt main} never reads that corrupted data.
+This is the justification behind the lazy micro-policy~\cite{??}:
 the monitor permits the caller to write into the
 callee's frame, but taints that write so that the callee cannot read it later without
-triggering a failstop. More generally, corruption by {\tt f} can be considered acceptable
-as long as it does not affect {\tt main}'s observable behavior. \apt{Maybe justify this
-  point of view by appeal to standard security notions?}
+triggering a failstop. More generally, it is common to specify the behavior of a system,
+including security properties, in terms of traces of observable events rather than details
+of the machine state. For any such notion of observable behavior, we can consider
+corruption by {\tt f} acceptable as long as it does not affect {\tt main}'s observable behavior.
+
 To characterize this situation, we define a state element to be \emph{irrelevant}
 if its value can be replaced with any other value without changing the observable behavior
 of the machine. More precisely, for a set of elements \(\components\),
 a pair of states \(\mach\) and \(\nach\)
 are {\em \(\components\)-variants} if they agree on the value of every
-element except those in \(\components\), and share the same policy state\apt{hopefully can remove this last}.
-The elements of \(\components\) are \emph{irrelevant} in \(\mach\) if every variant state produces an equivalent trace
+element except those in \(\components\). The elements of \(\components\) are \emph{irrelevant}
+in \(\mach\) if every variant state produces an equivalent trace
 (see Section \ref{sec:events}); all other elements are \emph{relevant}.
 We characterize \emph{observational integrity} as the property that
 every relevant element that is \(\sealed\) under the callee's view is restored
