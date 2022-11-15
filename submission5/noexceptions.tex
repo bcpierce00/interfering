@@ -9,7 +9,7 @@
 
 \usepackage{xcolor,listings}
 
-\usepackage{multirow}
+\usepackage{array,multirow}
 
 \usepackage{stmaryrd}
 
@@ -628,52 +628,73 @@ effect of marking those bytes \(\object\), assuming they were previously
 \(\unsealed\). (We use \(V\llbracket\cdot\rrbracket\) to denote updates to \(V\).)
 %
 
+\newcommand{\freebox}{\includegraphics[height=10px]{free.png}}
+\newcommand{\pubbox}{\includegraphics[height=10px]{public.png}}
+\newcommand{\objbox}{\includegraphics[height=10px]{object.png}}
+\newcommand{\sealbox}{\includegraphics[height=10px]{sealed.png}}
+
 \begin{figure*}
-  \begin{subfigure}[t]{.55\textwidth}
-    \vskip 0pt
-    \begin{tabular}{|r|r||l|}
-      \hline
-      \(\PCname\) & \(\SP\) & Context \\
-      \hline
-      0 & 1000 & \(V_0, \emplist\) \\
-      \hline
-      \multicolumn{3}{l}{\(1 \downarrow [\mathbf{alloc} ~ (-20,20)]\)} \\
-      \hline
-      4 & 980 & \(V_1 = V_0 \llbracket 980..999 \mapsto \object\rrbracket, \emplist\) \\
-      \hline
-      \multicolumn{3}{l}{\(2 \downarrow []\)} \\
-      \multicolumn{3}{l}{\(\ \ \vdots\)} \\
-      \multicolumn{3}{l}{\(4 \downarrow []\)} \\
-      \hline
-      16 & 980 & \(V_1, \emplist\) \\
-      \hline
-      \multicolumn{3}{l}{\(5 \downarrow [\mathbf{call} ~ 100 ~ \emplist ~ \emplist]\)} \\
-      \hline
-      100 & 980 & \(V_2 = V_1 \llbracket 980..999 \mapsto \sealed, \mathtt{a0} \mapsto \unsealed\rrbracket,[V_1]\) \\
-      \hline
-      \multicolumn{3}{l}{\(6 \downarrow []\)} \\
-      \multicolumn{3}{l}{\(\ \ \vdots\)} \\
-      \multicolumn{3}{l}{\(8 \downarrow []\)} \\
-      \hline
-      112 & 980 & \(V_2,[V_1]\) \\
-      \hline
-      \multicolumn{3}{l}{\(9 \downarrow [\mathbf{return}]\)} \\
-      \hline
-      20 & 980  & \(V_1, \emplist\) \\
-      \hline
-    \end{tabular}
-  \end{subfigure}
-  \begin{subfigure}[t]{.4\textwidth}
-    \vskip 0px
-
-    \(\underbrace{~ ~ ~}_\unsealed \uparrow \SP \)
-
-    \includegraphics[width=\columnwidth]{stack2.png}
-    \includegraphics[width=\columnwidth]{stack3.png}
-    \includegraphics[width=\columnwidth]{stack4.png}
-  \end{subfigure}
-
-\caption{Execution up through the return from {\tt f}\apt{Label rows on right. Also show registers?}}
+  \begin{tabular}{|r|r||l|r}
+    \cline{1-3}
+    \(\PCname\) & \(\SP\) & Context &
+    \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox
+        \freebox \freebox \freebox \freebox \freebox}_\unsealed
+      \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\pubbox} \!\! \pubbox \pubbox \dots}_\public
+      ~ \stackrel{\mathtt{a1}}{\pubbox} ~ \stackrel{\mathtt{a2}}{\freebox}
+      ~ \stackrel{\mathtt{s0}}{\sealbox}
+      \)} \\
+    \cline{1-3}
+    0 & 1000 & \(V_0, \emplist\)
+    \\
+    \cline{1-3}
+    \multicolumn{3}{l}{\multirow{2}{*}{\(1 \Big\downarrow [\mathbf{alloc} ~ (-20,20)]\)}} & \\
+    \multicolumn{3}{l}{} &
+    \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
+      \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\objbox} \!\! \objbox \objbox \objbox \objbox}_\object
+      \! \underbrace{\pubbox \pubbox \pubbox \dots}_\public
+      ~ \stackrel{\mathtt{a1}}{\pubbox} ~ \stackrel{\mathtt{a2}}{\freebox}
+      ~ \stackrel{\mathtt{s0}}{\sealbox}
+      \)}
+    \\
+    \cline{1-3}
+    4 & 980 & \(V_1 = V_0 \llbracket 980..999 \mapsto \object\rrbracket, \emplist\) &
+    \\
+    \cline{1-3}
+    \multicolumn{3}{l}{\multirow{2}{*}{2-4 \(\Big\downarrow \emplist\)}} \\ \multicolumn{3}{l}{} \\
+    \cline{1-3}
+    16 & 980 & \(V_1, \emplist\) & \\
+    \cline{1-3}
+    \multicolumn{3}{l}{\multirow{2}{*}{\(5 \Big\downarrow [\mathbf{call} ~ 100 ~ \emplist]\)}} & \\
+    \multicolumn{3}{l}{} &
+    \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
+      \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\sealbox} \!\! \sealbox \sealbox \sealbox \sealbox}_\sealed
+      \! \underbrace{\pubbox \pubbox \pubbox \dots}_\public
+      ~ \stackrel{\mathtt{a1}}{\freebox} ~ \stackrel{\mathtt{a2}}{\freebox}
+      ~ \stackrel{\mathtt{s0}}{\sealbox}
+      \)}
+    \\
+    \cline{1-3}
+    100 & 980 & \(V_2 = V_1 \llbracket 980..999 \mapsto \sealed, \mathtt{a0} \mapsto \unsealed\rrbracket,[V_1]\) & \\
+    \cline{1-3}
+    \multicolumn{3}{l}{\multirow{2}{*}{6-8 \(\Big\downarrow \emplist\)}} \\ \multicolumn{3}{l}{} \\
+    \cline{1-3}
+    112 & 980 & \(V_2,[V_1]\) \\
+    \cline{1-3}
+    \multicolumn{3}{l}{\multirow{2}{*}{\(9 \Big\downarrow [\mathbf{return}]\)}} & \\
+    \multicolumn{3}{l}{} & \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
+      \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\objbox} \!\! \objbox \objbox \objbox \objbox}_\object
+      \! \underbrace{\pubbox \pubbox \pubbox \dots}_\public
+      ~ \stackrel{\mathtt{a1}}{\pubbox} ~ \stackrel{\mathtt{a2}}{\freebox}
+      ~ \stackrel{\mathtt{s0}}{\sealbox}
+      \)}
+    \\
+    \cline{1-3}
+    20 & 980  & \(V_1, \emplist\) &
+    \\
+    \cline{1-3}
+    \multicolumn{2}{l}{} \\
+  \end{tabular}
+\caption{Execution up through the return from {\tt f}}
 \label{fig:exec1}
 \end{figure*}
 %
@@ -818,7 +839,7 @@ the traces may differ, in this case outputting 5 (the original value of {\tt sec
 
 \begin{figure}
   \includegraphics[width=\columnwidth]{variants2.png}
-  \caption{Internal Confidentiality Violation\apt{needs key cells to be colored}}
+  \caption{Internal Confidentiality Violation}
   \label{fig:variant2}
 \end{figure}
 
@@ -850,7 +871,8 @@ following the return, the caller is allowed to access its stack frame, so those 
 may influence future execution legitimately.
 
 But in the case of {\tt a0}, the value has changed during the call (in both the original
-and the variant, although only one of these would be necessary), and its final value differs between the variants.
+and the variant, although only one of these would be necessary), and its final value
+differs between the variants.
 Therefore, it must depend on a secret (in fact, the variable {\tt secret}).
 Unless {\tt a0} happens to be irrelevant in the original trace, this is a violation of what
 we term {\it return-time confidentiality}.
