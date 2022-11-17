@@ -367,6 +367,8 @@ that is used for security enforcement. We treat this as a set \(\mathcal{P}\) wi
 Collectively addresses and registers are {\em state elements} \(\component\)
 in the set \(\COMPONENTS ::= \WORDS + \REGS + \mathcal{P}\). A {\em machine state}
 \(\mach\) is a map from components to words, written \(\mach[\component]\).
+\apt{As we discussed, this seems too restrictive a definition for $\mathcal{P}$.
+  For example, for tagged machines it might contain a mapping from $\WORDS + \REGS$ to tags.}
 
 \sna{It occurs to me, based on some of your comments further down, that the old machine
   states were unclear. My intention was not for \(\mach\) to be a map, but for
@@ -401,6 +403,7 @@ of an offset from the stack pointer and a size. Returns don't require any additi
   \psi \in \Psi ::= & \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} & \\
   | & \mathbf{return} & \\
   | & \mathbf{alloc} ~ \mathit{off ~ sz} & \mathit{off, sz} \in \mathbb{N} \\
+  | & \mathbf{dealloc} ~ \mathit{off ~ sz} & \mathit{off, sz} \in \mathbb{N} \\
 \end{align*}
 %
 Security principals are function activations: at any given time, pending activations
@@ -516,6 +519,7 @@ Attacks of this kind do not violate {\tt main}'s confidentiality, but its
 And in Figure \ref{subfig:WBCF}, the attacker arranges to return to the
 wrong instruction, thereby bypassing the check and publishing {\tt secret} regardless,
 violating the program's {\it well-bracketed control flow} (WBCF.)
+\apt{Add brief description of \ref{subfig:WBCF2}.}
 
 \begin{figure}
   \begin{subfigure}[b]{\columnwidth}
@@ -684,7 +688,7 @@ are detected as security violations.
 \paragraph*{Well-bracketed Control Flow}
 
 To begin with, what if {\tt f} returns to an unexpected place (i.e. \(\PCname \neq 20\) or
-\(\SP \neq 980\)). We consider this to
+\(\SP \neq 980\))? We consider this to
 violate well-bracketed control flow (WBCF). WBCF is a relationship between
 call steps and their corresponding return steps: just after the return, the program
 counter should be at the next instruction following the call,
@@ -706,7 +710,7 @@ applies: \(\ret ~ \mach\) must hold the next time the pending stack is the same 
 
 To see why WBCF also cares about the stack pointer, consider the attack in
 Figure \ref{subfig:WBCF2}. Here the attacker returns with \(\SP' = 998\) instead of the
-correct \(\SP = 980\). Given the layout of {\tt main}'s frame: 
+correct \(\SP = 980\). In this scenario, given the layout of {\tt main}'s frame 
 \begin{tabular}{| l | l | l | l | l |}
   \multicolumn{1}{r}{\(\SP \downarrow\)} &
   \multicolumn{2}{r}{\(\SP' \downarrow\)} \\
@@ -718,9 +722,9 @@ correct \(\SP = 980\). Given the layout of {\tt main}'s frame:
 \vspace{\abovedisplayskip}
 
 \noindent
-In this scenario, when attempting to read {\tt sensitive}, {\tt main} will
-read part of the return address, and then it will attempt to output
-{\tt res}, but instead output {\tt secret}! Even absent other
+{\tt main}'s attempt to read {\tt sensitive} will instead 
+read part of the return address, and its attempt to output
+{\tt res} will instead output {\tt secret}! Even absent other
 kinds of data protection, the stack pointer {\it must} be restored
 for the program to behave predictably.
 
@@ -752,7 +756,7 @@ the monitor permits the caller to write into the
 callee's frame, but taints that write so that the callee cannot read it later without
 triggering a failstop. More generally, it is common to specify the behavior of a system,
 including security properties, in terms of traces of observable events rather than details
-of the machine state. For any such notion of observable behavior, we can consider
+of the machine state. Given such a specification, we can consider
 corruption by {\tt f} acceptable as long as it does not affect {\tt main}'s observable behavior.
 
 To characterize this situation, we define a state element to be \emph{irrelevant}
@@ -760,8 +764,9 @@ if its value can be replaced with any other value without changing the observabl
 of the machine. More precisely, for a set of elements \(\components\),
 a pair of states \(\mach\) and \(\nach\)
 are {\em \(\components\)-variants} if they agree on the value of every
-element except those in \(\components\). The elements of \(\components\) are \emph{irrelevant}
-in \(\mach\) if every variant state produces an equivalent trace
+element except those in \(\components\). \apt{Explicitly note that this excludes elements of
+  of $\mathcal{P}$ (assuming that is indeed the case).} The elements of \(\components\) are \emph{irrelevant}
+in \(\mach\) if every variant state produces an equivalent observation trace
 (see Section \ref{sec:events}); all other elements are \emph{relevant}.
 We characterize \emph{observational integrity} as the property that
 every relevant element that is \(\sealed\) under the callee's view is restored
@@ -773,7 +778,7 @@ to its original value at the return point.
   \label{fig:variant}
 \end{figure}
 
-The example in Figure \ref{subfig:integrity} modifies the value of {\tt sensitive},
+In our example setting, the observation trace consists of the sequence of values written to {\tt out}. The example in Figure \ref{subfig:integrity} modifies the value of {\tt sensitive},
 which is \(\sealed\). Figure \ref{fig:variant} shows the state just after the call at step 5,
 assuming that {\tt sec} is 5. Similar to WBCF, we will define
 \(\intProp\) as a predicate on states that holds if
@@ -872,8 +877,7 @@ memory after return.
 
 We model this as nearly dual to caller integrity: the callee's secrets are those
 values that it has stored in \(\unsealed\) elements. So, callee confidentiality means that
-at the state following the callee's return, any element that was \(\unsealed\) under the
-callee's view either retains its original value or is irrelevant.
+at the state following the callee's return, any relevant element that was \(\unsealed\) under the callee's view retains its original value.
 
 \paragraph*{The Hierarchy of Stack Safety}
 
@@ -883,7 +887,7 @@ many existing enforcement mechanisms enforce only some of the stack safety
 properties. Stricter enforcement may have greater performance impacts, leading to decisions
 about trade-offs between different degrees of stack safety.
 
-In principal, these properties can exist in any combination, but in practice we see examples
+In principle, these properties can exist in any combination, but in practice we see examples
 of certain combinations that form a hierarchy. Many enforcement techniques focus purely on
 well-bracketed control flow. Stack canaries aim to prevent certain attacks on the return
 address, and shadow stacks with protection (e.g. Return Address Defender \cite{Chiueh2001RAD})
@@ -902,14 +906,14 @@ the caller's frame, which is weaker than our full caller confidentiality and rul
 callee confidentiality entirely. Georges et al. \cite{Georges22:TempsDesCerises} correct
 both limitations.
 
-\paragraph*{Moving Forward}
+\paragraph*{Moving Forward}\apt{Suggest omit this para.}
 
 In the next section we will define traces and their (hyper-)properties.
 Then in Section \ref{sec:facts} we will define a mechanism to make assertions
 about what will happen on a future return, and Section \ref{sec:props} will use these
 to give the formal definitions of integrity and confidentiality.
 
-\section{Property Formalisms}
+\section{Formalizing Properties}
 
 We have described informally how the security context develops as the system performs
 security-relevant operations. Formally, we combine each machine state with a context
