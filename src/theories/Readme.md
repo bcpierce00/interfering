@@ -2,7 +2,8 @@ Dependencies:
 coq >= 8.12.1 (possibly lower)
 coq-quickchick
 coqutil, coq-recordupdate, and riscv-coq should be present and built, update their paths
-in \_CoqProject
+in \_CoqProject or use included submodules (must be built separately, pinned
+commits work with Coq 8.11 and 8.12)
 
 Core/ contains the abstract machine and policy models, as well as the RISCV
 instantiations with different policies.
