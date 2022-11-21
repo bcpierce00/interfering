@@ -100,7 +100,7 @@ Module TagPolicyLazyOrig (M : RISCV) <: Policy M.
     settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
 
   (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Component):  TagSet :=
+  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
     match k with
     | Mem a =>
       match map.get (memtags p) a with
@@ -292,16 +292,17 @@ Module TagPolicyLazyOrig (M : RISCV) <: Policy M.
     | _ => None
   end.
 
-  Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  Definition mpstep (mp : MPState)
+    : option (MPState * list Operation * Observation) :=
     p' <- pstep mp;
     match step (ms mp) with
-    | (m', o) => Some (m', p', o)
+    | (m', t, o) => Some (m', p', t, o)
     end.
 
   Axiom mpstepCompat :
-    forall m p o m' p',
-      mpstep (m,p) = Some (m',p',o) ->
-      step m = (m',o).
+    forall m p t o m' p',
+      mpstep (m,p) = Some (m',p',t,o) ->
+      step m = (m',t,o).
 
   (* TODO: More interesting well-formedness condition *)
   Definition WFInitMPState (mp:MPState) := True.
@@ -374,7 +375,7 @@ Module TagPolicyLazyNoCheck (M : RISCV) <: Policy M.
     settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
 
   (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Component):  TagSet :=
+  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
     match k with
     | Mem a =>
       match map.get (memtags p) a with
@@ -564,16 +565,17 @@ Module TagPolicyLazyNoCheck (M : RISCV) <: Policy M.
     | _ => None
   end.
 
-  Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  Definition mpstep (mp : MPState)
+    : option (MPState * list Operation * Observation) :=
     p' <- pstep mp;
     match step (ms mp) with
-    | (m', o) => Some (m', p', o)
+    | (m', t, o) => Some (m', p', t, o)
     end.
 
   Axiom mpstepCompat :
-    forall m p o m' p',
-      mpstep (m,p) = Some (m',p',o) ->
-      step m = (m',o).
+    forall m p t o m' p',
+      mpstep (m,p) = Some (m',p',t,o) ->
+      step m = (m',t,o).
 
   (* TODO: More interesting well-formedness condition *)
   Definition WFInitMPState (mp:MPState) := True.
@@ -645,7 +647,7 @@ Module TagPolicyLazyNoDepth (M : RISCV) <: Policy M.
     settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
 
   (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Component):  TagSet :=
+  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
     match k with
     | Mem a =>
       match map.get (memtags p) a with
@@ -834,16 +836,17 @@ Module TagPolicyLazyNoDepth (M : RISCV) <: Policy M.
     | _ => None
   end.
 
-  Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  Definition mpstep (mp : MPState)
+    : option (MPState * list Operation * Observation) :=
     p' <- pstep mp;
     match step (ms mp) with
-    | (m', o) => Some (m', p', o)
+    | (m', t, o) => Some (m', p', t, o)
     end.
 
   Axiom mpstepCompat :
-    forall m p o m' p',
-      mpstep (m,p) = Some (m',p',o) ->
-      step m = (m',o).
+    forall m p t o m' p',
+      mpstep (m,p) = Some (m',p',t,o) ->
+      step m = (m',t,o).
 
   (* TODO: More interesting well-formedness condition *)
   Definition WFInitMPState (mp:MPState) := True.
@@ -915,7 +918,7 @@ Module TagPolicyLazyFixed (M : RISCV) <: Policy M.
     settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
 
   (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Component):  TagSet :=
+  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
     match k with
     | Mem a =>
       match map.get (memtags p) a with
@@ -1106,16 +1109,17 @@ Module TagPolicyLazyFixed (M : RISCV) <: Policy M.
     | _ => None
   end.
 
-  Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  Definition mpstep (mp : MPState)
+    : option (MPState * list Operation * Observation) :=
     p' <- pstep mp;
     match step (ms mp) with
-    | (m', o) => Some (m', p', o)
+    | (m', t, o) => Some (m', p', t, o)
     end.
 
   Axiom mpstepCompat :
-    forall m p o m' p',
-      mpstep (m,p) = Some (m',p',o) ->
-      step m = (m',o).
+    forall m p t o m' p',
+      mpstep (m,p) = Some (m',p',t,o) ->
+      step m = (m',t,o).
 
   (* TODO: More interesting well-formedness condition *)
   Definition WFInitMPState (mp:MPState) := True.

@@ -312,17 +312,15 @@ Module Type RISCV <: Machine.
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Definition step (m : MachineState) : MachineState * list Operation * Observation :=
     (* returns option unit * state *)
-    match Run.run1 RV32IM m with
-    | (_, s') =>
-      if Z.eqb (word.unsigned (getPc m))
-               (word.unsigned (getPc s'))
-      then
-        (s', [], Tau)
-      else
-        match findDiff m s' with
-        | Some v => (s', [], Out v)
-        | None => (s', [], Tau)
-        end
-    end.
+    let '(_, s') := Run.run1 RV32IM m in
+    if Z.eqb (word.unsigned (getPc m))
+         (word.unsigned (getPc s'))
+    then
+      (s', [], Tau)
+    else
+      match findDiff m s' with
+      | Some v => (s', [], Out v)
+      | None => (s', [], Tau)
+      end.
 
 End RISCV.

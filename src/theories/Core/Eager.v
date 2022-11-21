@@ -119,7 +119,7 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
     settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
   
   (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Component):  TagSet :=
+  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
     match k with
     | Mem a =>
       match map.get (memtags p) a with
@@ -335,7 +335,8 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
       => None
       end).
 
-  Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  Definition mpstep (mp : MPState)
+    : option (MPState * list Operation * Observation) :=
     let instr : string := 
         match loadWord (getMem (ms mp)) (getPc (ms mp)) with
         | Some w32 =>
@@ -352,19 +353,19 @@ Module TagPolicyEager (M: RISCV) <: Policy M.
     (
       p' <- pstep mp; 
     match step (ms mp) with
-    | (m', o) =>
+    | (m', t, o) =>
       if Z.eqb (word.unsigned (getPc (ms mp)))
                (word.unsigned (getPc m'))
       then None (* error *)
-      else Some (m', p', o)
+      else Some (m', p', t, o)
     end
     )
   .
 
   Axiom mpstepCompat :
-    forall m p o m' p',
-      mpstep (m,p) = Some (m',p',o) ->
-      step m = (m',o).
+    forall m p t o m' p',
+      mpstep (m,p) = Some (m',p',t,o) ->
+      step m = (m',t,o).
 
 
   (* TODO: More interesting well-formedness condition *)
@@ -455,7 +456,7 @@ Module TagPolicyEagerNoLoadCheck (M: RISCV) <: Policy M.
     settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
   
   (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Component):  TagSet :=
+  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
     match k with
     | Mem a =>
       match map.get (memtags p) a with
@@ -664,7 +665,8 @@ Module TagPolicyEagerNoLoadCheck (M: RISCV) <: Policy M.
       => None
       end).
 
-  Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  Definition mpstep (mp : MPState)
+    : option (MPState * list Operation * Observation) :=
     let instr : string := 
         match loadWord (getMem (ms mp)) (getPc (ms mp)) with
         | Some w32 =>
@@ -681,19 +683,19 @@ Module TagPolicyEagerNoLoadCheck (M: RISCV) <: Policy M.
     (
       p' <- pstep mp; 
     match step (ms mp) with
-    | (m', o) =>
+    | (m', t, o) =>
       if Z.eqb (word.unsigned (getPc (ms mp)))
                (word.unsigned (getPc m'))
       then None (* error *)
-      else Some (m', p', o)
+      else Some (m', p', t, o)
     end
     )
   .
 
   Axiom mpstepCompat :
-    forall m p o m' p',
-      mpstep (m,p) = Some (m',p',o) ->
-      step m = (m',o).
+    forall m p t o m' p',
+      mpstep (m,p) = Some (m',p',t,o) ->
+      step m = (m',t,o).
 
   (* TODO: More interesting well-formedness condition *)
   Definition WFInitMPState (mp:MPState) := True.
@@ -783,7 +785,7 @@ Module TagPolicyEagerNoStoreCheck (M: RISCV) <: Policy M.
     settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
   
   (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Component):  TagSet :=
+  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
     match k with
     | Mem a =>
       match map.get (memtags p) a with
@@ -1004,7 +1006,8 @@ Module TagPolicyEagerNoStoreCheck (M: RISCV) <: Policy M.
       => None
       end).
 
-  Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  Definition mpstep (mp : MPState)
+    : option (MPState * list Operation * Observation) :=
     let instr : string := 
         match loadWord (getMem (ms mp)) (getPc (ms mp)) with
         | Some w32 =>
@@ -1021,19 +1024,19 @@ Module TagPolicyEagerNoStoreCheck (M: RISCV) <: Policy M.
     (
       p' <- pstep mp; 
     match step (ms mp) with
-    | (m', o) =>
+    | (m', t, o) =>
       if Z.eqb (word.unsigned (getPc (ms mp)))
                (word.unsigned (getPc m'))
       then None (* error *)
-      else Some (m', p', o)
+      else Some (m', p', t, o)
     end
     )
   .
 
   Axiom mpstepCompat :
-    forall m p o m' p',
-      mpstep (m,p) = Some (m',p',o) ->
-      step m = (m',o).
+    forall m p t o m' p',
+      mpstep (m,p) = Some (m',p',t,o) ->
+      step m = (m',t,o).
 
 
   (* TODO: More interesting well-formedness condition *)
@@ -1124,7 +1127,7 @@ Module TagPolicyEagerNoInit (M: RISCV) <: Policy M.
     settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
   
   (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Component):  TagSet :=
+  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
     match k with
     | Mem a =>
       match map.get (memtags p) a with
@@ -1338,7 +1341,8 @@ Module TagPolicyEagerNoInit (M: RISCV) <: Policy M.
       => None
       end).
 
-  Definition mpstep (mp : MPState) : option (MPState * Observation) :=
+  Definition mpstep (mp : MPState)
+    : option (MPState * list Operation * Observation) :=
     let instr : string := 
         match loadWord (getMem (ms mp)) (getPc (ms mp)) with
         | Some w32 =>
@@ -1355,19 +1359,19 @@ Module TagPolicyEagerNoInit (M: RISCV) <: Policy M.
     (
       p' <- pstep mp; 
     match step (ms mp) with
-    | (m', o) =>
+    | (m', t, o) =>
       if Z.eqb (word.unsigned (getPc (ms mp)))
                (word.unsigned (getPc m'))
       then None (* error *)
-      else Some (m', p', o)
+      else Some (m', p', t, o)
     end
     )
   .
 
   Axiom mpstepCompat :
-    forall m p o m' p',
-      mpstep (m,p) = Some (m',p',o) ->
-      step m = (m',o).
+    forall m p t o m' p',
+      mpstep (m,p) = Some (m',p',t,o) ->
+      step m = (m',t,o).
 
 
   (* TODO: More interesting well-formedness condition *)
