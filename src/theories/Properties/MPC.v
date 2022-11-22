@@ -18,16 +18,17 @@ Module MPC (M:Machine) (P:Policy M) (C:Ctx M).
   
   (********** Machine Lemmas ************)
 
-  Definition mpcstep (mpc:MPCState) : option (MPCState * Observation) :=
+  Definition mpcstep (mpc:MPCState)
+    : option (MPCState * list Operation * Observation) :=
     option_map
-      (fun '(m,p,o) => (m,p,CtxStateUpdate (mstate mpc) (cstate mpc),o))
+      (fun '(m,p,t,o) => (m,p,CtxStateUpdate (mstate mpc) (cstate mpc),t,o))
       (mpstep (mstate mpc,pstate mpc)).
   
   Inductive StepsTo : MPCState -> MPCState -> Prop :=
   | already : forall mpc, StepsTo mpc mpc
-  | future : forall mpc mpc' mpc'' o,
+  | future : forall mpc mpc' mpc'' t o,
       StepsTo mpc mpc' ->
-      mpcstep mpc' = Some (mpc'',o) ->
+      mpcstep mpc' = Some (mpc'',t,o) ->
       StepsTo mpc mpc''.
 
   Inductive StepsToWhenObs (P:MPCState -> Prop)
@@ -35,17 +36,17 @@ Module MPC (M:Machine) (P:Policy M) (C:Ctx M).
   | when : forall mpc,
       P mpc ->
       StepsToWhenObs P mpc mpc (finished Tau)
-  | futureWhen : forall mpc mpc' mpc'' o O,
+  | futureWhen : forall mpc mpc' mpc'' t o O,
       ~ P mpc ->
-      mpcstep mpc = Some (mpc',o) ->
+      mpcstep mpc = Some (mpc',t,o) ->
       StepsToWhenObs P mpc' mpc'' O ->
       StepsToWhenObs P mpc mpc'' (notfinished o O).
 
   Definition StepsToWhen P mpc mpc' := exists O, StepsToWhenObs P mpc mpc' O.
 
   Inductive FullObsTrace : MPCState -> TraceOf Observation -> Prop :=
-  | stepIt : forall mpc mpc' o O,
-      mpcstep mpc = Some (mpc',o) ->
+  | stepIt : forall mpc mpc' t o O,
+      mpcstep mpc = Some (mpc',t,o) ->
       FullObsTrace mpc' O ->
       FullObsTrace mpc (notfinished o O).
 
@@ -61,7 +62,7 @@ Module MPC (M:Machine) (P:Policy M) (C:Ctx M).
   CoFixpoint MPCTraceOf (mpc : MPCState) : MPCTrace :=
     match mpcstep mpc with
     | None => finished mpc
-    | Some (mpc',o) => notfinished mpc (MPCTraceOf mpc')
+    | Some (mpc',t,o) => notfinished mpc (MPCTraceOf mpc')
     end.
 
   CoInductive MPCTraceToWhen (P:MPCState -> Prop) : MPCState -> MPCTrace -> Prop :=
@@ -71,9 +72,9 @@ Module MPC (M:Machine) (P:Policy M) (C:Ctx M).
   | TTWNever : forall mpc,
       mpcstep mpc = None ->
       MPCTraceToWhen P mpc (finished mpc)
-  | TTWLater : forall mpc mpc' o MPC,
+  | TTWLater : forall mpc mpc' t o MPC,
       ~ P mpc ->
-      mpcstep mpc = Some (mpc',o) ->
+      mpcstep mpc = Some (mpc',t,o) ->
       MPCTraceToWhen P mpc' MPC ->
       MPCTraceToWhen P mpc (notfinished mpc MPC)
   .

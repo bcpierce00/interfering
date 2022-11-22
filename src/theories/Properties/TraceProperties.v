@@ -13,7 +13,7 @@ Module TraceProps (M : Machine) (P : Policy M) (C : Ctx M).
   Module Obs := ObsTrace M.
   Import Obs.
   
-  Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
+  Definition variantOf (K : Element -> Prop) (m n : MachineState) :=
     forall k, ~ K k -> proj m k = proj n k.
 
   Definition sameDifference (m m' n n' : MachineState) :=
@@ -33,7 +33,7 @@ Module TraceProps (M : Machine) (P : Policy M) (C : Ctx M).
   .
 
   Definition TraceConfidentialityStep
-             (K : Component -> Prop)
+             (K : Element -> Prop)
              (P : MPCState -> Prop)
              (M : MPCTrace) : Prop :=
     forall m p c n N,
@@ -42,14 +42,14 @@ Module TraceProps (M : Machine) (P : Policy M) (C : Ctx M).
       MPCTraceToWhen P (n,p,c) N ->
       Lockstep M N.
 
-  Definition StepIntegrity (K : Component -> Prop) (mpc:MPCState) : Prop :=
-    forall mpc' o k,
-    mpcstep mpc = Some (mpc',o) ->
+  Definition StepIntegrity (K : Element -> Prop) (mpc:MPCState) : Prop :=
+    forall mpc' t o k,
+    mpcstep mpc = Some (mpc',t,o) ->
     K k ->
     proj (mstate mpc) k = proj (mstate mpc') k.
 
   Definition TraceIntegrityObs
-             (K : Component -> Prop)
+             (K : Element -> Prop)
              (M : MPCTrace) : Prop :=
     forall m p c,
       Last M (m,p,c) ->
@@ -58,7 +58,7 @@ Module TraceProps (M : Machine) (P : Policy M) (C : Ctx M).
       TraceConfidentialityStep K' P (MPCTraceOf (m,p,c)).
 
   Definition TraceConfidentialityObs
-             (K : Component -> Prop)
+             (K : Element -> Prop)
              (P : MPCState -> Prop)
              (M : MPCTrace) : Prop :=
     forall m p c n N Om On, 

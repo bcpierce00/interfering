@@ -160,7 +160,7 @@ Module ObsTrace (M:Machine).
         eapply ObsEqTau2.
         auto.
     - destruct a'.
-      + destruct (EqOut_tauN O1' o1' Last' o T Eq1) as [n [HTau | [T' HTau]]].
+      + destruct (EqOut_tauN O1' o1' Last' e T Eq1) as [n [HTau | [T' HTau]]].
         * rewrite HTau in *.
           clear HTau.
           induction n; simpl in *; subst; app_frobber.
@@ -295,7 +295,7 @@ Module ObsTrace (M:Machine).
     - destruct a.
       + inv H0.
         * constructor.
-          apply (COFIX (notfinished (Out o) T1) (notfinished (Out o) T2) OO).
+          apply (COFIX (notfinished (Out e) T1) (notfinished (Out e) T2) OO).
           -- constructor. auto.
           -- auto.
         * constructor. apply (COFIX T1 T2 OO); auto.
@@ -316,7 +316,7 @@ Module ObsTrace (M:Machine).
     - destruct a.
       + inv H0.
         * constructor.
-          apply (COFIX OO' (notfinished (Out o) T1) (notfinished (Out o) T2)).
+          apply (COFIX OO' (notfinished (Out e) T1) (notfinished (Out e) T2)).
           -- constructor. auto.
           -- auto.
         * constructor. apply (COFIX OO' T1 T2); auto.
@@ -337,7 +337,7 @@ Module ObsTrace (M:Machine).
     - destruct a.
       + inv H0.
         * constructor.
-          apply (COFIX (notfinished (Out o) T1) (notfinished (Out o) T2) OO').
+          apply (COFIX (notfinished (Out e) T1) (notfinished (Out e) T2) OO').
           -- constructor. auto.
           -- auto.
         * constructor. apply (COFIX T1 T2 OO'); auto.

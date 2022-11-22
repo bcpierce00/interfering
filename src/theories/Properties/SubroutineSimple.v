@@ -71,7 +71,7 @@ Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
   .
 
   (* All components belong to domain, and a domain map tells us which. *)
-  Definition DomainMap := Component -> StackDomain.
+  Definition DomainMap := Element -> StackDomain.
   
   (* The Code and Stack maps tell us about the initial layout of memory, as determined
      by the compiler. They will help us build our initial DomainMap and identify
@@ -84,19 +84,17 @@ Module SimpleDomain (M : Machine) (MM : MapMaker M) <: Ctx M.
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
   Definition sc : SealingConvention :=
     fun m a =>
-      match wtoa (projw m (Reg SP)) with
-      | Some a' => alt a a'
-      | None => false
-      end.
+      let a' := proj m (Reg SP) in
+      wlt a a'.
 
   (* Likewise, we need to describe what it means to return properly from a call. We parameterize
      this as well, but the standard of course is that the stack pointer must match the original
      call point and the program counter should be one instruction (four cell) later. *)
   Definition ReturnConvention : Type := MachineState -> MachineState -> bool.
   Definition rc : ReturnConvention :=
-    fun m1 m2 => weq (projw m1 (Reg SP)) (projw m2 (Reg SP)) &&
-                 weq (wplus (projw m1 PC) 4)
-                     (wplus (projw m2 PC) 0).
+    fun m1 m2 => weq (proj m1 (Reg SP)) (proj m2 (Reg SP)) &&
+                 weq (wplus (proj m1 PC) 4)
+                     (wplus (proj m2 PC) 0).
 
   Definition ReturnTargets : Type := list (MachineState -> bool).
   Fixpoint popTo (m:MachineState) (rts : ReturnTargets) : option ReturnTargets :=
@@ -205,7 +203,7 @@ Module SimpleProp (M : Machine) (P : Policy M) (MM : MapMaker M).
      agree at some components in K. The intuition is that if the step from a state changes the
      state in the same way as the step from its K-variant, we can't tell from that step what
      value a component in K was, so K is secret. *)
-  Definition variantOf (K : Component -> Prop) (m n : MachineState) :=
+  Definition variantOf (K : Element -> Prop) (m n : MachineState) :=
     forall k, ~ K k -> proj m k = proj n k.
   
   (* The idea is that when variant states step, the resulting states should agree on any component
