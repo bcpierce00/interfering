@@ -84,19 +84,19 @@ Extract Constant exception =>
     Parameter wplus : Word -> nat -> Word.
     Parameter wminus : Word -> nat -> Word.
    *)
-  Definition wplus (w : Word) (n : nat) : Word :=
-    w + Z.of_nat n.
+  Definition wplus (w : Word) (n : Z) : Word :=
+    w + n.
 
-  Lemma wplus_neq : forall w (n : nat),
-      (n > O)%nat -> w <> wplus w n.
+  Lemma wplus_neq : forall w (n : Z),
+      n > 0 -> w <> wplus w n.
   Proof.
     intros w n H Contra.
     unfold wplus in *.
     lia.
   Qed.
 
-  Definition wminus (w : Word) (n : nat) : Word :=
-    w - Z.of_nat n.
+  Definition wminus (w : Word) (n : Z) : Word :=
+    w - n.
 
   Definition Addr : Type := Word.
 
@@ -116,19 +116,40 @@ Extract Constant exception =>
 
   Definition RA := 1.
   Definition SP := 2.
-  Definition regEq : Register -> Register -> bool := Z.eqb.
+  Definition regEqb : Register -> Register -> bool := Z.eqb.
 
-  Inductive Component:=
+  (* TODO: callee-save registers, note also general repetition w.r.t.
+     RISCVMachine *)
+  Definition is_callee_save : Register -> bool :=
+    fun _ => false.
+
+  Definition callee_save (r : Register) : bool :=
+    match r with
+    | 1 | 2 => true
+    | _ => is_callee_save r
+    end.
+
+  Lemma RA_callee_save : callee_save RA = true.
+  Proof.
+    reflexivity.
+  Qed.
+
+  Lemma SP_callee_save : callee_save SP = true.
+  Proof.
+    reflexivity.
+  Qed.
+
+  Inductive Element:=
   | Mem (a:Addr)
   | Reg (r:Register)
   | PC.
 
-  Derive Show for Component.
+  Derive Show for Element.
 
-  Definition keqb (k1 k2 : Component) : bool :=
+  Definition keqb (k1 k2 : Element) : bool :=
     match k1, k2 with
     | Mem a1, Mem a2 => Z.eqb a1 a2
-    | Reg r1, Reg r2 => regEq r1 r2
+    | Reg r1, Reg r2 => regEqb r1 r2
     | PC, PC => true
     | _, _ => false
     end.
@@ -147,10 +168,10 @@ Extract Constant exception =>
   (* We use a risc-v machine as our machine state and a view as a map from its
      components to their values. *)
   Definition MachineState := RiscvMachine.
-  Definition View := Component -> Value.
+  Definition View := Element -> Value.
 
   (* Project what we care about from the RiscV state. *)
-  Definition proj (m:  MachineState) (k: Component):  Value :=
+  Definition proj (m:  MachineState) (k: Element):  Value :=
     match k with
     | Mem a =>
       match (Spec.Machine.loadWord Spec.Machine.Execute (word.of_Z a)) m with
@@ -174,7 +195,7 @@ Extract Constant exception =>
   Lemma proj_vtow : forall m k, vtow (proj m k) = vtow (projw m k). Proof. intros;auto. Qed.
 
   (* Maybe name this pullback instead *)
-  Definition jorp (m : MachineState) (k : Component) (v : Value) : MachineState :=
+  Definition jorp (m : MachineState) (k : Element) (v : Value) : MachineState :=
     match k with
     | Mem a =>
       withMem
@@ -186,7 +207,7 @@ Extract Constant exception =>
       withPc (word.of_Z v) m
     end.
   
-  Definition getComponents (m : MachineState) : list Component :=
+  Definition getElements (m : MachineState) : list Element :=
     (* PC *)
     let pc := [PC] in
     (* Non-zero registers. *)
@@ -205,15 +226,20 @@ Extract Constant exception =>
                     (RiscvMachine.getMem m)) in
     pc ++ regs ++ mem.
 
-  Definition ObsType : Type := Register*Value.
+  Definition Event : Type := Register*Value.
 
-  Inductive Observation : Type := 
-  | Out (w:ObsType) 
+  Inductive Observation : Type :=
+  | Out (w:Event)
   | Tau.
+
+  Definition event_eqb (e1 e2 : Event) : bool :=
+    let '(a1, v1) := e1 in
+    let '(a2, v2) := e1 in
+    andb (weq a1 a2) (weq v1 v2).
 
   Definition obs_eqb (o1 o2 : Observation) :=
     match o1, o2 with
-    | Out (a1, v1), Out (a2, v2) => andb (weq a1 a2) (weq v1 v2)
+    | Out e1, Out e2 => event_eqb e1 e2
     | Tau, Tau => true
     | _, _ => false
     end.
@@ -245,24 +271,33 @@ Extract Constant exception =>
     end
     .
 
-  (* A Machine State can step to a new Machine State plus an Observation. *)
-  Definition step (m : RiscvMachine) : RiscvMachine * Observation :=
-    (* returns option unit * state *)
-    match Run.run1 RV32IM m with
-    | (_, s') =>
-      if Z.eqb (word.unsigned (getPc m))
-               (word.unsigned (getPc s'))
-      then
-        (s', Tau)
-      else          
-        match findDiff m s' with
-        | Some v => (s', Out v)
-        | None => (s', Tau)
-        end
-    end
+  Definition FunID := nat.
+
+  Inductive Operation : Type :=
+  | Call (f:FunID) (reg_args:list Register) (stk_args:list (Register*Z*Z))
+  | Tailcall (f:FunID) (reg_args:list Register) (stk_args:list (Register*Z*Z))
+  | Return
+  | Alloc (off:Z) (sz:Z)
+  | Dealloc (off:Z) (sz:Z)
   .
 
-  Definition FunID := nat.
+  (* A Machine State can step to a new Machine State plus an Observation. *)
+  (* TODO: Operations *)
+  Definition step (m : RiscvMachine)
+    : RiscvMachine * list Operation * Observation :=
+    (* returns option unit * state *)
+    let '(_, s') := Run.run1 RV32IM m in
+    if Z.eqb (word.unsigned (getPc m))
+         (word.unsigned (getPc s'))
+    then
+      (s', [], Tau)
+    else
+      match findDiff m s' with
+      | Some v => (s', [], Out v)
+      | None => (s', [], Tau)
+      end
+    .
+
   Definition StackID := nat.
 
   Definition EntryMap := Addr -> bool.
