@@ -340,7 +340,8 @@ example code, and their default security class (explained below).
 In addition to memory and registers, a machine has a program counter \(\PCname\)
 and may have additional architecture-specific state; particularly relevant is state
 that is used for security enforcement. We treat this as a set \(\mathcal{P}\) with
-\(\PCname \in \mathcal{P}\).
+\(\PCname \in \mathcal{P}\). Collectively these are {\em state elements} \(\component\)
+in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS | \mathcal{P}\).
 
 \begin{figure}
   \begin{tabular}{| l | l | l |}
@@ -364,19 +365,8 @@ that is used for security enforcement. We treat this as a set \(\mathcal{P}\) wi
   \label{fig:RISCVregs}
 \end{figure}
 
-Collectively addresses and registers are {\em state elements} \(\component\)
-in the set \(\COMPONENTS ::= \WORDS + \REGS + \mathcal{P}\). A {\em machine state}
-\(\mach\) is a map from components to words, written \(\mach[\component]\).
-\apt{As we discussed, this seems too restrictive a definition for $\mathcal{P}$.
-  For example, for tagged machines it might contain a mapping from $\WORDS + \REGS$ to tags.}
-
-\sna{It occurs to me, based on some of your comments further down, that the old machine
-  states were unclear. My intention was not for \(\mach\) to be a map, but for
-  it to be an arbitrary type on which \(\cdot[\cdot]\) was defined. (Akin to
-  the coq idiom of a record with a field t:Type and proj:t\(\rightarrow\)k\(\rightarrow\)w.)
-  Therefore, implicitly, there could be additional state for enforcement and other
-  purposes. The new presentation with P makes that explicit but is less elegant.
-}
+A machine has a set \(\mathcal{V}\) of values such that \(\WORDS \subseteq \mathcal{V}\).
+A {\em machine state} \(\mach\) is a map from components to values, written \(\mach[\component]\).
 
 {\em Events} are drawn from a set \(\OBSS\) and ranged over by \(\obs\), with a
 special silent event \(\tau\).
@@ -420,8 +410,6 @@ belong to (Figure \ref{fig:RISCVregs}): \(\sealed\) for callee-saved,
 \(\unsealed\) for caller-saved, and \(\public\) otherwise. Elements of \(\mathcal{P}\),
 such as the program counter, are always \(\public\). Even if they might deserve their
 own protection, that protection is orthogonal to stack safety.
-
-\sna{And the payoff of \(\mathcal{P}\) being explicit: we can just state this.}
 
 A {\it context} is a pair of the current activation's view and 
 a list of views representing the call stack (pending inactive
@@ -762,10 +750,10 @@ corruption by {\tt f} acceptable as long as it does not affect {\tt main}'s obse
 To characterize this situation, we define a state element to be \emph{irrelevant}
 if its value can be replaced with any other value without changing the observable behavior
 of the machine. More precisely, for a set of elements \(\components\),
-a pair of states \(\mach\) and \(\nach\)
-are {\em \(\components\)-variants} if they agree on the value of every
-element except those in \(\components\). \apt{Explicitly note that this excludes elements of
-  of $\mathcal{P}$ (assuming that is indeed the case).} The elements of \(\components\) are \emph{irrelevant}
+a pair of states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if they
+agree on the value of every element except those in \(\components\). This includes
+public elements such as those in \(\mathcal{P}\).
+The elements of \(\components\) are \emph{irrelevant}
 in \(\mach\) if every variant state produces an equivalent observation trace
 (see Section \ref{sec:events}); all other elements are \emph{relevant}.
 We characterize \emph{observational integrity} as the property that
@@ -905,13 +893,6 @@ read or write its caller's frame, but might allow it to read data that is left b
 the caller's frame, which is weaker than our full caller confidentiality and rules out
 callee confidentiality entirely. Georges et al. \cite{Georges22:TempsDesCerises} correct
 both limitations.
-
-\paragraph*{Moving Forward}\apt{Suggest omit this para.}
-
-In the next section we will define traces and their (hyper-)properties.
-Then in Section \ref{sec:facts} we will define a mechanism to make assertions
-about what will happen on a future return, and Section \ref{sec:props} will use these
-to give the formal definitions of integrity and confidentiality.
 
 \section{Formalizing Properties}
 
@@ -1353,9 +1334,22 @@ Then \(\mathit{passed}\) should recursively identify all objects that
 are reachable transitively from valid pointers in registers and accessible memory;
 these keep their \(\object\) status, while those that are not reachable become \(\sealed\).
 
-\section{Enforcement}
+\section{Enforcement and Testing}
 
-\paragraph{Protecting Enforcement State}
+We use our properties to test the stack safety micro-policies of Roessler and DeHon,
+particularly their Lazy Tagging and Clearing. Our underlying machine is a RISC-V
+based on the MIT RISC-V formalism \cite{} and extended with {\it metadata tags},
+represented as additional state in \(\mathcal{P}\), one for each register, address,
+and the program counter:
+\[\mathcal{P} ::= t_\reg | t_\addr | t_\PCname\]
+%
+We divide values into normal memory words and tags drawn from a policy-specific
+set of tags \(\mathcal{T}\), \(\mathcal{V} ::= \mathcal{W} | \mathcal{T}\).
+The machine's step function corresponds to that of the basic RISC-V machine,
+with the behavior of the tags at each step parameterized by a {\it micro-policy},
+which may turn a normal step into an error (represented by returning to the same state.)
+
+\paragraph*{Protecting Enforcement State}
 
 State beyond registers and memory is always considered \(\public\), and in a PIPE machine this
 includes tags. That does not mean that functions should be modifying them! It just means that we
