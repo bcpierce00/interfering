@@ -25,24 +25,22 @@ Module TestSimpleDomain (M : Machine) (LI : LayoutInfo M) <: TestCtx M LI.
     | _, _ => false
     end.
 
-  Definition DomainMap := Component -> StackDomain.
+  Definition DomainMap := Element -> StackDomain.
   
   Definition SealingConvention : Type := MachineState -> Addr -> bool.
   Definition sc : SealingConvention :=
     fun m a =>
-      match wtoa (projw m (Reg SP)) with
-      | Some a' => alt a a'
-      | None => false
-      end.
+      let a' := proj m (Reg SP) in
+      wlt a a'.
 
   (* Likewise, we need to describe what it means to return properly from a call. We parameterize
      this as well, but the standard of course is that the stack pointer must match the original
      call point and the program counter should be one instruction (four cell) later. *)
   Definition ReturnConvention : Type := MachineState -> MachineState -> bool.
   Definition rc : ReturnConvention :=
-    fun m1 m2 => weq (projw m1 (Reg SP)) (projw m2 (Reg SP)) &&
-                 weq (wplus (projw m1 PC) 4)
-                     (wplus (projw m2 PC) 0).
+    fun m1 m2 => weq (proj m1 (Reg SP)) (proj m2 (Reg SP)) &&
+                 weq (wplus (proj m1 PC) 4)
+                     (wplus (proj m2 PC) 0).
 
   Definition ReturnTargets : Type := list (MachineState -> bool).
   Fixpoint popTo (m:MachineState) (rts : ReturnTargets) : option ReturnTargets :=
@@ -56,16 +54,16 @@ Module TestSimpleDomain (M : Machine) (LI : LayoutInfo M) <: TestCtx M LI.
   
   Definition CtxState : Type := DomainMap * ReturnTargets.
 
-  Definition interestingComponent (c c' : CtxState) (k : Component) :=
+  Definition interestingComponent (c c' : CtxState) (k : Element) :=
     negb (SD_eqb (fst c k) (fst c' k)).
 
-  Definition integrityComponent (c : CtxState) (k : Component) :=
+  Definition integrityComponent (c : CtxState) (k : Element) :=
     match fst c k with
     | Sealed _ => true
     | _ => false
     end.
 
-  Definition confidentialityComponent (c : CtxState) (k : Component) :=
+  Definition confidentialityComponent (c : CtxState) (k : Element) :=
     match fst c k with
     | Sealed _ => true
     | Unsealed => true
@@ -91,10 +89,48 @@ Module TestSimpleDomain (M : Machine) (LI : LayoutInfo M) <: TestCtx M LI.
     | _ => None
     end.
 
+  (* Quick and dirty, extract the relevant information from a set of operations
+     (i.e., a subset of the old type of code annotations) *)
+  Inductive CallRet : Set :=
+  | CRcall
+  | CRret
+  | CRnone.
+
+  Definition CallRet_eqb (cr1 cr2 : CallRet) : bool :=
+    match cr1, cr2 with
+    | CRcall, CRcall | CRret, CRret | CRnone, CRnone => true
+    | _, _ => false
+    end.
+
+  Definition op_callret (o : Operation) : CallRet :=
+    match o with
+    | Call _ _ _
+    | Tailcall _ _ _ (* NOTE Separate treatment? *)
+      => CRcall
+    | Return
+      => CRret
+    | Alloc _ _
+    | Dealloc _ _
+      => CRnone
+    end.
+
+  Definition op_callrets (os : option Operations) : CallRet :=
+    match os with
+    | None => CRnone
+    | Some os' =>
+        let crs := map op_callret os' in
+        if seq.all (CallRet_eqb CRcall) crs then
+          CRcall
+        else if seq.all (CallRet_eqb CRret) crs then
+          CRret
+        else
+          CRnone
+    end.
+
   Definition CtxStateUpdate (m:MachineState) (cm:CodeMap_Impl) (prev:CtxState) : CtxState :=
     let '(dm, rts) := prev in
-    match flatten (option_map (CodeMap_fromImpl cm) (wtoa (projw m PC))) with
-    | Some call => (* On a call, we check what the sealing convention wants to seal.
+    match op_callrets ((CodeMap_fromImpl cm) (proj m PC)) with
+    | CRcall => (* On a call, we check what the sealing convention wants to seal.
                       If a component is Sealed, it can't be sealed again under the new depth.
                       Everything else retains its old status, presumably Unsealed. In the standard,
                       stack pointer-based sealing convention, sc seals everything below the stack
@@ -112,9 +148,9 @@ Module TestSimpleDomain (M : Machine) (LI : LayoutInfo M) <: TestCtx M LI.
                     end in
       let rts' := rc m :: rts in
       (dm', rts')
-    | Some ret => (* On a return, we unseal everything sealed by the highest sealed depth. That will
+    | CRret => (* On a return, we unseal everything sealed by the highest sealed depth. That will
                      always be one less than the current depth. Everything else remains. *)
-      match popTo (fst (step m)) rts with
+      match popTo (fst (fst (step m))) rts with
       | Some rts' =>
 (*        exception "BUT NOT HERE" *)
        (let d := length rts' in
@@ -136,5 +172,5 @@ End TestSimpleDomain.
 Module DLObs := DefaultLayout RISCVObs.
 Module TSSRiscvDefault := TestSimpleDomain RISCVObs DLObs.
 
-From StackSafety Require Import CeriseMachine CeriseLayout.
-Module TSSCeriseDefault := TestSimpleDomain DefCerise CeriseLayout.
+(* From StackSafety Require Import CeriseMachine CeriseLayout. *)
+(* Module TSSCeriseDefault := TestSimpleDomain DefCerise CeriseLayout. *)

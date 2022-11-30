@@ -89,7 +89,11 @@ Module Type Machine.
   Parameter obs_eqb : Observation -> Observation -> bool.
 
   Parameter FunID : Type.
-  
+
+  Definition StackID := nat.
+
+  Definition StackMap := Addr -> option StackID.
+
   Inductive Operation : Type :=
   | Call (f:FunID) (reg_args:list Register) (stk_args:list (Register*Z*Z))
   | Tailcall (f:FunID) (reg_args:list Register) (stk_args:list (Register*Z*Z))
@@ -97,7 +101,31 @@ Module Type Machine.
   | Alloc (off:Z) (sz:Z)
   | Dealloc (off:Z) (sz:Z)
   .
-  
+
+  (* TODO Replace [list Operation] in existing code *)
+  Definition Operations := list Operation.
+
+  (* NOTE A code map used to assign an optional annotation to an address. Now it
+     assigns a optional list of operations (which can be empty!). Attention: not
+     all lists are reasonable (e.g., [[Call; Return]])! We still allow unmapped
+     addresses, which will be lifted to empty lists. *)
+  Definition CodeMap := Addr -> option Operations.
+
+  (* Stack ID of stack pointer *)
+  Definition activeStack (sm: StackMap) (m: MachineState) :
+    option StackID :=
+    sm (proj m (Reg SP)).
+
+  Definition stack_eqb : StackID -> StackID -> bool :=
+    Nat.eqb.
+
+  Definition optstack_eqb (o1 o2 : option StackID) : bool :=
+    match o1, o2 with
+    | Some n1, Some n2 => stack_eqb n1 n2
+    | None, None => true
+    | _, _ => false
+    end.
+
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Parameter step : MachineState -> MachineState * (list Operation) * Observation.
   

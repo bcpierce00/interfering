@@ -33,7 +33,7 @@ Module DefaultLayout (M : RISCV) <: LayoutInfo M.
       Some O
     else None.
 
-  Definition CodeMap_Impl : Type := Zkeyed_map (option CodeAnnotation).
+  Definition CodeMap_Impl : Type := Zkeyed_map (option Operations).
   Definition CodeMap_fromImpl (cm : CodeMap_Impl) : CodeMap :=
     fun addr => match map.get cm addr with
                 | Some cs => cs

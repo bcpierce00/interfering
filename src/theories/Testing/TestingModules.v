@@ -7,9 +7,9 @@ Module Type LayoutInfo (M : Machine).
 
   Parameter LayoutInfo : Type.
   Parameter defLayoutInfo : LayoutInfo.
-  (* Parameter defStackMap : LayoutInfo -> StackMap. *)
+  Parameter defStackMap : LayoutInfo -> StackMap.
   Parameter CodeMap_Impl : Type.
-  (* Parameter CodeMap_fromImpl : CodeMap_Impl -> CodeMap. *)
+  Parameter CodeMap_fromImpl : CodeMap_Impl -> CodeMap.
 End LayoutInfo.
 
 Module Type TestCtx (M:Machine) (LI:LayoutInfo M).

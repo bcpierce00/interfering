@@ -281,6 +281,8 @@ Extract Constant exception =>
   | Dealloc (off:Z) (sz:Z)
   .
 
+  Definition Operations := list Operation.
+
   (* A Machine State can step to a new Machine State plus an Observation. *)
   (* TODO: Operations *)
   Definition step (m : RiscvMachine)
@@ -304,6 +306,7 @@ Extract Constant exception =>
 
   Definition StackMap := Addr -> option StackID.
 
+  (* TODO Look for stale code in this file (e.g., this definition) *)
   Inductive CodeAnnotation :=
   | call
   | retrn
@@ -312,7 +315,7 @@ Extract Constant exception =>
   | normal
   .
   
-  Definition CodeMap := Addr -> option CodeAnnotation.
+  Definition CodeMap := Addr -> option Operations.
 
   (* Stack ID of stack pointer *)
   Definition activeStack (sm: StackMap) (m: MachineState) :

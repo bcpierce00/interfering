@@ -259,11 +259,11 @@ Module Type RISCV <: Machine.
   Parameter findDiff : MachineState -> MachineState -> option Event.
 
   Definition FunID := nat.
-  (* Definition StackID := nat. *)
+  Definition StackID := nat.
 
   (* Definition EntryMap := Addr -> bool. *)
 
-  (* Definition StackMap := Addr -> option StackID. *)
+  Definition StackMap := Addr -> option StackID.
 
   (* Inductive CodeAnnotation := *)
   (* | call *)
@@ -273,22 +273,20 @@ Module Type RISCV <: Machine.
   (* | normal *)
   (* . *)
   
-  (* Definition CodeMap := Addr -> option CodeAnnotation. *)
+  (* Stack ID of stack pointer *)
+  Definition activeStack (sm: StackMap) (m: MachineState) :
+    option StackID :=
+    sm (proj m (Reg SP)).
 
-  (* (* Stack ID of stack pointer *) *)
-  (* Definition activeStack (sm: StackMap) (m: MachineState) : *)
-  (*   option StackID := *)
-  (*   sm (proj m (Reg SP)). *)
+  Definition stack_eqb : StackID -> StackID -> bool :=
+    Nat.eqb.
 
-  (* Definition stack_eqb : StackID -> StackID -> bool := *)
-  (*   Nat.eqb. *)
-
-  (* Definition optstack_eqb (o1 o2 : option StackID) : bool := *)
-  (*   match o1, o2 with *)
-  (*   | Some n1, Some n2 => stack_eqb n1 n2 *)
-  (*   | None, None => true *)
-  (*   | _, _ => false *)
-  (*   end. *)
+  Definition optstack_eqb (o1 o2 : option StackID) : bool :=
+    match o1, o2 with
+    | Some n1, Some n2 => stack_eqb n1 n2
+    | None, None => true
+    | _, _ => false
+    end.
 
   (* Definition justRet (mc m: MachineState) : Prop := *)
   (*   proj m PC = wplus (proj mc PC) 4 /\ proj m (Reg SP) = proj mc (Reg SP). *)
@@ -309,6 +307,10 @@ Module Type RISCV <: Machine.
   | Alloc (off:Z) (sz:Z)
   | Dealloc (off:Z) (sz:Z)
   .
+
+  Definition Operations := list Operation.
+
+  Definition CodeMap := Addr -> option Operations.
 
   (* TODO: operations *)
   (* A Machine State can step to a new Machine State plus an Observation. *)
