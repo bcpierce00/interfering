@@ -7,9 +7,9 @@ Module Type LayoutInfo (M : Machine).
 
   Parameter LayoutInfo : Type.
   Parameter defLayoutInfo : LayoutInfo.
-  Parameter defStackMap : LayoutInfo -> StackMap.
+  (* Parameter defStackMap : LayoutInfo -> StackMap. *)
   Parameter CodeMap_Impl : Type.
-  Parameter CodeMap_fromImpl : CodeMap_Impl -> CodeMap.
+  (* Parameter CodeMap_fromImpl : CodeMap_Impl -> CodeMap. *)
 End LayoutInfo.
 
 Module Type TestCtx (M:Machine) (LI:LayoutInfo M).
@@ -20,9 +20,9 @@ Module Type TestCtx (M:Machine) (LI:LayoutInfo M).
   Parameter initCtx : LayoutInfo -> CtxState.
   Parameter CtxStateUpdate : MachineState -> CodeMap_Impl -> CtxState -> CtxState.
 
-  Parameter interestingComponent : CtxState -> CtxState -> Component -> bool.
-  Parameter integrityComponent : CtxState -> Component -> bool.
-  Parameter confidentialityComponent : CtxState -> Component -> bool.
+  Parameter interestingComponent : CtxState -> CtxState -> Element -> bool.
+  Parameter integrityComponent : CtxState -> Element -> bool.
+  Parameter confidentialityComponent : CtxState -> Element -> bool.
   Parameter depthOf : CtxState -> nat.
 End TestCtx.
 
@@ -36,9 +36,10 @@ Module TestMPC (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestCtx M L
   Definition mstate : MPCState -> MachineState := fun '(m,p,cs) => m.
   Definition pstate : MPCState -> PolicyState := fun '(m,p,cs) => p.
   Definition cstate : MPCState -> CtxState := fun '(m,p,cs) => cs.
-  Definition mpcstep (mpc:MPCState) (cm : CodeMap_Impl) : option (MPCState * Observation) :=
+  Definition mpcstep (mpc:MPCState) (cm : CodeMap_Impl)
+    : option (MPCState * list Operation * Observation) :=
     option_map
-      (fun '(m,p,o) => (m,p,CtxStateUpdate (mstate mpc) cm (cstate mpc),o))
+      (fun '(m,p,t,o) => (m,p,CtxStateUpdate (mstate mpc) cm (cstate mpc),t,o))
       (mpstep (mstate mpc,pstate mpc)).
 End TestMPC.
 
@@ -47,7 +48,7 @@ Module Type Gen (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestCtx M 
   Import MPC.
 
   Parameter genVariantOf : nat -> CtxState -> MachineState -> G MachineState.
-  Parameter genVariantByList : list Component -> MachineState -> G MachineState.
+  Parameter genVariantByList : list Element -> MachineState -> G MachineState.
   
   Parameter genMach : G (MachineState * PolicyState * CodeMap_Impl).
 End Gen.
@@ -56,14 +57,14 @@ Module Type Printing (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestC
   Module MPC := TestMPC M P LI C.
   Import MPC.
 
-  Parameter printObsType : ObsType -> string.
-  Instance ShowObsType : Show ObsType :=
+  Parameter printObsType : Event -> string.
+  Instance ShowObsType : Show Event :=
     {| show o := printObsType o |}.
   Derive Show for Observation.
 
   Parameter printPC : MachineState -> PolicyState -> string.
   
-  Parameter printComponent : Component -> MachineState -> PolicyState -> 
+  Parameter printComponent : Element -> MachineState -> PolicyState ->
                              CodeMap_Impl -> CtxState -> LayoutInfo -> string.
 
   Parameter printMachine : MachineState -> PolicyState -> CodeMap_Impl -> CtxState -> string.
