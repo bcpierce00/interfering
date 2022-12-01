@@ -17,8 +17,8 @@ Module PrintRISCVLazyFixed : Printing RISCVObs TPLazyFixed DLObs TSSRiscvDefault
   Module MPC := TestMPC RISCVObs TPLazyFixed DLObs TSSRiscvDefault.
   Import MPC.
 
-  Definition printObsType (o:ObsType) := "".
-  Instance ShowObsType : Show ObsType :=
+  Definition printObsType (o:Event) := "".
+  Instance ShowObsType : Show Event :=
     {| show o := printObsType o |}.
   Derive Show for Observation.
 
@@ -33,19 +33,20 @@ Module PrintRISCVLazyFixed : Printing RISCVObs TPLazyFixed DLObs TSSRiscvDefault
       else (show val1 ++ "/" ++ show val2))
        ++ " @ " ++ show (pctags p))%string.
 
-  Instance ShowCodeAnnotation : Show CodeAnnotation :=
+  (* NOTE Reusing old name for now (but annotations are lists of operations) *)
+  Instance ShowCodeAnnotation : Show Operation :=
     {| show ca :=
          match ca with
-         | call => "call"
-         | yield => "yield"
-         | scall _ => "scall"
-         | normal => "normal"
-         | _  => "ret"
+         | Call _ _ _ => "Call"
+         | Tailcall _ _ _ => "Tailcall"
+         | Return => "Return"
+         | Alloc _ _ => "Alloc"
+         | Dealloc _ _ => "Dealloc"
          end |}.
 
   Derive Show for StackDomain.
   
-  Definition printComponent (k : Component)
+  Definition printComponent (k : Element)
            (m : MachineState) (p : PolicyState)
            (cm : CodeMap_Impl) (c : CtxState)
            (i : LayoutInfo) :=
@@ -148,7 +149,7 @@ Module PrintRISCVLazyFixed : Printing RISCVObs TPLazyFixed DLObs TSSRiscvDefault
       printMem m p cm c defLayoutInfo ++ nl
     )%string.
 
-  Derive Show for Component.
+  Derive Show for Element.
 
   Instance ShowValue : Show Value :=
     {| show v := show v |}.
@@ -162,8 +163,8 @@ Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
   Module MPC := TestMPC RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
   Import MPC.
 
-  Definition printObsType (o:ObsType) := "".
-  Instance ShowObsType : Show ObsType :=
+  Definition printObsType (o:Event) := "".
+  Instance ShowObsType : Show Event :=
     {| show o := printObsType o |}.
   Derive Show for Observation.
 
@@ -178,19 +179,20 @@ Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
       else (show val1 ++ "/" ++ show val2))
        ++ " @ " ++ show (pctags p))%string.
 
-  Instance ShowCodeAnnotation : Show CodeAnnotation :=
+  (* NOTE Reusing old name for now (but annotations are lists of operations) *)
+  Instance ShowCodeAnnotation : Show Operation :=
     {| show ca :=
          match ca with
-         | call => "call"
-         | yield => "yield"
-         | scall _ => "scall"
-         | normal => "normal"
-         | _  => "ret"
+         | Call _ _ _ => "Call"
+         | Tailcall _ _ _ => "Tailcall"
+         | Return => "Return"
+         | Alloc _ _ => "Alloc"
+         | Dealloc _ _ => "Dealloc"
          end |}.
 
   Derive Show for StackDomain.
   
-  Definition printComponent (k : Component)
+  Definition printComponent (k : Element)
            (m : MachineState) (p : PolicyState)
            (cm : CodeMap_Impl) (c : CtxState)
            (i : LayoutInfo) :=
@@ -293,7 +295,7 @@ Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
       printMem m p cm c defLayoutInfo ++ nl
     )%string.
 
-  Derive Show for Component.
+  Derive Show for Element.
 
   Instance ShowValue : Show Value :=
     {| show v := show v |}.
@@ -307,8 +309,8 @@ Module PrintRISCVLazyNoCheck : Printing RISCVObs TPLazyNoCheck DLObs TSSRiscvDef
   Module MPC := TestMPC RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
   Import MPC.
 
-  Definition printObsType (o:ObsType) := "".
-  Instance ShowObsType : Show ObsType :=
+  Definition printObsType (o:Event) := "".
+  Instance ShowObsType : Show Event :=
     {| show o := printObsType o |}.
   Derive Show for Observation.
 
@@ -323,19 +325,20 @@ Module PrintRISCVLazyNoCheck : Printing RISCVObs TPLazyNoCheck DLObs TSSRiscvDef
       else (show val1 ++ "/" ++ show val2))
        ++ " @ " ++ show (pctags p))%string.
 
-  Instance ShowCodeAnnotation : Show CodeAnnotation :=
+  (* NOTE Reusing old name for now (but annotations are lists of operations) *)
+  Instance ShowCodeAnnotation : Show Operation :=
     {| show ca :=
          match ca with
-         | call => "call"
-         | yield => "yield"
-         | scall _ => "scall"
-         | normal => "normal"
-         | _  => "ret"
+         | Call _ _ _ => "Call"
+         | Tailcall _ _ _ => "Tailcall"
+         | Return => "Return"
+         | Alloc _ _ => "Alloc"
+         | Dealloc _ _ => "Dealloc"
          end |}.
 
   Derive Show for StackDomain.
   
-  Definition printComponent (k : Component)
+  Definition printComponent (k : Element)
            (m : MachineState) (p : PolicyState)
            (cm : CodeMap_Impl) (c : CtxState)
            (i : LayoutInfo) :=
@@ -438,7 +441,7 @@ Module PrintRISCVLazyNoCheck : Printing RISCVObs TPLazyNoCheck DLObs TSSRiscvDef
       printMem m p cm c defLayoutInfo ++ nl
     )%string.
 
-  Derive Show for Component.
+  Derive Show for Element.
 
   Instance ShowValue : Show Value :=
     {| show v := show v |}.
@@ -452,8 +455,8 @@ Module PrintRISCVLazyNoDepth : Printing RISCVObs TPLazyNoDepth DLObs TSSRiscvDef
   Module MPC := TestMPC RISCVObs TPLazyNoDepth DLObs TSSRiscvDefault.
   Import MPC.
 
-  Definition printObsType (o:ObsType) := "".
-  Instance ShowObsType : Show ObsType :=
+  Definition printObsType (o:Event) := "".
+  Instance ShowObsType : Show Event :=
     {| show o := printObsType o |}.
   Derive Show for Observation.
 
@@ -468,19 +471,20 @@ Module PrintRISCVLazyNoDepth : Printing RISCVObs TPLazyNoDepth DLObs TSSRiscvDef
       else (show val1 ++ "/" ++ show val2))
        ++ " @ " ++ show (pctags p))%string.
 
-  Instance ShowCodeAnnotation : Show CodeAnnotation :=
+  (* NOTE Reusing old name for now (but annotations are lists of operations) *)
+  Instance ShowCodeAnnotation : Show Operation :=
     {| show ca :=
          match ca with
-         | call => "call"
-         | yield => "yield"
-         | scall _ => "scall"
-         | normal => "normal"
-         | _  => "ret"
+         | Call _ _ _ => "Call"
+         | Tailcall _ _ _ => "Tailcall"
+         | Return => "Return"
+         | Alloc _ _ => "Alloc"
+         | Dealloc _ _ => "Dealloc"
          end |}.
 
   Derive Show for StackDomain.
   
-  Definition printComponent (k : Component)
+  Definition printComponent (k : Element)
            (m : MachineState) (p : PolicyState)
            (cm : CodeMap_Impl) (c : CtxState)
            (i : LayoutInfo) :=
@@ -583,7 +587,7 @@ Module PrintRISCVLazyNoDepth : Printing RISCVObs TPLazyNoDepth DLObs TSSRiscvDef
       printMem m p cm c defLayoutInfo ++ nl
     )%string.
 
-  Derive Show for Component.
+  Derive Show for Element.
 
   Instance ShowValue : Show Value :=
     {| show v := show v |}.

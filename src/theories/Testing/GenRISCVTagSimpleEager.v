@@ -279,7 +279,7 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
   Definition genInstr (i : LayoutInfo) (t : TagInfo)
              (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
              (dataP codeP : TagSet -> bool) (f : FunID)
-    : G (InstructionI * TagSet * FunID * CodeAnnotation) :=
+    : G (InstructionI * TagSet * FunID * Operations) :=
     let groups := groupRegisters i t m p dataP codeP in
     let a := arith groups in
     let d := dataPtr groups in
@@ -298,18 +298,19 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
         | [] => O
         | _  => n
         end in
+    let noops : Operations := [] in
     freq [ (onNonEmpty a 1%nat,
             bindGen (elems_ def_a a) (fun ai =>
             bindGen (genTargetReg m) (fun rd =>
             bindGen (genImm (dataHi i)) (fun imm =>
             let instr := Addi rd (aID ai) imm in
-            ret (instr, [Tinstr], f, normal)))))
+            ret (instr, [Tinstr], f, noops)))))
          ; (4%nat, bindGen (genStackbasedWrite i m)
                            (fun instr =>
-                              (ret (instr, [Tinstr], f, normal))))
+                              (ret (instr, [Tinstr], f, noops))))
          ; (4%nat, bindGen (genStackbasedRead i m)
                            (fun instr =>
-                              ret (instr, [Tinstr], f, normal)))
+                              ret (instr, [Tinstr], f, noops)))
 (*           ;  (3%nat, match map.get (getRegs m) sp with
                       | Some spVal' =>
                         let spVal := word.unsigned spVal' in
@@ -346,7 +347,7 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
                 bindGen (elems_ def_a a) (fun ai2 =>
                 bindGen (genTargetReg m) (fun rd =>
                 let instr := Add rd (aID ai1) (aID ai2) in
-                ret (instr, [Tinstr], f, normal)))))
+                ret (instr, [Tinstr], f, noops)))))
     ].
 
   (*
@@ -363,20 +364,22 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
 --              )
             ]
  *)
-  
+
+  (* FIXME Code annotations are replaced by operations, but only the constructor
+     carries meaning! *)
   Definition callHead offset f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [(Jal ra offset, [Tinstr; Tcall], f, call)].
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [(Jal ra offset, [Tinstr; Tcall], f, [(Call f [] [])])].
 
   Definition headerHead f:
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [(Sw sp ra 0, [Tinstr; Th1], f, normal)].
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [(Sw sp ra 0, [Tinstr; Th1], f, [(*noops*)])].
 
   Definition initSeq f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [  (Addi sp sp 12,   [Tinstr; Th2], f, normal);
-       (Sw   sp 0  (-8), [Tinstr; Th3], f, normal);
-       (Sw   sp 0  (-4), [Tinstr; Th4], f, normal)
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [  (Addi sp sp 12,   [Tinstr; Th2], f, [(*noops*)]);
+       (Sw   sp 0  (-8), [Tinstr; Th3], f, [(*noops*)]);
+       (Sw   sp 0  (-4), [Tinstr; Th4], f, [(*noops*)])
     ].
   
   Definition callSeq offset f nextF :=
@@ -390,7 +393,7 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
              (m : MachineState) (p : PolicyState)
              (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
              (callP :  TagSet -> bool) :
-    option (G (list (InstructionI * TagSet * FunID * CodeAnnotation)))
+    option (G (list (InstructionI * TagSet * FunID * Operations)))
     :=
       let existingSites :=
           List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
@@ -425,11 +428,11 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
       end.
 
   Definition returnSeq (f : FunID) :=
-    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, normal)
-    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, normal)
-    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, normal)
-    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, normal)
-    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, retrn)
+    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, [(*noops*)])
+    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, [(*noops*)])
+    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, [(*noops*)])
+    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, [(*noops*)])
+    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, [Return])
     ].
   
   Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
@@ -444,7 +447,7 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
              (dataP codeP callP : TagSet -> bool)
              (cm : CodeMap_Impl) (f nextF : FunID)
              (fSteps : list nat)
-    : G (list (InstructionI * TagSet * FunID * CodeAnnotation) * (list nat)) :=
+    : G (list (InstructionI * TagSet * FunID * Operations) * (list nat)) :=
     let fromInstr :=
         bindGen (genInstr l t m p cm dataP codeP f)
                 (fun itf => returnGen ([itf])) in
@@ -489,9 +492,9 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
                                          (returnGen (jorp macc k z)))
                 end)
             )
-            (getComponents m) m .
+            (getElements m) m .
 
-  Definition genVariantByList (ks : list Component) (m : MachineState) : G MachineState :=
+  Definition genVariantByList (ks : list Element) (m : MachineState) : G MachineState :=
     foldGen (fun macc k =>
                match List.find (fun k' => keqb k k') ks with
                | Some _ => bindGen (genImm 40) (fun z => returnGen (jorp macc k z))
@@ -499,7 +502,7 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
                end)
           ks m.
 
-  Instance ShowStuff : Show (InstructionI * TagSet * FunID * CodeAnnotation) :=
+  Instance ShowStuff : Show (InstructionI * TagSet * FunID * Operations) :=
     {| show '(i, ts, f, a) := (show i ++ "@" ++ show ts ++ "|" ++ show f)%string |}.
   
   (*
@@ -518,7 +521,7 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
            (m0 : MachineState) (p0 : PolicyState)
            (m  : MachineState) (p  : PolicyState)
            (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
-           (its : list (InstructionI * TagSet * FunID * CodeAnnotation))
+           (its : list (InstructionI * TagSet * FunID * Operations))
            (dataP codeP callP : TagSet -> bool)
     (* num calls? *)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
@@ -534,10 +537,10 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
         | nil =>
           (* Instruction already exists, step... *)
           match mpstep (m,p), funSteps with
-          | Some ((m',p'),o), (S n)::ns =>
+          | Some ((m',p'),_t,o), (S n)::ns =>
             (* ...and recurse. *)
             gen_exec_aux steps' (n::ns) i t m0 p0 m' p' cm f nextF its codeP dataP callP 
-          | Some ((m',p'),o), _ =>
+          | Some ((m',p'),_t,o), _ =>
             gen_exec_aux steps' funSteps i t m0 p0 m' p' cm f nextF its codeP dataP callP 
           | _, _ =>
             (*trace "Something went wrong."*) ret (m0,p0,cm)
@@ -578,7 +581,7 @@ Module GenRISCVEager <: Gen RISCVObs TPEager DLObs TSSRiscvDefault.
               let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
               let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
               match mpstep (m', p') with
-              | Some ((m'', p''), o) =>
+              | Some ((m'', p''), _t, o) =>
                 (gen_exec_aux steps' funSteps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP)
               | _ =>
                 (*trace ("Couldn't step" ++ nl(* ++  printMachine m' p' cm' ++ nl*))%string*)
@@ -958,7 +961,7 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
   Definition genInstr (i : LayoutInfo) (t : TagInfo)
              (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
              (dataP codeP : TagSet -> bool) (f : FunID)
-    : G (InstructionI * TagSet * FunID * CodeAnnotation) :=
+    : G (InstructionI * TagSet * FunID * Operations) :=
     let groups := groupRegisters i t m p dataP codeP in
     let a := arith groups in
     let d := dataPtr groups in
@@ -977,18 +980,19 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
         | [] => O
         | _  => n
         end in
+    let noops : Operations := [] in
     freq [ (onNonEmpty a 1%nat,
             bindGen (elems_ def_a a) (fun ai =>
             bindGen (genTargetReg m) (fun rd =>
             bindGen (genImm (dataHi i)) (fun imm =>
             let instr := Addi rd (aID ai) imm in
-            ret (instr, [Tinstr], f, normal)))))
+            ret (instr, [Tinstr], f, noops)))))
          ; (4%nat, bindGen (genStackbasedWrite i m)
                            (fun instr =>
-                              (ret (instr, [Tinstr], f, normal))))
+                              (ret (instr, [Tinstr], f, noops))))
          ; (4%nat, bindGen (genStackbasedRead i m)
                            (fun instr =>
-                              ret (instr, [Tinstr], f, normal)))
+                              ret (instr, [Tinstr], f, noops)))
 (*           ;  (3%nat, match map.get (getRegs m) sp with
                       | Some spVal' =>
                         let spVal := word.unsigned spVal' in
@@ -1025,7 +1029,7 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
                 bindGen (elems_ def_a a) (fun ai2 =>
                 bindGen (genTargetReg m) (fun rd =>
                 let instr := Add rd (aID ai1) (aID ai2) in
-                ret (instr, [Tinstr], f, normal)))))
+                ret (instr, [Tinstr], f, noops)))))
     ].
 
   (*
@@ -1042,20 +1046,22 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
 --              )
             ]
  *)
-  
+
+  (* FIXME Code annotations are replaced by operations, but only the constructor
+     carries meaning! *)
   Definition callHead offset f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [(Jal ra offset, [Tinstr; Tcall], f, call)].
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [(Jal ra offset, [Tinstr; Tcall], f, [(Call f [] [])])].
 
   Definition headerHead f:
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [(Sw sp ra 0, [Tinstr; Th1], f, normal)].
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [(Sw sp ra 0, [Tinstr; Th1], f, [(*noops*)])].
 
   Definition initSeq f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [  (Addi sp sp 12,   [Tinstr; Th2], f, normal);
-       (Sw   sp 0  (-8), [Tinstr; Th3], f, normal);
-       (Sw   sp 0  (-4), [Tinstr; Th4], f, normal)
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [  (Addi sp sp 12,   [Tinstr; Th2], f, [(*noops*)]);
+       (Sw   sp 0  (-8), [Tinstr; Th3], f, [(*noops*)]);
+       (Sw   sp 0  (-4), [Tinstr; Th4], f, [(*noops*)])
     ].
   
   Definition callSeq offset f nextF :=
@@ -1069,7 +1075,7 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
              (m : MachineState) (p : PolicyState)
              (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
              (callP :  TagSet -> bool) :
-    option (G (list (InstructionI * TagSet * FunID * CodeAnnotation)))
+    option (G (list (InstructionI * TagSet * FunID * Operations)))
     :=
       let existingSites :=
           List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
@@ -1104,11 +1110,11 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
       end.
 
   Definition returnSeq (f : FunID) :=
-    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, normal)
-    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, normal)
-    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, normal)
-    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, normal)
-    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, retrn)
+    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, [(*noops*)])
+    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, [(*noops*)])
+    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, [(*noops*)])
+    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, [(*noops*)])
+    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, [Return])
     ].
   
   Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
@@ -1123,7 +1129,7 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
              (dataP codeP callP : TagSet -> bool)
              (cm : CodeMap_Impl) (f nextF : FunID)
              (fSteps : list nat)
-    : G (list (InstructionI * TagSet * FunID * CodeAnnotation) * (list nat)) :=
+    : G (list (InstructionI * TagSet * FunID * Operations) * (list nat)) :=
     let fromInstr :=
         bindGen (genInstr l t m p cm dataP codeP f)
                 (fun itf => returnGen ([itf])) in
@@ -1168,9 +1174,9 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
                                          (returnGen (jorp macc k z)))
                 end)
             )
-            (getComponents m) m .
+            (getElements m) m .
 
-  Definition genVariantByList (ks : list Component) (m : MachineState) : G MachineState :=
+  Definition genVariantByList (ks : list Element) (m : MachineState) : G MachineState :=
     foldGen (fun macc k =>
                match List.find (fun k' => keqb k k') ks with
                | Some _ => bindGen (genImm 40) (fun z => returnGen (jorp macc k z))
@@ -1178,7 +1184,7 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
                end)
           ks m.
 
-  Instance ShowStuff : Show (InstructionI * TagSet * FunID * CodeAnnotation) :=
+  Instance ShowStuff : Show (InstructionI * TagSet * FunID * Operations) :=
     {| show '(i, ts, f, a) := (show i ++ "@" ++ show ts ++ "|" ++ show f)%string |}.
   
   (*
@@ -1197,7 +1203,7 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
            (m0 : MachineState) (p0 : PolicyState)
            (m  : MachineState) (p  : PolicyState)
            (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
-           (its : list (InstructionI * TagSet * FunID * CodeAnnotation))
+           (its : list (InstructionI * TagSet * FunID * Operations))
            (dataP codeP callP : TagSet -> bool)
     (* num calls? *)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
@@ -1213,10 +1219,10 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
         | nil =>
           (* Instruction already exists, step... *)
           match mpstep (m,p), funSteps with
-          | Some ((m',p'),o), (S n)::ns =>
+          | Some ((m',p'),_t,o), (S n)::ns =>
             (* ...and recurse. *)
             gen_exec_aux steps' (n::ns) i t m0 p0 m' p' cm f nextF its codeP dataP callP 
-          | Some ((m',p'),o), _ =>
+          | Some ((m',p'),_t,o), _ =>
             gen_exec_aux steps' funSteps i t m0 p0 m' p' cm f nextF its codeP dataP callP 
           | _, _ =>
             (*trace "Something went wrong."*) ret (m0,p0,cm)
@@ -1257,7 +1263,7 @@ Module GenRISCVEagerNLC <: Gen RISCVObs TPEagerNLC DLObs TSSRiscvDefault.
               let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
               let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
               match mpstep (m', p') with
-              | Some ((m'', p''), o) =>
+              | Some ((m'', p''), _t, o) =>
                 (gen_exec_aux steps' funSteps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP)
               | _ =>
                 (*trace ("Couldn't step" ++ nl(* ++  printMachine m' p' cm' ++ nl*))%string*)
@@ -1637,7 +1643,7 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
   Definition genInstr (i : LayoutInfo) (t : TagInfo)
              (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
              (dataP codeP : TagSet -> bool) (f : FunID)
-    : G (InstructionI * TagSet * FunID * CodeAnnotation) :=
+    : G (InstructionI * TagSet * FunID * Operations) :=
     let groups := groupRegisters i t m p dataP codeP in
     let a := arith groups in
     let d := dataPtr groups in
@@ -1656,18 +1662,19 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
         | [] => O
         | _  => n
         end in
+    let noops : Operations := [] in
     freq [ (onNonEmpty a 1%nat,
             bindGen (elems_ def_a a) (fun ai =>
             bindGen (genTargetReg m) (fun rd =>
             bindGen (genImm (dataHi i)) (fun imm =>
             let instr := Addi rd (aID ai) imm in
-            ret (instr, [Tinstr], f, normal)))))
+            ret (instr, [Tinstr], f, noops)))))
          ; (4%nat, bindGen (genStackbasedWrite i m)
                            (fun instr =>
-                              (ret (instr, [Tinstr], f, normal))))
+                              (ret (instr, [Tinstr], f, noops))))
          ; (4%nat, bindGen (genStackbasedRead i m)
                            (fun instr =>
-                              ret (instr, [Tinstr], f, normal)))
+                              ret (instr, [Tinstr], f, noops)))
 (*           ;  (3%nat, match map.get (getRegs m) sp with
                       | Some spVal' =>
                         let spVal := word.unsigned spVal' in
@@ -1704,7 +1711,7 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
                 bindGen (elems_ def_a a) (fun ai2 =>
                 bindGen (genTargetReg m) (fun rd =>
                 let instr := Add rd (aID ai1) (aID ai2) in
-                ret (instr, [Tinstr], f, normal)))))
+                ret (instr, [Tinstr], f, noops)))))
     ].
 
   (*
@@ -1721,20 +1728,22 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
 --              )
             ]
  *)
-  
+
+  (* FIXME Code annotations are replaced by operations, but only the constructor
+     carries meaning! *)
   Definition callHead offset f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [(Jal ra offset, [Tinstr; Tcall], f, call)].
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [(Jal ra offset, [Tinstr; Tcall], f, [(Call f [] [])])].
 
   Definition headerHead f:
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [(Sw sp ra 0, [Tinstr; Th1], f, normal)].
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [(Sw sp ra 0, [Tinstr; Th1], f, [(*noops*)])].
 
   Definition initSeq f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [  (Addi sp sp 12,   [Tinstr; Th2], f, normal);
-       (Sw   sp 0  (-8), [Tinstr; Th3], f, normal);
-       (Sw   sp 0  (-4), [Tinstr; Th4], f, normal)
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [  (Addi sp sp 12,   [Tinstr; Th2], f, [(*noops*)]);
+       (Sw   sp 0  (-8), [Tinstr; Th3], f, [(*noops*)]);
+       (Sw   sp 0  (-4), [Tinstr; Th4], f, [(*noops*)])
     ].
   
   Definition callSeq offset f nextF :=
@@ -1748,7 +1757,7 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
              (m : MachineState) (p : PolicyState)
              (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
              (callP :  TagSet -> bool) :
-    option (G (list (InstructionI * TagSet * FunID * CodeAnnotation)))
+    option (G (list (InstructionI * TagSet * FunID * Operations)))
     :=
       let existingSites :=
           List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
@@ -1783,11 +1792,11 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
       end.
 
   Definition returnSeq (f : FunID) :=
-    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, normal)
-    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, normal)
-    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, normal)
-    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, normal)
-    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, retrn)
+    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, [(*noops*)])
+    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, [(*noops*)])
+    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, [(*noops*)])
+    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, [(*noops*)])
+    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, [Return])
     ].
 
   Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
@@ -1802,7 +1811,7 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
              (dataP codeP callP : TagSet -> bool)
              (cm : CodeMap_Impl) (f nextF : FunID)
              (fSteps : list nat)
-    : G (list (InstructionI * TagSet * FunID * CodeAnnotation) * (list nat)) :=
+    : G (list (InstructionI * TagSet * FunID * Operations) * (list nat)) :=
     let fromInstr :=
         bindGen (genInstr l t m p cm dataP codeP f)
                 (fun itf => returnGen ([itf])) in
@@ -1847,9 +1856,9 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
                                          (returnGen (jorp macc k z)))
                 end)
             )
-            (getComponents m) m .
+            (getElements m) m .
 
-  Definition genVariantByList (ks : list Component) (m : MachineState) : G MachineState :=
+  Definition genVariantByList (ks : list Element) (m : MachineState) : G MachineState :=
     foldGen (fun macc k =>
                match List.find (fun k' => keqb k k') ks with
                | Some _ => bindGen (genImm 40) (fun z => returnGen (jorp macc k z))
@@ -1857,7 +1866,7 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
                end)
           ks m.
 
-  Instance ShowStuff : Show (InstructionI * TagSet * FunID * CodeAnnotation) :=
+  Instance ShowStuff : Show (InstructionI * TagSet * FunID * Operations) :=
     {| show '(i, ts, f, a) := (show i ++ "@" ++ show ts ++ "|" ++ show f)%string |}.
   
   (*
@@ -1876,7 +1885,7 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
            (m0 : MachineState) (p0 : PolicyState)
            (m  : MachineState) (p  : PolicyState)
            (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
-           (its : list (InstructionI * TagSet * FunID * CodeAnnotation))
+           (its : list (InstructionI * TagSet * FunID * Operations))
            (dataP codeP callP : TagSet -> bool)
     (* num calls? *)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
@@ -1892,10 +1901,10 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
         | nil =>
           (* Instruction already exists, step... *)
           match mpstep (m,p), funSteps with
-          | Some ((m',p'),o), (S n)::ns =>
+          | Some ((m',p'),_t,o), (S n)::ns =>
             (* ...and recurse. *)
             gen_exec_aux steps' (n::ns) i t m0 p0 m' p' cm f nextF its codeP dataP callP 
-          | Some ((m',p'),o), _ =>
+          | Some ((m',p'),_t,o), _ =>
             gen_exec_aux steps' funSteps i t m0 p0 m' p' cm f nextF its codeP dataP callP 
           | _, _ =>
             (*trace "Something went wrong."*) ret (m0,p0,cm)
@@ -1936,7 +1945,7 @@ Module GenRISCVEagerNSC <: Gen RISCVObs TPEagerNSC DLObs TSSRiscvDefault.
               let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
               let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
               match mpstep (m', p') with
-              | Some ((m'', p''), o) =>
+              | Some ((m'', p''), _t, o) =>
                 (gen_exec_aux steps' funSteps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP)
               | _ =>
                 (*trace ("Couldn't step" ++ nl(* ++  printMachine m' p' cm' ++ nl*))%string*)
@@ -2316,7 +2325,7 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
   Definition genInstr (i : LayoutInfo) (t : TagInfo)
              (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
              (dataP codeP : TagSet -> bool) (f : FunID)
-    : G (InstructionI * TagSet * FunID * CodeAnnotation) :=
+    : G (InstructionI * TagSet * FunID * Operations) :=
     let groups := groupRegisters i t m p dataP codeP in
     let a := arith groups in
     let d := dataPtr groups in
@@ -2335,18 +2344,19 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
         | [] => O
         | _  => n
         end in
+    let noops : Operations := [] in
     freq [ (onNonEmpty a 1%nat,
             bindGen (elems_ def_a a) (fun ai =>
             bindGen (genTargetReg m) (fun rd =>
             bindGen (genImm (dataHi i)) (fun imm =>
             let instr := Addi rd (aID ai) imm in
-            ret (instr, [Tinstr], f, normal)))))
+            ret (instr, [Tinstr], f, noops)))))
          ; (4%nat, bindGen (genStackbasedWrite i m)
                            (fun instr =>
-                              (ret (instr, [Tinstr], f, normal))))
+                              (ret (instr, [Tinstr], f, noops))))
          ; (4%nat, bindGen (genStackbasedRead i m)
                            (fun instr =>
-                              ret (instr, [Tinstr], f, normal)))
+                              ret (instr, [Tinstr], f, noops)))
 (*           ;  (3%nat, match map.get (getRegs m) sp with
                       | Some spVal' =>
                         let spVal := word.unsigned spVal' in
@@ -2383,7 +2393,7 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
                 bindGen (elems_ def_a a) (fun ai2 =>
                 bindGen (genTargetReg m) (fun rd =>
                 let instr := Add rd (aID ai1) (aID ai2) in
-                ret (instr, [Tinstr], f, normal)))))
+                ret (instr, [Tinstr], f, noops)))))
     ].
 
   (*
@@ -2400,20 +2410,22 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
 --              )
             ]
  *)
-  
+
+  (* FIXME Code annotations are replaced by operations, but only the constructor
+     carries meaning! *)
   Definition callHead offset f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [(Jal ra offset, [Tinstr; Tcall], f, call)].
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [(Jal ra offset, [Tinstr; Tcall], f, [(Call f [] [])])].
 
   Definition headerHead f:
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [(Sw sp ra 0, [Tinstr; Th1], f, normal)].
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [(Sw sp ra 0, [Tinstr; Th1], f, [(*noops*)])].
 
   Definition initSeq f :
-    list (InstructionI * TagSet * FunID * CodeAnnotation) :=
-    [  (Addi sp sp 12,   [Tinstr; Th2], f, normal);
-       (Sw   sp 0  (-8), [Tinstr; Th3], f, normal);
-       (Sw   sp 0  (-4), [Tinstr; Th4], f, normal)
+    list (InstructionI * TagSet * FunID * Operations) :=
+    [  (Addi sp sp 12,   [Tinstr; Th2], f, [(*noops*)]);
+       (Sw   sp 0  (-8), [Tinstr; Th3], f, [(*noops*)]);
+       (Sw   sp 0  (-4), [Tinstr; Th4], f, [(*noops*)])
     ].
   
   Definition callSeq offset f nextF :=
@@ -2427,7 +2439,7 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
              (m : MachineState) (p : PolicyState)
              (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
              (callP :  TagSet -> bool) :
-    option (G (list (InstructionI * TagSet * FunID * CodeAnnotation)))
+    option (G (list (InstructionI * TagSet * FunID * Operations)))
     :=
       let existingSites :=
           List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
@@ -2462,11 +2474,11 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
       end.
 
     Definition returnSeq (f : FunID) :=
-    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, normal)
-    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, normal)
-    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, normal)
-    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, normal)
-    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, retrn)
+    [ (Sw   sp r0 (-8)  , [Tinstr; Tr1], f, [(*noops*)])
+    ; (Sw   sp r0 (-4)  , [Tinstr; Tr2], f, [(*noops*)])
+    ; (Addi sp sp (-12) , [Tinstr; Tr3], f, [(*noops*)])
+    ; (Lw   ra sp 0     , [Tinstr; Tr4], f, [(*noops*)])
+    ; (Jalr ra ra 0     , [Tinstr; Tr5], f, [Return])
     ].
 
   Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
@@ -2481,7 +2493,7 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
              (dataP codeP callP : TagSet -> bool)
              (cm : CodeMap_Impl) (f nextF : FunID)
              (fSteps : list nat)
-    : G (list (InstructionI * TagSet * FunID * CodeAnnotation) * (list nat)) :=
+    : G (list (InstructionI * TagSet * FunID * Operations) * (list nat)) :=
     let fromInstr :=
         bindGen (genInstr l t m p cm dataP codeP f)
                 (fun itf => returnGen ([itf])) in
@@ -2526,9 +2538,9 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
                                          (returnGen (jorp macc k z)))
                 end)
             )
-            (getComponents m) m .
+            (getElements m) m .
 
-  Definition genVariantByList (ks : list Component) (m : MachineState) : G MachineState :=
+  Definition genVariantByList (ks : list Element) (m : MachineState) : G MachineState :=
     foldGen (fun macc k =>
                match List.find (fun k' => keqb k k') ks with
                | Some _ => bindGen (genImm 40) (fun z => returnGen (jorp macc k z))
@@ -2536,7 +2548,7 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
                end)
           ks m.
 
-  Instance ShowStuff : Show (InstructionI * TagSet * FunID * CodeAnnotation) :=
+  Instance ShowStuff : Show (InstructionI * TagSet * FunID * Operations) :=
     {| show '(i, ts, f, a) := (show i ++ "@" ++ show ts ++ "|" ++ show f)%string |}.
   
   (*
@@ -2555,7 +2567,7 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
            (m0 : MachineState) (p0 : PolicyState)
            (m  : MachineState) (p  : PolicyState)
            (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
-           (its : list (InstructionI * TagSet * FunID * CodeAnnotation))
+           (its : list (InstructionI * TagSet * FunID * Operations))
            (dataP codeP callP : TagSet -> bool)
     (* num calls? *)
     : G (MachineState * PolicyState * CodeMap_Impl) :=
@@ -2571,10 +2583,10 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
         | nil =>
           (* Instruction already exists, step... *)
           match mpstep (m,p), funSteps with
-          | Some ((m',p'),o), (S n)::ns =>
+          | Some ((m',p'),_t,o), (S n)::ns =>
             (* ...and recurse. *)
             gen_exec_aux steps' (n::ns) i t m0 p0 m' p' cm f nextF its codeP dataP callP 
-          | Some ((m',p'),o), _ =>
+          | Some ((m',p'),_t,o), _ =>
             gen_exec_aux steps' funSteps i t m0 p0 m' p' cm f nextF its codeP dataP callP 
           | _, _ =>
             (*trace "Something went wrong."*) ret (m0,p0,cm)
@@ -2615,7 +2627,7 @@ Module GenRISCVEagerNI <: Gen RISCVObs TPEagerNI DLObs TSSRiscvDefault.
               let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
               let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
               match mpstep (m', p') with
-              | Some ((m'', p''), o) =>
+              | Some ((m'', p''), _t, o) =>
                 (gen_exec_aux steps' funSteps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP)
               | _ =>
                 (*trace ("Couldn't step" ++ nl(* ++  printMachine m' p' cm' ++ nl*))%string*)
