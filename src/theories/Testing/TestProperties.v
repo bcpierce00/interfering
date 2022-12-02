@@ -277,6 +277,56 @@ Module TestPropsRISCVSimple
     forAll genMach (fun '(m,p,cm) =>
                       (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
 
+  Definition step_tester
+    (cm : CodeMap_Impl) (li : LayoutInfo)
+    (fuel : nat)
+    (m : RiscvMachine) (p : PolicyState) (ctx : CtxState)
+    (conds : list (nat * (RiscvMachine -> bool)))
+    (gen : RiscvMachine -> (RiscvMachine -> bool))
+    : Checker :=
+    let fix aux fuel m p ctx conds :=
+      (* See if we have enough fuel to take a step, otherwise exit *)
+      match fuel with
+      | O => collect "Out-of-Fuel" true
+      | S fuel' =>
+          (* Try to take a step, exit if we are stuck *)
+          match mpcstep (m, p, ctx) cm with
+          | None => collect "Failstop" true
+          | Some (m', p', ctx', _ops, _obs) =>
+              (* If we could step, verify that the new state satisfies all
+                 active tests, otherwise raise an error *)
+              let check_cond '(depth, test) :=
+                negb ((Nat.eqb depth (depthOf ctx')) && (test m')) in
+              match seq.all check_cond conds with
+              | false => collect "Bad-checks" false
+              | true =>
+                  (* Check the code map at the current PC (this should never
+                     fail) *)
+                  match (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
+                  | None => collect "Bad-PC" false (* TODO Check *)
+                  | Some ops =>
+                      (* Recurse on the new state, where if the instruction
+                         corresponds to a call a new test is added to the
+                         list *)
+                      let is_call op :=
+                        match op with
+                        | Call _ _ _ => true
+                        | _ => false
+                        end in
+                      match seq.has is_call ops with
+                      | false =>
+                          aux fuel' m' p' ctx' conds
+                      | true =>
+                          (* m, m', other data? *)
+                          aux fuel' m' p' ctx' ((depthOf ctx, gen m') :: conds)
+                      end
+                  end
+              end
+          end
+      end
+    in
+    aux fuel m p ctx conds.
+
 End TestPropsRISCVSimple.
 
 Module TestRISCVEager := TestPropsRISCVSimple RISCVObs TPEager DLObs
