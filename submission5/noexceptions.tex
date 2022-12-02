@@ -218,15 +218,6 @@ cases where data can leak across repeated calls to the same callee,
 and also violates integrity if the leak uses the caller's frame. We
 propose a variant of {\em Lazy Tagging and Clearing} that testably enforces
 confidentiality, albeit at some performance cost.
-%
-
-%For ease of exposition, we initially assume a single simple
-%stack with no sharing between callers and callees: all parameters and return
-%values are passed in registers.  Later, we will introduce enhanced versions
-%supporting
-%(1) passing of scalar stack data,
-%(2) callee-saves registers calling conventions, and
-%(3) a coroutine system with a static layout.
 
 In sum, we offer the following contributions:
 
@@ -338,12 +329,8 @@ Figure \ref{fig:RISCVregs} gives an example division for a RISC-V machine as wil
 appear in our examples and testing, along with the register names that will appear in
 example code, and their default security class (explained below).
 
-In addition to memory and registers, a machine has a program counter \(\PCname\)
-and may have additional architecture-specific state; particularly relevant is state
-that is used for security enforcement. We treat this as a set \(\mathcal{P}\) with
-\(\PCname \in \mathcal{P}\). Collectively these are {\em state elements} \(\component\)
-in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS | \mathcal{P}\).
-One instance of \(\mathcal{P}\) is discussed in Section \ref{sec:enforcement}.
+Along with the program counter, \(\PCname\), these are {\em state elements} \(\component\)
+in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS\).
 
 \begin{figure}
   \begin{tabular}{| l | l | l |}
@@ -367,8 +354,11 @@ One instance of \(\mathcal{P}\) is discussed in Section \ref{sec:enforcement}.
   \label{fig:RISCVregs}
 \end{figure}
 
-A machine has a set \(\mathcal{V}\) of values such that \(\WORDS \subseteq \mathcal{V}\).
-A {\em machine state} \(\mach\) is a map from components to values, written \(\mach[\component]\).
+A {\em machine state} \(\mach\) is a map from components to a set \(\mathcal{V}\) of
+values. A value \(v\) may be convertible to an address, written \(|v|\) (\(|\cdot|\)
+being a partial function.) We write \(\mach[\component]\) to denote the value at
+\(\component\) of \(\mach\) and \(\mach[v]\) to denote the value at \(|v|\) if
+defined.
 
 {\em Events} are drawn from a set \(\OBSS\) and ranged over by \(\obs\), with a
 special silent event \(\tau\).
@@ -427,7 +417,9 @@ in Section \ref{sec:props}.
 %\section{Calls, Returns, and Private Allocations}
 \section{Examples}
 
-In this section we consider a simple setting with calls, returns, and private allocations.
+In this section we consider a simple setting with calls, returns, and private allocations,
+on a RISC-V machine with a PIPE tagging system. For some type \(\mathcal{T}\) of tags,
+\(\mathcal{V} ::= \mathcal{W} \times \mathcal{T}\), with \(|(w,t)| = w\).
 Figure \ref{fig:main} gives the C code and corresponding compiled RISC-V code
 for a function {\tt main}. (Code is compiled using the standard RISC-V
 calling conventions~\cite{??}; the stack grows towards lower addresses. We assume that
@@ -720,6 +712,22 @@ read part of the return address, and its attempt to output
 kinds of data protection, the stack pointer {\it must} be restored
 for the program to behave predictably.
 
+In typical compiled code, WBCF is maintained by the compiler's call and return sequences.
+As long as a function deallocates the same-sized frame that it allocates, and properly
+saves and restores the return address, it should have WBCF---unless an error in the middle
+subverts those sequences by overwriting one of the relevant elements, or by jumping into
+the middle of the call or return sequence. We can therefore enforce WBCF by (1) ensuring that
+the call and return sequences execute in order and (2) permitting only call and return
+sequences to write to \(\SP\), {\tt ra}, and the address in memory where {\tt ra} is stored.
+
+Let \(\mathcal{T} ::= \mathit{gen} | \mathit{seq} ~ n ~ m | \mathit{priv}\), named for general
+execution, sequence, and privileged, respectively. Call and return sequences of length \(m\) are
+tagged \(\mathit{seq} ~ 1 ~ m\) through \(\mathit{seq} ~ m ~ l\), and the micro-policy enforces
+that they execute in order. The stack pointer and {\tt ra}
+are tagged \(\mathit{priv}\). Only instructions tagged \(\mathit{seq} \dots\) may write to memory
+or registers tagged \(\mathit{priv}\). Store instructions tagged \(\mathit{seq} \dots\) tag their
+targets \(\mathit{priv}\).
+
 \paragraph*{Stack Integrity}
 
 Like WBCF, stack integrity defines at the call a condition that must hold upon
@@ -743,20 +751,40 @@ While it would be simple to define integrity as ``all sealed elements retain the
 values after the call,'' this would be stricter than necessary for many purposes.
 For example, it arguably doesn't matter if {\tt f} overwrites {\tt main}'s data provided
 that {\tt main} never reads that corrupted data.
-This is the justification behind the lazy micro-policy~\cite{??}:
-the monitor permits the caller to write into the
-callee's frame, but taints that write so that the callee cannot read it later without
-triggering a failstop. More generally, it is common to specify the behavior of a system,
-including security properties, in terms of traces of observable events rather than details
-of the machine state. Given such a specification, we can consider
+To illustrate, we can consider two integrity micro-policies: ``Depth Isolation'' and
+``Lazy Tagging and Clearing.''
+
+Depth Isolation tracks, via a tag on the program counter,
+the depth of the current activation. Stack frames are initialized and cleared, by writing
+to every address in them, so that during a call at depth \(d\), the current activation's
+frame is tagged with \(d\). Loads and stores targeting addresses so tagged failstop
+if the program counter does not match. In this setting, at depth \(d\), all memory tagged
+with a depth less than \(d\) corresponds to \(\sealed\) memory, and is inaccessible.
+When its depth is reached via a return, it will have the same value, so integrity is
+enforced.
+
+On the other hand, Lazy Tagging and Clearing skips the (problematically linear time)
+initialization and clearing steps, and only updates tags when memory is written to.
+It allows a callee to overwrite sealed memory, but that write tags the corrupted memory
+with the callee's identity. If the corrupted memory's owner (or any other activation) tries
+to read it, only then does the micro-policy failstop.
+
+Lazy Tagging and Clearing illustrates the value of ``extensional'' properties.
+It is common to specify the behavior of a system, including security properties, in
+terms of traces of observable events rather than details of the machine state.
+Lazy enforcement works because the deferred check catches errors before they appear
+in the trace. The nature of traces varies based on the properties of interest, but
+given a particular model of observation, we can consider
 corruption by {\tt f} acceptable as long as it does not affect {\tt main}'s observable behavior.
 
 To characterize this situation, we define a state element to be \emph{irrelevant}
 if its value can be replaced with any other value without changing the observable behavior
 of the machine. More precisely, for a set of elements \(\components\),
 a pair of states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if they
-agree on the value of every element except those in \(\components\). This includes
-public elements such as those in \(\mathcal{P}\).
+agree on the value of every element except those in \(\components\).
+In the tagged environment, we additionally need the values in \(\components\)
+to agree on tags, but not necessarily their data.
+
 The elements of \(\components\) are \emph{irrelevant}
 in \(\mach\) if every variant state produces an equivalent observation trace
 (see Section \ref{sec:events}); all other elements are \emph{relevant}.
@@ -770,7 +798,8 @@ to its original value at the return point.
   \label{fig:variant}
 \end{figure}
 
-In our example setting, the observation trace consists of the sequence of values written to {\tt out}. The example in Figure \ref{subfig:integrity} modifies the value of {\tt sensitive},
+In our example setting, the observation trace consists of the sequence of values written to {\tt out}.
+The example in Figure \ref{subfig:integrity} modifies the value of {\tt sensitive},
 which is \(\sealed\). Figure \ref{fig:variant} shows the state just after the call at step 5,
 assuming that {\tt sec} is 5. Similar to WBCF, we will define
 \(\intProp\) as a predicate on states that holds if
@@ -778,10 +807,10 @@ all relevant sealed addresses in \(\mach\) are the same as after step 5.
 We once again require that \(\intProp\) hold on the state following the matching return.
 That state is reached by step 9. Although {\tt sensitive} has changed, it might be
 irrelevant. Consider a variant state in which {\tt sensitive} has any other value, arbitrarily
-choosing 43. As execution continues after the return from the original state, it
-passes the {\tt if}-test on {\tt sensitive}, whereas the execution from the variant does not, resulting
-in differing outputs. Therefore {\tt sensitive} is relevant, so \(\intProp\) does not hold,
-and integrity has indeed been violated.
+choosing 43 (and keeping its tag, \(t_2'\), unchanged.) As execution continues after the return
+from the original state, it passes the {\tt if}-test on {\tt sensitive}, whereas the execution
+from the variant does not, resulting in differing outputs. Therefore {\tt sensitive} is relevant,
+so \(\intProp\) does not hold, and integrity has indeed been violated.
 
 \paragraph*{Caller Confidentiality}
 
@@ -858,6 +887,9 @@ from \(\mach\) and \(\nach\), respectively.
 
 Finally, we define caller confidentiality as the 
 combination of internal and return-time confidentiality.
+While we have separated the definitions of integrity and confidentiality,
+in terms of tag-based enforcement, both Depth Isolation and Lazy Tagging and Clearing
+enforce them.
 
 \paragraph*{Callee Confidentiality}
 
@@ -869,7 +901,12 @@ memory after return.
 
 We model this as nearly dual to caller integrity: the callee's secrets are those
 values that it has stored in \(\unsealed\) elements. So, callee confidentiality means that
-at the state following the callee's return, any relevant element that was \(\unsealed\) under the callee's view retains its original value.
+at the state following the callee's return, any relevant element that was \(\unsealed\) under
+the callee's view retains its original value.
+
+Once again, both tag-based approaches do enforce callee confidentiality, but it is
+worth keeping separate because some enforcement mechanisms might not, and it has not
+historically been acknowledged by all formal treatments of stack safety \cite{Georges22:TempsDesCerise}.
 
 \paragraph*{The Hierarchy of Stack Safety}
 
@@ -1303,7 +1340,7 @@ should not. Say the compiler opts to pass the pointer to {\tt x} in register {\t
 The {\tt f} is specifically being given access to the four bytes starting at that address.
 The call operation is \(\mathbf{call} ~ \emplist ~ \{(\mathtt{a0},0,4)\}\).
 
-\subsection{Tailcalls}
+\subsection{Tail Calls}
 
 The operation rule for a tailcall is similar to that for a normal call.
 We do not push the caller's view onto the stack,
@@ -1353,7 +1390,8 @@ of a pointer from one element to another.
 
 In addition to the normal call stack, our security context will carry a map \(\rho\) from
 elements to memory regions, represented as a base and a bound \(\context = (V, \sigma, \rho)\).
-Existing operations are extended to propagate \(\rho\), and the new operations work as follows:
+Existing operations are extended to keep the value of \(\rho\) the same, and the new operations
+work as follows:
 
 \judgmenttwobrlong[]
                   {\(\psi = \mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},sz)\)}
@@ -1374,7 +1412,7 @@ indirectly, by being stored in an object that is in turn passed. Formally, we ca
 this set \(\mathit{capped}\), and define it recursively:
 
 \[\begin{split}
-& \mathit{capped} ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \component \cup \mathit{capped} ~ \components' ~ \rho \textnormal{ where} \\
+& \mathit{capped} ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{\component\} \cup \mathit{capped} ~ \components' ~ \rho \textnormal{ where} \\
 & \components' = \{\component' |\rho[\component] = (\mathit{base},\mathit{bound})
 \land \mathit{base} \leq \component' < \mathit{bound}\} \\
 \end{split}\]
@@ -1395,35 +1433,35 @@ Note that we have a degree of monotonicity here. Once an object is sealed (becau
 capability has not been passed to a callee), subsequent nested calls can never unseal it.
 On the other hand, an object that is passed via a pointer may be passed on indefinitely.
 
-\section{Enforcement}
-\label{sec:enforcement}
+%\section{Enforcement}
+%\label{sec:enforcement}
 
-We use our properties to test the stack safety micro-policies of Roessler and DeHon,
-particularly their Lazy Tagging and Clearing. Our underlying machine is a RISC-V
-based on the MIT RISC-V formalism \cite{} and extended with {\it metadata tags},
-represented as additional state in \(\mathcal{P}\), one for each register, address,
-and the program counter:
-\[\mathcal{P} ::= t_\reg | t_\addr | t_\PCname\]
+%We use our properties to test the stack safety micro-policies of Roessler and DeHon,
+%particularly their Lazy Tagging and Clearing. Our underlying machine is a RISC-V
+%based on the MIT RISC-V formalism \cite{} and extended with {\it metadata tags},
+%represented as additional state in \(\mathcal{P}\), one for each register, address,
+%and the program counter:
+%\[\mathcal{P} ::= t_\reg | t_\addr | t_\PCname\]
 %
-We divide values into normal memory words and tags drawn from a policy-specific
-set of tags \(\mathcal{T}\), \(\mathcal{V} ::= \mathcal{W} | \mathcal{T}\).
-The machine's step function corresponds to that of the basic RISC-V machine,
-with the behavior of the tags at each step parameterized by a {\it micro-policy},
-which may turn a normal step into an error (represented by returning to the same state.)
+%We divide values into normal memory words and tags drawn from a policy-specific
+%set of tags \(\mathcal{T}\), \(\mathcal{V} ::= \mathcal{W} | \mathcal{T}\).
+%The machine's step function corresponds to that of the basic RISC-V machine,
+%with the behavior of the tags at each step parameterized by a {\it micro-policy},
+%which may turn a normal step into an error (represented by returning to the same state.)
 
-\paragraph*{Protecting Enforcement State}
+%\paragraph*{Protecting Enforcement State}
 
-State beyond registers and memory is always considered \(\public\), and in a PIPE machine this
-includes tags. That does not mean that functions should be modifying them! It just means that we
-do not consider them to be part of the state being protected. It is less obvious that a function
-should be prevented reading a tag, and our properties do not rule it out, although in practice
-PIPE does not allow such reads. It would be quite possible to implement
-the properties so that they would forbid these activities, for instance by structuring \(\mathcal{P}\)
-to treat tags separately and apply stack safety to the tags on the stack, but there is no obvious
-application for such a stringent property---the enforcement state must be protected in order that
-enforcement not be subverted, not for its own sake.
+%State beyond registers and memory is always considered \(\public\), and in a PIPE machine this
+%includes tags. That does not mean that functions should be modifying them! It just means that we
+%do not consider them to be part of the state being protected. It is less obvious that a function
+%should be prevented reading a tag, and our properties do not rule it out, although in practice
+%PIPE does not allow such reads. It would be quite possible to implement
+%the properties so that they would forbid these activities, for instance by structuring \(\mathcal{P}\)
+%to treat tags separately and apply stack safety to the tags on the stack, but there is no obvious
+%application for such a stringent property---the enforcement state must be protected in order that
+%enforcement not be subverted, not for its own sake.
 
-\section*{Remainder}
+\section*{[Meta] Remainder}
 
 These document sections lay out a way to present our stack safety properties to build intuition and
 then introduce the formalism. Next the full paper will need the testing section and an expanded
