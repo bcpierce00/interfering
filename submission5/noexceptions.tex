@@ -236,38 +236,47 @@ In sum, we offer the following contributions:
 Our artifact contains Coq formalizations of our properties for illustrative purposes
 as well as the testing implementation.
 
-\section{The Setting}
+\section{Machine Model and Security Semantics}
 
-We state our properties in terms of a generic machine subject to a few constraints,
-but our examples and tests are focused on a RISC-V-like machine enhanced with PIPE,
-a tag-based reference monitor. Importantly, such a machine has no explicit ``call''
-instruction, only {\tt jal} instructions which may be used for that purpose or potentially
-other purposes. Similarly, there is no ``return'', only {\tt jalr}, and so on.
-We therefore define our properties under the assumption that we can distinguish the
-steps that represent these abstract operations from those that do not---for instance,
-by labeling instructions as calls, returns, etc.
-Such a labeling scheme appears in our testing environment (Section [TBD]).% and is already necessary
-%to correctly apply tag-based enforcement in practice (cite something about this.)
+  We state our properties in terms of a generic machine, making minimal assumptions
+  on the machine architecture and the nature of its built-in safety enforcement mechanisms
+  (if any).  Our machine model is meant to be a faithful description of the hardware,
+  with a semantics that covers both ordinary instruction behavior and the behavior of
+  any tags, capabilities, etc. that the machine might support. 
+  This semantics is intentionally \emph{not} ``safe-by-construction;'' it gives
+  no guarantee that the enforcement hardware is being used correctly to achieve desired
+  security properties. 
 
-The set of special operations that are recognized in this way are termed
-{\it security-relevant operations}. Our properties are phrased as a {\it security semantics},
-which extends the underlying machine with additional context about its
-security principals and which registers and memory they require to be secure.
-This context evolves dynamically through the execution of security-relevant operations.
-This notion of security may be phrased as
-predicates on future states, e.g. assertions of the form
-``When control returns to me...'', or relations on traces of future execution
-(hyper-properties).
+  On top of this machine model, we layer a {\it security semantics}, which extends the
+  underlying machine with additional context about the identity of current and pending
+  functions (which act as security principals) and about the registers and memory they require
+  to be secure. This added context is purely notional;
+  it does not affect the real machine. The security context
+  evolves dynamically through the execution of {\it security-relevant operations},
+  which include events like calls, returns, and frame manipulations.
+  Our security properties are phrased in terms of this context, often as predicates
+  on future states, e.g. of the form ``when control returns to the current function...'',
+  or relations on traces of future execution (hyper-properties).
 
-Unlike approaches that give a safe-by-construction semantics
-for various security-relevant operations and then prove secure compilation to the underlying
-enforcement mechanism, our machine is explicitly not safe unless the enforcement
-is correctly instantiated; the security semantics gives us the means to judge whether
-an enforcement scheme implements stack safety or not. 
+  The security-relevant operations typically correspond to underling machine instructions,
+  but the correspondence may not be obvious just be inspecting the machine code.
+  For example, in the tagged RISC-V machine we use in our examples and tests,
+  calls and returns are conventionally performed by {\tt jal} (``jump-and-link'')
+  and {\tt jalr} (``jump-and-link-register'') instructions, respectively, but these
+  instructions might also be used for other things. We therefore assume that there
+  is some external mechanism for distinguishing which instructions are security-relevant;
+  the most obvious technique is to add optional labels to instructions, and that is 
+  what we do in this paper, but the theory does not depend on this choice. 
 
-We will first give a detailed example of a security semantics for a simple setting
+  Our security semantics has similarities to the overlay semantics that have been proposed
+  to characterize stack safety in the past~\cite{??}, but, like the basic machine
+  semantics, it is not safe-by-construction. Rather, it gives us a means to \emph{define}
+  the security properties that a correct enforcement scheme should implement, using
+  some combination of hardware and software.
+  
+In the next section, we give a detailed example of a security semantics for a simple setting
 in which our security-relevant operations are restricted to making calls and returns, and allocating
-private memory within the current function activation. We then extend this model
+private memory within the current function activation. In later sections, we extend this model
 to the full system that we test, which features:
 \begin{itemize}
 \item Function calls and returns, with caller- and callee-saved registers
@@ -279,7 +288,7 @@ to the full system that we test, which features:
 
 Finally, we give a property definition for stack safety in which (some) stack-allocated
 objects are governed by a provenance-based capability system, accessible only to those
-functions which have recieved a valid pointer to them.
+functions which have received a valid pointer to them.
 
 %In section (TBD) we discuss the extension of this model into a simple concurrency setup.
 
@@ -297,22 +306,24 @@ calling convention or implements a source language construct.
 In particular, while we are agnostic as to the source
 language, we certainly aim to support C, and so any source function might contain undefined
 behavior resulting in its compilation to arbitrary machine code. A given enforcement
-mechanism may place additional constraints, of course, particularly on the behavior of
+mechanism may place additional constraints, particularly on the behavior of
 call and return sequences.
 
 In general, it is impossible to distinguish buggy source code from an attacker; in
 our examples we will identify one function or another as an attacker, but we do not
-require any static division between trusted and untrusted code, and aim to protect
+require any static division between trusted and untrusted code, and we aim to protect
 even buggy code.
 
 This is a strong threat model, but hardware and timing attacks are out of scope,
-and our properties are termination insensitive as a result of the enforcement mechanism.
+and our properties are termination insensitive as a result of how failstops are
+modelled (see ~\ref{??}).
 
 \paragraph*{Limitations}
 
 Our concurrency model is fairly
 simplistic, assuming a fixed number of threads each with its own dedicated processor.
-We model memory safe stack objects, but not a heap. Regions outside of
+\apt{Is concurrency still alive?}
+We model memory-safe stack objects, but not a heap. Regions outside of
 stacks can be used however the compiler likes, including as a heap, but no protection is
 built in and our properties assume that if a pointer to a stack object is stored there,
 it is permanently compromised.
@@ -323,12 +334,9 @@ The building blocks of the machine are {\em words} and {\em registers}.
 Words are ranged over by \(\word\) and, when used as addresses, \(\addr\),
 and are drawn from the set \(\WORDS\).
 Registers in the set \(\REGS\) are ranged over by \(\reg\), with the stack pointer
-given the special name \(\SP\).
-They are divided into sets of caller-saved and callee-saved registers;
-Figure \ref{fig:RISCVregs} gives an example division for a RISC-V machine as will
-appear in our examples and testing, along with the register names that will appear in
-example code, and their default security class (explained below).
-
+given the special name \(\SP\); 
+some registers may be classified as caller-saved or callee-saved.
+%
 Along with the program counter, \(\PCname\), these are {\em state elements} \(\component\)
 in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS\).
 
@@ -354,9 +362,13 @@ in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS\).
   \label{fig:RISCVregs}
 \end{figure}
 
-A {\em machine state} \(\mach\) is a map from components to a set \(\mathcal{V}\) of
-values. A value \(v\) may be convertible to an address, written \(|v|\) (\(|\cdot|\)
-being a partial function.) We write \(\mach[\component]\) to denote the value at
+A {\em machine state} \(\mach\) is a map from elements to a set \(\mathcal{V}\) of
+\emph{values}. Each value \(v\) contains a \emph{payload} word, written \(|v|\) (\(|\cdot|\).
+The details of value structure depend on the specific machine being modelled;  
+intuitively, the payload represents the part of the value that is relevant to
+the behavior of the basic machine, while the rest of the value may contain
+information relevant to a hardware enforcement mechanism (such as a tag).
+We write \(\mach[\component]\) to denote the value at
 \(\component\) of \(\mach\) and \(\mach[v]\) to denote the value at \(|v|\) if
 defined.
 
@@ -399,10 +411,11 @@ in an allocated object that is accessible to the current principal (\(\object\))
 available to be allocated (\(\unsealed\)), or
 always accessible (\(\public\)). The {\it initial view} \(V_0\) maps all stack locations to \(\unsealed\),
 all other locations to \(\public\), and registers based on which set they
-belong to (Figure \ref{fig:RISCVregs}): \(\sealed\) for callee-saved,
-\(\unsealed\) for caller-saved, and \(\public\) otherwise. Elements of \(\mathcal{P}\),
-such as the program counter, are always \(\public\). Even if they might deserve their
-own protection, that protection is orthogonal to stack safety.
+belong to: % (Figure \ref{fig:RISCVregs}):
+\(\sealed\) for callee-saved, \(\unsealed\) for caller-saved, and \(\public\) otherwise.
+%Elements of \(\mathcal{P}\),
+%such as the program counter, are always \(\public\). Even if they might deserve their
+%own protection, that protection is orthogonal to stack safety.
 
 A {\it context} is a pair of the current activation's view and 
 a list of views representing the call stack (pending inactive
@@ -415,18 +428,21 @@ corresponding context, as described informally in the following section, and for
 in Section \ref{sec:props}.
 
 %\section{Calls, Returns, and Private Allocations}
-\section{Examples}
+\section{Properties by Example}
 
 In this section we consider a simple setting with calls, returns, and private allocations,
-on a RISC-V machine with a PIPE tagging system. For some type \(\mathcal{T}\) of tags,
-\(\mathcal{V} ::= \mathcal{W} \times \mathcal{T}\), with \(|(w,t)| = w\).
+on a RISC-V machine with a PIPE tagging system. Here 
+\(\mathcal{V} ::= \mathcal{W} \times \mathcal{T}\),
+for some type \(\mathcal{T}\) of tags to be elaborated later, with \(|(w,t)| = w\).
+Figure \ref{fig:RISCVregs} gives an example division of the RISC-V registers into
+security classes. 
 Figure \ref{fig:main} gives the C code and corresponding compiled RISC-V code
 for a function {\tt main}. (Code is compiled using the standard RISC-V
 calling conventions~\cite{??}; the stack grows towards lower addresses. We assume that
 {\tt main} begins at address 0 and its callee {\tt f} at address 100.)
 
 {\tt main} takes a secret as its argument and initializes a variable to contain
-potentially sensitive data. We assume that observable events are stores
+potentially sensitive data. We assume that the only observable events are stores
 to a special address, called {\tt out}. 
 {\tt main} calls another function {\tt f},
 and afterward may decide to output its secret based on the contents of
@@ -502,7 +518,7 @@ Attacks of this kind do not violate {\tt main}'s confidentiality, but its
 In Figure \ref{subfig:WBCF}, the attacker arranges to return to the
 wrong instruction, thereby bypassing the check and publishing {\tt secret} regardless,
 violating the program's {\it well-bracketed control flow} (WBCF.) Figure \ref{subfig:WBCF2}
-also shows an attack that violates WBCF, this time by returning to the correct
+shows another attack that violates WBCF, this time by returning to the correct
 program counter but with the stack pointer offset.
 
 \begin{figure}
@@ -681,16 +697,15 @@ and the stack pointer should be the same as it was before the call.
 Consider the attack in Figure \ref{subfig:WBCF}: the attacker adds
 16 to the return address and then returns, thus bypassing the {\tt if}-test in the code and outputting
 {\tt secret}. Before the call, the program counter is 16 and the stack pointer is 980,
-so we define a predicate \(\ret\)
-on states that should hold just after the return, namely, on states \(\mach\)
-such that \(\mach[\PCname] = 20\) and \(\mach[\SP] = 980\).
-
+so we define a predicate on states that should hold just after the return:
+\(\ret\ \mach \triangleq \mach[\PCname] = 20 \wedge \mach[\SP] = 980\).
+%
 We can identify the point just after the return (if a return occurs)
 as the first state in which the pending call stack is smaller than it was
 just after the call.
 WBCF requires that if \(\mach\) is the state at that point, then \(\ret ~ \mach\) holds.
-For nested calls, where the pending stack is initially larger, the same principle
-applies: \(\ret ~ \mach\) must hold the next time the pending stack is the same size or smaller.
+%For nested calls, where the pending stack is initially larger, the same principle
+%applies: \(\ret ~ \mach\) must hold the next time the pending stack is the same size or smaller.
 
 To see why WBCF also cares about the stack pointer, consider the attack in
 Figure \ref{subfig:WBCF2}. Here the attacker returns with \(\SP' = 998\) instead of the
@@ -717,23 +732,24 @@ As long as a function deallocates the same-sized frame that it allocates, and pr
 saves and restores the return address, it should have WBCF---unless an error in the middle
 subverts those sequences by overwriting one of the relevant elements, or by jumping into
 the middle of the call or return sequence. We can therefore enforce WBCF by (1) ensuring that
-the call and return sequences execute in order and (2) permitting only call and return
+these ``blessed'' call and return sequences execute in order and (2) permitting only blessed
 sequences to write to \(\SP\), {\tt ra}, and the address in memory where {\tt ra} is stored.
 
-Let \(\mathcal{T} ::= \mathit{gen} | \mathit{seq} ~ n ~ m | \mathit{priv}\), named for general
-execution, sequence, and privileged, respectively. Call and return sequences of length \(m\) are
-tagged \(\mathit{seq} ~ 1 ~ m\) through \(\mathit{seq} ~ m ~ l\), and the micro-policy enforces
+To perform this enforcement using tags, we can take
+\(\mathcal{T} ::= \mathit{gen} | \mathit{bseq} ~ n ~ m | \mathit{prot}\), named for general
+execution, blessed sequence, and protected, respectively. Blessed sequences of length \(m\) are
+tagged \(\mathit{bseq} ~ 1 ~ m\) through \(\mathit{bseq} ~ m ~ l\), and the micro-policy enforces
 that they execute in order. The stack pointer and {\tt ra}
-are tagged \(\mathit{priv}\). Only instructions tagged \(\mathit{seq} \dots\) may write to memory
-or registers tagged \(\mathit{priv}\). Store instructions tagged \(\mathit{seq} \dots\) tag their
-targets \(\mathit{priv}\).
+are tagged \(\mathit{prot}\). Only instructions tagged \(\mathit{bseq}\) may write to memory
+or registers tagged \(\mathit{prot}\). Store instructions tagged \(\mathit{bseq}\) tag their
+targets \(\mathit{prot}\).
 
 \paragraph*{Stack Integrity}
 
-Like WBCF, stack integrity defines at the call a condition that must hold upon
+Like WBCF, stack integrity defines a condition at the call that must hold upon
 return. This time the condition applies to all of the memory that a function has
 allocated. In Figure \ref{fig:exec1} we see the lifecycle of an allocated frame:
-upon allocation, the view labeled is \(\object\), and when a call is made, it instead
+upon allocation, the view labels it \(\object\), and when a call is made, it instead
 becomes \(\sealed\). Intuitively, the integrity of {\tt main}
 is preserved if, when control returns to it, it can rely on any \(\sealed\) elements
 to be identical to when it made the call.
@@ -754,20 +770,19 @@ that {\tt main} never reads that corrupted data.
 To illustrate, we can consider two integrity micro-policies: ``Depth Isolation'' and
 ``Lazy Tagging and Clearing.''
 
-Depth Isolation tracks, via a tag on the program counter,
-the depth of the current activation. Stack frames are initialized and cleared, by writing
+Depth Isolation tracks the depth of the current activation via a tag on the program counter.
+Stack frames are initialized and cleared, by writing
 to every address in them, so that during a call at depth \(d\), the current activation's
-frame is tagged with \(d\). Loads and stores targeting addresses so tagged failstop
-if the program counter does not match. In this setting, at depth \(d\), all memory tagged
-with a depth less than \(d\) corresponds to \(\sealed\) memory, and is inaccessible.
-When its depth is reached via a return, it will have the same value, so integrity is
-enforced.
+frame is tagged with \(d\). Loads and stores targeting addresses in frames failstop
+if the program counter tag does not match the frame tag. In this setting, at depth \(d\),
+all memory tagged with a depth less than \(d\) corresponds to \(\sealed\) memory,
+and should be indeed be inaccessible. 
 
-On the other hand, Lazy Tagging and Clearing skips the (problematically linear time)
+On the other hand, Lazy Tagging and Clearing skips the (inefficient)
 initialization and clearing steps, and only updates tags when memory is written to.
 It allows a callee to overwrite sealed memory, but that write tags the corrupted memory
-with the callee's identity. If the corrupted memory's owner (or any other activation) tries
-to read it, only then does the micro-policy failstop.
+with the callee's identity. Only if the corrupted memory's owner (or any other activation) tries
+to read it will the micro-policy failstop.
 
 Lazy Tagging and Clearing illustrates the value of ``extensional'' properties.
 It is common to specify the behavior of a system, including security properties, in
@@ -777,13 +792,15 @@ in the trace. The nature of traces varies based on the properties of interest, b
 given a particular model of observation, we can consider
 corruption by {\tt f} acceptable as long as it does not affect {\tt main}'s observable behavior.
 
-To characterize this situation, we define a state element to be \emph{irrelevant}
+To characterize this situation in a property, we define a state element to be \emph{irrelevant}
 if its value can be replaced with any other value without changing the observable behavior
 of the machine. More precisely, for a set of elements \(\components\),
 a pair of states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if they
-agree on the value of every element except those in \(\components\).
-In the tagged environment, we additionally need the values in \(\components\)
-to agree on tags, but not necessarily their data.
+agree on the value of every element not in \(\components\).
+In the tagged environment, we additionally require that the values of
+\emph{all} elements in \(\mach\) and \(\nach\) agree on their tags. 
+\apt{Right?  This does not generalize so nicely, since we have not defined the
+  non-payload part of values, but it will do ok here, I think.}
 
 The elements of \(\components\) are \emph{irrelevant}
 in \(\mach\) if every variant state produces an equivalent observation trace
@@ -794,7 +811,7 @@ to its original value at the return point.
 
 \begin{figure}
   \includegraphics[width=\columnwidth]{variants.png}
-  \caption{Integrity Violation}
+  \caption{Integrity Violation\apt{Tags are too small to read (also in next figures)}}
   \label{fig:variant}
 \end{figure}
 
@@ -804,12 +821,12 @@ which is \(\sealed\). Figure \ref{fig:variant} shows the state just after the ca
 assuming that {\tt sec} is 5. Similar to WBCF, we will define
 \(\intProp\) as a predicate on states that holds if
 all relevant sealed addresses in \(\mach\) are the same as after step 5.
-We once again require that \(\intProp\) hold on the state following the matching return.
-That state is reached by step 9. Although {\tt sensitive} has changed, it might be
-irrelevant. Consider a variant state in which {\tt sensitive} has any other value, arbitrarily
+We once again require that \(\intProp\) hold on the state following the matching return, 
+which is reached by step 9. Here {\tt sensitive} has obviously changed, but is it relevant?
+Consider a variant state in which {\tt sensitive} has any other value, arbitrarily
 choosing 43 (and keeping its tag, \(t_2'\), unchanged.) As execution continues after the return
 from the original state, it passes the {\tt if}-test on {\tt sensitive}, whereas the execution
-from the variant does not, resulting in differing outputs. Therefore {\tt sensitive} is relevant,
+from the variant does not, resulting in differing outputs. Therefore {\tt sensitive} \emph{is} relevant,
 so \(\intProp\) does not hold, and integrity has indeed been violated.
 
 \paragraph*{Caller Confidentiality}
@@ -861,7 +878,7 @@ In the second case, the return states disagree on the value of \(\SP + 12\). But
 case has that value changed since the original variants. So the difference is inherited from
 the original variation, and does not depend on a secret value either. This matters because,
 following the return, the caller is allowed to access its stack frame, so those addresses
-may influence future execution legitimately.
+may legitmately influence future execution.
 
 But in the case of {\tt a0}, the value has changed during the call (in both the original
 and the variant, although only one of these would be necessary), and its final value
@@ -888,8 +905,8 @@ from \(\mach\) and \(\nach\), respectively.
 Finally, we define caller confidentiality as the 
 combination of internal and return-time confidentiality.
 While we have separated the definitions of integrity and confidentiality,
-in terms of tag-based enforcement, both Depth Isolation and Lazy Tagging and Clearing
-enforce them.
+in terms of tag-based enforcement, Depth Isolation and Lazy Tagging and Clearing
+both enforce both properties. 
 
 \paragraph*{Callee Confidentiality}
 
@@ -926,7 +943,7 @@ Others combine this protection with some degree of memory protection,
 chiefly focusing on integrity. Skorstengaard et al. \cite{SkorstengaardSTK} characterize stack
 safety as the combination of WBCF and {\it local state encapsulation} (LSE), and prove that their
 capability-based enforcement satisfies both. LSE corresponds to integrity, plus the
-confidentiality of the caller's frame, but neither the unallocated stack nor data left
+confidentiality of the caller's frame, but not of the unallocated stack or data left
 behind in it by previous callees.
 They offer a fully abstract overlay semantics, which formalizes WBCF and LSE
 together as a safe-by-construction abstract machine. That machine does not allow a callee to
@@ -1038,6 +1055,7 @@ notion of non-interference involves comparing the traces of such
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
 written \(\mach \approx_\components \nach\), if, for
 all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]\).
+\apt{Needs revision to discuss payloads/tags.}
 
 \definition An element set \(\components\) in state \((\mach,\context)\) contains
 irrelevant values, written \((\mach,\context) \parallel \components\), if for all
