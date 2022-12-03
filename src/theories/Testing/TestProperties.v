@@ -42,6 +42,8 @@ Import RecordSetNotations.
 
 Import ListNotations.
 
+(* NOTE Not concentrating on eager properties at the moment, focusing changes on
+   lazy properties (not including lockstep integrity). *)
 Module TestPropsRISCVSimple
        (M : RISCV)
        (P : Policy M)
@@ -277,12 +279,15 @@ Module TestPropsRISCVSimple
     forAll genMach (fun '(m,p,cm) =>
                       (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
 
+  (* A generic tester for integrity-like properties (no variant generation at
+     the moment) *)
   Definition step_tester
     (cm : CodeMap_Impl) (li : LayoutInfo)
     (fuel : nat)
     (m : RiscvMachine) (p : PolicyState) (ctx : CtxState)
-    (conds : list (nat * (RiscvMachine -> bool)))
-    (gen : RiscvMachine -> (RiscvMachine -> bool))
+    (conds : list (nat * (RiscvMachine -> PolicyState -> CtxState -> bool)))
+    (gen : RiscvMachine -> PolicyState -> CtxState -> CodeMap_Impl ->
+           (RiscvMachine -> PolicyState -> CtxState -> bool))
     : Checker :=
     let fix aux fuel m p ctx conds :=
       (* See if we have enough fuel to take a step, otherwise exit *)
@@ -296,7 +301,7 @@ Module TestPropsRISCVSimple
               (* If we could step, verify that the new state satisfies all
                  active tests, otherwise raise an error *)
               let check_cond '(depth, test) :=
-                negb ((Nat.eqb depth (depthOf ctx')) && (test m')) in
+                negb ((Nat.eqb depth (depthOf ctx')) && (test m' p' ctx')) in
               match seq.all check_cond conds with
               | false => collect "Bad-checks" false
               | true =>
@@ -306,8 +311,9 @@ Module TestPropsRISCVSimple
                   | None => collect "Bad-PC" false (* TODO Check *)
                   | Some ops =>
                       (* Recurse on the new state, where if the instruction
-                         corresponds to a call a new test is added to the
-                         list *)
+                         corresponds to a call (assuming a well-formed code map
+                         without nonsensical lists of operations) a new test is
+                         added to the list *)
                       let is_call op :=
                         match op with
                         | Call _ _ _ => true
@@ -317,8 +323,9 @@ Module TestPropsRISCVSimple
                       | false =>
                           aux fuel' m' p' ctx' conds
                       | true =>
-                          (* m, m', other data? *)
-                          aux fuel' m' p' ctx' ((depthOf ctx, gen m') :: conds)
+                          (* Before or after call? *)
+                          let cond := gen m' p' ctx' cm in
+                          aux fuel' m' p' ctx' ((depthOf ctx, cond) :: conds)
                       end
                   end
               end
@@ -326,6 +333,52 @@ Module TestPropsRISCVSimple
       end
     in
     aux fuel m p ctx conds.
+
+  (* A boolean version of [walk'], where the base case simply checks the
+     accumulator and makes the overall walk succeed iff it is empty (i.e., no
+     elements of interest were changed). *)
+  Fixpoint walk'' (ks : list Element) (cm : CodeMap_Impl) (m : MachineState) (c : CtxState) (m' : MachineState) (p' : PolicyState) (c' : CtxState) (changed : list Element) : bool :=
+    match ks with
+    | [] =>
+      match changed with
+      | [] => true
+      | _ =>
+          (* This does not make sense in this context *)
+        (* (*trace (show (List.length changed) ++ nl)*) *)
+        (* (bindGen (genVariantByList changed m') *)
+        (*          (fun n => *)
+        (*             prop_laziestLockstepIntegrity defFuel m' n p' cm c')) *)
+          false
+      end
+    | k :: ks' =>
+      if integrityComponent c k then
+        if Z.eqb (proj m k) (proj m' k)
+        then walk'' ks' cm m c m' p' c' changed
+        else walk'' ks' cm m c m' p' c' (k::changed)
+      else walk'' ks' cm m c m' p' c' changed
+    end.
+
+  (* The condition for the laziest version of stack integrity becomes the core
+     of [prop_checkAtReturn], where the condition:
+       [if (depthOf ctx' <? depthOf ctxcall)%nat then]
+     should be covered by the framework (TODO beware off-by-one errors!). [m],
+     [p], [ctx] are the state at the time of instantiation (old [mcall],
+     [ctxcall]). The recursive structure of [prop_laziestStackIntegrity] is now
+     handled by the tester as well. *)
+  Definition cond_laziestStackIntegrity
+    (m : RiscvMachine) (p : PolicyState) (ctx : CtxState) (cm : CodeMap_Impl)
+    : RiscvMachine -> PolicyState -> CtxState -> bool :=
+    fun m' p' ctx' =>
+      walk'' (getElements m') cm m ctx m' p' ctx' [].
+
+  (* The top-level properties are now simple instantiations *)
+  Fixpoint prop_laziestStackIntegrity'
+    fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx : Checker.Checker :=
+    step_tester cm i fuel m p ctx [] cond_laziestStackIntegrity.
+
+  Definition prop_laziestIntegrity' :=
+    forAll genMach (fun '(m,p,cm) =>
+                      (prop_laziestStackIntegrity' defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
 
 End TestPropsRISCVSimple.
 

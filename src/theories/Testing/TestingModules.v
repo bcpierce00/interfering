@@ -77,5 +77,6 @@ Module Type TestProps (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : Test
   Parameter prop_integrity : Checker.
   Parameter prop_confidentiality : Checker.
   Parameter prop_laziestIntegrity : Checker.
+  Parameter prop_laziestIntegrity' : Checker. (* NOTE Temporary addition, replace old one later *)
 End TestProps.
 
