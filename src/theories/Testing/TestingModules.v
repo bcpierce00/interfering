@@ -4,58 +4,34 @@ Require Import Coq.Strings.String. Open Scope string_scope.
 
 Module Type LayoutInfo (M : Machine).
   Import M.
+  Module PM := Properties M.
+  Export PM.
 
   Parameter LayoutInfo : Type.
   Parameter defLayoutInfo : LayoutInfo.
   Parameter defStackMap : LayoutInfo -> StackMap.
+  Parameter initCtx : Ctx.
   Parameter CodeMap_Impl : Type.
   Parameter CodeMap_fromImpl : CodeMap_Impl -> CodeMap.
 End LayoutInfo.
 
-Module Type TestCtx (M:Machine) (LI:LayoutInfo M).
+Module Type Gen (M : Machine) (P : Policy M) (LI : LayoutInfo M).
   Import M.
+  Import P.
   Import LI.
-
-  Parameter CtxState : Type.
-  Parameter initCtx : LayoutInfo -> CtxState.
-  Parameter CtxStateUpdate : MachineState -> CodeMap_Impl -> CtxState -> CtxState.
-
-  Parameter interestingComponent : CtxState -> CtxState -> Element -> bool.
-  Parameter integrityComponent : CtxState -> Element -> bool.
-  Parameter confidentialityComponent : CtxState -> Element -> bool.
-  Parameter depthOf : CtxState -> nat.
-End TestCtx.
-
-Module TestMPC (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestCtx M LI).
-  Export M.
-  Export P.
-  Export LI.
-  Export C.
+  Module PM := Properties M.
+  Import PM.
   
-  Definition MPCState : Type := MachineState * PolicyState * CtxState.
-  Definition mstate : MPCState -> MachineState := fun '(m,p,cs) => m.
-  Definition pstate : MPCState -> PolicyState := fun '(m,p,cs) => p.
-  Definition cstate : MPCState -> CtxState := fun '(m,p,cs) => cs.
-  Definition mpcstep (mpc:MPCState) (cm : CodeMap_Impl)
-    : option (MPCState * list Operation * Observation) :=
-    option_map
-      (fun '(m,p,t,o) => (m,p,CtxStateUpdate (mstate mpc) cm (cstate mpc),t,o))
-      (mpstep (mstate mpc,pstate mpc)).
-End TestMPC.
-
-Module Type Gen (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestCtx M LI).
-  Module MPC := TestMPC M P LI C.
-  Import MPC.
-
-  Parameter genVariantOf : nat -> CtxState -> MachineState -> G MachineState.
+  Parameter genVariantOf : nat -> Ctx -> MachineState -> G MachineState.
   Parameter genVariantByList : list Element -> MachineState -> G MachineState.
   
   Parameter genMach : G (MachineState * PolicyState * CodeMap_Impl).
 End Gen.
 
-Module Type Printing (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestCtx M LI).
-  Module MPC := TestMPC M P LI C.
-  Import MPC.
+Module Type Printing (M : Machine) (P : Policy M) (LI : LayoutInfo M).
+  Import M.
+  Import P.
+  Import LI.
 
   Parameter printObsType : Event -> string.
   Instance ShowObsType : Show Event :=
@@ -65,15 +41,15 @@ Module Type Printing (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestC
   Parameter printPC : MachineState -> PolicyState -> string.
   
   Parameter printComponent : Element -> MachineState -> PolicyState ->
-                             CodeMap_Impl -> CtxState -> LayoutInfo -> string.
+                             CodeMap_Impl -> Ctx -> LayoutInfo -> string.
 
-  Parameter printMachine : MachineState -> PolicyState -> CodeMap_Impl -> CtxState -> string.
+  Parameter printMachine : MachineState -> PolicyState -> CodeMap_Impl -> Ctx -> string.
 
-  Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl):=
-    {| show := fun '(m,p,cm) => printMachine m p cm (initCtx defLayoutInfo) |}.
+  Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl) :=
+    {| show := fun '(m,p,cm) => printMachine m p cm initCtx |}.
 End Printing.
 
-Module Type TestProps (M : Machine) (P : Policy M) (LI : LayoutInfo M) (C : TestCtx M LI).
+Module Type TestProps (M : Machine) (P : Policy M) (LI : LayoutInfo M).
   Parameter prop_integrity : Checker.
   Parameter prop_confidentiality : Checker.
   Parameter prop_laziestIntegrity : Checker.

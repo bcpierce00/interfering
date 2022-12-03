@@ -177,7 +177,7 @@ Module TestPropsRISCVSimple
   Definition prop_confidentiality :=
     let sm := defStackMap defLayoutInfo in
     forAll genMach (fun '(m,p,cm) =>
-                      (prop_stackConfidentiality defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).        
+                      (prop_stackConfidentiality defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
 
 
   Fixpoint prop_laziestLockstepIntegrity
