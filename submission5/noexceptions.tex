@@ -9,6 +9,8 @@
 
 \usepackage{xcolor,listings}
 
+\usepackage{tikz}
+
 \usepackage{array,multirow}
 
 \usepackage{stmaryrd}
@@ -322,7 +324,9 @@ modelled (see ~\ref{??}).
 
 Our concurrency model is fairly
 simplistic, assuming a fixed number of threads each with its own dedicated processor.
-\apt{Is concurrency still alive?}
+\sna{There is no concurrency in this document. Attempting to build it in from the beginning
+  was rather complicated. The question is where to put that extra complexity? It's not difficult
+  from a technical standpoint, subject to the one-thread-per-processor constraint.}
 We model memory-safe stack objects, but not a heap. Regions outside of
 stacks can be used however the compiler likes, including as a heap, but no protection is
 built in and our properties assume that if a pointer to a stack object is stored there,
@@ -599,10 +603,10 @@ effect of marking those bytes \(\object\), assuming they were previously
 \(\unsealed\). (We use \(V\llbracket\cdot\rrbracket\) to denote updates to \(V\).)
 %
 
-\newcommand{\freebox}{\includegraphics[height=10px]{free.png}}
-\newcommand{\pubbox}{\includegraphics[height=10px]{public.png}}
-\newcommand{\objbox}{\includegraphics[height=10px]{object.png}}
-\newcommand{\sealbox}{\includegraphics[height=10px]{sealed.png}}
+\newcommand{\freebox}{\tikz \filldraw[fill=blue] (0,0) rectangle (10px,10px);}
+\newcommand{\pubbox}{\tikz \filldraw[fill=lightgray] (0,0) rectangle (10px,10px);}
+\newcommand{\objbox}{\tikz \filldraw[fill=yellow] (0,0) rectangle (10px,10px);}
+\newcommand{\sealbox}{\tikz \filldraw[fill=red] (0,0) rectangle (10px,10px);}
 
 \begin{figure*}
   \begin{tabular}{|r|r||l|r}
@@ -793,17 +797,16 @@ given a particular model of observation, we can consider
 corruption by {\tt f} acceptable as long as it does not affect {\tt main}'s observable behavior.
 
 To characterize this situation in a property, we define a state element to be \emph{irrelevant}
-if its value can be replaced with any other value without changing the observable behavior
-of the machine. More precisely, for a set of elements \(\components\),
-a pair of states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if they
-agree on the value of every element not in \(\components\).
-In the tagged environment, we additionally require that the values of
-\emph{all} elements in \(\mach\) and \(\nach\) agree on their tags. 
-\apt{Right?  This does not generalize so nicely, since we have not defined the
-  non-payload part of values, but it will do ok here, I think.}
+if its value can be replaced with another value without changing the observable behavior
+of the machine. This replacement value must respect any enforcement-relevant constraints on
+values; in the tagged setting, we define two values as variants if they share the same tag
+component. Then, for a set of elements \(\components\),
+a pair of states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if
+they agree on the value of every element not in \(\components\), and the values
+in all elements are variants.
 
 The elements of \(\components\) are \emph{irrelevant}
-in \(\mach\) if every variant state produces an equivalent observation trace
+in \(\mach\) if every \(\components\)-variant state produces an equivalent observation trace
 (see Section \ref{sec:events}); all other elements are \emph{relevant}.
 We characterize \emph{observational integrity} as the property that
 every relevant element that is \(\sealed\) under the callee's view is restored
@@ -811,7 +814,7 @@ to its original value at the return point.
 
 \begin{figure}
   \includegraphics[width=\columnwidth]{variants.png}
-  \caption{Integrity Violation\apt{Tags are too small to read (also in next figures)}}
+  \caption{Integrity Violation}
   \label{fig:variant}
 \end{figure}
 
@@ -869,22 +872,21 @@ To illustrate the issues, note that {\tt f} has also stores a 0 below the stack 
   \label{fig:variant3}
 \end{figure}
 %
-Now consider three elements: the address \(\SP - 4\) (blue), the address \(\SP + 12\) (yellow),
-and the register {\tt a0} (red). In the first case, the execution from the variant state
-has changed the value at \(\SP - 4\). But both return states agree on that value. Therefore,
-while the address was updated, it does not depend on a secret value.
+Now consider three elements: the address \(\SP - 4\), the address \(\SP + 12\),
+and the register {\tt a0}. The execution from the right-hand state to its return
+has changed the value at \(\SP - 4\), but that value matches that of the
+left-hand return. Therefore, the change does not represent a leak.
 
-In the second case, the return states disagree on the value of \(\SP + 12\). But in neither
+The return states disagree on the value of \(\SP + 12\). But in neither
 case has that value changed since the original variants. So the difference is inherited from
-the original variation, and does not depend on a secret value either. This matters because,
-following the return, the caller is allowed to access its stack frame, so those addresses
-may legitmately influence future execution.
+the original variation, and does not represent a leak either. We do not continue executing the
+variant state after return, so these values will not cause the caller to behave differently.
 
 But in the case of {\tt a0}, the value has changed during the call (in both the original
 and the variant, although only one of these would be necessary), and its final value
 differs between the variants.
 Therefore, it must depend on a secret (in fact, the variable {\tt secret}).
-Unless {\tt a0} happens to be irrelevant in the original trace, this is a violation of what
+Unless {\tt a0} happens to be irrelevant, this is a violation of what
 we term {\it return-time confidentiality}.
 
 Structurally, return-time confidentiality resembles integrity, but now dealing with
@@ -1047,15 +1049,18 @@ is the same. That is, we compare up to deletion of \(\tau\) events.
 
 \paragraph*{Variants and Irrelevant Values}
 
+For a given system, assume an equivalence class \(\sim\) on values.
 Two states are variants with respect to a set of elements, \(\components\),
-if they agree on the value of every element not in \(\components\). Our
-notion of non-interference involves comparing the traces of such
-\(\components\)-variants. We use this to define sets of irrelevant elements.
+if they agree on the value of every element not in \(\components\) and
+all of their values are equivalent under \(\sim\).
+Our notion of non-interference involves comparing the traces of such
+\(\components\)-variants. We use this to define sets of irrelevant elements,
+and secrets in general.
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
 written \(\mach \approx_\components \nach\), if, for
-all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]\).
-\apt{Needs revision to discuss payloads/tags.}
+all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]\)
+and for all \(\component\), \(\mach[\component] \sim \nach[\component]\).
 
 \definition An element set \(\components\) in state \((\mach,\context)\) contains
 irrelevant values, written \((\mach,\context) \parallel \components\), if for all
