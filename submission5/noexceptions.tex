@@ -268,7 +268,7 @@ as well as the testing implementation.
   instructions might also be used for other things. We therefore assume that there
   is some external mechanism for distinguishing which instructions are security-relevant;
   the most obvious technique is to add optional labels to instructions, and that is 
-  what we do in this paper, but the theory does not depend on this choice. 
+  what we do in this paper, but the theory does not depend on this choice.
 
   Our security semantics has similarities to the overlay semantics that have been proposed
   to characterize stack safety in the past~\cite{SkorstengaardSTK}, but, like the basic machine
@@ -1259,24 +1259,28 @@ not sealed at a call. This makes these
 regions of memory able to transmit information between caller and callee without
 violating the stack safety properties. Note that there is no way to seal a location
 once it has become \(\public\); only when {\tt x} is deallocated will its region
-be available to allocate privately.
-
+be available to allocate privately. We define a helper function, \(\mathit{range}\),
+to map an offset from a register and a size into a set of addresses.
+%
+\[\mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach \triangleq
+\{\mach[\reg]+i | \mathit{off} \leq i < \mathit{off+sz}\}\]
+%
 \judgmentbr[AllocPriv]
-           {\(b = \mach[\SP] + \mathit{off}\)}
-           {\(V' = V \llbracket \addr \mapsto \sealed |
-             b \leq a < b+\mathit{sz} \land V ~ \addr = \unsealed \rrbracket\)}
+           {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
+             \{\addr \mid V ~ \addr = \unsealed\}\)}
+           {\(V' = V \llbracket \addr \mapsto \sealed \mid \addr \in \components \rrbracket\)}
            {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{f} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
 
 \judgmentbr[AllocPub]
-           {\(b = \mach[\SP] + \mathit{off}\)}
-           {\(V' = V \llbracket \addr \mapsto \public |
-             b \leq a < b+\mathit{sz} \land V ~ \addr = \unsealed \rrbracket\)}
+           {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
+             \{\addr \mid V ~ \addr = \unsealed\}\)}
+           {\(V' = V \llbracket \addr \mapsto \public \mid \addr \in \components \rrbracket\)}
            {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{t} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
 
 \judgmentbr[Dealloc]
-           {\(b = \mach[\SP] + \mathit{off}\)}
-           {\(V' = V \llbracket \addr \mapsto \unsealed |
-             b \leq a < b+\mathit{sz} \land V ~ \addr \in \{\object, \public\} \rrbracket\)}
+           {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
+             \{\addr \mid V ~ \addr = \unsealed\}\)}
+           {\(V' = V \llbracket \addr \mapsto \unsealed \mid \addr \in \components \rrbracket\)}
            {\(Op ~ \mach ~ (\mathbf{dealloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
 
 \subsection{Stack Arguments}
@@ -1324,8 +1328,8 @@ We first define the helpful set \(\mathit{passed} ~ \overline{sa} ~ \mach\),
 then extend the call operation to keep all objects in \(\mathit{passed}\) marked
 as \(\object\) and seal everything else.
 %
-\[\mathit{passed} ~ \overline{sa} ~ \mach \triangleq
-\bigcup_{(\reg,b,o) \in \overline{sa}} \{\mach[\reg]+i | b \leq i < b+o\}\]
+\[\mathit{passed} ~ \overline{sa} ~ \mach = \bigcup_{(\reg,\mathit{off},\mathit{sz}) \in \overline{sa}}
+\mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach\]
 %
 \judgmentbrbr[]
              {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
@@ -1374,8 +1378,9 @@ pops the top of the stack.
 
 Since the caller will not be returned to, it does not need integrity, though
 it should still enjoy confidentiality. We set its frame to \(\unsealed\) rather
-than \(\sealed\) to express this. Of course, some objects may be passed in place,
-easily modeled by including them in \(\overline{sa}\).
+than \(\sealed\) to express this. Of course, some objects may be passed as arguments
+in place, easily modeled by including them in \(\overline{sa}\). More sophisticated
+behaviors may require sequences of {\bf dealloc}, {\bf tailcall}, then {\bf alloc}.
 
 \judgmentbrbr[]
              {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
@@ -1401,14 +1406,16 @@ annotated with the identity of the object they first pointed to. This annotation
 propagated when the pointer is copied and when operations are performed on it---even
 integer-only operations.
 
-We can model this as a pair of additional security-relevant operations: one which
-declares a register to contain a valid pointer, and one which transmits the provenance
-of a pointer from one element to another.
+We can model this as a trio of additional security-relevant operations: one which
+declares a register to contain a valid pointer, one which transmits the provenance
+of a pointer from one element to another, and one which clears the provenance
+(for instance, when a pointer is modified in place in a way that makes it invalid.)
 
 \begin{align*}
   \psi \in \Psi ::= & \dots \\
   & \mathbf{promote} ~ \reg ~ sa & sa \in \REGS \times \mathbb{Z} \times \mathbb{N} \\
   & \mathbf{propagate} ~ \component_{src} ~ \component_{dst} \\
+  & \mathbf{clear} ~ \component \\
 \end{align*}
 
 In addition to the normal call stack, our security context will carry a map \(\rho\) from
@@ -1416,24 +1423,27 @@ elements to memory regions, represented as a base and a bound \(\context = (V, \
 Existing operations are extended to keep the value of \(\rho\) the same, and the new operations
 work as follows:
 
-\judgmenttwobrlong[]
-                  {\(\psi = \mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},sz)\)}
-                  {\(b = \mach[\reg_{base}]+\mathit{off}\)}
-                  {\(\rho' = \rho[\reg \mapsto (b,b+sz)]\)}
-                  {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+\judgmentbr[Promote]
+           {\(\psi = \mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},\mathit{sz})\)}
+           {\(\rho' = \rho[\reg_{dst} \mapsto \mathit{range} ~ \reg_{base} ~ \mathit{off} ~ \mathit{sz}]\)}
+           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
 
-\judgmenttwo[]
-            {\(\psi = \mathbf{propagate} ~ \component_{src} ~ \component_{dst}\)}
-            {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
-            {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+\judgmentbr[Propagate]
+           {\(\psi = \mathbf{propagate} ~ \component_{src} ~ \component_{dst}\)}
+           {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
+           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
 
+\judgment[Clear]
+         {\(\psi = \mathbf{clear} ~ \component\)}
+         {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho[\component \mapsto \emptyset])\)}
+            
 We now have a notion of provenance, and must integrate it into the definition of
 stack safety. We essentially generalize the above notion of passing: we will consider
 a caller to have intentionally passed an object if that object is reachable by
 a capability that has been passed to the callee. This includes capabilities passed
 indirectly, by being stored in an object that is in turn passed. Formally, we call
 this set \(\mathit{capped}\), and define it recursively:
-
+%
 \[\begin{split}
 & \mathit{capped} ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{\component\} \cup \mathit{capped} ~ \components' ~ \rho \textnormal{ where} \\
 & \components' = \{\component' |\rho[\component] = (\mathit{base},\mathit{bound})
@@ -1489,6 +1499,17 @@ On the other hand, an object that is passed via a pointer may be passed on indef
 These document sections lay out a way to present our stack safety properties to build intuition and
 then introduce the formalism. Next the full paper will need the testing section and an expanded
 enforcement section, but these can largely be borrowed from previous submissions.
+
+There are some advanced features that would be nice to work in. Any of these that we support should
+all be folded into the ``advanced machine,'' so that the full formalism is only presented once.
+They can still be explained progressively. First, concurrency: the coroutine properties from earlier
+drafts should translate just fine into this formalism, but the challenge is that concurrency introduces
+non-determinism. I think it's feasible to formalize. I do wonder what level of testing is appropriate;
+two threads switching at intervals and mostly minding their own business seems doable, but the interesting
+parts happen when they interact through memory.
+
+It would also be nice to have a story about exceptions. I've done some thinking about how to model them,
+and we'll want to choose one particular style (e.g., C++-scoping with or without stack unwinding).
 
 \bibliographystyle{IEEEtran}
 \bibliography{bcp.bib,local.bib}
