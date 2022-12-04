@@ -1,5 +1,5 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     RISCVObs DefaultLayout TestSubroutineSimple PrintRISCVTagSimple.
+     RISCVMachine Lazy DefaultLayout PrintRISCVTagSimple.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -23,7 +23,7 @@ Import RecordSetNotations.
 
 Import ListNotations.
 
-Module GenRISCVLazyFixed <: Gen RISCVObs TPLazyFixed DLObs TSSRiscvDefault.
+(*Module GenRISCVLazyFixed <: Gen RISCV TPLazyFixed DLObs TSSRiscvDefault.
   Module MPC := TestMPC RISCVObs TPLazyFixed DLObs TSSRiscvDefault.
   Import MPC.
   Import PrintRISCVLazyFixed.
@@ -705,11 +705,14 @@ Module GenRISCVLazyFixed <: Gen RISCVObs TPLazyFixed DLObs TSSRiscvDefault.
                          end in  
   genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState map.empty
              dataP codeP callP.
-End GenRISCVLazyFixed.
+End GenRISCVLazyFixed.*)
 
-Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
-  Module MPC := TestMPC RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
-  Import MPC.
+Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
+  Import RISCVLazyOrig.
+  Import TagPolicyLazyOrig.
+  Import RISCVDef.
+  Module PM := PM.
+  Import PM.
   Import PrintRISCVLazyOrig.
 
   Definition maxFuel := 100%nat.
@@ -772,17 +775,21 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
         end in
     aux lo len.
     
-  Definition setInstrI addr (m : MachineState) (i : InstructionI) : MachineState :=
+  Definition setInstrI addr (mp : MachineState) (i : InstructionI) : MachineState :=
+    let (m,p) := mp in
     let prog := [encode i] in
-    withXAddrs
+    let m' :=
+      withXAddrs
       (addXAddrRange addr (4 * Datatypes.length prog)
                      (getXAddrs m))
       (withMem
          (unchecked_store_byte_list addr
-                                    (Z32s_to_bytes prog) (getMem m)) m).
+                                    (Z32s_to_bytes prog) (getMem m)) m) in
+    (m',p).
 
-  Definition setInstrTagI addr (p : PolicyState) (t : TagSet) : PolicyState :=
-    p <| memtags := map.put (memtags p) addr t |>.
+  Definition setInstrTagI addr (mp : MachineState) (t : TagSet) : MachineState :=
+    let (m,p) := mp in
+    (m, p <| memtags := map.put (memtags p) addr t |>).
 
   (*
     -- dataP, codeP : Predicates over the tagset to establish potential invariants for code/data pointers.
@@ -813,9 +820,10 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
     combine_match (listify1 m1) (listify1 m2).
   
   Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
-             (m : MachineState) (p : PolicyState)
+             (mp : MachineState)
              (dataP codeP : TagSet -> bool)
     : RegInfo :=
+    let (m,p) := mp in
     let regs := getRegs m in
     let tags := regtags p in
 
@@ -928,13 +936,13 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
   Definition if_true_n (b:bool) (n:nat) :=
     if b then n else O.
   
-  Definition genStackbasedWrite (i : LayoutInfo) (m : MachineState) : G InstructionI :=
-    let spVal := projw m (Reg SP) in
-    bindGen (genSourceReg m)
+  Definition genStackbasedWrite (i : LayoutInfo) (mp : MachineState) : G InstructionI :=
+    let spVal := projw mp (Reg SP) in
+    bindGen (genSourceReg mp)
             (fun rs =>
                freq [ (10%nat, ret (Sw sp rs (-4)))
                     ; (10%nat, ret (Sw sp rs (-8)))
-                    ; (if_true_n (512 <? spVal) 1%nat, ret (Sw sp rs (-12)))
+                    ; (if_true_n (512 <? (wtoz spVal)) 1%nat, ret (Sw sp rs (-12)))
                     ; (if_true_n (516 <? spVal) 2%nat, (ret (Sw sp rs (-16))))
                     ; (if_true_n (520 <? spVal) 2%nat, (ret (Sw sp rs (-20))))
                     ; (1%nat, bindGen (choose (spVal - 500, spVal))
@@ -943,9 +951,9 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
                                       (fun off => ret (Sw sp rs off)))
             ]).
 
-    Definition genStackbasedRead (i : LayoutInfo) (m : MachineState) : G InstructionI :=
-      let spVal := projw m (Reg SP) in
-      bindGen (genTargetReg m)
+    Definition genStackbasedRead (i : LayoutInfo) (mp : MachineState) : G InstructionI :=
+      let spVal := projw mp (Reg SP) in
+      bindGen (genTargetReg mp)
               (fun rd =>
                  freq [ (10%nat, ret (Lw rd sp (-4)))
                       ; (10%nat, ret (Lw rd sp (-8)))
@@ -965,10 +973,10 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
     (Instr_I -> Gen TagSet) -> Gen (Instr_I, TagSet)
    *)
   Definition genInstr (i : LayoutInfo) (t : TagInfo)
-             (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl)
+             (m : MachineState) (cm : CodeMap_Impl)
              (dataP codeP : TagSet -> bool) (f : FunID)
     : G (InstructionI * TagSet * FunID * Operations) :=
-    let groups := groupRegisters i t m p dataP codeP in
+    let groups := groupRegisters i t m dataP codeP in
     let a := arith groups in
     let d := dataPtr groups in
     let c := codePtr groups in
@@ -1078,42 +1086,42 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
      (* 12 *) IInstruction (Addi SP SP 12); (* H2 *)
    *)
   Definition genCall (l : LayoutInfo) (t : TagInfo)
-             (m : MachineState) (p : PolicyState)
+             (mp : MachineState)
              (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
              (callP :  TagSet -> bool) :
-    option (G (list (InstructionI * TagSet * FunID * Operations)))
-    :=
-      let existingSites :=
-          List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
-                   (List.filter (fun '(i,t) => callP t)
-                                (listify1 (memtags p))) in
-      let newCallSites :=
-          let offset_choices :=
-              Zseq 20 (instHi l - instLo l - 50) in
-          let valid_offsets :=
-              List.filter (fun i => Z.leb (word.unsigned (getPc m) + i) (instHi l - 50)) offset_choices in
-          let not_used :=
-              List.filter (fun i =>
-                             match map.get (getMem m) (word.of_Z i) with
-                             | Some _ => false
-                             | None => true
-                             end) valid_offsets in
-          not_used in
-      let exOpts :=
-          (* Existing callsites, lookup fun id *)
-          List.map (fun i => 
-                      match map.get cm (word.unsigned (getPc m) + i) with
-                      | Some _ =>
-                        callHead i f
-                      | _ => exception ("genCall - nofid: " ++ show (word.unsigned (getPc m) + i) ++ nl)%string
-                      end) existingSites  in
-      let newOpts :=
-          List.map (fun i => callSeq i f nextF) newCallSites in
-      match exOpts ++ newOpts with
-      | [] => None
-      | x :: xs =>
+    option (G (list (InstructionI * TagSet * FunID * Operations))) :=
+    let (m,p) := mp in
+    let existingSites :=
+      List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
+               (List.filter (fun '(i,t) => callP t)
+                            (listify1 (memtags p))) in
+    let newCallSites :=
+      let offset_choices :=
+        Zseq 20 (instHi l - instLo l - 50) in
+      let valid_offsets :=
+        List.filter (fun i => Z.leb (word.unsigned (getPc m) + i) (instHi l - 50)) offset_choices in
+      let not_used :=
+        List.filter (fun i =>
+                       match map.get (getMem m) (word.of_Z i) with
+                       | Some _ => false
+                       | None => true
+                       end) valid_offsets in
+      not_used in
+    let exOpts :=
+      (* Existing callsites, lookup fun id *)
+      List.map (fun i => 
+                  match map.get cm (word.unsigned (getPc m) + i) with
+                  | Some _ =>
+                      callHead i f
+                  | _ => exception ("genCall - nofid: " ++ show (word.unsigned (getPc m) + i) ++ nl)%string
+                  end) existingSites  in
+    let newOpts :=
+      List.map (fun i => callSeq i f nextF) newCallSites in
+    match exOpts ++ newOpts with
+    | [] => None
+    | x :: xs =>
         Some (elems_ x (x :: xs))
-      end.
+    end.
   
   Definition returnSeq (f : FunID) :=
     [ (Addi sp sp (-12) , [Tinstr; Tr1], f, [(*noops*)])
@@ -1121,21 +1129,21 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
     ; (Jalr ra ra 0     , [Tinstr; Tr3], f, [Return])
     ].
 
-  Definition genRetSeq (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (f : FunID) :=
+  Definition genRetSeq (m : MachineState) (cm : CodeMap_Impl) (f : FunID) :=
     let spv := projw m (Reg sp) in
-    if (512 <? spv)%Z 
+    if (512 <? (wtoz spv))%Z 
     then Some (returnGen (returnSeq f))
     else None.
 
   Definition genInstrSeq
              (l : LayoutInfo) (t : TagInfo)
-             (m : MachineState) (p : PolicyState)
+             (mp : MachineState)
              (dataP codeP callP : TagSet -> bool)
              (cm : CodeMap_Impl) (f nextF : FunID)
              (fSteps : list nat)
     : G (list (InstructionI * TagSet * FunID * Operations) * (list nat)) :=
     let fromInstr :=
-        bindGen (genInstr l t m p cm dataP codeP f)
+        bindGen (genInstr l t mp cm dataP codeP f)
                 (fun itf => returnGen ([itf])) in
     let '(fFuel, rest) :=
         match fSteps with
@@ -1147,8 +1155,8 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
     let instrFreq := (fFuel - 2)%nat in
     let callFreq := 1%nat in
     let instGen := bindGen fromInstr (fun g => ret (g,fFuel::rest)) in
-    match genCall l t m p cm f nextF callP,
-          genRetSeq m p cm f with
+    match genCall l t mp cm f nextF callP,
+          genRetSeq mp cm f with
     | None, None => instGen
     | None, Some g2 =>
       freq_ instGen ([ (instrFreq, instGen)
@@ -1165,17 +1173,17 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
 
   (* variantOf (fun k => fst c k = Sealed d) m n -> *)
   Definition genVariantOf (d : nat)
-             (c : CtxState) (m : MachineState)
+             (c : Ctx) (m : MachineState)
   : G MachineState :=
     foldGen (fun macc k =>
                (*trace (show ("Varying:", k, fst c k)) *)
                (match fst c k with
-                | Outside =>
+                | public =>
                   returnGen macc
                 | _ =>
                   bindGen (genImm 40) (fun z =>
                                          (*               trace ("Trying to set: " ++ show k ++ " to " ++ show z ++ " which was " ++ show (fst c k) ++ nl ++ "Previous value was: " ++ show (proj macc k) ++ nl ++ " Next value will be: " ++ show (proj (jorp macc k z) k) ++ nl ++ nl)%string *)
-                                         (returnGen (jorp macc k z)))
+                                         (returnGen (jorpw macc k z)))
                 end)
             )
             (getElements m) m .
@@ -1183,7 +1191,7 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
   Definition genVariantByList (ks : list Element) (m : MachineState) : G MachineState :=
     foldGen (fun macc k =>
                match List.find (fun k' => keqb k k') ks with
-               | Some _ => bindGen (genImm 40) (fun z => returnGen (jorp macc k z))
+               | Some _ => bindGen (genImm 40) (fun z => returnGen (jorpw macc k z))
                | None => returnGen macc
                end)
           ks m.
@@ -1204,18 +1212,20 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
   Fixpoint gen_exec_aux (steps : nat)
            (funSteps : list nat)
            (i : LayoutInfo) (t : TagInfo)
-           (m0 : MachineState) (p0 : PolicyState)
-           (m  : MachineState) (p  : PolicyState)
+           (mp0 : MachineState)
+           (mp  : MachineState)
            (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
            (its : list (InstructionI * TagSet * FunID * Operations))
            (dataP codeP callP : TagSet -> bool)
     (* num calls? *)
-    : G (MachineState * PolicyState * CodeMap_Impl) :=
+    : G (MachineState * CodeMap_Impl) :=
+    let '(m0,p0) := mp0 in
+    let '(m,p) := mp in
     (*trace ("GenExec..." ++ show steps ++ " " ++ show its ++ printPC m p ++ nl)%string*)
     match steps with
     | O =>
       (* Out-of-fuel: End generation. *)
-      ret (m0, p0, cm)
+      ret (mp0, cm)
     | S steps' =>
       match map.get (getMem m) (getPc m) with
       | Some _ =>
@@ -1223,13 +1233,11 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
         | nil =>
           (* Instruction already exists, step... *)
           match mpstep (m,p), funSteps with
-          | Some ((m',p'),_t,o), (S n)::ns =>
+          | ((m',p'),_t,o), (S n)::ns =>
             (* ...and recurse. *)
-            gen_exec_aux steps' (n::ns) i t m0 p0 m' p' cm f nextF its codeP dataP callP 
-          | Some ((m',p'),_t,o), _ =>
-            gen_exec_aux steps' funSteps i t m0 p0 m' p' cm f nextF its codeP dataP callP 
-          | _, _ =>
-            (*trace "Something went wrong."*) ret (m0,p0,cm)
+            gen_exec_aux steps' (n::ns) i t mp0 (m',p') cm f nextF its codeP dataP callP 
+          | ((m',p'),_t,o), _ =>
+            gen_exec_aux steps' funSteps i t mp0 (m',p') cm f nextF its codeP dataP callP 
           end
         | _ =>
           (*trace ("Existing instruction mid-sequence" ++ nl)%string*)
@@ -1242,7 +1250,7 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
             | [] =>
               (* Generate an instruction sequence. *)
               (* TODO: Sequences, calls. *)
-              bindGen (genInstrSeq i t m p dataP codeP callP cm f nextF funSteps)
+              bindGen (genInstrSeq i t mp dataP codeP callP cm f nextF funSteps)
                       (fun '(itfas,funSteps') =>
                          match itfas with
                          | (i,t,f',a) :: itfs' =>
@@ -1261,17 +1269,14 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
            (fun '(a, f', (is,it), its, funSteps') =>
               let nextF' := if Nat.eqb f' nextF then
                               S nextF else nextF in
-              let m0' := setInstrI (getPc m) m0 is in
-              let m'  := setInstrI (getPc m) m  is in
-              let p0' := setInstrTagI (word.unsigned (getPc m)) p0 it in
-              let p'  := setInstrTagI (word.unsigned (getPc m)) p it in
+              let mp0' := setInstrI (getPc m) mp0 is in
+              let mp'  := setInstrI (getPc m) mp  is in
+              let mp0'' := setInstrTagI (word.unsigned (getPc m)) mp0' it in
+              let mp''  := setInstrTagI (word.unsigned (getPc m)) mp' it in
               let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
-              match mpstep (m', p') with
-              | Some ((m'', p''), _t, o) =>
-                (gen_exec_aux steps' funSteps' i t m0' p0' m'' p'' cm' f' nextF' its dataP codeP callP)
-              | _ =>
-                (*trace ("Couldn't step" ++ nl(* ++  printMachine m' p' cm' ++ nl*))%string*)
-                      ret (m0', p0', cm')
+              match mpstep mp'' with
+              | (mp''', _t, o) =>
+                (gen_exec_aux steps' funSteps' i t mp0'' mp''' cm' f' nextF' its dataP codeP callP)
               end))
       end
     end.
@@ -1285,8 +1290,9 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
     aux n.
   
   Definition genGPRs (t : TagInfo)
-             (m : MachineState) (p : PolicyState)
-    : G (MachineState * PolicyState) :=
+             (mp : MachineState)
+    : G MachineState :=
+    let (m,p) := mp in
     bindGen (replicateGen 3 (genImm 40)) (fun ds =>
     bindGen (replicateGen 3 (returnGen (regTag t))) (fun ts =>
     let regs :=
@@ -1302,8 +1308,9 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
 
   Definition genDataMemory
              (i : LayoutInfo) (t : TagInfo)
-             (m : MachineState) (p : PolicyState)
-    : G (MachineState * PolicyState) :=
+             (mp : MachineState)
+    : G MachineState :=
+    let (m,p) := mp in
     let idx := Zseq (dataLo i) (dataHi i) in
     bindGen (replicateGen (List.length idx) (genImm (dataHi i))) (fun vals =>           
     bindGen (replicateGen (List.length idx) (returnGen (dataTag t))) (fun tags =>           
@@ -1318,24 +1325,23 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
                  List.fold_right
                    (fun '(z,t) pmem => map.put pmem z t)
                    (memtags p) (List.combine idx tags) |>))).
-
   
   Definition genMachine
              (i : LayoutInfo) (t : TagInfo)
-             (m0 : MachineState) (p0 : PolicyState)
+             (mp0 : MachineState)
              (cm0 : CodeMap_Impl)
              (dataP codeP callP : TagSet -> bool)
-    : G (MachineState * PolicyState * CodeMap_Impl) :=
-    bindGen (genDataMemory i t m0 p0)
-            (fun '(ms,ps) =>
-               bindGen (genGPRs t ms ps)
-                       (fun '(ms', ps') =>
+    : G (MachineState * CodeMap_Impl) :=
+    bindGen (genDataMemory i t mp0)
+            (fun '(mps) =>
+               bindGen (genGPRs t mps)
+                       (fun mps' =>
                           (* Something about sp?
                              let ms'' = ms' & fgpr . at sp ?~ (instrHigh pplus + 4)
                              ps' <- genGPRTs pplus ps (genGPRTag pplus)
                              let ps'' = ps' & pgpr . at sp ?~ spTag
                            *)
-                          (gen_exec_aux maxFuel [funMaxFuel] i t ms' ps' ms' ps' cm0 O (S O)
+                          (gen_exec_aux maxFuel [funMaxFuel] i t mps' mps' cm0 O (S O)
                                         (initSeq O) dataP codeP callP))).
 
   Definition zeroedRiscvMachine: RiscvMachine := {|
@@ -1387,11 +1393,11 @@ Module GenRISCVLazyOrig <: Gen RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
                          | [Tinstr; Th1] => true
                          | _ => false
                          end in  
-  genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState map.empty
+  genMachine defLayoutInfo defTagInfo (zeroedRiscvMachine,zeroedPolicyState) map.empty
              dataP codeP callP.
 End GenRISCVLazyOrig.
 
-Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
+(*Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
   Module MPC := TestMPC RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
   Import MPC.
   Import PrintRISCVLazyNoCheck.
@@ -2758,3 +2764,4 @@ Module GenRISCVLazyNoDepth <: Gen RISCVObs TPLazyNoDepth DLObs TSSRiscvDefault.
   genMachine defLayoutInfo defTagInfo zeroedRiscvMachine zeroedPolicyState map.empty
              dataP codeP callP.
 End GenRISCVLazyNoDepth.
+*)

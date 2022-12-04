@@ -1,12 +1,14 @@
-From StackSafety Require Import MachineModule PolicyModule TestingModules RISCVMachine.
+From StackSafety Require Import MachineModule PolicyModule TestingModules RISCVMachine Lazy.
 
 Import ZArith. Open Scope Z.
 Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Map.Interface.
 
-Module DefaultLayout (M : RISCV) <: LayoutInfo M.
+Module DefaultLayout (M:Machine) <: LayoutInfo M.
+  Module PM := Properties M.
+  Import PM.
   Import M.
-
+  
   Record myLayoutInfo := { instLo : Z
                          ; instHi : Z
                          ; dataLo : Z
@@ -26,17 +28,30 @@ Module DefaultLayout (M : RISCV) <: LayoutInfo M.
      ; stackHi  := 600
     |}.
 
+  Definition initCtx : Ctx :=
+    let V := (fun k =>
+                match k with
+                | PC => public
+                | Reg r => if callee_save r then sealed else free
+                | Mem a => if andb (wle (ztow defLayoutInfo.(stackLo)) a) (wlt a (ztow (defLayoutInfo.(stackHi))))
+                           then free
+                           else public
+                end) in
+    (V, nil).
+                    
   Definition defStackMap (i : LayoutInfo) (a : Addr) : option StackID :=
-    if (andb (Z.leb (stackLo i) a)
-             (Z.leb a (stackHi i)))
+    if (andb (wle (ztow (stackLo i)) a)
+             (wle a (ztow (stackHi i))))
     then
       Some O
     else None.
 
   Definition CodeMap_Impl : Type := Zkeyed_map (option Operations).
   Definition CodeMap_fromImpl (cm : CodeMap_Impl) : CodeMap :=
-    fun addr => match map.get cm addr with
+    fun addr => match map.get cm (wtoz addr) with
                 | Some cs => cs
                 | _ => None
                 end.
 End DefaultLayout.
+
+Module RISCVDef := DefaultLayout RISCVLazyOrig.

@@ -2,7 +2,7 @@ Require Coq.Strings.String. Open Scope string_scope.
 Require Import Coq.Lists.List.
 Import List.ListNotations.
 
-From StackSafety Require Import MachineModule RISCVMachine PolicyModule Eager Lazy.
+From StackSafety Require Import MachineModule RISCVMachine PolicyModule Lazy.
 
 Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.

@@ -15,9 +15,8 @@ Module Type LayoutInfo (M : Machine).
   Parameter CodeMap_fromImpl : CodeMap_Impl -> CodeMap.
 End LayoutInfo.
 
-Module Type Gen (M : Machine) (P : Policy M) (LI : LayoutInfo M).
+Module Type Gen (M : Machine) (LI : LayoutInfo M).
   Import M.
-  Import P.
   Import LI.
   Module PM := Properties M.
   Import PM.
@@ -25,31 +24,30 @@ Module Type Gen (M : Machine) (P : Policy M) (LI : LayoutInfo M).
   Parameter genVariantOf : nat -> Ctx -> MachineState -> G MachineState.
   Parameter genVariantByList : list Element -> MachineState -> G MachineState.
   
-  Parameter genMach : G (MachineState * PolicyState * CodeMap_Impl).
+  Parameter genMach : G (MachineState * CodeMap_Impl).
 End Gen.
 
-Module Type Printing (M : Machine) (P : Policy M) (LI : LayoutInfo M).
+Module Type Printing (M : Machine) (LI : LayoutInfo M).
   Import M.
-  Import P.
   Import LI.
-
+  
   Parameter printObsType : Event -> string.
   Instance ShowObsType : Show Event :=
     {| show o := printObsType o |}.
   Derive Show for Observation.
 
-  Parameter printPC : MachineState -> PolicyState -> string.
+  Parameter printPC : MachineState -> string.
   
-  Parameter printComponent : Element -> MachineState -> PolicyState ->
+  Parameter printComponent : Element -> MachineState ->
                              CodeMap_Impl -> Ctx -> LayoutInfo -> string.
 
-  Parameter printMachine : MachineState -> PolicyState -> CodeMap_Impl -> Ctx -> string.
+  Parameter printMachine : MachineState -> CodeMap_Impl -> Ctx -> string.
 
-  Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl) :=
-    {| show := fun '(m,p,cm) => printMachine m p cm initCtx |}.
+  Instance ShowM : Show (MachineState * CodeMap_Impl) :=
+    {| show := fun '(m,cm) => printMachine m cm initCtx |}.
 End Printing.
 
-Module Type TestProps (M : Machine) (P : Policy M) (LI : LayoutInfo M).
+Module Type TestProps (M : Machine) (LI : LayoutInfo M).
   Parameter prop_integrity : Checker.
   Parameter prop_confidentiality : Checker.
   Parameter prop_laziestIntegrity : Checker.

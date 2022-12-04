@@ -35,11 +35,13 @@ Import RecordSetNotations.
 
 From QuickChick Require Import QuickChick.
 
-Module TagPolicyLazyOrig (M : RISCV) <: Policy M.
-  Import M.
+Module TagPolicyLazyOrig <: TagPolicy RISCV.
+  Import RISCV.
+  Module PM := MachineModule.Properties RISCV.
+  Import PM.
   
   (* TODO: More interesting state/abstract *)
-  Inductive Tag : Type :=
+  Inductive myTag : Type :=
   | Tcall
   | Th1
   | Th2
@@ -52,7 +54,7 @@ Module TagPolicyLazyOrig (M : RISCV) <: Policy M.
   | Tstack (n : nat)
   .
 
-  Definition tag_eqb (t1 t2 :  Tag) : bool :=
+  Definition tag_eqb (t1 t2 : myTag) : bool :=
     match t1, t2 with
     | Tcall, Tcall
     | Th1, Th1
@@ -67,13 +69,13 @@ Module TagPolicyLazyOrig (M : RISCV) <: Policy M.
     | _, _ => false
     end.
 
-  Definition tag_neqb (t1 t2 :  Tag) : bool :=
+  Definition tag_neqb (t1 t2 : myTag) : bool :=
     negb (tag_eqb t1 t2).
 
-  Definition TagSet : Type := list Tag.
+  Definition TagSet : Type := list myTag.
   Definition TagMap : Type := Zkeyed_map TagSet.
 
-  Derive Show for Tag.
+  Derive Show for myTag.
   Derive Show for InstructionI.
 
   Fixpoint printTagSet (ts : TagSet) :=
@@ -85,6 +87,8 @@ Module TagPolicyLazyOrig (M : RISCV) <: Policy M.
   Instance ShowTagSet : Show TagSet :=
     {| show ts := printTagSet ts |}.
 
+  Definition Tag := TagSet.
+  
   (* Map of memory tags *)
   Record myPolicyState : Type :=
     {
@@ -96,29 +100,30 @@ Module TagPolicyLazyOrig (M : RISCV) <: Policy M.
 
   Definition PolicyState := myPolicyState.
 
+  Definition projt (p : PolicyState) (k : Element) : Tag :=
+    let ts :=
+      match k with
+      | Mem a => map.get p.(memtags) a
+      | Reg r => map.get p.(regtags) r
+      | PC => Some p.(pctags)
+      end in
+    match ts with
+    | Some ts => ts
+    | None => []
+    end.
+  
   Instance etaPolicyState : Settable _ :=
     settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
 
-  (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
+  Definition jorpt (p : PolicyState) (k : Element) (t : Tag) : PolicyState :=
     match k with
-    | Mem a =>
-      match map.get (memtags p) a with
-      | Some t => t
-      | _ => nil
-      end
-    | Reg r =>
-      match map.get (regtags p) r with
-      | Some t => t
-      | _ => nil
-      end
-    | PC => pctags p
+    | Mem a => p <| memtags := map.put p.(memtags) a t |>
+    | Reg r => p <| regtags := map.put p.(regtags) r t |>
+    | PC => p <| pctags := t |>
     end.
-
+  
   (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
   Definition MPState : Type := MachineState * PolicyState.
-  Definition ms (mp : MPState) := fst mp.
-  Definition ps (mp : MPState) := snd mp.
 
   (* TODO: Real policy. *)
   (* ...
@@ -138,7 +143,7 @@ Module TagPolicyLazyOrig (M : RISCV) <: Policy M.
       if (negb (existsb (tag_eqb Tsp) trs1))
          && negb (existsb (tag_eqb Tsp) trs2)
           then Some p
-          else trace ("Failstop in Arith" ++ nl) None
+          else (*trace ("Failstop in Arith" ++ nl)*) None
     | _, _, _ => (*trace ("Failstop in Arith" ++ nl)*) None
     end.
 
@@ -264,8 +269,7 @@ Module TagPolicyLazyOrig (M : RISCV) <: Policy M.
     | _ => None
     end.
 
-  Definition pstep (mp : MPState) : option PolicyState :=
-    let '(m, p) := mp in
+  Definition pstep (m : MachineState) (p : PolicyState) : option PolicyState :=
     let pc := getPc m in
     w <- loadWord (getMem m) pc;
     i <- decodeI w;
@@ -292,25 +296,23 @@ Module TagPolicyLazyOrig (M : RISCV) <: Policy M.
     | _ => None
   end.
 
-  Definition mpstep (mp : MPState)
-    : option (MPState * list Operation * Observation) :=
-    p' <- pstep mp;
-    match step (ms mp) with
-    | (m', t, o) => Some (m', p', t, o)
+  Definition mpstep (mp : MPState) : (MPState * list Operation * Observation) :=
+    let '(m,p) := mp in
+    match pstep m p with
+    | Some p' =>
+        let '(m',ops,o) := step m in
+        (m',p',ops,o)
+    | None => (m,p,nil,Tau)
     end.
-
-  Axiom mpstepCompat :
-    forall m p t o m' p',
-      mpstep (m,p) = Some (m',p',t,o) ->
-      step m = (m',t,o).
-
+  
   (* TODO: More interesting well-formedness condition *)
   Definition WFInitMPState (mp:MPState) := True.
 
 End TagPolicyLazyOrig.
 
+Module RISCVLazyOrig := RISCVTagged TagPolicyLazyOrig.
 
-Module TagPolicyLazyNoCheck (M : RISCV) <: Policy M.
+(*Module TagPolicyLazyNoCheck (M : RISCV) <: Policy M.
   Import M.
   
   (* TODO: More interesting state/abstract *)
@@ -1125,3 +1127,4 @@ Module TagPolicyLazyFixed (M : RISCV) <: Policy M.
   Definition WFInitMPState (mp:MPState) := True.
 
 End TagPolicyLazyFixed.
+*)

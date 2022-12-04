@@ -1,7 +1,6 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     RISCVMachine RISCVObs DefaultLayout TestSubroutineSimple
-     PrintRISCVTagSimple GenRISCVTagSimple
-     PrintRISCVTagSimpleEager GenRISCVTagSimpleEager.
+     DefaultLayout Lazy
+     PrintRISCVTagSimple GenRISCVTagSimple.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -44,25 +43,18 @@ Import ListNotations.
 
 (* NOTE Not concentrating on eager properties at the moment, focusing changes on
    lazy properties (not including lockstep integrity). *)
-Module TestPropsRISCVSimple
-       (M : RISCV)
-       (P : Policy M)
-       (LI : LayoutInfo M)
-       (C : TestCtx M LI)
-       (GenImp : Gen M P LI C)
-       (PrintImp : Printing M P LI C)
-  : TestProps M P LI C.
-  Module MPC := TestMPC M P LI C.
-  Import MPC.
-  Import GenImp.
-  Import PrintImp.
+Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
+  Import RISCVLazyOrig.
+  Import TagPolicyLazyOrig.
+  Import RISCVDef.
+  Import PM.
   
   Definition defFuel := 42%nat.
 
   Definition sameDifferenceP (m m' n n' : MachineState) k :=
-    if (orb (negb (Z.eqb (proj m k) (proj m' k)))
-            (negb (Z.eqb (proj n k) (proj n' k)))) then
-      Z.eqb (proj m' k) (proj n' k) 
+    if (orb (negb (Z.eqb (projw m k) (projw m' k)))
+            (negb (Z.eqb (projw n k) (projw n' k)))) then
+      Z.eqb (projw m' k) (projw n' k) 
     else true.
   
   Definition calcTraceDiff cm (m m' : MachineState) (p p' : PolicyState) (c c' : CtxState) (i : LayoutInfo) (o : Observation) : unit -> string :=

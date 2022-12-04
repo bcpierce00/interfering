@@ -1,6 +1,6 @@
 Require Coq.Strings.String. Open Scope string_scope.
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     RISCVMachine RISCVObs DefaultLayout TestSubroutineSimple.
+     RISCVMachine DefaultLayout Lazy.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -13,7 +13,7 @@ Require Import coqutil.Map.Z_keyed_SortedListMap.
 Require Import coqutil.Map.Interface.
 Require Import Coq.Lists.List. Import ListNotations.
 
-Module PrintRISCVLazyFixed : Printing RISCVObs TPLazyFixed DLObs TSSRiscvDefault.
+(*Module PrintRISCVLazyFixed : Printing RISCV TPLazyFixed DLObs TSSRiscvDefault.
   Module MPC := TestMPC RISCVObs TPLazyFixed DLObs TSSRiscvDefault.
   Import MPC.
 
@@ -157,19 +157,22 @@ Module PrintRISCVLazyFixed : Printing RISCVObs TPLazyFixed DLObs TSSRiscvDefault
   Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl):=
     {| show := fun '(m,p,cm) => printMachine m p cm (initCtx defLayoutInfo) |}.
 
-End PrintRISCVLazyFixed.
+End PrintRISCVLazyFixed.*)
 
-Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
-  Module MPC := TestMPC RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
-  Import MPC.
+Module PrintRISCVLazyOrig : Printing RISCVLazyOrig RISCVDef.
+  Import RISCVLazyOrig.
+  Import TagPolicyLazyOrig.
+  Import RISCVDef.
+  Import PM.
 
   Definition printObsType (o:Event) := "".
   Instance ShowObsType : Show Event :=
     {| show o := printObsType o |}.
   Derive Show for Observation.
 
-  Definition printPC (m : MachineState) (p : PolicyState) :=
-  (show (projw m PC) ++ " @ " ++ show (pctags p))%string.
+  Definition printPC (m : MachineState) :=
+    let (w,t) := proj m PC in
+    (show w ++ " @ " ++ show t)%string.
 
   Definition printPCs (m n : MachineState) (p : PolicyState) :=
     let val1 := projw m PC in
@@ -190,14 +193,13 @@ Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
          | Dealloc _ _ => "Dealloc"
          end |}.
 
-  Derive Show for StackDomain.
+  Derive Show for Sec.
   
   Definition printComponent (k : Element)
-           (m : MachineState) (p : PolicyState)
-           (cm : CodeMap_Impl) (c : CtxState)
+           (m : MachineState)
+           (cm : CodeMap_Impl) (c : Ctx)
            (i : LayoutInfo) :=
-  let val := proj m k in
-  let tag := pproj p k in
+  let (val,tag) := proj m k in
   match k with
   | Mem a =>
     (* Check if in instruction memory *)
@@ -212,8 +214,8 @@ Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
       ("[" ++ show a ++ "]" ++ show val ++ " @" ++ show tag ++ " < " ++ show (CodeMap_fromImpl cm a) ++ " > - " ++ show (fst c (Mem a)))%string
   | Reg r => 
     ("r" ++ show r ++ " : " ++ show val ++ " @ " ++ show tag) %string
-  | PC => ("PC: " ++ printPC m p ++ " - " ++
-      match decode RV32I (proj m (Mem val)) with
+  | PC => ("PC: " ++ printPC m ++ " - " ++
+      match decode RV32I (projw m (Mem val)) with
       | IInstruction inst =>
         (show inst)
       | _ => (show val ++ " <not-inst>")%string
@@ -241,10 +243,11 @@ Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
              (m2 : Zkeyed_map B) : list (Z * A * B) :=
     combine_match (listify1 m1) (listify1 m2).
 
-  Definition printGPRs (m : MachineState) (p : PolicyState) :=
+  Definition printGPRs (mp : MachineState) :=
+    let '(m,p) := mp in
     List.fold_left (fun acc '(rID, rVal, rTag) =>
                       show rID ++ " : " ++ show rVal ++ " @ " ++ show rTag ++ nl ++ acc)%string 
-                   (listify2 (getRegs m) (regtags p)) "".
+                   (listify2 (RiscvMachine.getRegs m) (regtags p)) "".
 
   Definition listify1_word mem := 
   List.rev
@@ -261,8 +264,9 @@ Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
             (word.unsigned k,val) :: acc
           else acc) nil mem).
 
-  Definition printMem (m : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c : CtxState) (i : LayoutInfo) :=
-    let mem := getMem m in
+  Definition printMem (mp : MachineState) (cm : CodeMap_Impl) (c : Ctx) (i : LayoutInfo) :=
+    let (m,p) := mp in
+    let mem := RiscvMachine.getMem m in
     let tags := memtags p in
     let mts := combine_match (listify1_word mem) (listify1 tags) in
     List.fold_left
@@ -285,27 +289,27 @@ Module PrintRISCVLazyOrig : Printing RISCVObs TPLazyOrig DLObs TSSRiscvDefault.
       ) mts "".
 
   
-  Definition printMachine (m : MachineState) (p : PolicyState) cm c :=
+  Definition printMachine (m : MachineState) cm c :=
     (
       "PC:" ++  
-      printPC m p ++ nl ++
+      printPC m ++ nl ++
       "Registers:" ++ nl ++
-      printGPRs m p ++ nl ++
+      printGPRs m ++ nl ++
       "Memory: " ++ nl ++
-      printMem m p cm c defLayoutInfo ++ nl
+      printMem m cm c defLayoutInfo ++ nl
     )%string.
 
   Derive Show for Element.
 
-  Instance ShowValue : Show Value :=
-    {| show v := show v |}.
-
-  Instance ShowMP : Show (MachineState * PolicyState * CodeMap_Impl):=
-    {| show := fun '(m,p,cm) => printMachine m p cm (initCtx defLayoutInfo) |}.
+(*  Instance ShowValue : Show Value :=
+    {| show v := show v |}.*)
+  
+  Instance ShowM : Show (MachineState * CodeMap_Impl):=
+    {| show := fun '(m,cm) => printMachine m cm initCtx |}.
 
 End PrintRISCVLazyOrig.
 
-Module PrintRISCVLazyNoCheck : Printing RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
+(*Module PrintRISCVLazyNoCheck : Printing RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
   Module MPC := TestMPC RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
   Import MPC.
 
@@ -596,3 +600,4 @@ Module PrintRISCVLazyNoDepth : Printing RISCVObs TPLazyNoDepth DLObs TSSRiscvDef
     {| show := fun '(m,p,cm) => printMachine m p cm (initCtx defLayoutInfo) |}.
 
 End PrintRISCVLazyNoDepth.
+*)

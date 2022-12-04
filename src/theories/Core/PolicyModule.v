@@ -1,22 +1,28 @@
 From StackSafety Require Import MachineModule.
 
-Module Type Policy(M:Machine).
+Module Type TagPolicy (M : Machine).
   Import M.
-
+  
+  Parameter Tag : Type.
+  
   Parameter PolicyState : Type.
 
-  (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
+  Parameter projt : PolicyState -> Element -> Tag.
+  Parameter jorpt : PolicyState -> Element -> Tag -> PolicyState.
+  
   Definition MPState : Type := MachineState * PolicyState.
 
-  Parameter pstep : MPState -> option PolicyState.
+  Parameter pstep : MachineState -> PolicyState -> option PolicyState.
 
-  Parameter mpstep : MPState -> option (MPState * list Operation * Observation).
-
-  Parameter mpstepCompat :
-    forall m p t o m' p',
-      mpstep (m,p) = Some (m',p',t,o) ->
-      step m = (m',t,o).
+  Definition mpstep (mp : MPState) : (MPState * list Operation * Observation) :=
+    let '(m,p) := mp in
+    match pstep m p with
+    | Some p' =>
+        let '(m',ops,o) := step m in
+        (m',p',ops,o)
+    | None => (m,p,nil,Tau)
+    end.
 
   Parameter WFInitMPState : MPState -> Prop.
 
-End Policy.
+End TagPolicy.

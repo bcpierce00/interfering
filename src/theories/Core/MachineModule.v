@@ -15,11 +15,13 @@ Module Type Machine.
           in failwith (""Exception: "" ^ Bytes.to_string (copy 0 l)))". *)
 
 
+  Parameter Value : Type.
   Parameter Word : Type.
   Definition Addr := Word.
-  (*Parameter Addr : Type.*)
 
-  (*Parameter wtoa : Word -> option Addr.*)
+  Parameter vtow : Value -> Word.
+  Parameter ztow : Z -> Word.
+  Parameter wtoz : Word -> Z.
   
   Parameter wlt : Word -> Word -> bool.
   (*Parameter alt : Addr -> Addr -> bool.*)
@@ -62,20 +64,22 @@ Module Type Machine.
   Parameter callee_save : Register -> bool.
   Parameter RA_callee_save : callee_save RA = true.
   Parameter SP_callee_save : callee_save SP = true.
-  
-  Inductive Element :=
-  | Mem (a:Addr)
-  | Reg (r:Register)
-  | PC.
+
+  Inductive Element : Type :=
+  | Mem : Addr -> Element
+  | Reg : Register -> Element
+  | PC : Element.
 
   Parameter keqb : Element -> Element -> bool.
 
   Parameter MachineState : Type.
 
-  Parameter proj : MachineState -> Element -> Word.
+  Parameter proj : MachineState -> Element -> Value.
+  Parameter projw : MachineState -> Element -> Word.
 
   (* Maybe name this pullback instead *)
-  Parameter jorp : MachineState -> Element -> Word -> MachineState.
+  Parameter jorp : MachineState -> Element -> Value -> MachineState.
+  Parameter jorpw : MachineState -> Element -> Word -> MachineState.
   
   Parameter getElements : MachineState -> list Element.
   
@@ -114,7 +118,7 @@ Module Type Machine.
   (* Stack ID of stack pointer *)
   Definition activeStack (sm: StackMap) (m: MachineState) :
     option StackID :=
-    sm (proj m (Reg SP)).
+    sm (projw m (Reg SP)).
 
   Definition stack_eqb : StackID -> StackID -> bool :=
     Nat.eqb.
@@ -143,14 +147,14 @@ Module Properties (M:Machine).
 
   Definition View : Type := Element -> Sec.
   
-  Definition Ctx : Type := View * list (View * Addr * Addr).
+  Definition Ctx : Type := View * list View.
 
   Definition State : Type := MachineState * Ctx.
 
   Definition in_range (m:MachineState) (a:Addr) (range:Register*Z*Z) : bool :=
     let '(r,off,sz) := range in
-    wle (wplus (proj m (Reg r)) off) a &&
-      wlt a (wplus (wplus (proj m (Reg r)) off) sz).    
+    wle (wplus (projw m (Reg r)) off) a &&
+      wlt a (wplus (wplus (projw m (Reg r)) off) sz).    
 
   Definition arg_view (m:MachineState) (V:View) (reg_args:list Register)
              (stk_args:list (Register*Z*Z)) : View :=
@@ -170,7 +174,7 @@ Module Properties (M:Machine).
              (stk_args:list (Register*Z*Z)) : Ctx :=
     let '(V, σ) := c in
     let V' := arg_view m V reg_args stk_args in
-    (V', (V, wplus (proj m PC) 4, proj m (Reg SP))::σ).
+    (V', V::σ).
 
   Definition tail_call_op (m:MachineState) (c:Ctx) (f:FunID) (reg_args:list Register)
              (stk_args:list (Register*Z*Z)) : Ctx :=
@@ -180,7 +184,7 @@ Module Properties (M:Machine).
 
   Definition return_op (c:Ctx) : Ctx :=
     match c with
-    | (V', (V,_,_)::σ) => (V, σ)
+    | (V', V::σ) => (V, σ)
     | (V, []) => (V, [])
     end.
   
@@ -297,18 +301,12 @@ Module Properties (M:Machine).
       variantOf K m n ->
       TraceEq (trace s) (trace (n,c)).
 
-  Definition WBCF_prime : Prop :=
-    forall m V V' a_ret a_sp σ m' c ψs e,
-      cstep (m, (V, (V',a_ret,a_sp)::σ)) = (m',c,ψs,e) ->
-      In Return ψs ->
-      proj m' PC = a_ret /\ proj m' (Reg SP) = a_sp.
-
-  Definition WBCF_alt : Prop :=
-    forall m V V' a_ret a_sp σ m' c ψs e f reg_args stk_args,
-      cstep (m, (V, (V',a_ret,a_sp)::σ)) = (m',c,ψs,e) ->
+  Definition WBCF : Prop :=
+    forall m V V' σ m' c ψs e f reg_args stk_args,
+      cstep (m, (V, V'::σ)) = (m',c,ψs,e) ->
       In (Call f reg_args stk_args) ψs ->
-      on_return (m',c) (length σ) (fun '(m'',_) => proj m' PC = wplus (proj m PC) 4 /\
-                                                     proj m' (Reg SP) = proj m (Reg SP)).
+      on_return (m',c) (length σ) (fun '(m'',_) => projw m' PC = wplus (projw m PC) 4 /\
+                                                     projw m' (Reg SP) = projw m (Reg SP)).
 
   Definition Delta (m1 m2:MachineState) (k:Element) : Prop :=
     proj m1 k <> proj m2 k.
