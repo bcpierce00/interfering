@@ -1,8 +1,8 @@
 all:
-	pdflatex noexceptions
-	-bibtex noexceptions
-	-pdflatex noexceptions
-	-pdflatex noexceptions
+	pdflatex core
+	-bibtex core
+	-pdflatex core
+	-pdflatex core
 ifeq ($(USER),bcpierce)
 	-cp -f ~/common/bib/bcp.bib .
 	chmod a-w bcp.bib
