@@ -173,7 +173,6 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     forAll genMach (fun '(m,p,cm) =>
                       (prop_stackConfidentiality defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
 
-
   Fixpoint prop_laziestLockstepIntegrity
            fuel m n p cm ctx
     : Checker.Checker :=
@@ -371,6 +370,113 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   Definition prop_laziestIntegrity' :=
     forAll genMach (fun '(m,p,cm) =>
                       (prop_laziestStackIntegrity' defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
+
+  (* From above, only operating on MPCState *)
+  Definition cond_confidentiality (m m' n n' : MPCState) : bool :=
+    let '(ms, _, _) := m in
+    let '(ms', _, _) := m' in
+    let '(ns, _, _) := n in
+    let '(ns', _, _) := n' in
+    List.forallb (sameDifferenceP ms ms' ns ns') (getElements ms').
+
+  (* TODO Monadic notation for added readability *)
+  Definition confidentiality_tester
+    (cm : CodeMap_Impl) (li : LayoutInfo)
+    (fuel : nat)
+    (mcur : MPCState) (stk : list (MPCState * nat * MPCState * MPCState))
+    : Checker :=
+    let fix aux fuel mcur stk :=
+      (* See if we have enough fuel to take a step, otherwise exit *)
+      match fuel with
+      | O => collect "Out-of-Fuel" true
+      | S fuel' =>
+          (* Try to take a step, exit if we are stuck *)
+          match mpcstep mcur cm with
+          | None => collect "Failstop" true
+          | Some (m', _ops, _obs) =>
+              (* If the main run steps, try to take the same step in all current
+                 variants (this should be the same step, with the same
+                 operations, but we do not check this at the moment) *)
+              let step_var '(ncur, depth, mcall, ncall) :=
+                match mpcstep ncur cm with
+                | None => None
+                | Some (n', ops, _obs) => (* No observations for now *)
+                    Some (ncur, n', depth, mcall, ncall, ops)
+                end
+              in
+              let stk' := seq.pmap step_var stk in
+              match (seq.size stk =? seq.size stk')%nat with
+              | false => collect "Out-of-Sync" false
+              | true =>
+                  (* No general checks being performed at the moment, only lazy
+                     confidentiality; continue checking the current operation.
+                     The temporary stack is decorated with the observations and
+                     original pre-step states, which are used to check to find
+                     return points as they occur, perform checks and pop
+                     variants from the stack. *)
+                  let check_var '(ncur, n', depth, mcall, ncall, ops) :=
+                    let is_ret op :=
+                      match op with
+                      | Return => true
+                      | _ => false
+                      end in
+                    match seq.has is_ret ops, (depthOf (snd n') =? depth)%nat with
+                    | true, true =>
+                        (* ... *)
+                        match cond_confidentiality mcur m' ncur n' with
+                        | false => None (* Error *)
+                        | true =>
+                            Some [] (* Pop variant *)
+                        end
+                    | _, _ => (* TODO Check missing/nonsensical cases *)
+                        Some [(n', depth, mcall, ncall)] (* Update variant *)
+                    end
+                  in
+                  let stk'' := seq.map check_var stk' in
+                  let stk''' := seq.pmap id stk'' in
+                  let stk'''' := seq.flatten stk''' in
+                  (* We need to distinguish three possible outcomes:
+                     - Return at matching depth, successful check, variant pop
+                     - Return at matching depth, failed check, error
+                     - Other step, no changes
+                     Here using options of 0-or-1-element lists
+                     Other checks are possible, e.g., only once check should
+                     take place at most (currently not done)
+                     The check that is in place is *)
+                  match (seq.size stk'' =? seq.size stk''')%nat with
+                  | false => collect "Confidentiality-Violation" false
+                  | true =>
+                      match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst mcur)))) with
+                      | None => collect "Bad-PC" false (* TODO Check *)
+                      | Some ops =>
+                          let is_call op :=
+                            match op with
+                            | Call _ _ _ => true
+                            | _ => false
+                            end in
+                          match seq.has is_call ops with
+                          | false =>
+                              aux fuel' m' stk''''
+                          | true =>
+                              (* Before or after call? *)
+                              let '(ms', ps', cs') := m' in
+                              (* From above, somewhat simplified *)
+                              let secret := List.filter (fun k => confidentialityComponent cs' k) (getElements ms') in
+                                 bindGen (genVariantByList secret ms')
+                                   (fun n =>
+                                      let npc := (n, ps', cs') in (**)
+                                      let frame := (npc, depthOf cs', mcur, npc (**)) in
+                                      (conjoin
+                                         ([aux fuel' m' (frame :: stk'''')]))
+                                   )
+                          end
+                      end
+                  end
+              end
+          end
+      end
+    in
+    aux fuel mcur stk.
 
 End TestPropsRISCVSimple.
 
