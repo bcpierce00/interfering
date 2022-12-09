@@ -125,7 +125,8 @@ Module RISCV <: Machine.
   Definition regEqb : Register -> Register -> bool := Z.eqb.
 
   (* TODO *)
-  Parameter is_callee_save : Register -> bool.
+  (* Parameter is_callee_save : Register -> bool. *)
+  Definition is_callee_save (r : Register) : bool := false. (* FIXME *)
 
   Definition callee_save (r : Register) : bool :=
     match r with

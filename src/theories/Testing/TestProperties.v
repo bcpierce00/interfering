@@ -472,6 +472,14 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     in
     aux fuel mcur stk.
 
+  Fixpoint prop_lazyStackConfidentiality
+    fuel (i : LayoutInfo) m (cm : CodeMap_Impl) ctx : Checker.Checker :=
+    confidentiality_tester cm i fuel (m, ctx) [].
+
+  Definition prop_lazyConfidentiality :=
+    forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
+                      (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
+
 End TestPropsRISCVSimple.
 
 (* Module TestRISCVEager := TestPropsRISCVSimple RISCVObs TPEager DLObs *)
@@ -509,6 +517,9 @@ End TestPropsRISCVSimple.
 
 Extract Constant defNumTests => "5000".
 
+(* Print Assumptions TestPropsRISCVSimple.prop_lazyConfidentiality. *)
+Time QuickCheck TestPropsRISCVSimple.prop_lazyConfidentiality.
+
 (* Import TestRISCVEager. *)
 (* Import TestRISCVEagerNLC. *)
 (* Import TestRISCVEagerNSC. *)
@@ -534,10 +545,10 @@ Time QuickCheck TestRISCVEagerNI.prop_integrity.*)
    How we managed to make coq code diverge...
 Time QuickCheck TestRISCVEager.prop_confidentiality.*) *)
 
-Import TestRISCVLazyOrig.
-Import TestRISCVLazyNoDepth.
-Import TestRISCVLazyNoCheck.
-Import TestRISCVLazyFixed.
+(* Import TestRISCVLazyOrig. *)
+(* Import TestRISCVLazyNoDepth. *)
+(* Import TestRISCVLazyNoCheck. *)
+(* Import TestRISCVLazyFixed. *)
 
 (*Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity. (* Fails *)
 Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.
