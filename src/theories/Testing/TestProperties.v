@@ -1,4 +1,4 @@
-From StackSafety Require Import MachineModule PolicyModule TestingModules
+From StackSafety Require Import MachineModule PolicyModule CtxModule TestingModules
      DefaultLayout Lazy
      PrintRISCVTagSimple GenRISCVTagSimple.
 
@@ -56,279 +56,278 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
             (negb (Z.eqb (projw n k) (projw n' k)))) then
       Z.eqb (projw m' k) (projw n' k) 
     else true.
-  
-  Definition calcTraceDiff cm (m m' : MachineState) (p p' : PolicyState) (c c' : CtxState) (i : LayoutInfo) (o : Observation) : unit -> string :=
+
+  (* Lifting of Z.eqb, ignoring tags *)
+  Definition Value_equivb (v1 v2 : Value) : bool :=
+    let '(w1, t1) := v1 in
+    let '(w2, t2) := v2 in
+    Z.eqb w1 w2.
+
+  (* Depends on deleted code from TestSubroutineSimple *)
+  Definition calcTraceDiff cm (m m' : MachineState) (* (p p' : PolicyState) *) (c c' : Ctx) (i : LayoutInfo) (o : Observation) : unit -> string :=
     let compsToTrace :=
         List.filter (fun k => 
-                       (orb (negb (Z.eqb (proj m k) (proj m' k)))
-                            (interestingComponent c c' k)))
+                       (orb (negb (Value_equivb (proj m k) (proj m' k)))
+                            false))
+                            (* (interestingComponent c c' k))) *) (* FIXME *)
                                   (*(andb (TagSet_eqb (pproj p k) (pproj p k))*)
                     (getElements m') in
     (fun tt => 
        ("Observation: " ++ show o ++ nl ++
                         "from: " ++ nl ++
-                        concatStr (List.map (fun k => printComponent k m p cm c i ++ nl) compsToTrace) ++ 
+                        concatStr (List.map (fun k => PrintRISCVLazyOrig.printComponent k m cm c i ++ nl) compsToTrace) ++
                         "to: " ++ nl ++
-                        concatStr (List.map (fun k => printComponent k m' p' cm c' i ++ nl) compsToTrace) ++ nl)%string).
+                        concatStr (List.map (fun k => PrintRISCVLazyOrig.printComponent k m' cm c' i ++ nl) compsToTrace) ++ nl)%string).
 
-  
-  Fixpoint walk (ks : list Element) (cm : CodeMap_Impl) (m : MachineState) (p : PolicyState) (c : CtxState) (m' : MachineState) (p' : PolicyState) (c' : CtxState) (traceOut : list (unit -> string))
+  (* Depends on deleted code from TestSubroutineSimple *)
+  Definition integrityComponent (c : Ctx) (k : Element) :=
+    match fst c k with
+    | sealed => true
+    | _ => false
+    end.
+
+  Fixpoint walk (ks : list Element) (cm : CodeMap_Impl) (m : MachineState) (c : Ctx) (m' : MachineState) (c' : Ctx) (traceOut : list (unit -> string))
            (cont : unit -> Checker) : Checker :=
     match ks with
     | [] => cont tt
     | k :: ks' =>
       if integrityComponent c k then
-        if Z.eqb (proj m k) (proj m' k)
-        then walk ks' cm m p c m' p' c' traceOut cont
+        if Value_equivb (proj m k) (proj m' k)
+        then walk ks' cm m c m' c' traceOut cont
         else (*whenFail ("Initial Machine:" ++ nl ++
                                           concatStr (List.rev (List.map (fun f => f tt) traceOut)) ++
                                           "Integrity failure at component: " ++ show k ++ nl ++
                                           "Component values: " ++ show (proj m k) ++ " vs " ++ show (proj m' k) ++ nl ++
                                           "Final state: " ++ nl ++
                                           printMachine m p cm c)%string*) checker false
-      else walk ks' cm m p c m' p' c' traceOut cont
+      else walk ks' cm m c m' c' traceOut cont
     end.
   
-  Definition prop_SimpleStackIntegrityStep fuel i m p cm ctx
+  Definition prop_SimpleStackIntegrityStep fuel i m cm ctx
     : Checker.Checker :=
-    let fix aux fuel m p ctx traceOut : Checker.Checker :=
+    let fix aux fuel m ctx traceOut : Checker.Checker :=
         match fuel with
         | O => collect "Out-of-Fuel" true
         | S fuel' => 
-          match mpcstep (m,p,ctx) cm with
-          | None => collect ("Failstop", fuel) true
-          | Some (m', p', c', t, o) =>
-            let traceDiff :=
-                calcTraceDiff cm m m' p p' ctx c' i o in
-            walk (getElements m') cm m p ctx m' p' c'
-                 (traceDiff :: traceOut)
-                 (fun tt => aux fuel' m' p' c' (traceDiff :: traceOut))
-          end
+          let '(m', c', t, o) := cstep (m,ctx) in (* No failstop *)
+          let traceDiff :=
+            calcTraceDiff cm m m' ctx c' i o in
+          walk (getElements m') cm m ctx m' c'
+            (traceDiff :: traceOut)
+            (fun tt => aux fuel' m' c' (traceDiff :: traceOut))
         end in
-    aux fuel m p ctx ([fun tt => (*printMachine m p cm ctx*) ""]).
+    aux fuel m ctx ([fun tt => (*printMachine m p cm ctx*) ""]).
 
   Definition prop_integrity :=
     let sm := defStackMap defLayoutInfo in
-    forAll genMach (fun '(m,p,cm) =>
-                      (prop_SimpleStackIntegrityStep defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
-  
+    forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
+                      (prop_SimpleStackIntegrityStep defFuel defLayoutInfo m cm initCtx)).
+
+  (* - endP could depend on the policy state now
+     - cstep can't failstop, doesn't use cm *)
   Fixpoint prop_lockstepConfidentiality
          (fuel :nat)
-         (m n : MachineState) (p : PolicyState)
-         (cm : CodeMap_Impl) (ctx : CtxState)
-         (endP : MPCState -> bool)
+         (m n : MachineState)
+         (cm : CodeMap_Impl) (ctx : Ctx)
+         (endP : State -> bool)
     : Checker.Checker :=
     (* trace (printMachines m n p cm ctx ++ nl)   *)
     match fuel with
     | O => checker true
     | S fuel' => 
-      match endP (m,p,ctx), endP (n,p,ctx) with
+      match endP (m,ctx), endP (n,ctx) with
       | true, true => (* collect "Both done" *) checker true
       | true, _    => (* collect "Main done" *) checker false
       | _   , true => (* collect "Vary done" *) checker false
       | _, _ =>
-        match mpcstep (m,p,ctx) cm,
-              mpcstep (n,p,ctx) cm with
-        | Some (m',p1,c1,t1,o1), Some (n', p2,c2, t2, o2) =>
-          if List.forallb (sameDifferenceP m m' n n') (getElements m')
-          then prop_lockstepConfidentiality fuel' m' n' p1 cm c1 endP
-          else checker false
-        | _, _ => checker true
-        end
+        let '(m', c1, t1, o1) := cstep (m, ctx) in
+        let '(n', c2, t2, o2) := cstep (n, ctx) in
+        if List.forallb (sameDifferenceP m m' n n') (getElements m')
+        then prop_lockstepConfidentiality fuel' m' n' cm c1 endP
+        else checker false
       end
     end.
 
+  (* Depends on deleted code from TestSubroutineSimple *)
+  Definition confidentialityComponent (c : Ctx) (k : Element) :=
+    match fst c k with
+    | sealed => true
+    | free => true
+    | _ => false
+    end.
+
+  (* Depends on deleted code from TestSubroutineSimple *)
+  Definition depthOf (c : Ctx) := seq.size (snd c).
+
   Fixpoint prop_stackConfidentiality
-             fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx 
+             fuel (i : LayoutInfo) (m : MachineState) (cm : CodeMap_Impl) ctx
     : Checker.Checker :=
     match fuel with
     | O => collect ("Out of fuel") true
     | S fuel' =>
-      match (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
+      match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst m))) with
       | Some call =>
-        match mpcstep (m,p,ctx) cm with
-        | Some (m', p', c', t, o) =>
-          let depth := depthOf c' in
-          let endP  := fun '(_,_,c) =>
-                         (Nat.ltb (depthOf c) depth) in
-          let secret := List.filter (fun k => confidentialityComponent c' k) (getElements m') in
-          bindGen (genVariantByList secret m')
-                   (fun n =>
-                      (conjoin
-                         ([prop_lockstepConfidentiality defFuel m' n p' cm c' endP] ++
-                          [prop_stackConfidentiality fuel' i m' p' cm c'])))
-        | _ => collect ("Failstop",fuel) true
-        end
+        let '(m', c', t, o) := cstep (m, ctx) in
+        let depth := depthOf c' in
+        let endP  := fun '(_,c) =>
+                       (Nat.ltb (depthOf c) depth) in
+        let secret := List.filter (fun k => confidentialityComponent c' k) (getElements m') in
+        bindGen (GenRISCVLazyOrig.genVariantByList secret m')
+          (fun n =>
+             (conjoin
+                ([prop_lockstepConfidentiality defFuel m' n cm c' endP] ++
+                   [prop_stackConfidentiality fuel' i m' cm c'])))
       | _ =>
-        match mpcstep (m,p,ctx) cm with
-        | Some (m', p', c', t, o) =>
-          prop_stackConfidentiality fuel' i m' p' cm c'
-        | _ => collect ("Failstop",fuel) true
-        end
+        let '(m', c', t, o) := cstep (m, ctx) in
+        prop_stackConfidentiality fuel' i m' cm c'
       end
     end.
 
   Definition prop_confidentiality :=
     let sm := defStackMap defLayoutInfo in
-    forAll genMach (fun '(m,p,cm) =>
-                      (prop_stackConfidentiality defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
+    forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
+                      (prop_stackConfidentiality defFuel defLayoutInfo m cm initCtx)).
 
   Fixpoint prop_laziestLockstepIntegrity
-           fuel m n p cm ctx
+           fuel m n (cm : CodeMap_Impl (* unused *)) ctx
     : Checker.Checker :=
     match fuel with
     | O => checker true
     | S fuel' =>
-      match mpcstep (m,p,ctx) cm,
-            mpcstep (n,p,ctx) cm with
-      | Some (m',p1,c1,t1,o1), Some (n',p2,c2,t2,o2) =>
-        if obs_eqb o1 o2 then
-          prop_laziestLockstepIntegrity fuel' m' n' p1 cm c1
-        else (*whenFail ("Primary: " ++ show o1 ++ " | Variant: " ++ show o2 ++ nl ++
-                       "Final state: " ++ nl ++ printMachine m p cm ctx)%string*) checker false
-
-      | _, _ => collect "Failstop after return" true
-      end
+      let '(m', c1, t1, o1) := cstep (m ,ctx) in
+      let '(n', c2, t2, o2) := cstep (n ,ctx) in
+      if obs_eqb o1 o2 then
+        prop_laziestLockstepIntegrity fuel' m' n' cm c1
+      else (*whenFail ("Primary: " ++ show o1 ++ " | Variant: " ++ show o2 ++ nl ++
+             "Final state: " ++ nl ++ printMachine m p cm ctx)%string*) checker false
     end.
 
-  Definition calcTraceDiff' cm (m m' : MachineState) (p p' : PolicyState) (c c' : CtxState) (i : LayoutInfo) : unit -> string :=
+  Definition calcTraceDiff' cm (m m' : MachineState) (c c' : Ctx) (i : LayoutInfo) : unit -> string :=
     let compsToTrace :=
         List.filter (fun k => 
-                       (orb (negb (Z.eqb (proj m k) (proj m' k)))
-                            (interestingComponent c c' k)))
+                       (orb (negb (Value_equivb (proj m k) (proj m' k)))
+                            (* (interestingComponent c c' k))) *)
+                            false)) (* FIXME *)
                                   (*(andb (TagSet_eqb (pproj p k) (pproj p k))*)
                     (getElements m') in
     (fun tt => 
        ("From: " ++ nl ++
-                 concatStr (List.map (fun k => printComponent k m p cm c i ++ nl) compsToTrace) ++ 
+                 concatStr (List.map (fun k => PrintRISCVLazyOrig.printComponent k m cm c i ++ nl) compsToTrace) ++ 
                  "to: " ++ nl ++
-                 concatStr (List.map (fun k => printComponent k m' p' cm c' i ++ nl) compsToTrace) ++ nl)%string).
+                 concatStr (List.map (fun k => PrintRISCVLazyOrig.printComponent k m' cm c' i ++ nl) compsToTrace) ++ nl)%string).
   
-  Fixpoint walk' (ks : list Element) (cm : CodeMap_Impl) (m : MachineState) (c : CtxState) (m' : MachineState) (p' : PolicyState) (c' : CtxState) (changed : list Element) : Checker :=
+  Fixpoint walk' (ks : list Element) (cm : CodeMap_Impl) (m : MachineState) (c : Ctx) (m' : MachineState) (c' : Ctx) (changed : list Element) : Checker :=
     match ks with
     | [] =>
       match changed with
       | [] => checker true
       | _ =>
         (*trace (show (List.length changed) ++ nl)*)
-        (bindGen (genVariantByList changed m')
+        (bindGen (GenRISCVLazyOrig.genVariantByList changed m')
                  (fun n =>
-                    prop_laziestLockstepIntegrity defFuel m' n p' cm c'))
+                    prop_laziestLockstepIntegrity defFuel m' n cm c'))
       end
     | k :: ks' =>
       if integrityComponent c k then
-        if Z.eqb (proj m k) (proj m' k)
-        then walk' ks' cm m c m' p' c' changed
-        else walk' ks' cm m c m' p' c' (k::changed)
-      else walk' ks' cm m c m' p' c' changed
+        if Value_equivb (proj m k) (proj m' k)
+        then walk' ks' cm m c m' c' changed
+        else walk' ks' cm m c m' c' (k::changed)
+      else walk' ks' cm m c m' c' changed
     end.
 
-  Definition prop_checkAtReturn fuel mcall pcall cm ctxcall
+  Definition prop_checkAtReturn fuel mcall cm ctxcall
     : Checker.Checker :=
-    let fix aux fuel m p ctx : Checker.Checker :=
+    let fix aux fuel m ctx : Checker.Checker :=
         match fuel with
         | O => collect "Out-of-Fuel" true
         | S fuel' => 
-          match mpcstep (m,p,ctx) cm with
-          | None => collect "Failstop" true
-          | Some (m', p', ctx', t, o) =>
-            if (depthOf ctx' <? depthOf ctxcall)%nat then
-              walk' (getElements m') cm mcall ctxcall m' p' ctx' []
-            else aux fuel' m' p' ctx'
-          end
+          let '(m', ctx', t, o) := cstep (m, ctx) in
+          if (depthOf ctx' <? depthOf ctxcall)%nat then
+            walk' (getElements m') cm mcall ctxcall m' ctx' []
+          else aux fuel' m' ctx'
         end in
-    aux fuel mcall pcall ctxcall.
+    aux fuel mcall ctxcall.
 
   Fixpoint prop_laziestStackIntegrity
-           fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx : Checker.Checker :=
+           fuel (i : LayoutInfo) (m : MachineState) (cm : CodeMap_Impl) ctx : Checker.Checker :=
     match fuel with
     | O => checker true
     | S fuel' =>
-      match (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
+      match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst m))) with
       | Some call =>
-        match mpcstep (m,p,ctx) cm  with
-        | Some (m', p', c', t, o) =>
-          let depth := depthOf c' in
-          (*trace ("callee depth: " ++ show depth ++ "   size of sealed: " ++
-                                  (show (List.length (List.filter sealed (getComponents m'))) ++ nl))*)
-          (conjoin
-             ([prop_checkAtReturn defFuel m' p' cm c'] ++
-              [prop_laziestStackIntegrity fuel' i m' p' cm c']))
-        | _ =>
-          checker true
-        end
+        let '(m', c', t, o) := cstep (m, ctx) in
+        let depth := depthOf c' in
+        (*trace ("callee depth: " ++ show depth ++ "   size of sealed: " ++
+          (show (List.length (List.filter sealed (getComponents m'))) ++ nl))*)
+        (conjoin
+           ([prop_checkAtReturn defFuel m' cm c'] ++
+            [prop_laziestStackIntegrity fuel' i m' cm c']))
       | _ =>
-        match mpcstep (m,p,ctx) cm with
-        | Some (m', p', c', t, o) =>
-          prop_laziestStackIntegrity fuel' i m' p' cm c'
-        | _ => checker true
-        end
+          let '(m', c', t, o) := cstep (m, ctx) in
+          prop_laziestStackIntegrity fuel' i m' cm c'
       end
     end.
 
   Definition prop_laziestIntegrity :=
-    forAll genMach (fun '(m,p,cm) =>
-                      (prop_laziestStackIntegrity defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
+    forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
+                      (prop_laziestStackIntegrity defFuel defLayoutInfo m cm initCtx)).
 
   (* A generic tester for integrity-like properties (no variant generation at
      the moment) *)
   Definition step_tester
     (cm : CodeMap_Impl) (li : LayoutInfo)
     (fuel : nat)
-    (m : RiscvMachine) (p : PolicyState) (ctx : CtxState)
-    (conds : list (nat * (RiscvMachine -> PolicyState -> CtxState -> bool)))
-    (gen : RiscvMachine -> PolicyState -> CtxState -> CodeMap_Impl ->
-           (RiscvMachine -> PolicyState -> CtxState -> bool))
+    (m : MachineState) (ctx : Ctx)
+    (conds : list (nat * (MachineState -> Ctx -> bool)))
+    (gen : MachineState -> Ctx -> CodeMap_Impl ->
+           (MachineState -> Ctx -> bool))
     : Checker :=
-    let fix aux fuel m p ctx conds :=
+    let fix aux fuel m ctx conds :=
       (* See if we have enough fuel to take a step, otherwise exit *)
       match fuel with
       | O => collect "Out-of-Fuel" true
       | S fuel' =>
           (* Try to take a step, exit if we are stuck *)
-          match mpcstep (m, p, ctx) cm with
-          | None => collect "Failstop" true
-          | Some (m', p', ctx', _ops, _obs) =>
-              (* If we could step, verify that the new state satisfies all
-                 active tests, otherwise raise an error *)
-              let check_cond '(depth, test) :=
-                negb ((Nat.eqb depth (depthOf ctx')) && (test m' p' ctx')) in
-              match seq.all check_cond conds with
-              | false => collect "Bad-checks" false
-              | true =>
-                  (* Check the code map at the current PC (this should never
-                     fail) *)
-                  match (CodeMap_fromImpl cm) (word.unsigned (getPc m)) with
-                  | None => collect "Bad-PC" false (* TODO Check *)
-                  | Some ops =>
-                      (* Recurse on the new state, where if the instruction
-                         corresponds to a call (assuming a well-formed code map
-                         without nonsensical lists of operations) a new test is
-                         added to the list *)
-                      let is_call op :=
-                        match op with
-                        | Call _ _ _ => true
-                        | _ => false
-                        end in
-                      match seq.has is_call ops with
-                      | false =>
-                          aux fuel' m' p' ctx' conds
-                      | true =>
-                          (* Before or after call? *)
-                          let cond := gen m' p' ctx' cm in
-                          aux fuel' m' p' ctx' ((depthOf ctx, cond) :: conds)
-                      end
+          let '(m', ctx', _ops, _obs) := cstep (m, ctx) in
+          (* If we could step, verify that the new state satisfies all
+             active tests, otherwise raise an error *)
+          let check_cond '(depth, test) :=
+            negb ((Nat.eqb depth (depthOf ctx')) && (test m' ctx')) in
+          match seq.all check_cond conds with
+          | false => collect "Bad-checks" false
+          | true =>
+              (* Check the code map at the current PC (this should never
+                 fail) *)
+              match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst m))) with
+              | None => collect "Bad-PC" false (* TODO Check *)
+              | Some ops =>
+                  (* Recurse on the new state, where if the instruction
+                     corresponds to a call (assuming a well-formed code map
+                     without nonsensical lists of operations) a new test is
+                     added to the list *)
+                  let is_call op :=
+                    match op with
+                    | Call _ _ _ => true
+                    | _ => false
+                    end in
+                  match seq.has is_call ops with
+                  | false =>
+                      aux fuel' m' ctx' conds
+                  | true =>
+                      (* Before or after call? *)
+                      let cond := gen m' ctx' cm in
+                      aux fuel' m' ctx' ((depthOf ctx, cond) :: conds)
                   end
               end
           end
       end
     in
-    aux fuel m p ctx conds.
+    aux fuel m ctx conds.
 
   (* A boolean version of [walk'], where the base case simply checks the
      accumulator and makes the overall walk succeed iff it is empty (i.e., no
      elements of interest were changed). *)
-  Fixpoint walk'' (ks : list Element) (cm : CodeMap_Impl) (m : MachineState) (c : CtxState) (m' : MachineState) (p' : PolicyState) (c' : CtxState) (changed : list Element) : bool :=
+  Fixpoint walk'' (ks : list Element) (cm : CodeMap_Impl) (m : MachineState) (c : Ctx) (m' : MachineState) (c' : Ctx) (changed : list Element) : bool :=
     match ks with
     | [] =>
       match changed with
@@ -343,10 +342,10 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
       end
     | k :: ks' =>
       if integrityComponent c k then
-        if Z.eqb (proj m k) (proj m' k)
-        then walk'' ks' cm m c m' p' c' changed
-        else walk'' ks' cm m c m' p' c' (k::changed)
-      else walk'' ks' cm m c m' p' c' changed
+        if Value_equivb (proj m k) (proj m' k)
+        then walk'' ks' cm m c m' c' changed
+        else walk'' ks' cm m c m' c' (k::changed)
+      else walk'' ks' cm m c m' c' changed
     end.
 
   (* The condition for the laziest version of stack integrity becomes the core
@@ -357,119 +356,114 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
      [ctxcall]). The recursive structure of [prop_laziestStackIntegrity] is now
      handled by the tester as well. *)
   Definition cond_laziestStackIntegrity
-    (m : RiscvMachine) (p : PolicyState) (ctx : CtxState) (cm : CodeMap_Impl)
-    : RiscvMachine -> PolicyState -> CtxState -> bool :=
-    fun m' p' ctx' =>
-      walk'' (getElements m') cm m ctx m' p' ctx' [].
+    (m : MachineState) (ctx : Ctx) (cm : CodeMap_Impl)
+    : MachineState -> Ctx -> bool :=
+    fun m' ctx' =>
+      walk'' (getElements m') cm m ctx m' ctx' [].
 
   (* The top-level properties are now simple instantiations *)
   Fixpoint prop_laziestStackIntegrity'
-    fuel (i : LayoutInfo) m p (cm : CodeMap_Impl) ctx : Checker.Checker :=
-    step_tester cm i fuel m p ctx [] cond_laziestStackIntegrity.
+    fuel (i : LayoutInfo) m (cm : CodeMap_Impl) ctx : Checker.Checker :=
+    step_tester cm i fuel m ctx [] cond_laziestStackIntegrity.
 
   Definition prop_laziestIntegrity' :=
-    forAll genMach (fun '(m,p,cm) =>
-                      (prop_laziestStackIntegrity' defFuel defLayoutInfo m p cm (initCtx defLayoutInfo))).
+    forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
+                      (prop_laziestStackIntegrity' defFuel defLayoutInfo m cm initCtx)).
 
   (* From above, only operating on MPCState *)
-  Definition cond_confidentiality (m m' n n' : MPCState) : bool :=
-    let '(ms, _, _) := m in
-    let '(ms', _, _) := m' in
-    let '(ns, _, _) := n in
-    let '(ns', _, _) := n' in
+  Definition cond_confidentiality (m m' n n' : State) : bool :=
+    let '(ms, _) := m in
+    let '(ms', _) := m' in
+    let '(ns, _) := n in
+    let '(ns', _) := n' in
     List.forallb (sameDifferenceP ms ms' ns ns') (getElements ms').
 
   (* TODO Monadic notation for added readability *)
   Definition confidentiality_tester
     (cm : CodeMap_Impl) (li : LayoutInfo)
     (fuel : nat)
-    (mcur : MPCState) (stk : list (MPCState * nat * MPCState * MPCState))
+    (mcur : State) (stk : list (State * nat * State * State))
     : Checker :=
     let fix aux fuel mcur stk :=
       (* See if we have enough fuel to take a step, otherwise exit *)
       match fuel with
       | O => collect "Out-of-Fuel" true
       | S fuel' =>
-          (* Try to take a step, exit if we are stuck *)
-          match mpcstep mcur cm with
-          | None => collect "Failstop" true
-          | Some (m', _ops, _obs) =>
-              (* If the main run steps, try to take the same step in all current
-                 variants (this should be the same step, with the same
-                 operations, but we do not check this at the moment) *)
-              let step_var '(ncur, depth, mcall, ncall) :=
-                match mpcstep ncur cm with
-                | None => None
-                | Some (n', ops, _obs) => (* No observations for now *)
-                    Some (ncur, n', depth, mcall, ncall, ops)
+          (* Try to take a step, exit if we are stuck (no more) *)
+          let '(m', _ops, _obs) := cstep mcur in
+          (* If the main run steps, try to take the same step in all current
+             variants (this should be the same step, with the same
+             operations, but we do not check this at the moment) *)
+          (* TODO Simplify *)
+          let step_var '(ncur, depth, mcall, ncall) :=
+            let '(n', ops, _obs) := cstep ncur in
+            (* No observations for now *)
+            Some (ncur, n', depth, mcall, ncall, ops)
+          in
+          let stk' := seq.pmap step_var stk in
+          match (seq.size stk =? seq.size stk')%nat with
+          | false => collect "Out-of-Sync" false
+          | true =>
+              (* No general checks being performed at the moment, only lazy
+                 confidentiality; continue checking the current operation.
+                 The temporary stack is decorated with the observations and
+                 original pre-step states, which are used to check to find
+                 return points as they occur, perform checks and pop
+                 variants from the stack. *)
+              let check_var '(ncur, n', depth, mcall, ncall, ops) :=
+                let is_ret op :=
+                  match op with
+                  | Return => true
+                  | _ => false
+                  end in
+                match seq.has is_ret ops, (depthOf (snd n') =? depth)%nat with
+                | true, true =>
+                    (* ... *)
+                    match cond_confidentiality mcur m' ncur n' with
+                    | false => None (* Error *)
+                    | true =>
+                        Some [] (* Pop variant *)
+                    end
+                | _, _ => (* TODO Check missing/nonsensical cases *)
+                    Some [(n', depth, mcall, ncall)] (* Update variant *)
                 end
               in
-              let stk' := seq.pmap step_var stk in
-              match (seq.size stk =? seq.size stk')%nat with
-              | false => collect "Out-of-Sync" false
+              let stk'' := seq.map check_var stk' in
+              let stk''' := seq.pmap id stk'' in
+              let stk'''' := seq.flatten stk''' in
+              (* We need to distinguish three possible outcomes:
+                 - Return at matching depth, successful check, variant pop
+                 - Return at matching depth, failed check, error
+                 - Other step, no changes
+                 Here using options of 0-or-1-element lists
+                 Other checks are possible, e.g., only once check should
+                 take place at most (currently not done)
+                 The check that is in place is *)
+              match (seq.size stk'' =? seq.size stk''')%nat with
+              | false => collect "Confidentiality-Violation" false
               | true =>
-                  (* No general checks being performed at the moment, only lazy
-                     confidentiality; continue checking the current operation.
-                     The temporary stack is decorated with the observations and
-                     original pre-step states, which are used to check to find
-                     return points as they occur, perform checks and pop
-                     variants from the stack. *)
-                  let check_var '(ncur, n', depth, mcall, ncall, ops) :=
-                    let is_ret op :=
-                      match op with
-                      | Return => true
-                      | _ => false
-                      end in
-                    match seq.has is_ret ops, (depthOf (snd n') =? depth)%nat with
-                    | true, true =>
-                        (* ... *)
-                        match cond_confidentiality mcur m' ncur n' with
-                        | false => None (* Error *)
-                        | true =>
-                            Some [] (* Pop variant *)
-                        end
-                    | _, _ => (* TODO Check missing/nonsensical cases *)
-                        Some [(n', depth, mcall, ncall)] (* Update variant *)
-                    end
-                  in
-                  let stk'' := seq.map check_var stk' in
-                  let stk''' := seq.pmap id stk'' in
-                  let stk'''' := seq.flatten stk''' in
-                  (* We need to distinguish three possible outcomes:
-                     - Return at matching depth, successful check, variant pop
-                     - Return at matching depth, failed check, error
-                     - Other step, no changes
-                     Here using options of 0-or-1-element lists
-                     Other checks are possible, e.g., only once check should
-                     take place at most (currently not done)
-                     The check that is in place is *)
-                  match (seq.size stk'' =? seq.size stk''')%nat with
-                  | false => collect "Confidentiality-Violation" false
-                  | true =>
-                      match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst mcur)))) with
-                      | None => collect "Bad-PC" false (* TODO Check *)
-                      | Some ops =>
-                          let is_call op :=
-                            match op with
-                            | Call _ _ _ => true
-                            | _ => false
-                            end in
-                          match seq.has is_call ops with
-                          | false =>
-                              aux fuel' m' stk''''
-                          | true =>
-                              (* Before or after call? *)
-                              let '(ms', ps', cs') := m' in
-                              (* From above, somewhat simplified *)
-                              let secret := List.filter (fun k => confidentialityComponent cs' k) (getElements ms') in
-                                 bindGen (genVariantByList secret ms')
-                                   (fun n =>
-                                      let npc := (n, ps', cs') in (**)
-                                      let frame := (npc, depthOf cs', mcur, npc (**)) in
-                                      (conjoin
-                                         ([aux fuel' m' (frame :: stk'''')]))
-                                   )
-                          end
+                  match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst mcur)))) with
+                  | None => collect "Bad-PC" false (* TODO Check *)
+                  | Some ops =>
+                      let is_call op :=
+                        match op with
+                        | Call _ _ _ => true
+                        | _ => false
+                        end in
+                      match seq.has is_call ops with
+                      | false =>
+                          aux fuel' m' stk''''
+                      | true =>
+                          (* Before or after call? *)
+                          let '(ms', cs') := m' in
+                          (* From above, somewhat simplified *)
+                          let secret := List.filter (fun k => confidentialityComponent cs' k) (getElements ms') in
+                          bindGen (GenRISCVLazyOrig.genVariantByList secret ms')
+                            (fun n =>
+                               let npc := (n, cs') in (**)
+                               let frame := (npc, depthOf cs', mcur, npc (**)) in
+                               conjoin [aux fuel' m' (frame :: stk'''')]
+                            )
                       end
                   end
               end
@@ -480,45 +474,45 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
 
 End TestPropsRISCVSimple.
 
-Module TestRISCVEager := TestPropsRISCVSimple RISCVObs TPEager DLObs
-                                              TSSRiscvDefault GenRISCVEager
-                                              PrintRISCVEager.
+(* Module TestRISCVEager := TestPropsRISCVSimple RISCVObs TPEager DLObs *)
+(*                                               TSSRiscvDefault GenRISCVEager *)
+(*                                               PrintRISCVEager. *)
 
-Module TestRISCVEagerNLC := TestPropsRISCVSimple RISCVObs TPEagerNLC DLObs
-                                              TSSRiscvDefault GenRISCVEagerNLC
-                                              PrintRISCVEagerNLC.
+(* Module TestRISCVEagerNLC := TestPropsRISCVSimple RISCVObs TPEagerNLC DLObs *)
+(*                                               TSSRiscvDefault GenRISCVEagerNLC *)
+(*                                               PrintRISCVEagerNLC. *)
 
-Module TestRISCVEagerNSC := TestPropsRISCVSimple RISCVObs TPEagerNSC DLObs
-                                              TSSRiscvDefault GenRISCVEagerNSC
-                                              PrintRISCVEagerNSC.
+(* Module TestRISCVEagerNSC := TestPropsRISCVSimple RISCVObs TPEagerNSC DLObs *)
+(*                                               TSSRiscvDefault GenRISCVEagerNSC *)
+(*                                               PrintRISCVEagerNSC. *)
 
-Module TestRISCVEagerNI := TestPropsRISCVSimple RISCVObs TPEagerNI DLObs
-                                              TSSRiscvDefault GenRISCVEagerNI
-                                              PrintRISCVEagerNI.
+(* Module TestRISCVEagerNI := TestPropsRISCVSimple RISCVObs TPEagerNI DLObs *)
+(*                                               TSSRiscvDefault GenRISCVEagerNI *)
+(*                                               PrintRISCVEagerNI. *)
 
 
-Module TestRISCVLazyOrig := TestPropsRISCVSimple RISCVObs TPLazyOrig DLObs
-                                                   TSSRiscvDefault GenRISCVLazyOrig
-                                                   PrintRISCVLazyOrig.
+(* Module TestRISCVLazyOrig := TestPropsRISCVSimple RISCVObs TPLazyOrig DLObs *)
+(*                                                    TSSRiscvDefault GenRISCVLazyOrig *)
+(*                                                    PrintRISCVLazyOrig. *)
 
-Module TestRISCVLazyNoDepth := TestPropsRISCVSimple RISCVObs TPLazyNoDepth DLObs
-                                                    TSSRiscvDefault GenRISCVLazyNoDepth
-                                                    PrintRISCVLazyNoDepth.
+(* Module TestRISCVLazyNoDepth := TestPropsRISCVSimple RISCVObs TPLazyNoDepth DLObs *)
+(*                                                     TSSRiscvDefault GenRISCVLazyNoDepth *)
+(*                                                     PrintRISCVLazyNoDepth. *)
 
-Module TestRISCVLazyNoCheck := TestPropsRISCVSimple RISCVObs TPLazyNoCheck DLObs
-                                                    TSSRiscvDefault GenRISCVLazyNoCheck
-                                                    PrintRISCVLazyNoCheck.
+(* Module TestRISCVLazyNoCheck := TestPropsRISCVSimple RISCVObs TPLazyNoCheck DLObs *)
+(*                                                     TSSRiscvDefault GenRISCVLazyNoCheck *)
+(*                                                     PrintRISCVLazyNoCheck. *)
 
-Module TestRISCVLazyFixed := TestPropsRISCVSimple RISCVObs TPLazyFixed DLObs
-                                                  TSSRiscvDefault GenRISCVLazyFixed
-                                                  PrintRISCVLazyFixed.
+(* Module TestRISCVLazyFixed := TestPropsRISCVSimple RISCVObs TPLazyFixed DLObs *)
+(*                                                   TSSRiscvDefault GenRISCVLazyFixed *)
+(*                                                   PrintRISCVLazyFixed. *)
 
 Extract Constant defNumTests => "5000".
-  
-Import TestRISCVEager.
-Import TestRISCVEagerNLC.
-Import TestRISCVEagerNSC.
-Import TestRISCVEagerNI.
+
+(* Import TestRISCVEager. *)
+(* Import TestRISCVEagerNLC. *)
+(* Import TestRISCVEagerNSC. *)
+(* Import TestRISCVEagerNI. *)
 
 (* Mutations marked "Fails" are expected to fail, and do! *)
 (* Three trials with each mutation for averaging *)
