@@ -272,6 +272,25 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
                       (prop_laziestStackIntegrity defFuel defLayoutInfo m cm initCtx)).
 
+  (* Simple operation helpers, no assumptions on well-formedness *)
+  Definition op_call (op : Operation) : bool :=
+    match op with
+    | Call _ _ _ => true
+    | _ => false
+    end.
+
+  Definition ops_call (ops : Operations) : bool :=
+    seq.has op_call ops.
+
+  Definition op_ret (op : Operation) : bool :=
+    match op with
+    | Return => true
+    | _ => false
+    end.
+
+  Definition ops_ret (ops : Operations) : bool :=
+    seq.has op_ret ops.
+
   (* A generic tester for integrity-like properties (no variant generation at
      the moment) *)
   Definition step_tester
@@ -305,19 +324,12 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                      corresponds to a call (assuming a well-formed code map
                      without nonsensical lists of operations) a new test is
                      added to the list *)
-                  let is_call op :=
-                    match op with
-                    | Call _ _ _ => true
-                    | _ => false
-                    end in
-                  match seq.has is_call ops with
-                  | false =>
-                      aux fuel' m' ctx' conds
-                  | true =>
-                      (* Before or after call? *)
-                      let cond := gen m' ctx' cm in
-                      aux fuel' m' ctx' ((depthOf ctx, cond) :: conds)
-                  end
+                  let conds' :=
+                    if ops_call ops
+                    then let cond := gen m' ctx' cm in (* Before/after call? *)
+                         (depthOf ctx, cond) :: conds
+                    else conds in
+                  aux fuel' m' ctx' conds'
               end
           end
       end
@@ -394,16 +406,13 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
           (* If the main run steps, try to take the same step in all current
              variants (this should be the same step, with the same
              operations, but we do not check this at the moment) *)
-          (* TODO Simplify *)
           let step_var '(ncur, depth, mcall, ncall) :=
             let '(n', ops, _obs) := cstep ncur in
             (* No observations for now *)
-            Some (ncur, n', depth, mcall, ncall, ops)
+            (ncur, n', depth, mcall, ncall, ops)
           in
-          let stk' := seq.pmap step_var stk in
-          match (seq.size stk =? seq.size stk')%nat with
-          | false => collect "Out-of-Sync" false
-          | true =>
+          let stk' := seq.map step_var stk in
+          (* (Variants don't get out of sync by getting stuck now) *)
               (* No general checks being performed at the moment, only lazy
                  confidentiality; continue checking the current operation.
                  The temporary stack is decorated with the observations and
@@ -411,12 +420,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                  return points as they occur, perform checks and pop
                  variants from the stack. *)
               let check_var '(ncur, n', depth, mcall, ncall, ops) :=
-                let is_ret op :=
-                  match op with
-                  | Return => true
-                  | _ => false
-                  end in
-                match seq.has is_ret ops, (depthOf (snd n') =? depth)%nat with
+                match ops_ret ops, (depthOf (snd n') =? depth)%nat with
                 | true, true =>
                     (* ... *)
                     match cond_confidentiality mcur m' ncur n' with
@@ -445,12 +449,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                   match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst mcur)))) with
                   | None => collect "Bad-PC" false (* TODO Check *)
                   | Some ops =>
-                      let is_call op :=
-                        match op with
-                        | Call _ _ _ => true
-                        | _ => false
-                        end in
-                      match seq.has is_call ops with
+                      match ops_call ops with
                       | false =>
                           aux fuel' m' stk''''
                       | true =>
@@ -465,7 +464,6 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                                conjoin [aux fuel' m' (frame :: stk'''')]
                             )
                       end
-                  end
               end
           end
       end
