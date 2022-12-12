@@ -413,57 +413,57 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
           in
           let stk' := seq.map step_var stk in
           (* (Variants don't get out of sync by getting stuck now) *)
-              (* No general checks being performed at the moment, only lazy
-                 confidentiality; continue checking the current operation.
-                 The temporary stack is decorated with the observations and
-                 original pre-step states, which are used to check to find
-                 return points as they occur, perform checks and pop
-                 variants from the stack. *)
-              let check_var '(ncur, n', depth, mcall, ncall, ops) :=
-                match ops_ret ops, (depthOf (snd n') =? depth)%nat with
-                | true, true =>
-                    (* ... *)
-                    match cond_confidentiality mcur m' ncur n' with
-                    | false => None (* Error *)
-                    | true =>
-                        Some [] (* Pop variant *)
-                    end
-                | _, _ => (* TODO Check missing/nonsensical cases *)
-                    Some [(n', depth, mcall, ncall)] (* Update variant *)
+          (* No general checks being performed at the moment, only lazy
+             confidentiality; continue checking the current operation.
+             The temporary stack is decorated with the observations and
+             original pre-step states, which are used to check to find
+             return points as they occur, perform checks and pop
+             variants from the stack. *)
+          let check_var '(ncur, n', depth, mcall, ncall, ops) :=
+            match ops_ret ops, (depthOf (snd n') =? depth)%nat with
+            | true, true =>
+                (* ... *)
+                match cond_confidentiality mcur m' ncur n' with
+                | false => None (* Error *)
+                | true =>
+                    Some [] (* Pop variant *)
                 end
-              in
-              let stk'' := seq.map check_var stk' in
-              let stk''' := seq.pmap id stk'' in
-              let stk'''' := seq.flatten stk''' in
-              (* We need to distinguish three possible outcomes:
-                 - Return at matching depth, successful check, variant pop
-                 - Return at matching depth, failed check, error
-                 - Other step, no changes
-                 Here using options of 0-or-1-element lists
-                 Other checks are possible, e.g., only once check should
-                 take place at most (currently not done)
-                 The check that is in place is *)
-              match (seq.size stk'' =? seq.size stk''')%nat with
-              | false => collect "Confidentiality-Violation" false
-              | true =>
-                  match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst mcur)))) with
-                  | None => collect "Bad-PC" false (* TODO Check *)
-                  | Some ops =>
-                      match ops_call ops with
-                      | false =>
-                          aux fuel' m' stk''''
-                      | true =>
-                          (* Before or after call? *)
-                          let '(ms', cs') := m' in
-                          (* From above, somewhat simplified *)
-                          let secret := List.filter (fun k => confidentialityComponent cs' k) (getElements ms') in
-                          bindGen (GenRISCVLazyOrig.genVariantByList secret ms')
-                            (fun n =>
-                               let npc := (n, cs') in (**)
-                               let frame := (npc, depthOf cs', mcur, npc (**)) in
-                               conjoin [aux fuel' m' (frame :: stk'''')]
-                            )
-                      end
+            | _, _ => (* TODO Check missing/nonsensical cases *)
+                Some [(n', depth, mcall, ncall)] (* Update variant *)
+            end
+          in
+          let stk'' := seq.map check_var stk' in
+          let stk''' := seq.pmap id stk'' in
+          let stk'''' := seq.flatten stk''' in
+          (* We need to distinguish three possible outcomes:
+             - Return at matching depth, successful check, variant pop
+             - Return at matching depth, failed check, error
+             - Other step, no changes
+             Here using options of 0-or-1-element lists
+             Other checks are possible, e.g., only once check should
+             take place at most (currently not done)
+             The check that is in place is *)
+          match (seq.size stk'' =? seq.size stk''')%nat with
+          | false => collect "Confidentiality-Violation" false
+          | true =>
+              match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst mcur)))) with
+              | None => collect "Bad-PC" false (* TODO Check *)
+              | Some ops =>
+                  match ops_call ops with
+                  | false =>
+                      aux fuel' m' stk''''
+                  | true =>
+                      (* Before or after call? *)
+                      let '(ms', cs') := m' in
+                      (* From above, somewhat simplified *)
+                      let secret := List.filter (fun k => confidentialityComponent cs' k) (getElements ms') in
+                      bindGen (GenRISCVLazyOrig.genVariantByList secret ms')
+                        (fun n =>
+                           let npc := (n, cs') in (**)
+                           let frame := (npc, depthOf cs', mcur, npc (**)) in
+                           conjoin [aux fuel' m' (frame :: stk'''')]
+                        )
+                  end
               end
           end
       end
