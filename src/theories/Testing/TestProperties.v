@@ -444,10 +444,13 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
              take place at most (currently not done)
              The check that is in place is *)
           match (seq.size stk'' =? seq.size stk''')%nat with
-          | false => collect "Confidentiality-Violation" false
+          | false =>
+              whenFail
+                "Confidentiality violation!"
+                (collect "Confidentiality-Violation" false)
           | true =>
               match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst mcur)))) with
-              | None => collect "Bad-PC" false (* TODO Check *)
+              | None => collect "Bad-PC" true (* TODO Check *)
               | Some ops =>
                   match ops_call ops with
                   | false =>
