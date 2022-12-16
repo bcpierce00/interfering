@@ -41,6 +41,8 @@ Import RecordSetNotations.
 
 Import ListNotations.
 
+(* To debug, use [Show.trace] with the printers defined in [PrintRISCVLazyOrig] *)
+
 (* NOTE Not concentrating on eager properties at the moment, focusing changes on
    lazy properties (not including lockstep integrity). *)
 Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
