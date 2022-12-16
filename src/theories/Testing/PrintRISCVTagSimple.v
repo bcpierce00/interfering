@@ -249,6 +249,22 @@ Module PrintRISCVLazyOrig : Printing RISCVLazyOrig RISCVDef.
                       show rID ++ " : " ++ show rVal ++ " @ " ++ show rTag ++ nl ++ acc)%string 
                    (listify2 (RiscvMachine.getRegs m) (regtags p)) "".
 
+  Definition printGPRss (m n : MachineState) (p : PolicyState) := "printGPRss".
+(* Definition printGPRss (m n : MachineState) (p : PolicyState) := *)
+(*   let regs1 := listify2 (getRegs m) (regtags p) in *)
+(*   let regs2 := listify2 (getRegs n) (regtags p) in *)
+(*   List.fold_left *)
+(*     (fun acc '((rID1, rVal1, rTag1),(rID2, rVal2, rTag2)) => *)
+(*        if andb (Z.eqb rID1 rID2) (TagSet_eqb rTag1 rTag2) *)
+(*        then *)
+(*          ("r" ++ show rID1 ++ " : " ++  *)
+(*          (if Z.eqb (word.unsigned rVal1) (word.unsigned rVal2) then show rVal1 *)
+(*            else (show rVal1 ++ "/" ++ show rVal2)) *)
+(*             ++ " @ " ++ show rTag1 ++ nl ++ acc)%string *)
+(*        else *)
+(*          exception "printGPRss - unequal rID/rTag" *)
+(*     ) (List.combine regs1 regs2) "". *)
+
   Definition listify1_word mem := 
   List.rev
     (map.fold
@@ -288,7 +304,41 @@ Module PrintRISCVLazyOrig : Printing RISCVLazyOrig RISCVDef.
            (show k ++ " : " ++ printed ++ nl ++ s)%string
       ) mts "".
 
-  
+  Definition printMems (m n : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c : Ctx) (i : LayoutInfo) := "printMems".
+(* Definition printMems (m n : MachineState) (p : PolicyState) (cm : CodeMap_Impl) (c : context) (i : LayoutInfo) := *)
+(*   let tags := memtags p in *)
+(*   let mem1 := getMem m in *)
+(*   let mts1 := combine_match (listify1_word mem1) (listify1 tags) in *)
+(*   let mem2  := getMem n in *)
+(*   let mts2  := combine_match (listify1_word mem2) (listify1 tags) in *)
+
+(*   List.fold_left *)
+(*     (fun s '((k1,val1,t1),(k2,val2,t2)) => *)
+(*        if andb (Z.eqb k1 k2) (TagSet_eqb t1 t2) then *)
+(*        let printed := *)
+(*            if andb (Z.leb (instLo i) k1) *)
+(*                    (Z.leb k1 (instHi i)) *)
+(*            then *)
+(*              if Z.eqb val1 val2 then *)
+(*              match decode RV32I val1 with *)
+(*              | IInstruction inst => *)
+(*                (show inst ++ " @ " ++ show t1 ++ " < " ++ show (CodeMap_fromImpl cm k1) ++ " > - " ++ show (fst c (Mem k1)))%string *)
+(*              | _ => (show val1 ++ " <not-inst>")%string *)
+(*              end *)
+(*              else exception "Instructions not equal" *)
+(*            else *)
+(*              let printVar := *)
+(*                  (if Z.eqb val1 val2 then *)
+(*                     show val1 *)
+(*                   else (show val1 ++ "/" ++ show val2))%string in *)
+(*              (printVar ++ " @" ++ show t1 ++ " < " ++ show (CodeMap_fromImpl cm k1) ++ " > - " ++ show (fst c (Mem k1)))%string in *)
+(*        if andb (andb (Z.eqb val1 0) (Z.eqb val2 0)) (seq.nilp t1) then *)
+(*          s *)
+(*        else *)
+(*          ("[" ++ show k1 ++ "]: " ++ printed ++ nl ++ s)%string *)
+(*        else exception "printMems - not equal k/t" *)
+(*     ) (List.combine mts1 mts2) "". *)
+
   Definition printMachine (m : MachineState) cm c :=
     (
       "PC:" ++  
@@ -297,6 +347,16 @@ Module PrintRISCVLazyOrig : Printing RISCVLazyOrig RISCVDef.
       printGPRs m ++ nl ++
       "Memory: " ++ nl ++
       printMem m cm c defLayoutInfo ++ nl
+    )%string.
+
+  Definition printMachines
+             (m n : MachineState) (p : PolicyState) cm c := (
+    "PC:" ++
+    printPCs m n p ++ nl ++
+    "Registers:" ++ nl ++
+    printGPRss m n p ++ nl ++
+    "Memory: " ++ nl ++
+    printMems m n p cm c defLayoutInfo ++ nl
     )%string.
 
   Derive Show for Element.

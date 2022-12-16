@@ -75,6 +75,14 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
   Definition TagSet : Type := list myTag.
   Definition TagMap : Type := Zkeyed_map TagSet.
 
+  Fixpoint TagSet_eqb l1 l2 :=
+    match l1, l2 with
+    | nil,nil => true
+    | cons t1 l1', cons t2 l2' =>
+        andb (tag_eqb t1 t2) (TagSet_eqb l1' l2')
+    | _, _ => false
+    end.
+
   Derive Show for myTag.
   Derive Show for InstructionI.
 
