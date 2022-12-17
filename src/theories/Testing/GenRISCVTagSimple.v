@@ -1395,6 +1395,132 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                          end in  
   genMachine defLayoutInfo defTagInfo (zeroedRiscvMachine,zeroedPolicyState) map.empty
              dataP codeP callP.
+
+(* To encode specific examples, the relevant bits already exist as part of
+   zeroedRiscvMachine. zeroedPolicyState, gen_exec_aux, etc. Consider a
+   rather verbose encoding of a fixed counterexample: *)
+
+(*
+PC:0 @ Tpc 0Th2
+Registers:
+0 : 0 @
+1 : 0 @
+2 : 500 @ Tsp
+8 : 12 @
+9 : 0 @
+10 : 4 @
+Memory:
+0 : Addi 2 2 12 @ TinstrTh2 < Some [] > - public
+4 : Sw 2 0 -8 @ Tinstr < Some [] > - public
+8 : Jal 1 60 @ TinstrTcall < Some [Call] > - public
+68 : Sw 2 1 0 @ TinstrTh1 < Some [] > - public
+72 : Addi 2 2 12 @ TinstrTh2 < Some [] > - public
+76 : Sw 2 10 -8 @ Tinstr < Some [] > - public
+80 : Lw 10 2 -4 @ Tinstr < Some [] > - public
+500 : 0 @Tstack 0 < None > - free
+1000 : 636 @ < None > - public
+1004 : 420 @ < None > - public
+1008 : 1016 @ < None > - public
+1012 : 916 @ < None > - public
+1016 : 192 @ < None > - public
+*)
+
+  Definition cex01 : G (MachineState * CodeMap_Impl) :=
+
+    (* Machine state *)
+    let  ms : MachineState :=
+      let rs0 :=
+        {|
+          getRegs :=
+            List.fold_right
+              (fun '(i, v) m => map.put m i (word.of_Z v))
+              map.empty
+              [
+                (0, 0);
+                (1, 0);
+                (2, 500);
+                (8, 12);
+                (9, 0);
+                (10, 4)
+              ];
+          getPc := ZToReg 0;
+          getNextPc := ZToReg 4;
+          getMem :=
+            unchecked_store_byte_list
+              (word.of_Z 500)
+              (Z32s_to_bytes (repeat 0 125))
+              map.empty;
+          getXAddrs := [];
+          getLog := []
+        |}
+      in
+      let ps0 :=
+        {|
+          nextid := 0;
+          pctags := [Tpc 0; Th2];
+          regtags :=
+            map.putmany_of_list
+              [
+                (0, []);
+                (1, []);
+                (2, [Tsp]);
+                (8, []);
+                (9, []);
+                (10, [])
+              ]
+              map.empty;
+          memtags :=
+            map.putmany_of_list
+              [
+                (0, [Tinstr; Th2]);
+                (4, [Tinstr]);
+                (8, [Tinstr; Tcall]);
+                (68, [Tinstr; Th1]);
+                (72, [Tinstr; Th2]);
+                (76, [Tinstr]);
+                (80, [Tinstr]);
+                (500, [Tstack 0]);
+                (1000, []);
+                (1004, []);
+                (1008, []);
+                (1012, []);
+                (1016, [])
+              ]
+              map.empty
+        |}
+      in
+      let ms0 := (rs0, ps0) in
+      let instrs :=
+        [
+          (0, Addi 2 2 12);
+          (4, Sw 2 0 (-8));
+          (8, Jal 1 60);
+          (68, Sw 2 1 0);
+          (72, Addi 2 2 12);
+          (76, Sw 2 10 (-8));
+          (80, Lw 10 2 (-4))
+        ]
+      in
+      List.fold_right (fun '(a, i) m => setInstrI (word.of_Z a) m i) ms0 instrs
+    in
+
+    (* Code map *)
+    let cm : CodeMap_Impl :=
+      map.putmany_of_list
+        [
+          (0, Some []);
+          (4, Some []);
+          (8, Some [(Call O [] [])]);
+          (68, Some []);
+          (72, Some []);
+          (76, Some []);
+          (80, Some [])
+        ]
+        map.empty
+    in
+
+    (* Generator *)
+    returnGen (ms, cm).
 End GenRISCVLazyOrig.
 
 (*Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
