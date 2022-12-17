@@ -1425,10 +1425,12 @@ Memory:
 1016 : 192 @ < None > - public
 *)
 
+  (* Counterexample to prop_laziestIntegrity', use this generator instead of the
+     random machine execution generator to reproduce *)
   Definition cex01 : G (MachineState * CodeMap_Impl) :=
 
     (* Machine state *)
-    let  ms : MachineState :=
+    let ms : MachineState :=
       let rs0 :=
         {|
           getRegs :=
@@ -1479,14 +1481,15 @@ Memory:
                 (72, [Tinstr; Th2]);
                 (76, [Tinstr]);
                 (80, [Tinstr]);
-                (500, [Tstack 0]);
-                (1000, []);
-                (1004, []);
-                (1008, []);
-                (1012, []);
-                (1016, [])
+                (500, [Tstack 0])
+                (* (1000, []); *)
+                (* (1004, []); *)
+                (* (1008, []); *)
+                (* (1012, []); *)
+                (* (1016, []) *)
               ]
-              map.empty
+              (snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
+                                    (repeat nil 125)))
         |}
       in
       let ms0 := (rs0, ps0) in
