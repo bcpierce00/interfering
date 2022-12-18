@@ -1524,6 +1524,127 @@ Memory:
 
     (* Generator *)
     returnGen (ms, cm).
+
+  Definition cex02 : G (MachineState * CodeMap_Impl) :=
+
+    (* Machine state *)
+    let ms : MachineState :=
+      let rs0 :=
+        {|
+          getRegs :=
+            List.fold_right
+              (fun '(i, v) m => map.put m i (word.of_Z v))
+              map.empty
+              [
+                (0, 0);
+                (1, 0);
+                (2, 500);
+                (8, 12);
+                (9, 0);
+                (10, 4)
+              ];
+          getPc := ZToReg 0;
+          getNextPc := ZToReg 4;
+          getMem :=
+            unchecked_store_byte_list
+              (word.of_Z 500)
+              (Z32s_to_bytes (repeat 0 125))
+              map.empty;
+          getXAddrs := [];
+          getLog := []
+        |}
+      in
+      let ps0 :=
+        {|
+          nextid := 0;
+          pctags := [Tpc 0; Th2];
+          regtags :=
+            map.putmany_of_list
+              [
+                (0, []);
+                (1, []);
+                (2, [Tsp]);
+                (8, []);
+                (9, []);
+                (10, [])
+              ]
+              map.empty;
+          memtags :=
+            map.putmany_of_list
+              [
+                (0, [Tinstr; Th2]);
+                (4, [Tinstr]);
+                (8, [Tinstr; Tcall]);
+                (12, [Tinstr]);
+                (16, [Tinstr; Tcall]);
+                (100, [Tinstr; Th1]);
+                (104, [Tinstr; Th2]);
+                (108, [Tinstr]);
+                (112, [Tinstr]);
+                (116, [Tinstr]); (* machine gets stuck here (2nd pass) *)
+                (120, [Tinstr]);
+                (124, [Tinstr; Tr1]);
+                (128, [Tinstr; Tr2]);
+                (132, [Tinstr; Tr3]);
+                (500, [Tstack 0])
+                (* (1000, []); *)
+                (* (1004, []); *)
+                (* (1008, []); *)
+                (* (1012, []); *)
+                (* (1016, []) *)
+              ]
+              (snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
+                                    (repeat nil 125)))
+        |}
+      in
+      let ms0 := (rs0, ps0) in
+      let instrs :=
+        [
+          (* main *)
+          (0, Addi 2 2 12);
+          (4, Addi 10 0 1);
+          (8, Jal 1 92);
+          (12, Addi 10 0 0);
+          (16, Jal 1 84);
+          (* f *)
+          (100, Sw 2 1 0); (* header *)
+          (104, Addi 2 2 12);
+          (108, Beq 10 0 8); (* check flag *)
+          (112, Sw 2 8 (-4)); (* then: init *)
+          (116, Lw 8 2 (-4)); (* else: reuse *)
+          (120, Sw 2 8 (-8));
+          (124, Addi 2 2 (-12)); (* footer *)
+          (128, Lw 1 2 0);
+          (132, Jalr 1 1 0)
+        ]
+      in
+      List.fold_right (fun '(a, i) m => setInstrI (word.of_Z a) m i) ms0 instrs
+    in
+
+    (* Code map *)
+    let cm : CodeMap_Impl :=
+      map.putmany_of_list
+        [
+          (0, Some []);
+          (4, Some []);
+          (8, Some [(Call O [] [])]);
+          (12, Some []);
+          (16, Some [(Call O [] [])]);
+          (100, Some []);
+          (104, Some []);
+          (108, Some []);
+          (112, Some []);
+          (116, Some []);
+          (120, Some []);
+          (124, Some []);
+          (128, Some []);
+          (132, Some [Return])
+        ]
+        map.empty
+    in
+
+    (* Generator *)
+    returnGen (ms, cm).
 End GenRISCVLazyOrig.
 
 (*Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
