@@ -43,6 +43,9 @@ Module Type Printing (M : Machine) (LI : LayoutInfo M).
 
   Parameter printMachine : MachineState -> CodeMap_Impl -> Ctx -> string.
 
+  Parameter printMachines :
+    MachineState -> MachineState -> CodeMap_Impl -> Ctx -> string.
+
   Instance ShowM : Show (MachineState * CodeMap_Impl) :=
     {| show := fun '(m,cm) => printMachine m cm initCtx |}.
 End Printing.
