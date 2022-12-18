@@ -1400,6 +1400,72 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
    zeroedRiscvMachine. zeroedPolicyState, gen_exec_aux, etc. Consider a
    rather verbose encoding of a fixed counterexample: *)
 
+  Definition ex_gen
+    (mem : list (Z * InstructionI * TagSet * option Operations))
+    (regs : list (Z * Z * TagSet)) :
+    G (MachineState * CodeMap_Impl) :=
+
+    (* Compute machine state components from example description *)
+    let ait := seq.unzip1 mem in
+    let ai := seq.unzip1 ait in
+    let addrs := seq.unzip1 ai in
+    let instrs := seq.zip addrs (seq.unzip2 ai) in
+    let mtags := seq.zip addrs (seq.unzip2 ait) in
+    let ops := seq.zip addrs (seq.unzip2 mem) in
+    let rv := seq.unzip1 regs in
+    let rids := seq.unzip1 rv in
+    let rvals : list (Z * Z) := seq.zip rids (seq.unzip2 rv) in
+    let rtags : list (Z * TagSet) := seq.zip rids (seq.unzip2 regs) in
+
+    (* Machine state *)
+    let ms : MachineState :=
+      let rs0 :=
+        {|
+          getRegs :=
+            List.fold_right
+              (fun '(i, v) m => map.put m i (word.of_Z v))
+              map.empty
+              ([(0, 0); (1, 0); (2, 500)] ++ rvals);
+          getPc := ZToReg 0;
+          getNextPc := ZToReg 4;
+          getMem :=
+            unchecked_store_byte_list
+              (word.of_Z 500)
+              (Z32s_to_bytes (repeat 0 125))
+              map.empty;
+          getXAddrs := [];
+          getLog := []
+        |}
+      in
+      let ps0 :=
+        {|
+          nextid := 0;
+          pctags := [Tpc 0; Th2];
+          regtags :=
+            map.putmany_of_list
+              ([(0, []); (1, []); (2, [Tsp])] ++ rtags)
+              map.empty;
+          memtags :=
+            map.putmany_of_list
+              (mtags ++ [(500, [Tstack 0])])
+              (snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
+                                    (repeat nil 125)))
+        |}
+      in
+      let ms0 := (rs0, ps0) in
+      List.fold_right (fun '(a, i) m => setInstrI (word.of_Z a) m i) ms0 instrs
+    in
+
+    (* Code map *)
+    let cm : CodeMap_Impl :=
+      map.putmany_of_list
+        ops
+        map.empty
+    in
+
+    (* Generator *)
+    returnGen (ms, cm).
+
 (*
 PC:0 @ Tpc 0Th2
 Registers:
@@ -1428,102 +1494,17 @@ Memory:
   (* Counterexample to prop_laziestIntegrity', use this generator instead of the
      random machine execution generator to reproduce *)
   Definition cex01 : G (MachineState * CodeMap_Impl) :=
-
-    (* Machine state *)
-    let ms : MachineState :=
-      let rs0 :=
-        {|
-          getRegs :=
-            List.fold_right
-              (fun '(i, v) m => map.put m i (word.of_Z v))
-              map.empty
-              [
-                (0, 0);
-                (1, 0);
-                (2, 500);
-                (8, 12);
-                (9, 0);
-                (10, 4)
-              ];
-          getPc := ZToReg 0;
-          getNextPc := ZToReg 4;
-          getMem :=
-            unchecked_store_byte_list
-              (word.of_Z 500)
-              (Z32s_to_bytes (repeat 0 125))
-              map.empty;
-          getXAddrs := [];
-          getLog := []
-        |}
-      in
-      let ps0 :=
-        {|
-          nextid := 0;
-          pctags := [Tpc 0; Th2];
-          regtags :=
-            map.putmany_of_list
-              [
-                (0, []);
-                (1, []);
-                (2, [Tsp]);
-                (8, []);
-                (9, []);
-                (10, [])
-              ]
-              map.empty;
-          memtags :=
-            map.putmany_of_list
-              [
-                (0, [Tinstr; Th2]);
-                (4, [Tinstr]);
-                (8, [Tinstr; Tcall]);
-                (68, [Tinstr; Th1]);
-                (72, [Tinstr; Th2]);
-                (76, [Tinstr]);
-                (80, [Tinstr]);
-                (500, [Tstack 0])
-                (* (1000, []); *)
-                (* (1004, []); *)
-                (* (1008, []); *)
-                (* (1012, []); *)
-                (* (1016, []) *)
-              ]
-              (snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
-                                    (repeat nil 125)))
-        |}
-      in
-      let ms0 := (rs0, ps0) in
-      let instrs :=
-        [
-          (0, Addi 2 2 12);
-          (4, Sw 2 0 (-8));
-          (8, Jal 1 60);
-          (68, Sw 2 1 0);
-          (72, Addi 2 2 12);
-          (76, Sw 2 10 (-8));
-          (80, Lw 10 2 (-4))
-        ]
-      in
-      List.fold_right (fun '(a, i) m => setInstrI (word.of_Z a) m i) ms0 instrs
-    in
-
-    (* Code map *)
-    let cm : CodeMap_Impl :=
-      map.putmany_of_list
-        [
-          (0, Some []);
-          (4, Some []);
-          (8, Some [(Call O [] [])]);
-          (68, Some []);
-          (72, Some []);
-          (76, Some []);
-          (80, Some [])
-        ]
-        map.empty
-    in
-
-    (* Generator *)
-    returnGen (ms, cm).
+    ex_gen
+      [(  0, Addi 2 2 12,  [Tinstr; Th2],   Some [] );
+       (  4, Sw 2 0 (-8),  [Tinstr],        Some [] );
+       (  8, Jal 1 60,     [Tinstr; Tcall], Some [(Call O [] [])] );
+       ( 68, Sw 2 1 0,     [Tinstr; Th1],   Some [] );
+       ( 72, Addi 2 2 12,  [Tinstr; Th2],   Some [] );
+       ( 76, Sw 2 10 (-8), [Tinstr],        Some [] );
+       ( 80, Lw 10 2 (-4), [Tinstr],        Some [] )]
+      [(  8, 12, [] );
+       (  9,  0, [] );
+       ( 10,  4, [] )].
 
   Definition cex02 : G (MachineState * CodeMap_Impl) :=
 
