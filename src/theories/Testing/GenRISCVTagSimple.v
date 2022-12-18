@@ -1400,12 +1400,27 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
    zeroedRiscvMachine. zeroedPolicyState, gen_exec_aux, etc. Consider a
    rather verbose encoding of a fixed counterexample: *)
 
+  Definition setRegs (rvals : list (Z * Z)) (mp : MachineState) : MachineState :=
+    let (m, p) := mp in
+    let rvals' := seq.map (fun '(i, v) => (i, word.of_Z v)) rvals in
+    (m <| getRegs := map.putmany_of_list rvals' (getRegs m) |>, p).
+
+  Definition setInstrs (instrs : list (Z * InstructionI)) (mp : MachineState) : MachineState :=
+    List.fold_right (fun '(a, i) m => setInstrI (word.of_Z a) m i) mp instrs.
+
+  Definition setMemTags (mtags : list (Z * TagSet)) (mp : MachineState) : MachineState :=
+    let (m, p) := mp in
+    (m, p <| memtags := map.putmany_of_list mtags (memtags p) |>).
+
+  Definition setRegTags (rtags : list (Z * TagSet)) (mp : MachineState) : MachineState :=
+    let (m, p) := mp in
+    (m, p <| regtags := map.putmany_of_list rtags (regtags p) |>).
+
   Definition ex_gen
     (mem : list (Z * InstructionI * TagSet * option Operations))
     (regs : list (Z * Z * TagSet)) :
     G (MachineState * CodeMap_Impl) :=
-
-    (* Compute machine state components from example description *)
+    (* Machine state components from example description *)
     let ait := seq.unzip1 mem in
     let ai := seq.unzip1 ait in
     let addrs := seq.unzip1 ai in
@@ -1414,56 +1429,15 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     let ops := seq.zip addrs (seq.unzip2 mem) in
     let rv := seq.unzip1 regs in
     let rids := seq.unzip1 rv in
-    let rvals : list (Z * Z) := seq.zip rids (seq.unzip2 rv) in
-    let rtags : list (Z * TagSet) := seq.zip rids (seq.unzip2 regs) in
-
-    (* Machine state *)
-    let ms : MachineState :=
-      let rs0 :=
-        {|
-          getRegs :=
-            List.fold_right
-              (fun '(i, v) m => map.put m i (word.of_Z v))
-              map.empty
-              ([(0, 0); (1, 0); (2, 500)] ++ rvals);
-          getPc := ZToReg 0;
-          getNextPc := ZToReg 4;
-          getMem :=
-            unchecked_store_byte_list
-              (word.of_Z 500)
-              (Z32s_to_bytes (repeat 0 125))
-              map.empty;
-          getXAddrs := [];
-          getLog := []
-        |}
-      in
-      let ps0 :=
-        {|
-          nextid := 0;
-          pctags := [Tpc 0; Th2];
-          regtags :=
-            map.putmany_of_list
-              ([(0, []); (1, []); (2, [Tsp])] ++ rtags)
-              map.empty;
-          memtags :=
-            map.putmany_of_list
-              (mtags ++ [(500, [Tstack 0])])
-              (snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
-                                    (repeat nil 125)))
-        |}
-      in
-      let ms0 := (rs0, ps0) in
-      List.fold_right (fun '(a, i) m => setInstrI (word.of_Z a) m i) ms0 instrs
-    in
-
-    (* Code map *)
-    let cm : CodeMap_Impl :=
-      map.putmany_of_list
-        ops
-        map.empty
-    in
-
-    (* Generator *)
+    let rvals := seq.zip rids (seq.unzip2 rv) in
+    let rtags := seq.zip rids (seq.unzip2 regs) in
+    (* Machine state, code map and generator *)
+    let ms := setRegs rvals (
+              setInstrs instrs (
+              setRegTags rtags (
+              setMemTags mtags
+              (zeroedRiscvMachine, zeroedPolicyState)))) in
+    let cm := map.putmany_of_list ops map.empty in
     returnGen (ms, cm).
 
 (*

@@ -196,6 +196,9 @@ Module RISCV <: Machine.
 
   Definition projw (m:MachineState) (k:Element) := vtow (proj m k).
 
+  Instance etaMachineState : Settable _ :=
+    settable! mkRiscvMachine <getRegs; getPc; getNextPc; getMem; getXAddrs; getLog>.
+
   (* Maybe name this pullback instead *)
   Definition jorp (m : MachineState) (k : Element) (v : Value) : MachineState :=
     match k with
