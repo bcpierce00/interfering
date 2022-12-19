@@ -403,11 +403,10 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
       match fuel with
       | O => collect "Out-of-Fuel" true
       | S fuel' =>
-          (* Try to take a step, exit if we are stuck (no more) *)
           let '(m', _ops, _obs) := cstep mcur in
-          (* If the main run steps, try to take the same step in all current
-             variants (this should be the same step, with the same
-             operations, but we do not check this at the moment) *)
+          (* Try to take the same step in all current variants (this should be
+             the same step, with the same operations, but we do not check this
+             at the moment) *)
           let step_var '(ncur, depth, mcall, ncall) :=
             let '(n', ops, _obs) := cstep ncur in
             (* No observations for now *)
