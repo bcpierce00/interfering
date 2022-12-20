@@ -338,6 +338,8 @@ Module RISCV <: Machine.
   | Dealloc (off:Z) (sz:Z)
   .
 
+  Derive Show for Operation.
+
   Definition Operations := list Operation.
 
   Definition CodeMap := Addr -> option Operations.
@@ -555,6 +557,8 @@ Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
   | Alloc (off:Z) (sz:Z)
   | Dealloc (off:Z) (sz:Z)
   .
+
+  Derive Show for Operation.
 
   Definition coercion4 (op : RISCV.Operation) :=
     match op with
