@@ -1492,7 +1492,7 @@ Memory:
        ( 100, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
        ( 104, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
        ( 108, Beq 10 0 12,    [Tinstr],        Some [] ); (* check flag in r10 *)
-       ( 112, Addi 3 0 42,    [Tinstr],        Some [] ); (* if true then store 42...*)
+       ( 112, Addi 8 0 42,    [Tinstr],        Some [] ); (* if true then store 42...*)
        ( 116, Sw 2 8 (-4),    [Tinstr],        Some [] ); (* ... into our frame *)
        ( 120, Lw 8 2 (-4),    [Tinstr],        Some [] ); (* either way, use/reuse; machine gets stuck here (2nd pass) *)
        ( 124, Sw 2 8 (-8),    [Tinstr],        Some [] );
