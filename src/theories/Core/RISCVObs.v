@@ -284,7 +284,7 @@ Extract Constant exception =>
   Definition Operations := list Operation.
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
-  (* TODO: Operations *)
+  (* FIXME: Operations *)
   Definition step (m : RiscvMachine)
     : RiscvMachine * list Operation * Observation :=
     (* returns option unit * state *)

@@ -244,14 +244,25 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
       match fuel with
       | O => collect "Out-of-Fuel" true
       | S fuel' =>
-          (* Take a step in the primary and the shadow states *)
-          let '(m', _ops, obs) := cstep m in
-          let '(n', _, obs') := step n in
-          (* Check the observations *)
-          if negb (obs_eqb obs obs') then collect "External Violation" false else
           match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst m)))) with
           | None => collect "Bad-PC" true (* TODO Check *)
           | Some ops =>
+          (* Take a step in the primary and the shadow states *)
+          (* FIXME: The current stepping functions always return an empty list
+             of operations. We try to work around this by moving up the code map
+             check on the PC (which makes sense anyway); we can attempt to use
+             this information to update the context of new state [m'] as it
+             would have been had the data been available when it should have
+             (see [cstep] in [MachineModule]). *)
+          let '(m', _ops, obs) := cstep m in
+          (* BEGIN HACK *)
+          let m' :=
+            let '(_ms, _mc) := m' in
+            (_ms, fold_left (GenRISCVLazyOrig.PM.op (fst m)) ops _mc) in
+          (* END HACK *)
+          let '(n', _, obs') := step n in
+          (* Check the observations *)
+          if negb (obs_eqb obs obs') then collect "External Violation" false else
               (* If we just made a call, push a new variant *)
               bindGen
                 (if ops_call ops
@@ -262,20 +273,23 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                                  let nc := (ns,cs') in
                                  let test := (fun m'' n'' => cond_confidentiality m' m'' nc n'') in
                                  let frame := (fuel', nc, (depthOf cs', test)) in
-                                 ret (frame::stk))
+                                 ret (frame::stk)
+                              )
                  else ret stk) (fun stk' =>
               if (depthOf (snd m') <? depthOf (snd m))%nat
-              then let (ready, stk'') := separate_by_depth stk' (depthOf (snd m')) in
+              then
+                   let (ready, stk'') := separate_by_depth stk' (depthOf (snd m')) in
                    (* If we just returned to a depth, d, execute all the variants waiting for that depth *)
                    let results := map (fun '(fuel,nv,cond) => step_until_done fuel nv cond m') ready in
                    (* TODO: Check internal confidentiality *)
-                   
+
                    (* Collect witnesses *)
                    let witnesses := seq.flatten (map fst results) in
                    (* Update the shadow state *)
                    bindGen (GenRISCVLazyOrig.genVariantByList witnesses n)
                            (fun n'' => aux fuel' m' n'' stk'')
-              else aux fuel' m' n' stk')
+              else aux fuel' m' n' stk'
+                    )
           end
       end in
     aux fuel m n [].

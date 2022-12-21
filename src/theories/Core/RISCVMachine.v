@@ -342,7 +342,7 @@ Module RISCV <: Machine.
 
   Definition CodeMap := Addr -> option Operations.
   
-  (* TODO: operations *)
+  (* FIXME: operations *)
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Definition step (m : MachineState) : MachineState * list Operation * Observation :=
     (* returns option unit * state *)
