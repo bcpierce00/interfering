@@ -51,10 +51,7 @@ Module Type Printing (M : Machine) (LI : LayoutInfo M).
 End Printing.
 
 Module Type TestProps (M : Machine) (LI : LayoutInfo M).
-  Parameter prop_integrity : Checker.
-  Parameter prop_confidentiality : Checker.
   Parameter prop_laziestIntegrity : Checker.
-  Parameter prop_laziestIntegrity' : Checker. (* NOTE Temporary addition, replace old one later *)
   Parameter prop_lazyConfidentiality : Checker.
 End TestProps.
 

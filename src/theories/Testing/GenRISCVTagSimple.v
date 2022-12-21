@@ -1275,7 +1275,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
               let mp''  := setInstrTagI (word.unsigned (getPc m)) mp' it in
               let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
               match mpstep mp'' with
-              | (mp''', _t, o) =>
+              | (mp''', _t, _) =>
                 (gen_exec_aux steps' funSteps' i t mp0'' mp''' cm' f' nextF' its dataP codeP callP)
               end))
       end
@@ -1484,24 +1484,24 @@ Memory:
     ex_gen
       [(* main *)
        (   0, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
-       (   4, Addi 10 0 1,    [Tinstr],        Some [] );
+       (   4, Addi 10 0 1,    [Tinstr],        Some [] ); (* Set flag to true *)
        (   8, Jal 1 92,       [Tinstr; Tcall], Some [(Call O [] [])] );
-       (  12, Addi 10 0 0,    [Tinstr],        Some [] );
+       (  12, Addi 10 0 0,    [Tinstr],        Some [] ); (* Set flag to false *)
        (  16, Jal 1 84,       [Tinstr; Tcall], Some [(Call O [] [])] );
        (* f *)
        ( 100, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
        ( 104, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
-       ( 108, Beq 10 0 8,     [Tinstr],        Some [] ); (* check flag *)
-       ( 112, Sw 2 8 (-4),    [Tinstr],        Some [] ); (* then: init *)
-       ( 116, Lw 8 2 (-4),    [Tinstr],        Some [] ); (* else: reuse; machine gets stuck here (2nd pass) *)
-       ( 120, Sw 2 8 (-8),    [Tinstr],        Some [] );
-       ( 124, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
-       ( 128, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       ( 132, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
+       ( 108, Beq 10 0 12,    [Tinstr],        Some [] ); (* check flag in r10 *)
+       ( 112, Addi 3 0 42,    [Tinstr],        Some [] ); (* if true then store 42...*)
+       ( 116, Sw 2 8 (-4),    [Tinstr],        Some [] ); (* ... into our frame *)
+       ( 120, Lw 8 2 (-4),    [Tinstr],        Some [] ); (* either way, use/reuse; machine gets stuck here (2nd pass) *)
+       ( 124, Sw 2 8 (-8),    [Tinstr],        Some [] );
+       ( 128, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
+       ( 132, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 136, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
       [(  8, 12, [] );
        (  9,  0, [] );
        ( 10,  4, [] )].
-
 
 End GenRISCVLazyOrig.
 
