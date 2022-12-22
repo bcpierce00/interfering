@@ -337,7 +337,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     confidentiality_tester cm i fuel (m, ctx) m.
 
   Definition prop_lazyConfidentiality :=
-    forAll GenRISCVLazyOrig.cex02 (fun '(m,cm) =>
+    forAll GenRISCVLazyOrig.cex03 (fun '(m,cm) =>
                       (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
 
 End TestPropsRISCVSimple.

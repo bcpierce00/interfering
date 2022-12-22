@@ -1503,6 +1503,23 @@ Memory:
        (  9,  0, [] );
        ( 10,  4, [] )].
 
+  Definition cex03 : G (MachineState * CodeMap_Impl) :=
+    ex_gen
+      [(* main *)
+       (   0, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       (   4, Jal 1 72,       [Tinstr; Tcall], Some [(Call O [] [])] );
+       (   8, Addi 8 8 740,   [Tinstr],        Some [] );
+       (  12, Jal 1 68,       [Tinstr; Tcall], Some [(Call O [] [])] );
+       (* f *)
+       (  76, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       (  80, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       (  84, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
+       (  88, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       (  92, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
+      [(  8, 12, [] );
+       (  9, 32, [] );
+       ( 10, 20, [] )].
+
 End GenRISCVLazyOrig.
 
 (*Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
