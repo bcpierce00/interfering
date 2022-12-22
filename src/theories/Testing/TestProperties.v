@@ -60,7 +60,57 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   Import TagPolicyLazyOrig.
   Import RISCVDef.
   Import PM.
-  
+
+  (* FIXME: The current stepping functions always return an empty list
+     of operations. We try to work around this by moving up the code map
+     check on the PC (which makes sense anyway); we can attempt to use
+     this information to update the context of new state [m'] as it
+     would have been had the data been available when it should have
+     (see [cstep] in [MachineModule]). *)
+
+  (* BEGIN HACK *)
+
+  (* Obtain operations from code map, wrap around given (defective) step
+     functions and update contexts if applicable. Use only wrappers in the
+     properties until a proper fix is implemented. *)
+
+  Definition get_ops (m : MachineState) (cm : CodeMap_Impl) : Operations :=
+    match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst m))) with
+    | Some ops => ops
+    | None => [] (* shouldn't happen, but delegating error handling now *)
+    end.
+
+  Definition step (m : MachineState) (cm : CodeMap_Impl)
+    : MachineState * list Operation * Observation :=
+    let ops := get_ops m cm in
+    let '(m', _ (* always empty! *), obs) := step m in
+    (m', ops, obs).
+
+  Definition uncoercion4 (op : Operation) : RISCVMachine.RISCV.Operation :=
+    match op with
+    | Call f reg_args stk_args => RISCVMachine.RISCV.Call f reg_args stk_args
+    | Tailcall f reg_args stk_args => RISCVMachine.RISCV.Call f reg_args stk_args
+    | Return => RISCVMachine.RISCV.Return
+    | Alloc off sz => RISCVMachine.RISCV.Alloc off sz
+    | Dealloc off sz => RISCVMachine.RISCV.Dealloc off sz
+    end.
+
+  Definition mpstep (m : MPState) (cm : CodeMap_Impl)
+    : MPState * list RISCVMachine.RISCV.Operation * RISCVMachine.RISCV.Observation :=
+    let ops := get_ops m cm in
+    let '(m', _ (* always empty! *), obs) := mpstep m in
+    (m', map uncoercion4 ops, obs).
+
+  Definition cstep (m : State) (cm : CodeMap_Impl)
+    : MachineState * Ctx * list Operation * Observation :=
+    let ops := get_ops (fst m) cm in
+    let '(m', _ (* always empty! *), obs) := cstep m in
+    let m'_fix :=
+      (fst m', fold_left (GenRISCVLazyOrig.PM.op (fst m)) ops (snd m')) in
+    (m'_fix, ops, obs).
+
+  (* END HACK *)
+
   Definition defFuel := 42%nat.
 
   Definition sameDifferenceP (m m' n n' : MachineState) k :=
@@ -144,9 +194,9 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
       match fuel with
       | O => collect "Out-of-Fuel" true
       | S fuel' =>
-          let '(m', ctx', _ops, obs) := cstep (m, ctx) in
+          let '(m', ctx', _ops, obs) := cstep (m, ctx) cm in
           (* Take a step of the shadow state *)
-          let '(n',_,obs') := step n in
+          let '(n',_,obs') := step n cm in
           (* Test that we made the same observations *)
           check (obs_eqb obs obs'), "Lazy Violation";
           (* If we could step, verify that the new state satisfies all
@@ -214,14 +264,14 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   Definition BinCondition : Type := nat * (State -> State -> list Element).
   Definition Deferred : Type := nat * State * BinCondition.
   
-  Fixpoint step_until_done (fuel: nat) (n: State) (cond: BinCondition) (m: State) : list Element * Trace :=
+  Fixpoint step_until_done (fuel: nat) (n: State) (cond: BinCondition) (m: State) (cm : CodeMap_Impl) : list Element * Trace :=
     let (depth, test) := cond in
     if (depthOf (snd n) <=? depth)%nat
     then match fuel with
          | O => ([], Trace.finished Tau)
          | S fuel' =>
-             let '(n', _ops, obs) := cstep n in
-             let (witnesses, t) := step_until_done fuel' n' cond m in
+             let '(n', _ops, obs) := cstep n cm in
+             let (witnesses, t) := step_until_done fuel' n' cond m cm in
              (witnesses, Trace.notfinished obs t)
          end
     else
@@ -252,19 +302,8 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
       | S fuel' =>
           get ops <- (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst m)))), "Bad-PC";
           (* Take a step in the primary and the shadow states *)
-          (* FIXME: The current stepping functions always return an empty list
-             of operations. We try to work around this by moving up the code map
-             check on the PC (which makes sense anyway); we can attempt to use
-             this information to update the context of new state [m'] as it
-             would have been had the data been available when it should have
-             (see [cstep] in [MachineModule]). *)
-          let '(m', _ops, obs) := cstep m in
-          (* BEGIN HACK *)
-          let m' :=
-            let '(_ms, _mc) := m' in
-            (_ms, fold_left (GenRISCVLazyOrig.PM.op (fst m)) ops _mc) in
-          (* END HACK *)
-          let '(n', _, obs') := step n in
+          let '(m', _ops, obs) := cstep m cm in
+          let '(n', _, obs') := step n cm in
           (* Check the observations *)
           check (obs_eqb obs obs'), "External Violation";
           (* If we just made a call, push a new variant *)
@@ -281,7 +320,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
           if (depthOf (snd m') <? depthOf (snd m))%nat
           then let (ready, stk'') := separate_by_depth stk' (depthOf (snd m')) in
                (* If we just returned to a depth, d, execute all the variants waiting for that depth *)
-               let results := map (fun '(fuel,nv,cond) => step_until_done fuel nv cond m') ready in
+               let results := map (fun '(fuel,nv,cond) => step_until_done fuel nv cond m' cm) ready in
                (* TODO: Check internal confidentiality *)
             
                (* Collect witnesses *)
