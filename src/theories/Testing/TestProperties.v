@@ -26,7 +26,6 @@ Require Import riscv.Platform.Minimal.
 Require Import riscv.Platform.MinimalLogging.
 Require Import riscv.Platform.Run.
 Require Import riscv.Utility.Monads.
-Require Import riscv.Utility.MonadNotations.
 Require Import riscv.Utility.MkMachineWidth.
 Require Import coqutil.Map.Interface.
 Require Import coqutil.Word.LittleEndian.
@@ -41,7 +40,18 @@ Import RecordSetNotations.
 
 Import ListNotations.
 
+Require Import ExtLib.Structures.Monad. Import MonadNotation. Open Scope monad_scope.
+
 (* To debug, use [Show.trace] with the printers defined in [PrintRISCVLazyOrig] *)
+
+(* Helpful Error-monad-ish notation *)
+Notation " 'check' A , B ; C" := (if A then C else collect B false)
+                                   (at level 200, A at level 100, B at level 200, C at level 200).
+Notation " 'get' X <- A , B ; C" := (match A with
+                                    | Some X => C
+                                    | None => collect B false
+                                    end)
+                                     (at level 60, X at level 60, A at level 60, B at level 200, C at level 200).
 
 (* NOTE Not concentrating on eager properties at the moment, focusing changes on
    lazy properties (not including lockstep integrity). *)
@@ -134,34 +144,30 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
       match fuel with
       | O => collect "Out-of-Fuel" true
       | S fuel' =>
-          (* Try to take a step, exit if we are stuck *)
           let '(m', ctx', _ops, obs) := cstep (m, ctx) in
           (* Take a step of the shadow state *)
           let '(n',_,obs') := step n in
           (* Test that we made the same observations *)
-          if negb (obs_eqb obs obs') then collect "Violation" false else
+          check (obs_eqb obs obs'), "Lazy Violation";
           (* If we could step, verify that the new state satisfies all
              active tests, and accumulate witnesses to violations *)
           let '(conds', witnesses) := check_conds conds (m', ctx') in
-          bindGen (GenRISCVLazyOrig.genVariantByList witnesses n') (fun n'' =>
+          n'' <- (GenRISCVLazyOrig.genVariantByList witnesses n');;
           (* Check the code map at the current PC (this should never fail) *)
-          match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst m))) with
-          | None => collect "Bad-PC" false (* TODO Check *)
-          | Some ops =>
-              (* Recurse on the new state, where if the instruction
-                 corresponds to a call (assuming a well-formed code map
-                 without nonsensical lists of operations) a new test is
-                 added to the list *)
-              let conds'' :=
-                if ops_call ops
-                then let cond := gen m' ctx' cm in (* Before/after call? *)
-                     (depthOf ctx, cond) :: conds'
-                else conds in
-              aux fuel' m' ctx' n'' conds'
-          end)
-      end
-    in
-    aux fuel m ctx n conds.
+          get ops <- (CodeMap_fromImpl cm) (word.unsigned (getPc (fst m))), "Bad-PC";
+          (* Recurse on the new state, where if the instruction
+             corresponds to a call (assuming a well-formed code map
+             without nonsensical lists of operations) a new test is
+             added to the list *)
+          let conds'' :=
+            if ops_call ops
+            then let test := gen m' ctx' cm in (* Before/after call? *)
+                 (depthOf ctx, test) :: conds'
+            else conds in
+          aux fuel' m' ctx' n'' conds'
+  end
+  in
+  aux fuel m ctx n conds.
 
   (* Walk over the memory and determine which elements of interest were changed). *)
   Fixpoint walk (ks : list Element) (cm : CodeMap_Impl) (m : MachineState) (c : Ctx) (m' : MachineState) : list Element :=
@@ -232,7 +238,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
         else (ready, (fuel,m,(depth,test))::not_ready)
     end.
 
-  (* TODO Monadic notation for added readability *)
+  (* TODO Did some Monad notation, but the stk' <- ... stuck is nasty *)
   Definition confidentiality_tester
     (cm : CodeMap_Impl) (li : LayoutInfo)
     (fuel : nat)
@@ -244,9 +250,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
       match fuel with
       | O => collect "Out-of-Fuel" true
       | S fuel' =>
-          match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst m)))) with
-          | None => collect "Bad-PC" true (* TODO Check *)
-          | Some ops =>
+          get ops <- (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst m)))), "Bad-PC";
           (* Take a step in the primary and the shadow states *)
           (* FIXME: The current stepping functions always return an empty list
              of operations. We try to work around this by moving up the code map
@@ -262,38 +266,33 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
           (* END HACK *)
           let '(n', _, obs') := step n in
           (* Check the observations *)
-          if negb (obs_eqb obs obs') then collect "External Violation" false else
-              (* If we just made a call, push a new variant *)
-              bindGen
-                (if ops_call ops
-                 then let '(ms', cs') := m' in
-                      let secret := List.filter (fun k => confidentialityComponent cs' k) (getElements ms') in
-                      bindGen (GenRISCVLazyOrig.genVariantByList secret ms')
-                              (fun ns =>
-                                 let nc := (ns,cs') in
-                                 let test := (fun m'' n'' => cond_confidentiality m' m'' nc n'') in
-                                 let frame := (fuel', nc, (depthOf cs', test)) in
-                                 ret (frame::stk)
-                              )
-                 else ret stk) (fun stk' =>
-              if (depthOf (snd m') <? depthOf (snd m))%nat
-              then
-                   let (ready, stk'') := separate_by_depth stk' (depthOf (snd m')) in
-                   (* If we just returned to a depth, d, execute all the variants waiting for that depth *)
-                   let results := map (fun '(fuel,nv,cond) => step_until_done fuel nv cond m') ready in
-                   (* TODO: Check internal confidentiality *)
-
-                   (* Collect witnesses *)
-                   let witnesses := seq.flatten (map fst results) in
-                   (* Update the shadow state *)
-                   bindGen (GenRISCVLazyOrig.genVariantByList witnesses n)
-                           (fun n'' => aux fuel' m' n'' stk'')
-              else aux fuel' m' n' stk'
-                    )
-          end
-      end in
-    aux fuel m n [].
-
+          check (obs_eqb obs obs'), "External Violation";
+          (* If we just made a call, push a new variant *)
+          stk' <- 
+            (if ops_call ops
+             then let '(ms', cs') := m' in
+                  let secret := List.filter (fun k => confidentialityComponent cs' k) (getElements ms') in
+                  ns <- GenRISCVLazyOrig.genVariantByList secret ms';;
+                  let nc := (ns,cs') in
+                  let test := (fun m'' n'' => cond_confidentiality m' m'' nc n'') in
+                  let frame := (fuel', nc, (depthOf cs', test)) in
+                  ret (frame::stk)
+             else ret stk);;
+          if (depthOf (snd m') <? depthOf (snd m))%nat
+          then let (ready, stk'') := separate_by_depth stk' (depthOf (snd m')) in
+               (* If we just returned to a depth, d, execute all the variants waiting for that depth *)
+               let results := map (fun '(fuel,nv,cond) => step_until_done fuel nv cond m') ready in
+               (* TODO: Check internal confidentiality *)
+            
+               (* Collect witnesses *)
+               let witnesses := seq.flatten (map fst results) in
+               (* Update the shadow state *)
+               n'' <- GenRISCVLazyOrig.genVariantByList witnesses n;;
+               aux fuel' m' n'' stk''
+          else aux fuel' m' n' stk'                   
+  end in
+  aux fuel m n [].
+  
   Fixpoint prop_lazyStackConfidentiality
     fuel (i : LayoutInfo) m (cm : CodeMap_Impl) ctx : Checker.Checker :=
     confidentiality_tester cm i fuel (m, ctx) m.
