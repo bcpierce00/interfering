@@ -1396,9 +1396,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   genMachine defLayoutInfo defTagInfo (zeroedRiscvMachine,zeroedPolicyState) map.empty
              dataP codeP callP.
 
-(* To encode specific examples, the relevant bits already exist as part of
-   zeroedRiscvMachine. zeroedPolicyState, gen_exec_aux, etc. Consider a
-   rather verbose encoding of a fixed counterexample: *)
+  (* Some helpers *)
 
   Definition setRegs (rvals : list (Z * Z)) (mp : MachineState) : MachineState :=
     let (m, p) := mp in
@@ -1415,6 +1413,11 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition setRegTags (rtags : list (Z * TagSet)) (mp : MachineState) : MachineState :=
     let (m, p) := mp in
     (m, p <| regtags := map.putmany_of_list rtags (regtags p) |>).
+
+  (* Constant generator for explicit program listings. These follow the same
+     conventions as the initial machine: reserved registers (zero, RA, SP) and
+     memory layout (instructions in 0-496 range, reserved space for stack etc.
+     starting at 500). *)
 
   Definition ex_gen
     (mem : list (Z * InstructionI * TagSet * option Operations))
@@ -1439,31 +1442,6 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
               (zeroedRiscvMachine, zeroedPolicyState)))) in
     let cm := map.putmany_of_list ops map.empty in
     returnGen (ms, cm).
-
-(*
-PC:0 @ Tpc 0Th2
-Registers:
-0 : 0 @
-1 : 0 @
-2 : 500 @ Tsp
-8 : 12 @
-9 : 0 @
-10 : 4 @
-Memory:
-0 : Addi 2 2 12 @ TinstrTh2 < Some [] > - public
-4 : Sw 2 0 -8 @ Tinstr < Some [] > - public
-8 : Jal 1 60 @ TinstrTcall < Some [Call] > - public
-68 : Sw 2 1 0 @ TinstrTh1 < Some [] > - public
-72 : Addi 2 2 12 @ TinstrTh2 < Some [] > - public
-76 : Sw 2 10 -8 @ Tinstr < Some [] > - public
-80 : Lw 10 2 -4 @ Tinstr < Some [] > - public
-500 : 0 @Tstack 0 < None > - free
-1000 : 636 @ < None > - public
-1004 : 420 @ < None > - public
-1008 : 1016 @ < None > - public
-1012 : 916 @ < None > - public
-1016 : 192 @ < None > - public
-*)
 
   (* Counterexample to prop_laziestIntegrity', use this generator instead of the
      random machine execution generator to reproduce *)
