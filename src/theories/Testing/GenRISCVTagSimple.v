@@ -1498,6 +1498,49 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
        (  9, 32, [] );
        ( 10, 20, [] )].
 
+  Definition cex04 : G (MachineState * CodeMap_Impl) :=
+    ex_gen
+      [(* main *)
+       (   0, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       (   4, Jal 1 416,      [Tinstr; Tcall], Some [(Call 0%nat [] [])] );
+       (   8, Sw 2 0 (-4),    [Tinstr],        Some [] );
+       (  12, Sw 2 10 (-4),   [Tinstr],        Some [] );
+       (  16, Jal 1 332,      [Tinstr; Tcall], Some [(Call 1%nat [] [])] );
+       (  20, Jal 1 104,      [Tinstr; Tcall], Some [(Call 2%nat [] [])] );
+       (* f3 *)
+       ( 124, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 128, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       ( 132, Lw 9 2 (-4),    [Tinstr],        Some [] );
+       (* f2 *)
+       ( 348, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 352, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       ( 356, Jal 1 20,       [Tinstr; Tcall], Some [(Call 4%nat [] [])] );
+       ( 360, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
+       ( 364, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 368, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f4 *)
+       ( 376, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 380, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       ( 384, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
+       ( 388, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 392, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f1 *)
+       ( 420, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 424, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       ( 428, Jal 1 20,       [Tinstr; Tcall], Some [(Call 5%nat [] [])] );
+       ( 432, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
+       ( 436, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 440, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f5 *)
+       ( 448, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 452, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       ( 456, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
+       ( 460, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 464, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
+      [(  8, 12, [] );
+       (  9, 28, [] );
+       ( 10, 12, [] )].
+
 End GenRISCVLazyOrig.
 
 (*Module GenRISCVLazyNoCheck <: Gen RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.

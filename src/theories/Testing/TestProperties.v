@@ -288,6 +288,8 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
         else (ready, (fuel,m,(depth,test))::not_ready)
     end.
 
+    Derive Show for Element.
+
   (* TODO Did some Monad notation, but the stk' <- ... stuck is nasty *)
   Definition confidentiality_tester
     (cm : CodeMap_Impl) (li : LayoutInfo)
@@ -340,11 +342,23 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     confidentiality_tester cm i fuel (m, ctx) m.
 
   (* cex03 will ordinarily pass if n'' is computed based on n', but testing the
-     same example repeatedly will cause it to fail; cex02 will also pass with
-     this change; in this case genMach still finds counterexamples, which tend
-     to be more complex (after policy and property adjustments, cex02 fails due
-     to reuse at the same level between executions, the innocuous cex03 passes,
-     and genMach still finds longer counterexamples) *)
+     same example repeatedly will cause it to fail
+
+     cex02 will also pass with this change
+
+     in this case genMach still finds counterexamples, which tend to be more
+     complex
+
+     after policy and property adjustments:
+
+     cex02 fails due to reuse at the same level between executions
+
+     the innocuous cex03 passes
+
+     genMach still finds longer counterexamples, such as cex04, where the
+     variant gets stuck (and therefore out of sync) due to step_until_done
+     selecting (most of) the code memory as witness and mutating it into
+     non-instructions *)
   Definition prop_lazyConfidentiality :=
     forAll GenRISCVLazyOrig.cex03 (fun '(m,cm) =>
                       (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
