@@ -326,6 +326,9 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                (* Collect witnesses *)
                let witnesses := seq.flatten (map fst results) in
                (* Update the shadow state *)
+               (* NOTE: Executions become unsynced by one step here, e.g., when
+                  returning: m -> m' keeps the new PC, but n -> n'' discards the
+                  n -> n' step *)
                n'' <- GenRISCVLazyOrig.genVariantByList witnesses n;;
                aux fuel' m' n'' stk''
           else aux fuel' m' n' stk'                   

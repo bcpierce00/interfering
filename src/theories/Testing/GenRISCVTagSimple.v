@@ -1487,13 +1487,13 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
        (   0, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
        (   4, Jal 1 72,       [Tinstr; Tcall], Some [(Call O [] [])] );
        (   8, Addi 8 8 740,   [Tinstr],        Some [] );
-       (  12, Jal 1 68,       [Tinstr; Tcall], Some [(Call O [] [])] );
+       (  12, Jal 1 68,       [Tinstr; Tcall], Some [(Call O [] [])] ); (* could correct this offset to 64, the same problem occurs *)
        (* f *)
        (  76, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
        (  80, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
        (  84, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
        (  88, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       (  92, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
+       (  92, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )] (* variant machine can step on first return, but state is not updated and becomes unsynced *)
       [(  8, 12, [] );
        (  9, 32, [] );
        ( 10, 20, [] )].
