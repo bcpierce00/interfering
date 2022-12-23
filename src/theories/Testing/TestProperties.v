@@ -339,6 +339,10 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     fuel (i : LayoutInfo) m (cm : CodeMap_Impl) ctx : Checker.Checker :=
     confidentiality_tester cm i fuel (m, ctx) m.
 
+  (* cex03 will ordinarily pass if n'' is computed based on n', but testing the
+     same example repeatedly will cause it to fail; cex02 will also pass with
+     this change; in this case genMach still finds counterexamples, which tend
+     to be more complex *)
   Definition prop_lazyConfidentiality :=
     forAll GenRISCVLazyOrig.cex03 (fun '(m,cm) =>
                       (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
