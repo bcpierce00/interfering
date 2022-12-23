@@ -165,7 +165,8 @@ Module PrintRISCVLazyOrig : Printing RISCVLazyOrig RISCVDef.
   Import RISCVDef.
   Import PM.
 
-  Definition printObsType (o:Event) := "".
+  Definition printObsType (o:Event) :=
+    ("[R" ++ show (fst o) ++ " -> " ++ show (snd o) ++ "]")%string.
   Instance ShowObsType : Show Event :=
     {| show o := printObsType o |}.
   Derive Show for Observation.
