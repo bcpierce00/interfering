@@ -215,7 +215,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       match tpc, ttarget with
       | [Tpc current; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
                                                  <| regtags := map.put (regtags p) rd [] |>
-                                                 <| nextid := current |>)
+                                                 <| nextid := pred current |>)
       | _, _ => (*trace ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
                                                ++ " rd@" ++ show treturn ++ nl)*) None
       end

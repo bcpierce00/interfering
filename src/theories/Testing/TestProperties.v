@@ -328,8 +328,8 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                (* Update the shadow state *)
                (* NOTE: Executions become unsynced by one step here, e.g., when
                   returning: m -> m' keeps the new PC, but n -> n'' discards the
-                  n -> n' step *)
-               n'' <- GenRISCVLazyOrig.genVariantByList witnesses n;;
+                  n -> n' step (currently changed to n') *)
+               n'' <- GenRISCVLazyOrig.genVariantByList witnesses n';;
                aux fuel' m' n'' stk''
           else aux fuel' m' n' stk'                   
   end in
@@ -342,7 +342,9 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   (* cex03 will ordinarily pass if n'' is computed based on n', but testing the
      same example repeatedly will cause it to fail; cex02 will also pass with
      this change; in this case genMach still finds counterexamples, which tend
-     to be more complex *)
+     to be more complex (after policy and property adjustments, cex02 fails due
+     to reuse at the same level between executions, the innocuous cex03 passes,
+     and genMach still finds longer counterexamples) *)
   Definition prop_lazyConfidentiality :=
     forAll GenRISCVLazyOrig.cex03 (fun '(m,cm) =>
                       (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
