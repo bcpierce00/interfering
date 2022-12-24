@@ -264,19 +264,25 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   Definition BinCondition : Type := nat * (State -> State -> list Element).
   Definition Deferred : Type := nat * State * BinCondition.
   
-  Fixpoint step_until_done (fuel: nat) (n: State) (cond: BinCondition) (m: State) (cm : CodeMap_Impl) : list Element * Trace :=
+  Definition step_until_done (fuel: nat) (n: State) (cond: BinCondition) (m: State) (cm : CodeMap_Impl) : list Element * Trace :=
     let (depth, test) := cond in
-    if (depthOf (snd n) <=? depth)%nat
-    then match fuel with
-         | O => ([], Trace.finished Tau)
-         | S fuel' =>
-             let '(n', _ops, obs) := cstep n cm in
-             let (witnesses, t) := step_until_done fuel' n' cond m cm in
-             (witnesses, Trace.notfinished obs t)
-         end
-    else
-      let witnesses := test m n in
-      (witnesses, Trace.finished Tau).
+    let fix aux fuel n :=
+      if (negb (depthOf (snd n) <? depth))%nat (* XXX check depths, see below *)
+      then match fuel with
+           | O =>
+               ([], Trace.finished Tau)
+           | S fuel' =>
+               let '(n', _ops, obs) := cstep n cm in
+               let (witnesses, t) := aux fuel' n' in
+               (witnesses, Trace.notfinished obs t)
+           end
+      else
+        let witnesses := test m n in
+        (witnesses, Trace.finished Tau)
+)
+    in
+    aux fuel n
+  .
 
   Fixpoint separate_by_depth (stk:list (nat * State * BinCondition)) (d:nat) :=
     match stk with
@@ -288,7 +294,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
         else (ready, (fuel,m,(depth,test))::not_ready)
     end.
 
-    Derive Show for Element.
+  Derive Show for Element.
 
   (* TODO Did some Monad notation, but the stk' <- ... stuck is nasty *)
   Definition confidentiality_tester
@@ -320,7 +326,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                   ret (frame::stk)
              else ret stk);;
           if (depthOf (snd m') <? depthOf (snd m))%nat
-          then let (ready, stk'') := separate_by_depth stk' (depthOf (snd m')) in
+          then let (ready, stk'') := separate_by_depth stk' (depthOf (snd m(*'*))) in (* XXX check depths, see above *)
                (* If we just returned to a depth, d, execute all the variants waiting for that depth *)
                let results := map (fun '(fuel,nv,cond) => step_until_done fuel nv cond m' cm) ready in
                (* TODO: Check internal confidentiality *)
