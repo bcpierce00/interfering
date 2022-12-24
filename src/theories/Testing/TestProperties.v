@@ -113,6 +113,8 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
 
   Definition defFuel := 42%nat.
 
+  Derive Show for Element.
+
   Definition sameDifferenceP (m m' n n' : MachineState) k :=
     if (orb (negb (Z.eqb (projw m k) (projw m' k)))
             (negb (Z.eqb (projw n k) (projw n' k)))) then
@@ -259,7 +261,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     let '(ms', _) := m' in
     let '(ns, _) := n in
     let '(ns', _) := n' in
-    List.filter (sameDifferenceP ms ms' ns ns') (getElements ms').
+    List.filter (fun k => negb (sameDifferenceP ms ms' ns ns' k)) (getElements ms').
 
   Definition BinCondition : Type := nat * (State -> State -> list Element).
   Definition Deferred : Type := nat * State * BinCondition.
