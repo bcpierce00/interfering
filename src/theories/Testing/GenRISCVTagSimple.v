@@ -1447,11 +1447,11 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
      random machine execution generator to reproduce *)
   Definition cex01 : G (MachineState * CodeMap_Impl) :=
     ex_gen
-      [(  0, Addi 2 2 12,  [Tinstr; Th2],   Some [] );
+      [(  0, Addi 2 2 12,  [Tinstr; Th2],   Some [(Alloc 0 12)] );
        (  4, Sw 2 0 (-8),  [Tinstr],        Some [] );
        (  8, Jal 1 60,     [Tinstr; Tcall], Some [(Call O [] [])] );
        ( 68, Sw 2 1 0,     [Tinstr; Th1],   Some [] );
-       ( 72, Addi 2 2 12,  [Tinstr; Th2],   Some [] );
+       ( 72, Addi 2 2 12,  [Tinstr; Th2],   Some [(Alloc 0 12)] );
        ( 76, Sw 2 10 (-8), [Tinstr],        Some [] );
        ( 80, Lw 10 2 (-4), [Tinstr],        Some [] )]
       [(  8, 12, [] );
@@ -1461,20 +1461,20 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition cex02 : G (MachineState * CodeMap_Impl) :=
     ex_gen
       [(* main *)
-       (   0, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       (   0, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
        (   4, Addi 10 0 1,    [Tinstr],        Some [] ); (* Set flag to true *)
        (   8, Jal 1 92,       [Tinstr; Tcall], Some [(Call O [] [])] );
        (  12, Addi 10 0 0,    [Tinstr],        Some [] ); (* Set flag to false *)
        (  16, Jal 1 84,       [Tinstr; Tcall], Some [(Call O [] [])] );
        (* f *)
        ( 100, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 104, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       ( 104, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
        ( 108, Beq 10 0 12,    [Tinstr],        Some [] ); (* check flag in r10 *)
        ( 112, Addi 8 0 42,    [Tinstr],        Some [] ); (* if true then store 42...*)
        ( 116, Sw 2 8 (-4),    [Tinstr],        Some [] ); (* ... into our frame *)
        ( 120, Lw 8 2 (-4),    [Tinstr],        Some [] ); (* either way, use/reuse; machine gets stuck here (2nd pass) *)
        ( 124, Sw 2 8 (-8),    [Tinstr],        Some [] );
-       ( 128, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
+       ( 128, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
        ( 132, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
        ( 136, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
       [(  8, 12, [] );
@@ -1484,14 +1484,14 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition cex03 : G (MachineState * CodeMap_Impl) :=
     ex_gen
       [(* main *)
-       (   0, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       (   0, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
        (   4, Jal 1 72,       [Tinstr; Tcall], Some [(Call O [] [])] );
        (   8, Addi 8 8 740,   [Tinstr],        Some [] );
        (  12, Jal 1 68,       [Tinstr; Tcall], Some [(Call O [] [])] ); (* could correct this offset to 64, the same problem occurs *)
        (* f *)
        (  76, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       (  80, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
-       (  84, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
+       (  80, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (  84, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
        (  88, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
        (  92, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )] (* variant machine can step on first return, but state is not updated and becomes unsynced *)
       [(  8, 12, [] );
@@ -1501,7 +1501,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition cex04 : G (MachineState * CodeMap_Impl) :=
     ex_gen
       [(* main *)
-       (   0, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       (   0, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
        (   4, Jal 1 416,      [Tinstr; Tcall], Some [(Call 1%nat [] [])] );
        (   8, Sw 2 0 (-4),    [Tinstr],        Some [] );
        (  12, Sw 2 10 (-4),   [Tinstr],        Some [] );
@@ -1511,31 +1511,31 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
           modifications, e.g., the replacement of some of the calls, lead to
           other, but different violations) -- observe that variant generation
           also mutates the hardwired zero register *)
-       (* (* f2 *) *)
-       (* ( 348, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *) *)
-       (* ( 352, Addi 2 2 12,    [Tinstr; Th2],   Some [] ); *)
+       (* f2 *)
+       ( 348, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 352, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 356, Jal 1 20,       [Tinstr; Tcall], Some [(Call 4%nat [] [])] );
        (* ( 356, Jal 1 20,       [Tinstr; Tcall], Some [(Call 4%nat [] [])] ); *)
-       (* (* ( 356, Jal 1 20,       [Tinstr; Tcall], Some [(Call 4%nat [] [])] ); *) *)
-       (* ( 360, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *) *)
-       (* ( 364, Lw 1 2 0,       [Tinstr; Tr2],   Some [] ); *)
-       (* ( 368, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] ); *)
-       (* (* f4 *) *)
-       (* ( 376, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *) *)
-       (* ( 380, Addi 2 2 12,    [Tinstr; Th2],   Some [] ); *)
-       (* ( 384, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *) *)
-       (* ( 388, Lw 1 2 0,       [Tinstr; Tr2],   Some [] ); *)
-       (* ( 392, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] ); *)
+       ( 360, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 364, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 368, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f4 *)
+       ( 376, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 380, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 384, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 388, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 392, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
        (* f1 *)
        ( 420, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 424, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
+       ( 424, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
        ( 428, Jal 1 20,       [Tinstr; Tcall], Some [(Call 5%nat [] [])] );
-       ( 432, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
+       ( 432, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
        ( 436, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
        ( 440, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
        (* f5 *)
        ( 448, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 452, Addi 2 2 12,    [Tinstr; Th2],   Some [] );
-       ( 456, Addi 2 2 (-12), [Tinstr; Tr1],   Some [] ); (* footer *)
+       ( 452, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 456, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
        ( 460, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
        ( 464, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
       [(  8, 12, [] );
