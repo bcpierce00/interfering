@@ -387,7 +387,7 @@ Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
   Definition wplus_neq := wplus_neq.  
   Definition Register := Register.
   Definition RA := RA.
-  Definition SP := RA.
+  Definition SP := SP.
   Definition regEqb := regEqb.
   Definition callee_save := callee_save.
   Definition RA_callee_save := RA_callee_save.
