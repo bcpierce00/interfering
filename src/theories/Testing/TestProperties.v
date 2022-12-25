@@ -101,6 +101,8 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     let '(m', _ (* always empty! *), obs) := mpstep m in
     (m', map uncoercion4 ops, obs).
 
+  Derive Show for Sec.
+
   Definition cstep (m : State) (cm : CodeMap_Impl)
     : MachineState * Ctx * list Operation * Observation :=
     let ops := get_ops (fst m) cm in

@@ -1506,6 +1506,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
        (   8, Sw 2 0 (-4),    [Tinstr],        Some [] );
        (  12, Sw 2 10 (-4),   [Tinstr],        Some [] );
        (  16, Jal 1 332,      [Tinstr; Tcall], Some [(Call 2%nat [] [])] );
+       (  20, Beq 0 0 0,      [Tinstr],        Some [] ); (* TODO check *)
        (* NOTE The presence of f2 and the position of f1 have no effect on this
           error, but the existence of call hierarchy does to some degree (other
           modifications, e.g., the replacement of some of the calls, lead to
