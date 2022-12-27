@@ -1073,7 +1073,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
 
   Definition initSeq f :
     list (InstructionI * TagSet * FunID * Operations) :=
-    [  (Addi sp sp 12 , [Tinstr; Th2], f, [(*noops*)])
+    [  (Addi sp sp 12 , [Tinstr; Th2], f, [(Alloc 0 12)])
 (*       (Sw sp 8 (-8)  , [Tinstr]     , f, normal);
        (Sw sp 9 (-4)  , [Tinstr]     , f, normal)*)
     ].
@@ -1124,7 +1124,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     end.
   
   Definition returnSeq (f : FunID) :=
-    [ (Addi sp sp (-12) , [Tinstr; Tr1], f, [(*noops*)])
+    [ (Addi sp sp (-12) , [Tinstr; Tr1], f, [(Dealloc 0 12)])
     ; (Lw   ra sp 0     , [Tinstr; Tr2], f, [(*noops*)])
     ; (Jalr ra ra 0     , [Tinstr; Tr3], f, [Return])
     ].
