@@ -323,6 +323,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
             (if ops_call ops
              then let '(ms', cs') := m' in
                   let secret := List.filter (fun k => confidentialityComponent cs' k) (getElements ms') in
+                  let secret := List.filter (fun k => negb (keqb k (Reg 0)) && negb (keqb k (Reg 1)) && negb (keqb k (Reg 2))) secret in (* HACK *)
                   ns <- GenRISCVLazyOrig.genVariantByList secret ms';;
                   let nc := (ns,cs') in
                   let test := (fun m'' n'' => cond_confidentiality m' m'' nc n'') in
