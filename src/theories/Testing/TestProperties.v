@@ -435,6 +435,52 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
        (  9,  4, [] );
        ( 10, 40, [] )].
 
+  (* The generated example fails (frequently, but not always) because calls are
+     not annotated with registers carrying information across calls, i.e.,
+     acting as parameters (missing information added here). This is to be
+     expected, given that irrelevant registers will be mutated and different
+     runs will result in different traces. *)
+  Definition cex06 : G (MachineState * CodeMap_Impl) :=
+    GenRISCVLazyOrig.ex_gen
+      [(   0, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (   4, Jal 1 128,      [Tinstr; Tcall], Some [(Call 2%nat [10 (* added *)] [])] );
+       (   8, Jal 1 68,       [Tinstr; Tcall], Some [(Call 1%nat [] [])] );
+       (  12, Jal 1 272,      [Tinstr; Tcall], Some [(Call 4%nat [10 (* added *)] [])] );
+       (  16, Jal 1 220,      [Tinstr; Tcall], Some [(Call 3%nat [10 (* added *)] [])] );
+       (* f1 *)
+       (  76, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       (  80, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (  84, Lw 8 2 (-4),    [Tinstr],        Some [] );
+       (  88, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       (  92, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       (  96, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f2 *)
+       ( 132, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 136, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 140, Add 9 1 10,     [Tinstr],        Some [] );
+       ( 144, Sw 2 10 (-4),   [Tinstr],        Some [] );
+       ( 148, Lw 10 2 (-4),   [Tinstr],        Some [] );
+       ( 152, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 156, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 160, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f3 *)
+       ( 236, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 240, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 244, Lw 10 2 (-8),   [Tinstr],        Some [] ); (* ??? *)
+       (* ( XXX, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *) *)
+       (* ( XXX, Lw 1 2 0,       [Tinstr; Tr2],   Some [] ); *)
+       (* ( XXX, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] ); *)
+       (* f4 *)
+       ( 284, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 288, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 292, Lw 10 2 (-4),   [Tinstr],        Some [] );
+       ( 296, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 300, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 304, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
+      [(  8, 24, [] );
+       (  9, 28, [] );
+       ( 10, 40, [] )].
+
   Definition prop_lazyConfidentiality :=
     forAll GenRISCVLazyOrig.cex03 (fun '(m,cm) =>
                       (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
