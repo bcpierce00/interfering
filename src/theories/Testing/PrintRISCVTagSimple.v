@@ -184,15 +184,15 @@ Module PrintRISCVLazyOrig : Printing RISCVLazyOrig RISCVDef.
        ++ " @ " ++ show (pctags (snd m)))%string. (* v. n-tags? *)
 
   (* NOTE Reusing old name for now (but annotations are lists of operations) *)
-  Instance ShowCodeAnnotation : Show Operation :=
-    {| show ca :=
-         match ca with
-         | Call _ _ _ => "Call"
-         | Tailcall _ _ _ => "Tailcall"
-         | Return => "Return"
-         | Alloc _ _ => "Alloc"
-         | Dealloc _ _ => "Dealloc"
-         end |}.
+  (* Instance ShowCodeAnnotation : Show Operation := *)
+  (*   {| show ca := *)
+  (*        match ca with *)
+  (*        | Call _ _ _ => "Call" *)
+  (*        | Tailcall _ _ _ => "Tailcall" *)
+  (*        | Return => "Return" *)
+  (*        | Alloc _ _ => "Alloc" *)
+  (*        | Dealloc _ _ => "Dealloc" *)
+  (*        end |}. *)
 
   Derive Show for Sec.
   

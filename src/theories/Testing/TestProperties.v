@@ -104,6 +104,8 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     let '(m', _ (* always empty! *), obs) := mpstep m in
     (m', map uncoercion4 ops, obs).
 
+  Derive Show for Sec.
+
   Definition cstep (m : State) (cm : CodeMap_Impl)
     : MachineState * Ctx * list Operation * Observation :=
     let ops := get_ops (fst m) cm in
@@ -406,6 +408,117 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
      variant gets stuck (and therefore out of sync) due to step_until_done
      selecting (most of) the code memory as witness and mutating it into
      non-instructions *)
+
+  Definition cex05 : G (MachineState * CodeMap_Impl) :=
+    GenRISCVLazyOrig.ex_gen
+      [(   0, Addi 2 2 12,  [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (   4, Sw 2 9 (-4),  [Tinstr],        Some [] );
+       (   8, Jal 1 264,    [Tinstr; Tcall], Some [(Call 4%nat [] [])] );
+       (  12, Jal 1 208,    [Tinstr; Tcall], Some [(Call 3%nat [] [])] );
+       (  16, Jal 1 368,    [Tinstr; Tcall], Some [(Call 7%nat [] [])] );
+       (  20, Jal 1 344,    [Tinstr; Tcall], Some [(Call 6%nat [] [])] );
+       (  24, Jal 1 304,    [Tinstr; Tcall], Some [(Call 5%nat [] [])] );
+       (  28, Jal 1 124,    [Tinstr; Tcall], Some [(Call 2%nat [] [])] );
+       (  32, Jal 1 52,     [Tinstr; Tcall], Some [(Call 1%nat [] [])] );
+       (  36, Jal 1 312,    [Tinstr; Tcall], Some [(Call 5%nat [] [])] ); (* ! *)
+       (* f1 *)
+       (  84, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       (  88, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (  92, Lw 9 2 (-8),    [Tinstr],        Some [] );
+       (  96, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 100, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 104, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f2 *)
+       ( 152, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 156, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 160, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 164, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 168, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f3 *)
+       ( 220, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 224, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 228, Sw 2 10 (-8),   [Tinstr],        Some [] ); (* ??? *)
+       ( 232, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 236, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 240, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f4 *)
+       ( 272, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 276, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 280, Sw 2 0 (-4),    [Tinstr],        Some [] );
+       ( 284, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 288, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 292, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f5 *)
+       ( 328, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 332, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 336, Lw 8 2 (-8),    [Tinstr],        Some [] ); (* ??? *)
+       ( 340, Addi 9 10 464,  [Tinstr],        Some [] );
+       ( 344, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 348, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 352, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f6 *)
+       ( 364, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 368, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 372, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 376, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 380, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f7 *)
+       ( 384, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 388, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 392, Sw 2 0 (-20),   [Tinstr],        Some [] );
+       ( 396, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 400, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 404, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
+      [(  8, 16, [] );
+       (  9,  4, [] );
+       ( 10, 40, [] )].
+
+  (* The generated example fails (frequently, but not always) because calls are
+     not annotated with registers carrying information across calls, i.e.,
+     acting as parameters (missing information added here). This is to be
+     expected, given that irrelevant registers will be mutated and different
+     runs will result in different traces. *)
+  Definition cex06 : G (MachineState * CodeMap_Impl) :=
+    GenRISCVLazyOrig.ex_gen
+      [(   0, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (   4, Jal 1 128,      [Tinstr; Tcall], Some [(Call 2%nat [10 (* added *)] [])] );
+       (   8, Jal 1 68,       [Tinstr; Tcall], Some [(Call 1%nat [] [])] );
+       (  12, Jal 1 272,      [Tinstr; Tcall], Some [(Call 4%nat [10 (* added *)] [])] );
+       (  16, Jal 1 220,      [Tinstr; Tcall], Some [(Call 3%nat [10 (* added *)] [])] );
+       (* f1 *)
+       (  76, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       (  80, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (  84, Lw 8 2 (-4),    [Tinstr],        Some [] );
+       (  88, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       (  92, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       (  96, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f2 *)
+       ( 132, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 136, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 140, Add 9 1 10,     [Tinstr],        Some [] );
+       ( 144, Sw 2 10 (-4),   [Tinstr],        Some [] );
+       ( 148, Lw 10 2 (-4),   [Tinstr],        Some [] );
+       ( 152, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 156, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 160, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f3 *)
+       ( 236, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 240, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 244, Lw 10 2 (-8),   [Tinstr],        Some [] ); (* ??? *)
+       (* ( XXX, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *) *)
+       (* ( XXX, Lw 1 2 0,       [Tinstr; Tr2],   Some [] ); *)
+       (* ( XXX, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] ); *)
+       (* f4 *)
+       ( 284, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 288, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 292, Lw 10 2 (-4),   [Tinstr],        Some [] );
+       ( 296, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 300, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 304, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
+      [(  8, 24, [] );
+       (  9, 28, [] );
+       ( 10, 40, [] )].
+
   Definition prop_lazyConfidentiality :=
     forAll GenRISCVLazyOrig.cex04 (fun '(m,cm) =>
                       (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
