@@ -32,7 +32,7 @@ Module DefaultLayout (M:Machine) <: LayoutInfo M.
     let V := (fun k =>
                 match k with
                 | PC => public
-                | Reg r => if callee_save r then sealed else free
+                | Reg r => reg_defaults r
                 | Mem a => if andb (wle (ztow defLayoutInfo.(stackLo)) a) (wlt a (ztow (defLayoutInfo.(stackHi))))
                            then free
                            else public

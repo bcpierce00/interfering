@@ -120,26 +120,32 @@ Module RISCV <: Machine.
   
   Definition Register : Type := Word.
 
+  Definition Zero := 0.
   Definition RA := 1.
   Definition SP := 2.
   Definition regEqb : Register -> Register -> bool := Z.eqb.
 
-  (* TODO *)
-  (* Parameter is_callee_save : Register -> bool. *)
-  Definition is_callee_save (r : Register) : bool := false. (* FIXME *)
-
-  Definition callee_save (r : Register) : bool :=
+  Inductive Sec :=
+  | sealed
+  | free
+  | object
+  | public
+  .
+  
+  (* TODO - make some callee-save *)
+  Definition reg_defaults (r : Register) : Sec :=
     match r with
-    | 1 | 2 => true
-    | _ => is_callee_save r
+    | 0 | 2 => public
+    | 1 => sealed
+    | _ => free
     end.
 
-  Lemma RA_callee_save : callee_save RA = true.
+  Lemma RA_sealed : reg_defaults RA = sealed.
   Proof.
     reflexivity.
   Qed.
 
-  Lemma SP_callee_save : callee_save SP = true.
+  Lemma SP_public : reg_defaults SP = public.
   Proof.
     reflexivity.
   Qed.
@@ -389,9 +395,49 @@ Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
   Definition RA := RA.
   Definition SP := SP.
   Definition regEqb := regEqb.
-  Definition callee_save := callee_save.
-  Definition RA_callee_save := RA_callee_save.
-  Definition SP_callee_save := SP_callee_save.
+
+  Inductive Sec :=
+  | sealed
+  | free
+  | object
+  | public
+  .
+  
+  Definition coercion0 (s:Sec) :=
+    match s with
+    | sealed => RISCV.sealed
+    | free => RISCV.free
+    | object => RISCV.object
+    | public => RISCV.public
+    end.
+
+  Definition coercion0' (s:RISCV.Sec) :=
+    match s with
+    | RISCV.sealed => sealed
+    | RISCV.free => free
+    | RISCV.object => object
+    | RISCV.public => public
+    end.
+  
+  Coercion coercion0 : Sec >-> RISCV.Sec.
+  Coercion coercion0' : RISCV.Sec >-> Sec.
+
+  Definition reg_defaults (r : Register) : Sec :=
+    match r with
+    | 0 | 2 => public
+    | 1 => sealed
+    | _ => free
+    end.
+
+  Lemma RA_sealed : reg_defaults RA = sealed.
+  Proof.
+    reflexivity.
+  Qed.
+
+  Lemma SP_public : reg_defaults SP = public.
+  Proof.
+    reflexivity.
+  Qed.
 
   Inductive Element :=
   | Mem (a:Addr)

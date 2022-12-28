@@ -61,9 +61,16 @@ Module Type Machine.
   Parameter SP : Register.
   Parameter regEqb : Register -> Register -> bool.
 
-  Parameter callee_save : Register -> bool.
-  Parameter RA_callee_save : callee_save RA = true.
-  Parameter SP_callee_save : callee_save SP = true.
+  Inductive Sec :=
+  | sealed
+  | free
+  | object
+  | public
+  .
+  
+  Parameter reg_defaults : Register -> Sec.
+  Parameter RA_sealed : reg_defaults RA = sealed.
+  Parameter SP_public : reg_defaults SP = public.
 
   Inductive Element : Type :=
   | Mem : Addr -> Element
@@ -138,13 +145,6 @@ End Machine.
 Module Properties (M:Machine).
   Import M.
 
-  Inductive Sec :=
-  | sealed
-  | free
-  | object
-  | public
-  .
-
   Definition View : Type := Element -> Sec.
   
   Definition Ctx : Type := View * list View.
@@ -162,7 +162,7 @@ Module Properties (M:Machine).
                          | Reg r, _ =>
                              if existsb (regEqb r) reg_args
                              then public
-                             else if callee_save r then sealed else free
+                             else reg_defaults r
                          | Mem a, object => 
                              if existsb (in_range m a) stk_args
                              then object

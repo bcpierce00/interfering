@@ -45,13 +45,16 @@ Require Import ExtLib.Structures.Monad. Import MonadNotation. Open Scope monad_s
 (* To debug, use [Show.trace] with the printers defined in [PrintRISCVLazyOrig] *)
 
 (* Helpful Error-monad-ish notation *)
-Notation " 'check' A , B ; C" := (if A then C else collect B false)
+Notation " 'check' A , B ; C" := (if A then C else Show.trace B (checker false))
                                    (at level 200, A at level 100, B at level 200, C at level 200).
 Notation " 'get' X <- A , B ; C" := (match A with
-                                    | Some X => C
-                                    | None => collect B false
-                                    end)
-                                     (at level 60, X at level 60, A at level 60, B at level 200, C at level 200).
+                                     | Some X => C
+                                     | None => Show.trace B (checker false)
+                                     end)
+                                      (at level 60, X at level 60, A at level 60, B at level 200, C at level 200).
+
+Notation " 'iff' B , X <- A ; C" := (X <- (if B then A else ret X) ;; C)
+                                      (at level 60, X at level 60, A at level 60, B at level 200, C at level 200).
 
 (* NOTE Not concentrating on eager properties at the moment, focusing changes on
    lazy properties (not including lockstep integrity). *)
@@ -60,7 +63,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   Import TagPolicyLazyOrig.
   Import RISCVDef.
   Import PM.
-
+  
   (* FIXME: The current stepping functions always return an empty list
      of operations. We try to work around this by moving up the code map
      check on the PC (which makes sense anyway); we can attempt to use
@@ -265,24 +268,34 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
 
   Definition BinCondition : Type := nat * (State -> State -> list Element).
   Definition Deferred : Type := nat * State * BinCondition.
+
+  (*Definition Witness : Type := Element * nat * nat.*)
+
+  Derive Show for Element.
+
+  (*Instance show_witness : Show Witness :=
+    {| show := (fun '(e,f,i) => "(" ++ show e ++ show f ++ show i ++ ")") |}%string.
+
+  Fixpoint label_witnesses (ks: list Element) (f: nat) : list Witness :=
+    match ks with
+    | [] => []
+    | k::ks' => (k,f,List.length ks')::label_witnesses ks' f
+    end.*)
   
-  Definition step_until_done (fuel: nat) (n: State) (cond: BinCondition) (m: State) (cm : CodeMap_Impl) : list Element * Trace :=
+  Definition step_until_done (fuel: nat) (n: State) (cond: BinCondition) (m: State) (cm : CodeMap_Impl) : list Element * list Observation :=
     let (depth, test) := cond in
     let fix aux fuel n :=
-      if (negb (depthOf (snd n) <? depth))%nat (* XXX check depths, see below *)
-      then match fuel with
-           | O =>
-               ([], Trace.finished Tau)
-           | S fuel' =>
-               let '(n', _ops, obs) := cstep n cm in
-               let (witnesses, t) := aux fuel' n' in
-               (witnesses, Trace.notfinished obs t)
-           end
-      else
-        let witnesses := test m n in
-        (witnesses, Trace.finished Tau)
-)
-    in
+      match fuel with
+      | O => ([], [])
+      | S fuel' =>
+          let '(n', _ops, obs) := cstep n cm in
+          let d' := depthOf (snd n') in
+          if (d' <? depth)%nat
+          then let witnesses := test m n in
+               (witnesses, [obs])
+          else let (witnesses, t) := aux fuel' n' in
+               (witnesses, obs::t)
+      end in
     aux fuel n
   .
 
@@ -296,54 +309,80 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
         else (ready, (fuel,m,(depth,test))::not_ready)
     end.
 
-  Derive Show for Element.
-
-  (* TODO Did some Monad notation, but the stk' <- ... stuck is nasty *)
+  Definition variant_frame (fuel : nat) (m : State) : G (nat * State * BinCondition) :=
+    let '(ms, cs) := m in
+    let secret := List.filter (fun k => confidentialityComponent cs k) (getElements ms) in
+    Show.trace ("Generating variant for: " ++ show secret ++ nl) (
+    ns <- GenRISCVLazyOrig.genVariantByList secret ms;;
+    let n := (ns, cs) in
+    let test := (fun m' n' => cond_confidentiality m m' n n') in
+    ret (fuel, n, (depthOf cs, test))).
+  
+  Definition mcons {A:Type} (h: G A)  (tl: list A) :=
+    head <- h;;
+    ret (head :: tl).
+  
+  Fixpoint trace_sym (base: list Observation) (traces: list (list Observation)) : bool :=
+    let fix next tr :=
+      match tr with
+      | [] => None
+      | (Out e)::tr' => Some (e,tr')
+      | Tau::tr' => next tr'
+      end in
+    match base with
+    | [] => true
+    | Tau::base' => trace_sym base' traces
+    | (Out e)::base' =>
+        let compare o :=
+          match o with
+          | None => true
+          | Some (e',_) => event_eqb e e'
+          end in
+        let chop := map next traces in
+        if forallb compare chop
+        then trace_sym base' (seq.pmap (option_map snd) chop)
+        else false
+    end.
+  
   Definition confidentiality_tester
     (cm : CodeMap_Impl) (li : LayoutInfo)
     (fuel : nat)
     (m : State)
     (n : MachineState)
     : Checker :=
-    let fix aux fuel m n (stk : list (nat * State * BinCondition)) :=
+    let fix aux fuel m n (stk : list (nat * State * BinCondition)) (tr:list Observation) :=
       (* See if we have enough fuel to take a step, otherwise exit *)
       match fuel with
       | O => collect "Out-of-Fuel" true
       | S fuel' =>
-          get ops <- (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst m)))), "Bad-PC";
+          get ops <- (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst m)))), ("Bad-PC: " ++ show (proj (fst m) PC) ++ nl);
           (* Take a step in the primary and the shadow states *)
           let '(m', _ops, obs) := cstep m cm in
           let '(n', _, obs') := step n cm in
+          let d := depthOf (snd m) in
+          let d' := depthOf (snd m') in
+          let tr' := obs::tr in
           (* Check the observations *)
-          check (obs_eqb obs obs'), "External Violation";
+          check (obs_eqb obs obs'), "External Violation: " ++ show obs ++ "/" ++ show obs' ++ " at " ++ show (proj (fst m) PC) ++ nl;
           (* If we just made a call, push a new variant *)
-          stk' <- 
-            (if ops_call ops
-             then let '(ms', cs') := m' in
-                  let secret := List.filter (fun k => confidentialityComponent cs' k) (getElements ms') in
-                  ns <- GenRISCVLazyOrig.genVariantByList secret ms';;
-                  let nc := (ns,cs') in
-                  let test := (fun m'' n'' => cond_confidentiality m' m'' nc n'') in
-                  let frame := (fuel', nc, (depthOf cs', test)) in
-                  ret (frame::stk)
-             else ret stk);;
-          if (depthOf (snd m') <? depthOf (snd m))%nat
-          then let (ready, stk'') := separate_by_depth stk' (depthOf (snd m(*'*))) in (* XXX check depths, see above *)
-               (* If we just returned to a depth, d, execute all the variants waiting for that depth *)
-               let results := map (fun '(fuel,nv,cond) => step_until_done fuel nv cond m' cm) ready in
-               (* TODO: Check internal confidentiality *)
-            
+          iff (ops_call ops), stk <- mcons (variant_frame fuel' m') stk;
+          if (d' <? d)%nat
+          then let (ready, stk'') := separate_by_depth stk d in (* XXX check depths, see above *)
+               (* If we just returned from a depth, d, execute all the variants waiting for that depth *)
+               let results := map (fun '(fuel,nv,cond) => step_until_done fuel nv cond m cm) ready in
+               (* NEW: Checking state *before* return! *)
+               (* Check internal confidentiality *)
+               let traces := map snd results in
+               check (trace_sym tr traces), "Internal Violation";
                (* Collect witnesses *)
                let witnesses := seq.flatten (map fst results) in
                (* Update the shadow state *)
-               (* NOTE: Executions become unsynced by one step here, e.g., when
-                  returning: m -> m' keeps the new PC, but n -> n'' discards the
-                  n -> n' step (currently changed to n') *)
                n'' <- GenRISCVLazyOrig.genVariantByList witnesses n';;
-               aux fuel' m' n'' stk''
-          else aux fuel' m' n' stk'                   
+               Show.trace ("New shadow variants: " ++ show (map (fun k => (k, proj n'' k)) witnesses) ++ nl)
+               (aux fuel' m' n'' stk'' tr')
+          else aux fuel' m' n' stk tr'
   end in
-  aux fuel m n [].
+  aux fuel m n [] [].
   
   Fixpoint prop_lazyStackConfidentiality
     fuel (i : LayoutInfo) m (cm : CodeMap_Impl) ctx : Checker.Checker :=
@@ -368,43 +407,10 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
      selecting (most of) the code memory as witness and mutating it into
      non-instructions *)
   Definition prop_lazyConfidentiality :=
-    forAll GenRISCVLazyOrig.cex03 (fun '(m,cm) =>
+    forAll GenRISCVLazyOrig.cex04 (fun '(m,cm) =>
                       (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
 
 End TestPropsRISCVSimple.
-
-(* Module TestRISCVEager := TestPropsRISCVSimple RISCVObs TPEager DLObs *)
-(*                                               TSSRiscvDefault GenRISCVEager *)
-(*                                               PrintRISCVEager. *)
-
-(* Module TestRISCVEagerNLC := TestPropsRISCVSimple RISCVObs TPEagerNLC DLObs *)
-(*                                               TSSRiscvDefault GenRISCVEagerNLC *)
-(*                                               PrintRISCVEagerNLC. *)
-
-(* Module TestRISCVEagerNSC := TestPropsRISCVSimple RISCVObs TPEagerNSC DLObs *)
-(*                                               TSSRiscvDefault GenRISCVEagerNSC *)
-(*                                               PrintRISCVEagerNSC. *)
-
-(* Module TestRISCVEagerNI := TestPropsRISCVSimple RISCVObs TPEagerNI DLObs *)
-(*                                               TSSRiscvDefault GenRISCVEagerNI *)
-(*                                               PrintRISCVEagerNI. *)
-
-
-(* Module TestRISCVLazyOrig := TestPropsRISCVSimple RISCVObs TPLazyOrig DLObs *)
-(*                                                    TSSRiscvDefault GenRISCVLazyOrig *)
-(*                                                    PrintRISCVLazyOrig. *)
-
-(* Module TestRISCVLazyNoDepth := TestPropsRISCVSimple RISCVObs TPLazyNoDepth DLObs *)
-(*                                                     TSSRiscvDefault GenRISCVLazyNoDepth *)
-(*                                                     PrintRISCVLazyNoDepth. *)
-
-(* Module TestRISCVLazyNoCheck := TestPropsRISCVSimple RISCVObs TPLazyNoCheck DLObs *)
-(*                                                     TSSRiscvDefault GenRISCVLazyNoCheck *)
-(*                                                     PrintRISCVLazyNoCheck. *)
-
-(* Module TestRISCVLazyFixed := TestPropsRISCVSimple RISCVObs TPLazyFixed DLObs *)
-(*                                                   TSSRiscvDefault GenRISCVLazyFixed *)
-(*                                                   PrintRISCVLazyFixed. *)
 
 Extract Constant defNumTests => "1".
 
