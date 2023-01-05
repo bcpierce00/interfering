@@ -156,20 +156,15 @@ useful).}
 The protections offered by such mechanisms are commonly described by giving
 concrete examples of attacks that they can prevent---corruption of return
 addresses, buffer overflows, use of uninitialized variables, etc.---leaving
-a more generic characterization to the reader's intuition.  But these
-mechanisms can be quite intricate, and the behaviors they aim to prevent are
-subtle and varied. It can be hard to guess, based only on informal
-intuitions, whether a given mechanism actually blocks all potential
-attacks in a given class---or, conversely, whether it is overly conservative and disallows
-system behaviors that are actually safe.
-To settle such questions with confidence,
-we need a precise, generic, and formal specification for stack
-safety, as a basis both for comparing the security claims of different
-enforcement techniques and for validating that these claims
-are met by particular implementations. With the notable exception of the model used
-in Skorstengaard et al.'s StkTokens work~\cite{SkorstengaardSTKJFP}, which we
-discuss in Section \ref{sec:relwork}, there is a dearth of such properties in
-the literature. \bcp{can we give a very quick preview here of the comparison?}
+a more formal characterization to the reader's intuition. Previous attempts
+to produce a formal characterization do so using a {\it fully abstract overlay semantics},
+a style of correct-by-construction machine \cite{SkorstengaardSTKJFP}.
+The latest stack-safety overlay semantics \cite{Georges22:TempsDesCerises} capture
+both control-flow and data protection (confidentiality and integrity).
+But, this approach is not suitable for {\em lazy} enforcement mechanisms like those
+of Roessler and DeHon, in which stores are not checked, and illegal stores are
+only caught when their location is later read. We aim to provide a stack-safety
+property suitable for testing lazy enforcement.
 
 We propose a novel characterization of stack safety using the formal tools of language-based
 security~\cite{sabelfeld2003language}, decomposing stack safety into
@@ -179,18 +174,18 @@ afterward, and the control flow protection of {\em well-bracketed control
   flow (WBCF)}~\cite{SkorstengaardSTKJFP}. We also extend WBCF to a setting with exceptions,
 in which there may be multiple points at which a callee can ``return.''
 
-This approach has several benefits: first, not all state-safety enforcement mechanisms
-aim to protect all aspects of stack safety. Most protect control flow, but relatively
-few care about the confidentiality of the callee after return. Second, our formalism
-factors stack safety into three questions: (1) ``when does this machine call, return, etc.?''
-(2) ``during any given call, which elements of the state are in need of protection?'' and
-(3) ``when an element needs protection, how can we tell that it is protected?''
-Different machines, including those with different enforcement mechanisms, may answer question
-(1) differently, without needing new definitions for (2) or (3). In order to adjust our notion
-of permissible behavior to correspond to features such as pass-by-reference behavior, which
-alter its security requirements (typically by relaxing them), we need only add nuance to (2).
-Regardless of the assumptions that we make for either (1) or (2), the security definitions that
-answer (3) need not change.
+Stack safety is challenging to specify in full generality, because the stack is fundamentally
+an architecture-specific construct. Its desired behavior varies based on ISA, calling convention,
+and the features of whichever programming language originated the code that must be protected.
+Our approach centers around a tagged architecture, like PIPE \cite{???} or STAR \cite{???},
+particularly using a lazy micro-policy. However, our design is factored into three pieces:
+(1) the definition of {\em security relevant operations} in a given machine,
+(2) the definition of a {\em security context} which tracks the security needs of different
+elements of the state over the course of execution, and
+(3) the definition, for a given security context, of how we distinguish secure behavior
+from insecure. This separation of concerns allows (3) to be relatively general, while
+architecture-specifics are isolated in (1) and some special features require extending
+(2).
 
 A key technical novelty in these definitions,
 compared to standard formulations of confidentiality and integrity from the
@@ -865,6 +860,18 @@ an equivalent observation trace.) All other elements are \emph{relevant}.
 We characterize \emph{observational integrity} as the property that
 every relevant element that is \(\sealed\) under the callee's view is restored
 to its original value at the return point.
+
+\sna{Version that is less tied to lazy enforcement. It's still rather tied, actually,
+  more than I remembered.}
+ 
+One or more elements of a given state are {\it safe} if their values
+in that state have no observable influence on future execution. We define this
+formally as a sort of non-interference: for a state \(\sigma\) and
+a set of elements \(\components\), \(\mathit{safe} ~ \sigma ~ \components\)
+holds if we can replace the contents of \(\components\) with arbitrary values
+and have the resulting state produce an equivalent trace. The state created
+by modifying \(\components\) in this way is termed a variant.}
+
 
 \begin{figure}
   \includegraphics[width=\columnwidth]{variants.png}
