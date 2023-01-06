@@ -23,6 +23,8 @@ Import RecordSetNotations.
 
 Import ListNotations.
 
+Require Import ExtLib.Structures.Monad. Import MonadNotation. Open Scope monad_scope.
+
 Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Import RISCVLazyOrig.
   Import TagPolicyLazyOrig.
@@ -81,7 +83,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                     ; codePtr : list PtrInfo
                     ; arith : list ArithInfo
                     }.
-
+  
   Definition Zseq (lo hi : Z) :=
     let len := Z.to_nat (Z.div (hi - lo) 4) in
     let fix aux start len :=
@@ -377,67 +379,74 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
             ]
  *)
 
+  Record FunctionProfile :=
+    mkfunprofile {
+        id : FunID;
+        entry : Addr;
+        register_args : list Register;
+        relative_args : list Z;
+        reference_args : list (Register * Z);
+        locals : list (positive * bool);
+      }.
+
+  Fixpoint count_list (n:nat) :=
+    match n with
+    | O => []
+    | S n' => (Z.of_nat n'+3)::count_list n'
+    end.
+
+  (* TODO: Fill in the different kinds of arguments, etc.!*)
+  Definition genFun (id:FunID) (addr:Addr) : G FunctionProfile :=
+    reg_args <- choose (0,3)%nat;; (* Maxing out on 3 argument registers currently *)
+    let rel_args := [] in
+    let ref_args := [] in
+    local_count <- choose (0,3)%nat;;
+    let locals := List.repeat (1%positive,false) local_count in
+    ret (mkfunprofile id addr (count_list reg_args) rel_args ref_args locals).
+
+  Definition main : FunctionProfile :=
+    mkfunprofile O 0 [] [] [] [(3%positive,false)].
+
   (* FIXME Code annotations are replaced by operations, but only the constructor
      carries meaning! *)
-  Definition callHead offset f :
+  Definition callHead offset f (callee:FunctionProfile) :
     list (InstructionI * TagSet * FunID * Operations) :=
-    [(Jal ra offset, [Tinstr; Tcall], f, [(Call f [] [])])].
+    [(Jal ra offset, [Tinstr; Tcall], f, [(Call callee.(id) callee.(register_args) [])])].
 
   Definition headerHead f:
     list (InstructionI * TagSet * FunID * Operations) :=
     [(Sw sp ra 0, [Tinstr; Th1], f, [(*noops*)])].
 
-  Definition initSeq f :
+  Definition initSeq (prof:FunctionProfile) :
     list (InstructionI * TagSet * FunID * Operations) :=
-    [  (Addi sp sp 12 , [Tinstr; Th2], f, [(Alloc 0 12)])
+    [  (Addi sp sp 12 , [Tinstr; Th2], prof.(id), [(Alloc 0 12)])
 (*       (Sw sp 8 (-8)  , [Tinstr]     , f, normal);
        (Sw sp 9 (-4)  , [Tinstr]     , f, normal)*)
     ].
   
-  Definition callSeq offset f nextF :=
-    callHead offset f ++ headerHead nextF ++ initSeq nextF.
-  
+  Definition callSeq offset f (callee:FunctionProfile) :=
+    callHead offset f callee ++ headerHead (callee.(id)) ++ initSeq callee.
+
   (* Based on Rob's 
      (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
      (* 12 *) IInstruction (Addi SP SP 12); (* H2 *)
    *)
-  Definition genCall (l : LayoutInfo) (t : TagInfo)
+  Definition genCall (l : LayoutInfo)
+             (t : TagInfo)
              (mp : MachineState)
-             (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
+             (cm : CodeMap_Impl)
+             (f : FunID)
+             (existing : list FunctionProfile)
              (callP :  TagSet -> bool) :
-    option (G (list (InstructionI * TagSet * FunID * Operations))) :=
-    let (m,p) := mp in
-    let existingSites :=
-      List.map (fun '(i,t) => i - (word.unsigned (getPc m)))
-               (List.filter (fun '(i,t) => callP t)
-                            (listify1 (memtags p))) in
-    let newCallSites :=
-      let offset_choices :=
-        Zseq 20 (instHi l - instLo l - 50) in
-      let valid_offsets :=
-        List.filter (fun i => Z.leb (word.unsigned (getPc m) + i) (instHi l - 50)) offset_choices in
-      let not_used :=
-        List.filter (fun i =>
-                       match map.get (getMem m) (word.of_Z i) with
-                       | Some _ => false
-                       | None => true
-                       end) valid_offsets in
-      not_used in
-    let exOpts :=
-      (* Existing callsites, lookup fun id *)
-      List.map (fun i => 
-                  match map.get cm (word.unsigned (getPc m) + i) with
-                  | Some _ =>
-                      callHead i f
-                  | _ => exception ("genCall - nofid: " ++ show (word.unsigned (getPc m) + i) ++ nl)%string
-                  end) existingSites  in
-    let newOpts :=
-      List.map (fun i => callSeq i f nextF) newCallSites in
-    match exOpts ++ newOpts with
-    | [] => None
-    | x :: xs =>
-        Some (elems_ x (x :: xs))
-    end.
+    G (list (InstructionI * TagSet * FunID * Operations) * (list FunctionProfile)) :=
+    let nextF := length existing in
+    newF <- genFun nextF (100*(Z.of_nat nextF));;
+    let existing :=
+      if (nextF <? 5)%nat
+      then newF::existing
+      else existing in
+    choice <- elems_ newF existing;;
+    ret (callSeq (choice.(entry) - (projw mp PC)) f choice, existing).
   
   Definition returnSeq (f : FunID) :=
     [ (Addi sp sp (-12) , [Tinstr; Tr1], f, [(Dealloc 0 12)])
@@ -455,9 +464,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
              (l : LayoutInfo) (t : TagInfo)
              (mp : MachineState)
              (dataP codeP callP : TagSet -> bool)
-             (cm : CodeMap_Impl) (f nextF : FunID)
+             (cm : CodeMap_Impl) (f : FunID) (functions : list FunctionProfile)
              (fSteps : list nat)
-    : G (list (InstructionI * TagSet * FunID * Operations) * (list nat)) :=
+    : G (list (InstructionI * TagSet * FunID * Operations) * (list nat) * (list FunctionProfile)) :=
     let fromInstr :=
         bindGen (genInstr l t mp cm dataP codeP f)
                 (fun itf => returnGen ([itf])) in
@@ -470,21 +479,15 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     let returnFreq := (funMaxFuel - fFuel)%nat in
     let instrFreq := (fFuel - 2)%nat in
     let callFreq := 1%nat in
-    let instGen := bindGen fromInstr (fun g => ret (g,fFuel::rest)) in
-    match genCall l t mp cm f nextF callP,
-          genRetSeq mp cm f with
-    | None, None => instGen
-    | None, Some g2 =>
-      freq_ instGen ([ (instrFreq, instGen)
-                       ; (returnFreq, bindGen g2 (fun g => ret (g,rest))) ])%nat
-    | Some g1, None =>
-      freq_ instGen ([ (instrFreq, instGen)
-                       ; (callFreq, bindGen g1 (fun g => ret (g,funMaxFuel::fFuel::rest))) ])%nat
-    | Some g1, Some g2 =>
-      freq_ instGen ([ (instrFreq, bindGen fromInstr (fun g => ret (g,fFuel::rest)))
-                       ; (callFreq, bindGen g1 (fun g => ret (g,funMaxFuel::fFuel::rest)))
-                       ; (returnFreq, bindGen g2 (fun g => ret (g,rest)))
-                    ])%nat
+    let instGen := bindGen fromInstr (fun g => ret (g,fFuel::rest,functions)) in
+    let retGen g := bindGen g (fun g => ret (g,rest,functions)) in
+    let callGen := bindGen (genCall l t mp cm f functions callP) (fun '(g,fs) => ret (g,funMaxFuel::rest,fs)) in
+    match genRetSeq mp cm f with
+    | None => freq_ instGen ([(instrFreq, instGen);
+                              (callFreq, callGen)])%nat
+    | Some g => freq_ instGen ([(instrFreq, instGen);
+                                (returnFreq, retGen g);
+                                (callFreq, callGen)])%nat
     end.
 
   (* variantOf (fun k => fst c k = Sealed d) m n -> *)
@@ -530,7 +533,8 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
            (i : LayoutInfo) (t : TagInfo)
            (mp0 : MachineState)
            (mp  : MachineState)
-           (cm : CodeMap_Impl) (f : FunID) (nextF : FunID)
+           (cm : CodeMap_Impl) (f : FunID)
+           (functions : list FunctionProfile)
            (its : list (InstructionI * TagSet * FunID * Operations))
            (dataP codeP callP : TagSet -> bool)
     (* num calls? *)
@@ -551,9 +555,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
           match mpstep (m,p), funSteps with
           | ((m',p'),_t,o), (S n)::ns =>
             (* ...and recurse. *)
-            gen_exec_aux steps' (n::ns) i t mp0 (m',p') cm f nextF its codeP dataP callP 
+            gen_exec_aux steps' (n::ns) i t mp0 (m',p') cm f functions its codeP dataP callP 
           | ((m',p'),_t,o), _ =>
-            gen_exec_aux steps' funSteps i t mp0 (m',p') cm f nextF its codeP dataP callP 
+            gen_exec_aux steps' funSteps i t mp0 (m',p') cm f functions its codeP dataP callP 
           end
         | _ =>
           (*trace ("Existing instruction mid-sequence" ++ nl)%string*)
@@ -566,8 +570,8 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
             | [] =>
               (* Generate an instruction sequence. *)
               (* TODO: Sequences, calls. *)
-              bindGen (genInstrSeq i t mp dataP codeP callP cm f nextF funSteps)
-                      (fun '(itfas,funSteps') =>
+              bindGen (genInstrSeq i t mp dataP codeP callP cm f functions funSteps)
+                      (fun '(itfas,funSteps',functions') =>
                          match itfas with
                          | (i,t,f',a) :: itfs' =>
                            (*trace (show (i,t,f',a) ++ nl)%string*)
@@ -583,8 +587,6 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
               end
             end)
            (fun '(a, f', (is,it), its, funSteps') =>
-              let nextF' := if Nat.eqb f' nextF then
-                              S nextF else nextF in
               let mp0' := setInstrI (getPc m) mp0 is in
               let mp'  := setInstrI (getPc m) mp  is in
               let mp0'' := setInstrTagI (word.unsigned (getPc m)) mp0' it in
@@ -592,7 +594,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
               let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
               match mpstep mp'' with
               | (mp''', _t, _) =>
-                (gen_exec_aux steps' funSteps' i t mp0'' mp''' cm' f' nextF' its dataP codeP callP)
+                (gen_exec_aux steps' funSteps' i t mp0'' mp''' cm' f' functions its dataP codeP callP)
               end))
       end
     end.
@@ -657,8 +659,8 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                              ps' <- genGPRTs pplus ps (genGPRTag pplus)
                              let ps'' = ps' & pgpr . at sp ?~ spTag
                            *)
-                          (gen_exec_aux maxFuel [funMaxFuel] i t mps' mps' cm0 O (S O)
-                                        (initSeq O) dataP codeP callP))).
+                          (gen_exec_aux maxFuel [funMaxFuel] i t mps' mps' cm0 O [main]
+                                        (initSeq main) dataP codeP callP))).
 
   Definition zeroedRiscvMachine: RiscvMachine := {|
     getRegs :=
