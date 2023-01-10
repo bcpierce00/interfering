@@ -269,11 +269,11 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                                       (fun off => ret (Sw sp rs off)))
             ]).
 
-    Definition genStackbasedRead (i : LayoutInfo) (mp : MachineState) : G InstructionI :=
-      let spVal := projw mp (Reg SP) in
-      bindGen (genTargetReg mp)
-              (fun rd =>
-                 freq [ (10%nat, ret (Lw rd sp (-4)))
+  Definition genStackbasedRead (i : LayoutInfo) (mp : MachineState) : G InstructionI :=
+    let spVal := projw mp (Reg SP) in
+    bindGen (genTargetReg mp)
+            (fun rd =>
+               freq [ (10%nat, ret (Lw rd sp (-4)))
                       ; (10%nat, ret (Lw rd sp (-8)))
                       ; (if_true_n (512 <? spVal) 1%nat, ret (Lw rd sp (-12)))
                       ; (if_true_n (516 <? spVal) 2%nat, ret (Lw rd sp (-16)))
@@ -419,7 +419,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
 
   Definition initSeq (prof:FunctionProfile) :
     list (InstructionI * TagSet * FunID * Operations) :=
-    [  (Addi sp sp 12 , [Tinstr; Th2], prof.(id), [(Alloc 0 12)])
+    (* For now, just allocating all at once. The extra 1 is for the return address*)
+    let sz := Zpos (fold_left (fun i '(s,p) => i+s) prof.(locals) 1)%positive in
+    [  (Addi sp sp sz , [Tinstr; Th2], prof.(id), [(Alloc 0 12)])
 (*       (Sw sp 8 (-8)  , [Tinstr]     , f, normal);
        (Sw sp 9 (-4)  , [Tinstr]     , f, normal)*)
     ].
