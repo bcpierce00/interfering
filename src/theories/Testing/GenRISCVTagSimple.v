@@ -419,7 +419,8 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
 
   Definition initSeq (prof:FunctionProfile) :
     list (InstructionI * TagSet * FunID * Operations) :=
-    [  (Addi sp sp 12 , [Tinstr; Th2], prof.(id), [(Alloc 0 12)])
+    let frameWords := 1 (* RA *) + List.fold_left (fun sum l => sum + Zpos (fst l)) (locals prof) 0 in
+    [  (Addi sp sp 12 , [Tinstr; Th2], prof.(id), [(Alloc 0 (4 * frameWords))])
 (*       (Sw sp 8 (-8)  , [Tinstr]     , f, normal);
        (Sw sp 9 (-4)  , [Tinstr]     , f, normal)*)
     ].
