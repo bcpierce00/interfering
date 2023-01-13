@@ -136,7 +136,17 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
              (m1 : Zkeyed_map A)
              (m2 : Zkeyed_map B) : list (Z * A * B) :=
     combine_match (listify1 m1) (listify1 m2).
-  
+
+  Record FunctionProfile :=
+    mkfunprofile {
+        id : FunID;
+        entry : Addr;
+        register_args : list Register;
+        relative_args : list Z;
+        reference_args : list (Register * Z);
+        locals : list (positive * bool);
+      }.
+
   Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
              (mp : MachineState)
              (dataP codeP : TagSet -> bool)
@@ -254,7 +264,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition if_true_n (b:bool) (n:nat) :=
     if b then n else O.
   
-  Definition genStackbasedWrite (i : LayoutInfo) (mp : MachineState) : G InstructionI :=
+  Definition genStackbasedWrite (i : LayoutInfo) (mp : MachineState)
+                                (functions : list FunctionProfile)
+    : G InstructionI :=
     let spVal := projw mp (Reg SP) in
     bindGen (genSourceReg mp)
             (fun rs =>
@@ -269,7 +281,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                                       (fun off => ret (Sw sp rs off)))
             ]).
 
-    Definition genStackbasedRead (i : LayoutInfo) (mp : MachineState) : G InstructionI :=
+    Definition genStackbasedRead (i : LayoutInfo) (mp : MachineState)
+                                 (functions : list FunctionProfile)
+      : G InstructionI :=
       let spVal := projw mp (Reg SP) in
       bindGen (genTargetReg mp)
               (fun rd =>
@@ -293,6 +307,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition genInstr (i : LayoutInfo) (t : TagInfo)
              (m : MachineState) (cm : CodeMap_Impl)
              (dataP codeP : TagSet -> bool) (f : FunID)
+             (functions : list FunctionProfile)
     : G (InstructionI * TagSet * FunID * Operations) :=
     let groups := groupRegisters i t m dataP codeP in
     let a := arith groups in
@@ -319,10 +334,10 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
             bindGen (genImm (dataHi i)) (fun imm =>
             let instr := Addi rd (aID ai) imm in
             ret (instr, [Tinstr], f, noops)))))
-         ; (4%nat, bindGen (genStackbasedWrite i m)
+         ; (4%nat, bindGen (genStackbasedWrite i m functions)
                            (fun instr =>
                               (ret (instr, [Tinstr], f, noops))))
-         ; (4%nat, bindGen (genStackbasedRead i m)
+         ; (4%nat, bindGen (genStackbasedRead i m functions)
                            (fun instr =>
                               ret (instr, [Tinstr], f, noops)))
 (*           ;  (3%nat, match map.get (getRegs m) sp with
@@ -378,16 +393,6 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
 --              )
             ]
  *)
-
-  Record FunctionProfile :=
-    mkfunprofile {
-        id : FunID;
-        entry : Addr;
-        register_args : list Register;
-        relative_args : list Z;
-        reference_args : list (Register * Z);
-        locals : list (positive * bool);
-      }.
 
   Fixpoint count_list (n:nat) :=
     match n with
@@ -469,7 +474,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
              (fSteps : list nat)
     : G (list (InstructionI * TagSet * FunID * Operations) * (list nat) * (list FunctionProfile)) :=
     let fromInstr :=
-        bindGen (genInstr l t mp cm dataP codeP f)
+        bindGen (genInstr l t mp cm dataP codeP f functions)
                 (fun itf => returnGen ([itf])) in
     let '(fFuel, rest) :=
         match fSteps with
