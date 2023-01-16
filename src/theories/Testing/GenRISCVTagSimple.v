@@ -142,10 +142,21 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         id : FunID;
         entry : Addr;
         register_args : list Register;
-        relative_args : list Z;
+        relative_args : nat;
         reference_args : list (Register * Z);
-        locals : list (positive * bool);
+        locals : list (positive * bool); (* size in words, public (true) or secret *)
       }.
+
+  (* Constants to bound the complexity of generate functions. Note that
+     arguments add a good number of instructions for boilerplate, limiting the
+     complexity of functions of a given size (one may want to allocate more
+     space for function generation to account for this). *)
+  Definition MAX_REL_ARGS : nat := 1.
+
+  Definition frameSizeWords (fp : FunctionProfile) : Z :=
+    let words_ra := 1 in
+    let words_rel_args := Z.of_nat (fp.(relative_args)) in
+    words_ra + words_rel_args.
 
   Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
              (mp : MachineState)
@@ -179,14 +190,14 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         (*      trace ("Testing Loc: " ++ show t ++ nl)%string *)
         (
           andb (p t) (match t with
-                      | [Tstack _] => true
+                      | [Tstack _ _] => true
                       | _ => false
                       end)) in
     let loadLocs :=
         List.fold_right
           (fun (i : Z) '(acc1,acc2) =>
              match pctags p, map.get (memtags p) i with
-             | [Tpc pcdepth], Some (cons (Tstack depth) nil) =>
+             | [Tpc pcdepth], Some (cons (Tstack depth _) nil) =>
                (* TODO: Likely to load bad stuff? *)
                if Nat.leb pcdepth depth  then 
                  (i :: acc1, acc2)
@@ -282,9 +293,20 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
             ]).
 
     Definition genStackbasedRead (i : LayoutInfo) (mp : MachineState)
-                                 (functions : list FunctionProfile)
+                                 (f : FunID) (functions : list FunctionProfile)
       : G InstructionI :=
       let spVal := projw mp (Reg SP) in
+      let ofprof := find (fun fp => Nat.eqb f fp.(id)) functions in
+      let nth_rel_arg p :=
+        match ofprof with
+        | Some fprof => (fprof.(relative_args) <=? (Pos.to_nat p))%nat
+        | None => false
+        end in
+      let frameSize :=
+        match ofprof with
+        | Some fprof => 4 * frameSizeWords fprof
+        | None => 0
+        end in
       bindGen (genTargetReg mp)
               (fun rd =>
                  freq [ (10%nat, ret (Lw rd sp (-4)))
@@ -296,6 +318,12 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                                         (fun off => ret (Lw rd sp (- off))))
                       ; (1%nat, bindGen (choose (0, 600 - spVal))
                                         (fun off => ret (Lw rd sp off)))
+                      (* relative arguments
+                         quick and dirty, related to MAX_REL_ARGS
+                         generate programmatically later *)
+                      ; (if_true_n (nth_rel_arg 1%positive) 1%nat, ret (Lw rd sp (-frameSize - 4)))
+                      (* ; (if_true_n (nth_rel_arg 2%positive) 1%nat, ret (Lw rd sp (-frameSize - 8))) *)
+                      (* ; (if_true_n (nth_rel_arg 3%positive) 1%nat, ret (Lw rd sp (-frameSize - 12))) *)
               ]).
 
   (*
@@ -337,7 +365,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
          ; (4%nat, bindGen (genStackbasedWrite i m functions)
                            (fun instr =>
                               (ret (instr, [Tinstr], f, noops))))
-         ; (4%nat, bindGen (genStackbasedRead i m functions)
+         ; (4%nat, bindGen (genStackbasedRead i m f functions)
                            (fun instr =>
                               ret (instr, [Tinstr], f, noops)))
 (*           ;  (3%nat, match map.get (getRegs m) sp with
@@ -400,23 +428,83 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     | S n' => (Z.of_nat n'+3)::count_list n'
     end.
 
+  (*
+    relative arguments: list of Z offsets
+
+    current:
+    - caller stores arguments in its own stack frame
+    - call (Tcall)
+    - callee opens by storing RA at SP (Th1) and allocating its own frame (Th2)
+
+    new:
+    - tag arguments with (ARG depth) following Nick and André
+    - rules for writing (caller) and reading (callee)
+    - callers *must* allocate/store relargs
+      - part of an extended call (and return) sequence?
+      - callers must know the callee profile in advance (generation?)
+      - for now, store freshly generated constants as arguments
+    - callees *may* read from/write to relargs
+    - to simplify, make relargs into a continuous range right below SP?
+      - in any case, need to generate reads in the right range
+      - other argument types will add some complexity to the scheme
+
+    simplification 1:
+    - as above
+    - ignore locals and other types of arguments for now
+    - [Caller frame] [Args] | [RA] [Callee frame]
+      - where | is the stack pointer before the callee moves it
+
+    simplification 2:
+    - additionally, assume a maximum number of relative arguments
+    - no need for additional stack (de)allocation
+
+    argument clearing:
+    - in both cases
+    - leftover relative arguments may be read by subsequent callees
+    - the usual issue with depth-based lazy policies
+   *)
+
   (* TODO: Fill in the different kinds of arguments, etc.!*)
   Definition genFun (id:FunID) (addr:Addr) : G FunctionProfile :=
     reg_args <- choose (0,3)%nat;; (* Maxing out on 3 argument registers currently *)
-    let rel_args := [] in
+    rel_args <- choose (0,MAX_REL_ARGS)%nat;;
     let ref_args := [] in
     local_count <- choose (0,3)%nat;;
     let locals := List.repeat (1%positive,false) local_count in
     ret (mkfunprofile id addr (count_list reg_args) rel_args ref_args locals).
 
   Definition main : FunctionProfile :=
-    mkfunprofile O 0 [] [] [] [(3%positive,false)].
+    mkfunprofile O 0 [] 0 [] [(3%positive,false)].
 
-  (* FIXME Code annotations are replaced by operations, but only the constructor
-     carries meaning! *)
-  Definition callHead offset f (callee:FunctionProfile) :
-    list (InstructionI * TagSet * FunID * Operations) :=
-    [(Jal ra offset, [Tinstr; Tcall], f, [(Call callee.(id) callee.(register_args) [])])].
+  (* NOTE No argument clearing at the moment *)
+  Definition callHead
+    offset f
+    (i : LayoutInfo) (m : MachineState)
+    (callee:FunctionProfile) :
+    G (list (InstructionI * TagSet * FunID * Operations)) :=
+    (* pass relative arguments (generated constants) *)
+    (* quick and dirty, related to MAX_REL_ARGS, programmatically later *)
+    bindGen (genTargetReg m) (fun rt =>
+    bindGen (genImm (dataHi i)) (fun imm =>
+    let args :=
+      if (callee.(relative_args) =? 1)%nat
+      then [(Addi rt 0 imm, [Tinstr],          f, [(*noops*)]);
+            (Sw sp rt (-4), [Tinstr; Tsetarg], f, [(*noops*)])]
+      else [] in
+    let call_args :=
+      if (callee.(relative_args) =? 1)%nat
+      then [(sp, -4, -1)]
+      else [] in
+    ret
+      (args ++
+         [(
+             Jal ra offset,
+             [Tinstr; Tcall],
+             f,
+             [(Call callee.(id) callee.(register_args) call_args)]
+         )]
+      )
+    )).
 
   Definition headerHead f:
     list (InstructionI * TagSet * FunID * Operations) :=
@@ -424,14 +512,18 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
 
   Definition initSeq (prof:FunctionProfile) :
     list (InstructionI * TagSet * FunID * Operations) :=
-    let frameWords := 1 (* RA *) + List.fold_left (fun sum l => sum + Zpos (fst l)) (locals prof) 0 in
+    let frameWords := frameSizeWords prof in
     [  (Addi sp sp 12 , [Tinstr; Th2], prof.(id), [(Alloc 0 (4 * frameWords))])
 (*       (Sw sp 8 (-8)  , [Tinstr]     , f, normal);
        (Sw sp 9 (-4)  , [Tinstr]     , f, normal)*)
     ].
   
-  Definition callSeq offset f (callee:FunctionProfile) :=
-    callHead offset f callee ++ headerHead (callee.(id)) ++ initSeq callee.
+  Definition callSeq
+    offset f
+    (i : LayoutInfo) (m : MachineState)
+    (callee:FunctionProfile) :=
+    callHeadInstrs <- callHead offset f i m callee;;
+    ret (callHeadInstrs ++ headerHead (callee.(id)) ++ initSeq callee).
 
   (* Based on Rob's 
      (* 08 *) IInstruction (Sw SP RA 0); (* H1 *)
@@ -452,7 +544,8 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
       then newF::existing
       else existing in
     choice <- elems_ newF existing;;
-    ret (callSeq (choice.(entry) - (projw mp PC)) f choice, existing).
+    callInstrs <- callSeq (choice.(entry) - (projw mp PC)) f l mp choice;;
+    ret (callInstrs, existing).
   
   Definition returnSeq (f : FunID) :=
     [ (Addi sp sp (-12) , [Tinstr; Tr1], f, [(Dealloc 0 12)])
@@ -705,7 +798,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
               (snd (List.fold_right (fun x '(i,m) => (i+4, map.put m i x)) (500, map.empty)
                                     (repeat nil 125)))
               500
-              ([Tstack 0]))
+              ([Tstack 0 Knormal]))
              (*map.empty (* map.put map.empty 500 (cons Tsp nil) *)*)
     |}.
   

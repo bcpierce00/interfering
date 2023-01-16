@@ -39,7 +39,19 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
   Import RISCV.
   Module PM := MachineModule.Properties RISCV.
   Import PM.
-  
+
+  Inductive stackKind : Type :=
+  | Knormal
+  | Krelarg
+  .
+
+  Definition stackKind_eqb (t1 t2 : stackKind) :=
+    match t1, t2 with
+    | Knormal, Knormal
+    | Krelarg, Krelarg => true
+    | _, _ => false
+    end.
+
   (* TODO: More interesting state/abstract *)
   Inductive myTag : Type :=
   | Tcall
@@ -51,7 +63,8 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
   | Tr2
   | Tr3
   | Tsp
-  | Tstack (n : nat)
+  | Tstack (n : nat) (k : stackKind)
+  | Tsetarg
   .
 
   Definition tag_eqb (t1 t2 : myTag) : bool :=
@@ -63,9 +76,10 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     | Tr1, Tr1
     | Tr2, Tr2
     | Tr3, Tr3
-    | Tsp, Tsp => true
-    | Tpc n1, Tpc n2
-    | Tstack n1, Tstack n2 => Nat.eqb n1 n2
+    | Tsp, Tsp
+    | Tsetarg, Tsetarg => true
+    | Tpc n1, Tpc n2 => Nat.eqb n1 n2
+    | Tstack n1 k1, Tstack n2 k2 => Nat.eqb n1 n2 && stackKind_eqb k1 k2
     | _, _ => false
     end.
 
@@ -83,6 +97,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     | _, _ => false
     end.
 
+  Derive Show for stackKind.
   Derive Show for myTag.
   Derive Show for InstructionI.
 
@@ -231,9 +246,13 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     match tinstr with
     | [Tinstr] =>
       match tpc, taddr with
-      | [Tpc pcdepth], [Tstack memdepth] =>
+      | [Tpc pcdepth], [Tstack memdepth Knormal] =>
         if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
         else (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
+      | [Tpc pcdepth], [Tstack memdepth Krelarg] =>
+        if Nat.eqb pcdepth (S memdepth) then Some (p <| regtags := map.put (regtags p) rd [] |>)
+        else (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
+
       | _, _ =>
         (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
       end
@@ -258,8 +277,15 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     | [Tinstr] =>
       match tpc, trs, tmem with
       | [Tpc memdepth], [], []
-      | [Tpc memdepth], [], [Tstack _]
-        => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth] |>)
+      | [Tpc memdepth], [], [Tstack _ _]
+        => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth Knormal] |>)
+      | _, _, _ => (*trace ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      end
+    | [Tinstr; Tsetarg] =>
+      match tpc, trs, tmem with
+      | [Tpc memdepth], [], []
+      | [Tpc memdepth], [], [Tstack _ _]
+        => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth Krelarg] |>)
       | _, _, _ => (*trace ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
       end
     | [Tinstr; Th1] =>
