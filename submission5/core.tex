@@ -125,7 +125,7 @@ from causing harm.
 The stack governs a large number of language features that are often excluded
 from discussion of stack safety. Our properties support a system with
 both caller- and callee-saved registers, arguments passed on the stack,
-exceptions, [tail call elimination, and concurrency.] They are modular by
+tail-call elimination, [exceptions, and concurrency.] They are modular by
 design, in order to be further extensible to other features and architectures.
 
 We use these properties to validate Roessler and DeHon's micro-policies
@@ -199,12 +199,12 @@ confidentiality, albeit at some performance cost.
 
 \subsection{Motivation}
 
-Security mechanisms designed to prevent a certain class of attacks can be brittle---successfully
+Security mechanisms designed to prevent a certain attack can be brittle---successfully
 eliminating the attack as it exists at the time of publication, but leaving room for attackers
 to find new, similar attacks. To mitigate this risk, mechanisms should aim to enforce formal
-properties that can be proven or tested. Such properties become the specification against which
-enforcement can be validated; even enforcement mechanisms that do not fulfill the property
-benefit from the ability to articulate {\it why}.
+properties of correct behavior that can be proven or tested. Such properties become the
+specification against which enforcement can be validated; even enforcement mechanisms that do
+not fulfill the property benefit from the ability to articulate {\it why} they fail.
 
 Stack safety is challenging to specify in full generality, because the stack is fundamentally
 an architecture-specific construct. (Contrast Acevedo de Amorim et al.'s \cite{} work on heap safety,
@@ -215,8 +215,8 @@ For instance, the current state-of-the-art stack-safety specification from Georg
 \cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
 control flow, and therefore defines {\it Well-bracketed Control Flow} (WBCF) under the assumption that
 a callee should always return to its caller. But, in the presence of tail-call elimination, a
-return from a callee to a distant ancestor is perfectly reasonable. Subtle tweaks to the definition
-accompany any addition to the model.
+return from a callee to a distant ancestor is perfectly reasonable. Any addition of new features
+must be accompanied by tweaks to the model.
 
 We are not attempting to create a universal definition of stack safety for all systems.
 Rather, we define the stack safety of a single, fairly realistic system, decomposed into
@@ -224,11 +224,13 @@ Rather, we define the stack safety of a single, fairly realistic system, decompo
 derive the integrity, confidentiality, and control-flow requirements of each call and
 return, (2) the application of that model to a particular target system, and (3)
 the formal criteria for integrity, confidentiality, and control flow
-to obey the requirements.
+to obey the requirements. We consider the criteria in (3) to represent universal definitions
+that are parameterized by (1).
 
 We treat stack safety as multiple properties, rather than one multi-faceted property, because
-not all enforcement mechanisms attempt to implement all of them. Some focus exclusively on
-control flow, others protect the confidentiality of the caller but not the callee, etc.
+not all enforcement mechanisms attempt to implement all aspects of stack safety. Some focus
+exclusively on control flow, others protect the confidentiality of the caller but not the
+callee, etc.
 
 \paragraph*{Permissiveness, Laziness, and Tagged Architectures}
 
@@ -278,7 +280,24 @@ Our artifact contains Coq formalizations of our properties for illustrative purp
 as well as their testing implementation. There are no proofs---we use primarily Coq for the
 QuickChick library and to ensure that the formalizations are unambiguous.
 
+\paragraph*{Limitations}
+
+%Our concurrency model is fairly
+%simplistic, assuming a fixed number of threads each with its own dedicated processor.
+We model memory-safe stack objects, but not a heap. Regions outside of
+stacks can be used however the compiler likes, including as a heap, but no protection is
+built in and our properties assume that if a pointer to a stack object is stored there,
+it is permanently compromised.
+
+Our properties are termination insensitive: in order to support enforcement mechanisms
+that failstop rather than execute dangerous code, the properties must treat failstops
+as invisible to the attacker. We extend this insensitivity to all errors for simplicity.
+This is consistent with our treatment of properties that specify the state after a return,
+in that a callee that diverges for any reason will never reach the return, and will fulfill
+the property vacuously.
+
 \section{Key Ideas}
+\label{sec:ideas}
 
 The paper is structured as follows. In \cref{sec:example}, we will walk through a function
 call in a simple example machine and discuss how each of our properties applies to it,
@@ -289,6 +308,26 @@ formal statements of the properties, while the full formalism is found in \cref{
 \cref{sec:testing} describes the testing framework used to test it.
 \Cref{sec:relwork,sec:future} discuss related and future work.
 The remainder of this section introduces ideas that will be important throughout.
+
+\paragraph*{Terminology and Notation}
+
+The building blocks of a machine are {\em words} and {\em registers}.
+Words are ranged over by \(\word\) and, when used as addresses, \(\addr\),
+and are drawn from the set \(\WORDS\).
+Registers in the set \(\REGS\) are ranged over by \(\reg\), with the stack pointer
+given the special name \(\SP\);
+some registers may be classified as caller-saved or callee-saved.
+Along with the program counter, \(\PCname\), these are referred to as
+{\em state elements} \(\component\) in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS\).
+
+A {\em machine state} \(\mach \in \MACHS\) is a map from state elements to a set \(\mathcal{V}\) of
+\emph{values}. Each value \(v\) contains a \emph{payload} word, written \(|v|\).
+The details of value structure depend on the specific machine being modelled;
+intuitively, the payload represents the part of the value that is relevant to
+the behavior of the basic machine, while the rest of the value may contain
+information relevant to a hardware enforcement mechanism (such as a tag).
+We write \(\mach[\component]\) to denote the value of \(\mach\) at
+\(\component\)  and \(\mach[v]\) as shorthand for \(\mach[|v|]\).
 
 \paragraph*{Security Semantics}
 
@@ -314,13 +353,13 @@ security-relevant; the most obvious technique is to add optional labels to instr
 but the theory does not depend on this choice.
 
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
-the following table. Those that we explore in detail in Section \ref{sec:examples}
+\cref{tab:psi}. Those that we explore in detail in \cref{sec:examples}
 are shown in white: calls, returns, and the allocation and deallocation of local memory.
-In the full formalism (Appendix \ref{app:full}) and the machine that we test,
+In the full formalism (\cref{app:full}) and the machine that we test,
 we cover additional operations add parameters to our existing ones, to support
 various forms of memory sharing and tail-call elimination. These are shown in light gray.
 We give a proof-of-concept formalization of a more sophisticated, heap-like sharing model
-based on pointer provenance in Appendix \ref{app:ptr}, represented by the dark grey
+based on pointer provenance in \cref{app:ptr}, represented by the dark grey
 operations, but we do not test this.
 
 \newcommand{\example}{\rowcolor{black!0}}
@@ -329,27 +368,30 @@ operations, but we do not test this.
 
 \vspace{\abovedisplayskip}
 
-\begin{tabular}{| l | l |}
-  \hline
-  \(\psi \in \Psi\) & Parameters \\
-  \hline
-  \example \(\mathbf{call}\) & Target address \\
-  \example & Argument registers \\
-  \testing & Stack argument offset \& size \\
-  \example \(\mathbf{return}\) & \\
-  \example \(\mathbf{alloc}\) & Offset \& size \\
-  \testing & Public flag \\
-  \example \(\mathbf{dealloc}\) & Offset \& size \\
-  \testing \(\mathbf{tailcall}\) & As \(\mathbf{call}\) \\
-  \hline
-  \multicolumn{2}{|c|}{{\it Pointer provenance operations}} \\
-  \hline
-  \theory \(\mathbf{promote}\) & Register, offset \& size \\
-  \theory \(\mathbf{propagate}\) & Source register/address \\
-  \theory & Destination register/address \\
-  \theory \(\mathbf{clear}\) & Target register/address \\
-  \hline
-\end{tabular}
+\begin{table}
+  \begin{tabular}{| l | l |}
+    \hline
+    \(\psi \in \Psi\) & Parameters \\
+    \hline
+    \example \(\mathbf{call}\) & Target address \\
+    \example & Argument registers \\
+    \testing & Stack argument offset \& size \\
+    \example \(\mathbf{return}\) & \\
+    \example \(\mathbf{alloc}\) & Offset \& size \\
+    \testing & Public flag \\
+    \example \(\mathbf{dealloc}\) & Offset \& size \\
+    \testing \(\mathbf{tailcall}\) & As \(\mathbf{call}\) \\
+    \hline
+    \multicolumn{2}{|c|}{{\it Pointer provenance operations}} \\
+    \hline
+    \theory \(\mathbf{promote}\) & Register, offset \& size \\
+    \theory \(\mathbf{propagate}\) & Source register/address \\
+    \theory & Destination register/address \\
+    \theory \(\mathbf{clear}\) & Target register/address \\
+    \hline
+  \end{tabular}
+  \label{tab:psi}
+\end{table}
 
 \vspace{\belowdisplayskip}
 
@@ -378,16 +420,30 @@ A {\it context} is a pair of the current activation's view and
 a list of views representing the call stack (pending inactive
 principals), ranged over by \(\sigma\).
 
-\paragraph*{Variant States}
-
-\paragraph*{Events and Traces}
+\paragraph*{Events, Steps, and Traces}
 
 It is common to specify the behavior of a system, including security properties, in
-terms of traces of observable events rather than details of the machine state.
+terms of traces of observable {\em events} rather than details of the machine state.
 Lazy enforcement works because the deferred check catches errors before they appear
-in the trace. The nature of traces varies based on the properties of interest, but
-given a particular model of observation, we can consider
-corruption by {\tt f} acceptable as long as it does not affect {\tt main}'s observable behavior.
+in the trace. The nature of events is a parameter of the machine, and can be specialized
+to any notion of observable behavior.
+
+Events are ranged over by \(\obs\), and include the special silent event
+\(\tau\). Traces are non-empty, potentially infinite (coinductive) series of
+events, and traces are {\em similar} \(\obsT_1 \simeq \obsT_2\) if they are
+equal up to deletion of \(\tau\) events. This means that an infinite silent trace is
+similar to any trace, consistent with termination insensitivity.
+
+A machine step function
+\(\mach \xrightarrow{\overline{\psi},\obs} \mach' \in \MACHS \rightarrow
+\MACHS \times \mathit{list} ~ \Psi \times \OBSS\)
+is labeled by an ordered list of security-relevant operations and an event.
+We lift it into the security semantics by adding a security context to the
+state, giving us a combined step function
+\(\mach,\context \stepstounder{\overline{\psi},\obs} \mach',\context' \in
+\MACHS \times \CONTEXTS \rightarrow \MACHS \times \CONTEXT \times \mathit{list} ~ \Psi \times \OBSS\).
+We will define \(\stepstounder{}\) informally in the next section, and formally
+in \cref{sec:props}.
 
 \paragraph*{Threat Model}
 
@@ -415,15 +471,6 @@ This is a strong threat model, but it does omit some important aspects of
 security enforcement: In particular, hardware and timing attacks are out of scope,
 and our properties are termination insensitive as a result of how failstops are
 modelled (see~\ref{??}).
-
-\paragraph*{Limitations}
-
-%Our concurrency model is fairly
-%simplistic, assuming a fixed number of threads each with its own dedicated processor.
-We model memory-safe stack objects, but not a heap. Regions outside of
-stacks can be used however the compiler likes, including as a heap, but no protection is
-built in and our properties assume that if a pointer to a stack object is stored there,
-it is permanently compromised.
 
 %\section{Calls, Returns, and Private Allocations}
 \section{Properties by Example}
@@ -935,19 +982,8 @@ the caller's frame, which is weaker than our full caller confidentiality and rul
 callee confidentiality entirely. Georges et al. \cite{Georges22:TempsDesCerises} correct
 both limitations.\bcp{Then why are we not comparing to them instead??}
 
-\section{Machine Model and Security Semantics}
-
-\subsection{The Basic Machine}
-
-The building blocks of the machine are {\em words} and {\em registers}.
-Words are ranged over by \(\word\) and, when used as addresses, \(\addr\),
-and are drawn from the set \(\WORDS\).
-Registers in the set \(\REGS\) are ranged over by \(\reg\), with the stack pointer
-given the special name \(\SP\);
-some registers may be classified as caller-saved or callee-saved.
-%
-Along with the program counter, \(\PCname\), these are {\em state elements} \(\component\)
-in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS\).
+\section{Machine and Security Semantics, Formally}
+\label{sec:props}
 
 \begin{figure}
   \begin{tabular}{| l | l | l |}
@@ -971,41 +1007,18 @@ in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS\).
   \label{fig:RISCVregs}
 \end{figure}
 
-A {\em machine state} \(\mach\) is a map from state elements to a set \(\mathcal{V}\) of
-\emph{values}. Each value \(v\) contains a \emph{payload} word, written \(|v|\).
-The details of value structure depend on the specific machine being modelled;
-intuitively, the payload represents the part of the value that is relevant to
-the behavior of the basic machine, while the rest of the value may contain
-information relevant to a hardware enforcement mechanism (such as a tag).
-We write \(\mach[\component]\) to denote the value of \(\mach\) at
-\(\component\)  and \(\mach[v]\) as shorthand for \(\mach[|v|]\).
+Recall from \cref{sec:ideas} that a machine is a map from state elements
+to values, with a step function \(\mach \xrightarrow{\bar{\psi},\obs} \mach'\).
+The step function is total---while some enforcement mechanisms may cause a machine
+to failstop, we model this as the machine silently diverging by remaining in the
+same state.
 
-{\em Events} are drawn from a set \(\OBSS\)\bcp{lowercase?} and ranged over by \(\obs\), with a
-special silent event \(\tau\).
-The machine step function
-\(\mach \xrightarrow{\overline{\psi},\obs} \mach' \in \MACHS \rightarrow
-\MACHS \times \mathit{list} ~ \Psi \times \OBSS\)
-is labeled by an ordered list of security-relevant operations, defined below,
-and an event.
-
-While some enforcement mechanisms may cause a machine to
-failstop, we model this as the machine silently diverging by remaining in the
-same state. We consider silently diverging traces to be indistinguishable
-(from the point of view of an attacker) from traces that might eventually
-produce output\bcp{why?}, an assumption that gives our properties the flavor of
-{\it termination insensitivity}.
-
-\subsection{Security-Relevant Operations, Principals, and State}
-
-Security-relevant operations consist of calls, returns, and allocations.
-Calls identify the address of the call's target,
-plus the argument registers. Allocations and deallocations are phrased in terms of a pair
-of an offset from the stack pointer and a size. Returns don't require any additional information.
-%
-
-%\[\context \in \CONTEXTS ::= \mathit{VIEW \times list ~ VIEW}\]
+A view \(V\) maps elements to security classes, and a context consists of the
+view of the active function together with a stack of inactive views.
 The initial context is \(\context_0 = (V_0, \emplist)\).
-
+%
+\[\context \in \CONTEXTS ::= \mathit{VIEW \times list ~ VIEW}\]
+%
 We have described informally how the security context develops as the system performs
 security-relevant operations. Formally, we combine each machine state with a context
 to create a {\it combined state} \(s = (\mach,\context)\) and a lift the transition
@@ -1021,15 +1034,23 @@ Since a single step might correspond to multiple operations, we apply
             {\((\mach,\context) \stepstounder{\overline{\psi}} (\mach', \context', \obs)\)}
 
 The definition of \(Op\) is most convenient to present decomposed into
-rules for each operation. In the simple system, the operations affect the
-context as follows:
+rules for each operation. We have already seen the intuition behind the rules for
+\(\mathbf{alloc}\), \(\mathbf{call}\), and \(\mathbf{ret}\). Their precise behavior
+is found in \cref{fig:basicops}.
 
+\begin{figure}
 \judgmentbr[Alloc]
            {\(b = \mach[\SP] + \mathit{off}\)}
-           {\(V' = V \llbracket \addr \mapsto \sealed |
+           {\(V' = V \llbracket \addr \mapsto \object |
              b \leq a < b+\mathit{sz} \land V ~ \addr = \unsealed \rrbracket\)}
            {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
 
+\judgmentbr[Dealloc]
+           {\(b = \mach[\SP] + \mathit{off}\)}
+           {\(V' = V \llbracket \addr \mapsto \unsealed |
+             b \leq a < b+\mathit{sz} \land V ~ \addr = \object \rrbracket\)}
+           {\(Op ~ \mach ~ (\mathbf{dealloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
+           
 \judgmentbr[Call]
            {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}}\)}
            {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
@@ -1041,19 +1062,20 @@ context as follows:
          {\(\sigma = (V,\addr_{ret},\addr_{sp})::\sigma'\)}
          {\(Op ~ \mach ~ \mathbf{return} ~ (\_, \sigma) = (V, \sigma)\)}
 
-\section{Formalizing Properties}
+         \caption{The basic operations}
+         \label{fig:basicops}
+\end{figure}
 
-\section{Advanced Machine}
+\subsection{Advanced Operations}
 
 The advanced machine defines additional operations, and extends some of the old ones.
-It adds a field \(\overline{sa}\) to the \(\mathbf{call}\) operation, which is a set of
-triples of a register, a base offset, and a size, and denotes that the object at the offset
-from the given register is to be passed as an argument. The new \(\mathbf{tailcall}\) operation
-has the same fields, but deals with tail call optimizations in which the callee will reuse
-the caller's stack. The \(\mathbf{alloc}\) operation
+We add a field \(\overline{sa}\) to the \(\mathbf{call}\) operation: a set of
+triples of a register \(\reg\), a base offset \(off\), and a size \(sz\), denoting
+that the object at the offset \(off\) from \(\reg\) is to be passed as an argument.
+The new \(\mathbf{tailcall}\) operation has the same fields, but deals with tail-call
+optimizations in which the callee will reuse the caller's stack. The \(\mathbf{alloc}\) operation
 gains a boolen flag indicating whether the allocation is to be public, accessible to
-all functions until deallocated. And, we add the corresponding \(\mathbf{dealloc}\)
-operation.
+all functions until deallocated.
 
 \subsection{Public Allocations}
 
@@ -1094,29 +1116,53 @@ regions of memory able to transmit information between caller and callee without
 violating the stack safety properties. Note that there is no way to seal a location
 once it has become \(\public\); only when {\tt x} is deallocated will its region
 be available to allocate privately. We define a helper function, \(\mathit{range}\),
-to map an offset from a register and a size into a set of addresses.
-%
-\[\mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach \triangleq
-\{\mach[\reg]+i | \mathit{off} \leq i < \mathit{off+sz}\}\]
-%
-\judgmentbr[AllocPriv]
-           {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
-             \{\addr \mid V ~ \addr = \unsealed\}\)}
-           {\(V' = V \llbracket \addr \mapsto \sealed \mid \addr \in \components \rrbracket\)}
-           {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{f} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
+to map an offset from a register and a size into a set of addresses, and update
+the operation's security semantics as shown in \cref{sfig:publicalloc}.
 
-\judgmentbr[AllocPub]
-           {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
-             \{\addr \mid V ~ \addr = \unsealed\}\)}
-           {\(V' = V \llbracket \addr \mapsto \public \mid \addr \in \components \rrbracket\)}
-           {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{t} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
-
-\judgmentbr[Dealloc]
-           {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
-             \{\addr \mid V ~ \addr = \unsealed\}\)}
-           {\(V' = V \llbracket \addr \mapsto \unsealed \mid \addr \in \components \rrbracket\)}
-           {\(Op ~ \mach ~ (\mathbf{dealloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
-
+\begin{figure*}
+  \begin{subfigure}{0.4\textwidth}
+    \[\mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach \triangleq
+    \{\mach[\reg]+i | \mathit{off} \leq i < \mathit{off+sz}\}\]
+    
+    \judgmentbr[]
+               {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
+                 \{\addr \mid V ~ \addr = \unsealed\}\)}
+               {\(V' = V \llbracket \addr \mapsto \sealed \mid \addr \in \components \rrbracket\)}
+               {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{f} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
+             
+    \judgmentbr[]
+               {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
+                 \{\addr \mid V ~ \addr = \unsealed\}\)}
+               {\(V' = V \llbracket \addr \mapsto \public \mid \addr \in \components \rrbracket\)}
+               {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{t} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
+    \caption{Allocating Public Regions}
+    \label{sfig:publicalloc}
+  \end{subfigure}
+  \begin{subfigure}{0.6\textwidth}
+    %
+    \[\mathit{passed} ~ \overline{sa} ~ \mach = \bigcup_{(\reg,\mathit{off},\mathit{sz}) \in \overline{sa}}
+    \mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach\]
+    %
+    \judgmentbr[]
+               {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
+                 \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
+               {\(V'' = V'\llbracket \addr \mapsto \sealed | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \rrbracket\)}
+               {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
+                 ~ (V,\sigma) = (V'',V::\sigma)\)}
+    %
+    \judgmentbr[]
+               {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
+                 \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
+               {\(V'' = V'\llbracket \addr \mapsto \unsealed | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \rrbracket\)}
+               {\(Op ~ \mach ~ (\mathbf{tailcall} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
+                 ~ (V,\sigma) = (V',\sigma)\)}
+    \caption{Argument Passing on Stack}
+    \label{sfig:stkargs}
+  \end{subfigure}
+  \caption{Advanced Operations}
+  \label{fig:advops}
+\end{figure*}
+           
 \subsection{Stack Arguments}
 
 So far, we have not dealt with arguments spilled onto the stack, variadic arguments,
@@ -1160,18 +1206,7 @@ which memory contain arguments, \(\overline{sa}\). \(\overline{sa}\) is a set of
 triples of a register, an offset from the value of that register, and a size.
 We first define the helpful set \(\mathit{passed} ~ \overline{sa} ~ \mach\),
 then extend the call operation to keep all objects in \(\mathit{passed}\) marked
-as \(\object\) and seal everything else.
-%
-\[\mathit{passed} ~ \overline{sa} ~ \mach = \bigcup_{(\reg,\mathit{off},\mathit{sz}) \in \overline{sa}}
-\mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach\]
-%
-\judgmentbrbr[]
-             {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
-             {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
-               \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
-             {\(V'' = V'\llbracket \addr \mapsto \sealed | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \rrbracket\)}
-             {\(Op ~ \mach ~ \psi ~ (V,\sigma) =
-               (V'',V::\sigma)\)}
+as \(\object\) and seal everything else (\cref{sfig:stkargs}).
 
 The remaining definitions are unchanged. Now a stack-spilled argument can be allocated
 and remain accessible in the callee, while its memory is sealed for calls that do not
@@ -1215,14 +1250,6 @@ it should still enjoy confidentiality. We set its frame to \(\unsealed\) rather
 than \(\sealed\) to express this. Of course, some objects may be passed as arguments
 in place, easily modeled by including them in \(\overline{sa}\). More sophisticated
 behaviors may require sequences of {\bf dealloc}, {\bf tailcall}, then {\bf alloc}.
-
-\judgmentbrbr[]
-             {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
-             {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
-               \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
-             {\(V'' = V'\llbracket \addr \mapsto \unsealed | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \rrbracket\)}
-             {\(Op ~ \mach ~ \psi ~ (V,\sigma) =
-               (V',\sigma)\)}
 
 \subsection{Provenance, Capabilities, and Protecting Objects}
 
@@ -1747,7 +1774,7 @@ respectively. Once again, \(\Uparrow\) is coinductive.
               {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
 \subsection{Properties}
-\label{sec:props}
+\label{app:props}
 
 \paragraph*{Well-bracketed Control Flow}
 
