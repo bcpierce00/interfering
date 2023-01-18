@@ -153,9 +153,13 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
      space for function generation to account for this). *)
   Definition MAX_REL_ARGS : nat := 1.
 
+  (* If we want to allocate everything at once, we need to know the amount of
+     space we need to pass arguments to any of our callees (whom we need not
+     know in advance). The callee's function profile would be used by the caller
+     to extend its frame before the call. *)
   Definition frameSizeWords (fp : FunctionProfile) : Z :=
     let words_ra := 1 in
-    let words_rel_args := Z.of_nat (fp.(relative_args)) in
+    let words_rel_args := Z.of_nat MAX_REL_ARGS in
     words_ra + words_rel_args.
 
   Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
@@ -510,15 +514,11 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     list (InstructionI * TagSet * FunID * Operations) :=
     [(Sw sp ra 0, [Tinstr; Th1], f, [(*noops*)])].
 
-(*FIXME
-    let frameWords := frameSizeWords prof in
-    [  (Addi sp sp 12 , [Tinstr; Th2], prof.(id), [(Alloc 0 (4 * frameWords))])
-*)
   Definition initSeq (prof:FunctionProfile) :
     list (InstructionI * TagSet * FunID * Operations) :=
+    let sz := 4 * (frameSizeWords prof) in
     (* For now, just allocating all at once. The extra 1 is for the return address*)
-    let sz := Zpos (fold_left (fun i '(s,p) => i+s) prof.(locals) 1)%positive in
-    [  (Addi sp sp sz , [Tinstr; Th2], prof.(id), [(Alloc 0 12)])
+    [  (Addi sp sp sz , [Tinstr; Th2], prof.(id), [(Alloc 0 sz)])
 (*       (Sw sp 8 (-8)  , [Tinstr]     , f, normal);
        (Sw sp 9 (-4)  , [Tinstr]     , f, normal)*)
     ].
