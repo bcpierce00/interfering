@@ -44,7 +44,11 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition minReg : Register := 8.
   Definition noRegs : nat := 3%nat.
   Definition maxReg : Register := minReg + Z.of_nat noRegs - 1.
-  
+  (* TEMP: Keep argument register(s), in particular those used to pass arguments
+     by reference, separate separate from the rest. This eases bookkeeping if we
+     keep them immutable, like e.g. SP. A single register for now. *)
+  Definition argReg : Register := maxReg + 1.
+
   Record TagInfo :=
     { regTag  : TagSet
     ; codeTag : TagSet
@@ -137,14 +141,21 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
              (m2 : Zkeyed_map B) : list (Z * A * B) :=
     combine_match (listify1 m1) (listify1 m2).
 
+  Inductive localKind :=
+  | Lpublic
+  | Lsecret
+  .
+
+  Derive Show for localKind.
+
   Record FunctionProfile :=
     mkfunprofile {
         id : FunID;
         entry : Addr;
         register_args : list Register;
         relative_args : nat;
-        reference_args : list (Register * Z);
-        locals : list (positive * bool); (* size in words, public (true) or secret *)
+        reference_args : list (Register * Z); (* argument register, size (words)? *)
+        locals : list (positive * localKind);
       }.
 
   (* Constants to bound the complexity of generate functions. Note that
@@ -152,6 +163,10 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
      complexity of functions of a given size (one may want to allocate more
      space for function generation to account for this). *)
   Definition MAX_REL_ARGS : nat := 1.
+  Definition MAX_REF_ARGS : nat := 1.
+  Definition MAX_LOCAL_WORDS : nat := 2.
+  (* Quick consistency checks *)
+  Goal (MAX_LOCAL_WORDS >= MAX_REF_ARGS)%nat. now constructor. Qed.
 
   (* If we want to allocate everything at once, we need to know the amount of
      space we need to pass arguments to any of our callees (whom we need not
@@ -160,7 +175,8 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition frameSizeWords (fp : FunctionProfile) : Z :=
     let words_ra := 1 in
     let words_rel_args := Z.of_nat MAX_REL_ARGS in
-    words_ra + words_rel_args.
+    let words_locals := Z.of_nat MAX_LOCAL_WORDS in (* includes ref_args *)
+    words_ra + words_rel_args + words_locals.
 
   Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
              (mp : MachineState)
@@ -311,6 +327,11 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         | Some fprof => 4 * frameSizeWords fprof
         | None => 0
         end in
+      let has_ref_arg :=
+        match ofprof with
+        | Some fprof => (List.length fprof.(reference_args) =? 1)%nat
+        | None => false
+        end in
       bindGen (genTargetReg mp)
               (fun rd =>
                  freq [ (10%nat, ret (Lw rd sp (-4)))
@@ -328,6 +349,10 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                       ; (if_true_n (nth_rel_arg 1%positive) 1%nat, ret (Lw rd sp (-frameSize - 4)))
                       (* ; (if_true_n (nth_rel_arg 2%positive) 1%nat, ret (Lw rd sp (-frameSize - 8))) *)
                       (* ; (if_true_n (nth_rel_arg 3%positive) 1%nat, ret (Lw rd sp (-frameSize - 12))) *)
+                      (* reference arguments
+                         quick and dirty, similar to relative arguments
+                         now technically a stack read, could be more general *)
+                      ; (if_true_n has_ref_arg 1%nat, ret (Lw rd argReg 0))
               ]).
 
   (*
@@ -468,17 +493,36 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     - the usual issue with depth-based lazy policies
    *)
 
+  (*
+    reference arguments: list of registers and sizes
+
+    new:
+    - add a section of local stack variables below relargs
+      - for simplicity, start with a private area of fixed size
+      - we continue allocating full frames all at once
+    - [Caller frame] [Locals] [Relargs] | [RA] [Callee frame]
+    - callers *may* pass pointers into their private memory to callees
+      - initially sharing at fixed single-word granularity
+      - select one slot deterministically or pick from available area
+    - callees *may* then read and write to shared memory
+      - attention: argument registers may be overwritten!
+      - (rule this out statically for now?)
+    - attention: uninitialized/garbage locals?
+   *)
+
   (* TODO: Fill in the different kinds of arguments, etc.!*)
   Definition genFun (id:FunID) (addr:Addr) : G FunctionProfile :=
     reg_args <- choose (0,3)%nat;; (* Maxing out on 3 argument registers currently *)
     rel_args <- choose (0,MAX_REL_ARGS)%nat;;
-    let ref_args := [] in
-    local_count <- choose (0,3)%nat;;
-    let locals := List.repeat (1%positive,false) local_count in
+    ref_args_count <- choose (0,MAX_REF_ARGS)%nat;;
+    let ref_args := List.repeat (argReg, 1) ref_args_count in
+    (* local_count <- choose (0,3)%nat;; *)
+    let local_count := MAX_LOCAL_WORDS in
+    let locals := List.repeat (1%positive,Lsecret) local_count in
     ret (mkfunprofile id addr (count_list reg_args) rel_args ref_args locals).
 
   Definition main : FunctionProfile :=
-    mkfunprofile O 0 [] 0 [] [(3%positive,false)].
+    mkfunprofile O 0 [] 0 [] [(3%positive,Lsecret)].
 
   (* NOTE No argument clearing at the moment *)
   Definition callHead
@@ -489,26 +533,38 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     (* pass relative arguments (generated constants) *)
     (* quick and dirty, related to MAX_REL_ARGS, programmatically later *)
     bindGen (genTargetReg m) (fun rt =>
-    bindGen (genImm (dataHi i)) (fun imm =>
+    bindGen (genImm (dataHi i)) (fun imm1 =>
+    bindGen (genImm (dataHi i)) (fun imm2 =>
     let args :=
       if (callee.(relative_args) =? 1)%nat
-      then [(Addi rt 0 imm, [Tinstr],          f, [(*noops*)]);
-            (Sw sp rt (-4), [Tinstr; Tsetarg], f, [(*noops*)])]
+      then [(Addi rt 0 imm1, [Tinstr],          f, [(*noops*)]);
+            (Sw sp rt (-4),  [Tinstr; Tsetarg], f, [(*noops*)])]
       else [] in
     let call_args :=
       if (callee.(relative_args) =? 1)%nat
       then [(sp, -4, -1)]
       else [] in
+    let refs :=
+      if (List.length callee.(reference_args) =? 1)%nat
+      then let hd := nth_default (0, 0) callee.(reference_args) 0 in
+           [(Addi rt 0 imm2,       [Tinstr],          f, [(*noops*)]);
+            (Sw sp rt (-8),        [Tinstr; Tsetarg], f, [(*noops*)]);
+            (Addi argReg sp (-8),  [Tinstr],          f, [(*noops*)])]
+      else [] in
+    let refs_args :=
+      if (List.length callee.(reference_args) =? 1)%nat
+      then [(sp, -8, -5)] (* or (argReg _ _) *)
+      else [] in
     ret
-      (args ++
+      (args ++ refs ++
          [(
              Jal ra offset,
              [Tinstr; Tcall],
              f,
-             [(Call callee.(id) callee.(register_args) call_args)]
+             [(Call callee.(id) callee.(register_args) (call_args ++ refs_args))]
          )]
       )
-    )).
+    ))).
 
   Definition headerHead f:
     list (InstructionI * TagSet * FunID * Operations) :=
