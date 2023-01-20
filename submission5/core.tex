@@ -79,8 +79,6 @@
   }
 }
 
-
-
 %% Keywords
 %% comma separated list
 \ifcameraready
@@ -208,7 +206,8 @@ not fulfill the property benefit from the ability to articulate {\it why} they f
 
 Stack safety is challenging to specify in full generality, because the stack is fundamentally
 an architecture-specific construct. (Contrast Acevedo de Amorim et al.'s \cite{} work on heap safety,
-which is broadly consistent across architectures and therefore amenable to a very general approach.)
+which is broadly consistent across architectures and language semantics, and therefore amenable
+to a very general approach.)
 The desired behavior of the stack varies based on ISA, calling convention,
 and the features of whichever programming language originated the code.
 For instance, the current state-of-the-art stack-safety specification from Georges et al.
@@ -236,7 +235,7 @@ callee, etc.
 
 Security properties tend to be conservative, identifying violations that would be
 harmless in practice. But enforcement mechanisms make trade-offs in the name of performance
-and of compatibility with existing codebases. In the motivating case for this work,
+and of compatibility with existing codebases. In a crucial motivating example for this work,
 Roessler and DeHon \cite{} present a collection of tag-based enforcement mechanisms
 using PIPE \cite{???}, a tagged hardware reference monitor. In monitors such as PIPE and
 STAR \cite{???}, every value in memory and registers is paired with a {\em metadata tag}.
@@ -244,18 +243,23 @@ A set of software-defined rules, termed a micro-policy, determines the tags for 
 results based on the tags of their inputs---or, if the input tags are in a dangerous
 combination, it may halt the machine (a ``failstop.'')
 
-Roessler and DeHon find that the obvious way to enforce stack safety in this setting
+Roessler and DeHon find that the intuitive way to enforce stack safety in this setting
 is inefficient when allocating and clearing stack frames, because each word must be initialized
 with a tag corresponding to the (depth of the) current function activation. They propose
 {\em Lazy Tagging and Clearing}, in which tags are not initialized at allocation, but only
 when a function writes to memory. This means that such writes cannot be protected. Instead
 the micro-policy enforces that memory be read by the same fuction that wrote it. This
-lazy enforcement is incompatible with existing models of stack safety, particularly the
-integrity side, because an attacker can modify another function's data. But the owner of
-the data will never see the changes, so it may still be secure in some sense. We aim to elaborate
+lazy enforcement is incompatible with existing models of stack safety,
+because an attacker can modify another function's data. But the owner of
+the data will never see the changes, so it is secure in the sense that the attacker is
+unsuccessful at changing program behavior (except, perhaps, by causing a fault.) We aim to elaborate
 that sense, and to test whether the micro-policy fulfills it.
+
 This key motivation leads us to present integrity and confidentiality as predicates on (pairs of)
 machine states that make claims about the future observable behavior of execution from those states.
+That is not to say that our properties are specialized for lazy micro-policies. It also supports
+normal ``eager'' micro-policies, and should support other enforcement mechanisms. In fact, our
+observational properties are even weaker than necessary to support Roessler and Dehon's micro-policy.
 
 \subsection{Contributions}
 
@@ -301,36 +305,14 @@ the property vacuously.
 
 The paper is structured as follows. In \cref{sec:example}, we will walk through a function
 call in a simple example machine and discuss how each of our properties applies to it,
-informally. Then in \cref{sec:props} we will introduce the machine model that we test, and give
-its {\em security semantics}, described in brief below.
-%In \cref{sec:props} we give abbreviated
-%formal statements of the properties, while
-The full formalism is found in \cref{app:props}.
-\Cref{sec:testing} describes the testing framework used to test it.
-\Cref{sec:relwork,sec:future} discuss related and future work.
+informally. Then in \cref{sec:machine} we will introduce the machine model that we test, and give
+its {\em security semantics}, described in brief below. We formalize the definitions of
+stack safety that derive from the security semantics in \cref{sec:props}.
+\Cref{sec:testing} describes the testing framework, and
+\cref{sec:relwork,sec:future} discuss related and future work.
 The remainder of this section introduces ideas that will be important throughout.
 
-\paragraph*{Terminology and Notation}
-
-The building blocks of a machine are {\em words} and {\em registers}.
-Words are ranged over by \(\word\) and, when used as addresses, \(\addr\),
-and are drawn from the set \(\WORDS\).
-Registers in the set \(\REGS\) are ranged over by \(\reg\), with the stack pointer
-given the special name \(\SP\);
-some registers may be classified as caller-saved or callee-saved.
-Along with the program counter, \(\PCname\), these are referred to as
-{\em state elements} \(\component\) in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS\).
-
-A {\em machine state} \(\mach \in \MACHS\) is a map from state elements to a set \(\mathcal{V}\) of
-\emph{values}. Each value \(v\) contains a \emph{payload} word, written \(|v|\).
-The details of value structure depend on the specific machine being modelled;
-intuitively, the payload represents the part of the value that is relevant to
-the behavior of the basic machine, while the rest of the value may contain
-information relevant to a hardware enforcement mechanism (such as a tag).
-We write \(\mach[\component]\) to denote the value of \(\mach\) at
-\(\component\)  and \(\mach[v]\) as shorthand for \(\mach[|v|]\).
-
-\paragraph*{Security Semantics}
+\paragraph*{Security Semantics and Property Structure}
 
 A {\it security semantics} extends a machine
 with additional context about the identity of current and pending
@@ -354,10 +336,9 @@ security-relevant; the most obvious technique is to add optional labels to instr
 but the theory does not depend on this choice.
 
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
-\cref{tab:psi}. Those that we explore in detail in \cref{sec:examples}
+\cref{tab:psi}. Those that we explore in detail in \cref{sec:example}
 are shown in white: calls, returns, and the allocation and deallocation of local memory.
-In the full formalism (\cref{app:full}) and the machine that we test,
-we cover additional operations add parameters to our existing ones, to support
+In \cref{sec:machine}), we cover additional operations add parameters to the examples', to support
 various forms of memory sharing and tail-call elimination. These are shown in light gray.
 We give a proof-of-concept formalization of a more sophisticated, heap-like sharing model
 based on pointer provenance in \cref{app:ptr}, represented by the dark grey
@@ -367,15 +348,12 @@ operations, but we do not test this.
 \newcommand{\testing}{\rowcolor{black!10}}
 \newcommand{\theory}{\rowcolor{black!25}}
 
-\vspace{\abovedisplayskip}
-
 \begin{table}
   \begin{tabular}{| l | l |}
     \hline
     \(\psi \in \Psi\) & Parameters \\
     \hline
-    \example \(\mathbf{call}\) & Target address \\
-    \example & Argument registers \\
+    \example \(\mathbf{call}\) & Target address, argument registers \\
     \testing & Stack argument offset \& size \\
     \example \(\mathbf{return}\) & \\
     \example \(\mathbf{alloc}\) & Offset \& size \\
@@ -391,18 +369,15 @@ operations, but we do not test this.
     \theory \(\mathbf{clear}\) & Target register/address \\
     \hline
   \end{tabular}
+  \caption{Security-relevant Operations and their Parameters}
   \label{tab:psi}
 \end{table}
-
-\vspace{\belowdisplayskip}
 
 Our security semantics has similarities to the overlay semantics that have been proposed
 to characterize stack safety in the past~\cite{SkorstengaardSTK}, but it does not restrict
 the behavior of the underlying machine in any way. Rather, it tracks additional context
 about the history of security-relevant operations, which inform the criterion a machine
 must satisfy in order to correctly obey the properties.
-
-\paragraph*{Security Classes}
 
 The security principals in our account of stack safety are function
 activations: at any given time, pending activations
@@ -413,38 +388,33 @@ of the system that maps each state element to a {\it security class}:
 it may be private to an inactive principal (\(\sealed\)),
 in an allocated object that is accessible to the current principal (\(\object\)),
 available to be allocated (\(\unsealed\)), or
-always accessible (\(\public\)). The {\it initial view} \(V_0\) maps all stack locations to \(\unsealed\),
-all other locations to \(\public\), and registers based on which set they
-belong to: \(\sealed\) for callee-saved, \(\unsealed\) for caller-saved, and \(\public\) otherwise.
+always accessible (\(\public\)).
 
-A {\it context} is a pair of the current activation's view and
-a list of views representing the call stack (pending inactive
-principals), ranged over by \(\sigma\).
+\paragraph*{The Properties and their Hierarchy}
 
-\paragraph*{Events, Steps, and Traces}
+We have five different properties to introduce:
+
+\begin{itemize}
+\item Well=bracketed Control Flow (\(WBCF\))
+\item Caller Integrity (\(CLRI\))
+\item Caller Confidentiality (\(CLRC\))
+\item Callee Confidentiality (\(CLEC\))
+\item Callee Integrity (\(CLEI\))
+\end{itemize}
+
+The properties form a rough hierarchy; although they are technically separate and need
+not coexist in any particular combination, some are likely to take priority in terms of their
+importance to security. Almost all stack-safety enforcement mechanisms will try to enforce \(WBCF\),
+as control-flow attacks such as ROP are a major vulnerability that can be targeted via the stack.
+Many also cover some degree of (caller) integrity. [TODO: more hierarchy].
+
+\paragraph*{Events}
 
 It is common to specify the behavior of a system, including security properties, in
 terms of traces of observable {\em events} rather than details of the machine state.
 Lazy enforcement works because the deferred check catches errors before they appear
 in the trace. The nature of events is a parameter of the machine, and can be specialized
 to any notion of observable behavior.
-
-Events are ranged over by \(\obs\), and include the special silent event
-\(\tau\). Traces are non-empty, potentially infinite (coinductive) series of
-events, and traces are {\em similar} \(\obsT_1 \simeq \obsT_2\) if they are
-equal up to deletion of \(\tau\) events. This means that an infinite silent trace is
-similar to any trace, consistent with termination insensitivity.
-
-A machine step function
-\(\mach \xrightarrow{\overline{\psi},\obs} \mach' \in \MACHS \rightarrow
-\MACHS \times \mathit{list} ~ \Psi \times \OBSS\)
-is labeled by an ordered list of security-relevant operations and an event.
-We lift it into the security semantics by adding a security context to the
-state, giving us a combined step function
-\(\mach,\context \stepstounder{\overline{\psi},\obs} \mach',\context' \in
-\MACHS \times \CONTEXTS \rightarrow \MACHS \times \CONTEXTS \times \mathit{list} ~ \Psi \times \OBSS\).
-We will define \(\stepstounder{}\) informally in the next section, and formally
-in \cref{sec:props}.
 
 \paragraph*{Threat Model}
 
@@ -469,11 +439,8 @@ require any static division between trusted and untrusted code, and we aim to pr
 even buggy code.
 
 This is a strong threat model, but it does omit some important aspects of
-security enforcement: In particular, hardware and timing attacks are out of scope,
-and our properties are termination insensitive as a result of how failstops are
-modelled (see~\ref{??}).
+security enforcement: In particular, hardware and timing attacks are out of scope.
 
-%\section{Calls, Returns, and Private Allocations}
 \section{Properties by Example}
 \label{sec:example}
 
@@ -490,7 +457,7 @@ calling conventions~\cite{??}; the stack grows towards lower addresses. We assum
 {\tt main} begins at address 0 and its callee {\tt f} at address 100.
 
 {\tt main} takes a secret as its argument and initializes a variable to contain
-potentially sensitive data. We assume that the only observable events are stores
+potentially sensitive data. We define an observable event to be a store
 to a special address, called {\tt out}.
 {\tt main} calls another function {\tt f},
 and afterward may decide to output its secret based on the contents of
@@ -635,11 +602,10 @@ on the security-relevant events noted in the right columns of Figures~\ref{fig:m
 and~\ref{fig:f}, namely execution of instructions that allocate or deallocate space,
 make a call, or make a return.
 Figure \ref{fig:exec1} shows how the corresponding security context
-develops over the first few steps of the program. We assume execution begins
-at the start of {\tt main} (\(\PCname = 0\)) and that the stack pointer is initially at
-address 1000.
-\(\xrightarrow{\overline{\psi}}\) transitions are numbered and
-written \(\downarrow \overline{\psi}\) in this diagram; events are omitted.
+develops over the first few steps of the program, beginning with
+the start of {\tt main} (\(\PCname = 0\)) and with the stack pointer at address 1000.
+State transitions are numbered and labeled with a list of security operations, written
+\(\downarrow \overline{\psi}\) between steps.
 
 Step 1 allocates a word each for {\tt secret}, {\tt sensitive}, and {\tt res}, as well
 as two words for the return address. This will have the
@@ -816,11 +782,9 @@ restored to their prior value.
 
 While it would be simple to define integrity as ``all sealed elements retain their
 values after the call,'' this would be stricter than necessary. Suppose that
-a callee overwrites some data of its caller, but the caller never accesses that data.
-By sheer luck, the callee has managed not to impact the observable execution beyond that one write.
-Luck, or enforcement: Lazy Tagging and Clearing, from Roessler and Dehon, works by
-failstopping any time a caller accesses callee-tainted data, so that out-of-frame
-writes should never impact execution.
+a callee overwrites some data of its caller, but the caller never accesses that data
+(or only does so after re-initializing it.) This would be harmless, with the callee
+essentially using the caller's memory as scratch space, but the caller never seeing any change.
 
 To characterize this situation in a property, we borrow the idea of \emph{variant} states
 from the theory of non-interference.
@@ -926,11 +890,11 @@ i.e., any element that is not used legitimately to pass arguments. Caller confid
 therefore can be thought of as the callee's insensitivity to elements in its initial state
 that are not part of the caller-callee interface.
 
-In place of a predicate we define \(\conf\) as a binary relation on states,
+In place of a predicate we define \(\confProp\) as a binary relation on states,
 which holds on eventual return states \(\mach'\) and \(\nach'\)
 iff all relevant elements that changed between \(\mach\) and \(\mach'\) or \(\nach\) and \(\nach'\)
 are the same in \(\mach\) and \(\nach\). We then define
-return-time confidentiality as holding if \(\conf\) holds on the matching return states
+return-time confidentiality as holding if \(\confProp\) holds on the matching return states
 from \(\mach\) and \(\nach\), respectively.
 
 Finally, we define caller confidentiality as the
@@ -984,7 +948,7 @@ callee confidentiality entirely. Georges et al. \cite{Georges22:TempsDesCerises}
 both limitations.\bcp{Then why are we not comparing to them instead??}
 
 \section{Machine and Security Semantics, Formally}
-\label{sec:props}
+\label{sec:machine}
 
 \begin{figure}
   \begin{tabular}{| l | l | l |}
@@ -1008,11 +972,37 @@ both limitations.\bcp{Then why are we not comparing to them instead??}
   \label{fig:RISCVregs}
 \end{figure}
 
-Recall from \cref{sec:ideas} that a machine is a map from state elements
-to values, with a step function \(\mach \xrightarrow{\bar{\psi},\obs} \mach'\).
-The step function is total---while some enforcement mechanisms may cause a machine
-to failstop, we model this as the machine silently diverging by remaining in the
-same state.
+\paragraph*{Terminology and Notation}
+
+The building blocks of a machine are {\em words} and {\em registers}.
+Words are ranged over by \(\word\) and, when used as addresses, \(\addr\),
+and are drawn from the set \(\WORDS\).
+Registers in the set \(\REGS\) are ranged over by \(\reg\), with the stack pointer
+given the special name \(\SP\);
+some registers may be classified as caller-saved or callee-saved.
+Along with the program counter, \(\PCname\), these are referred to as
+{\em state elements} \(\component\) in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS\).
+
+A {\em machine state} \(\mach \in \MACHS\) is a map from state elements to a set \(\mathcal{V}\) of
+\emph{values},  with a step function \(\mach \xrightarrow{\bar{\psi},\obs} \mach'\).
+Each value \(v\) contains a \emph{payload} word, written \(|v|\).
+The details of value structure depend on the specific machine being modelled;
+intuitively, the payload represents the part of the value that is relevant to
+the behavior of the basic machine, while the rest of the value may contain
+information relevant to a hardware enforcement mechanism (such as a tag).
+We write \(\mach[\component]\) to denote the value of \(\mach\) at
+\(\component\)  and \(\mach[v]\) as shorthand for \(\mach[|v|]\).
+
+Security classes are ranged over by \(C\).
+For some security class \(C\), we write \(C(V)\)
+to denote the set of elements \(\component\) such that \(V ~ \component = C\).
+The {\it initial view} \(V_0\) maps all stack locations to \(\unsealed\),
+all other locations to \(\public\), and registers based on which set they
+belong to: \(\sealed\) for callee-saved, \(\unsealed\) for caller-saved, and \(\public\) otherwise.
+
+A {\it context} is a pair of the current activation's view and
+a list of views representing the call stack (pending inactive
+principals), ranged over by \(\sigma\).
 
 A view \(V\) maps elements to security classes, and a context consists of the
 view of the active function together with a stack of inactive views.
@@ -1252,74 +1242,188 @@ than \(\sealed\) to express this. Of course, some objects may be passed as argum
 in place, easily modeled by including them in \(\overline{sa}\). More sophisticated
 behaviors may require sequences of {\bf dealloc}, {\bf tailcall}, then {\bf alloc}.
 
-\subsection{Provenance, Capabilities, and Protecting Objects}
+\section{Formal properties}
+\label{sec:props}
 
-What if we want to express a finer-grained notion of safety, in which
-stack objects are protected unless the function that owns them intentionally
-passes a pointer to them? This can be thought of as a {\it capability}-based
-notion of security. Capabilities are unforgeable tokens that grant access to
-a region of memory, typically corresponding to valid pointers to that region.
-So, in order to express such a property, we need our machine to carry some notion
-of {\it pointer provenance}---a distinction between a pointer that is intended to
-point to a given object, and non-pointer integers as well as pointers to other objects.
+Now we are ready to introduce the formal properties that define correctly enforced
+security semantics. First, we must give a few prelimaries: the generation and comparison
+of traces, variant states, and ``on-return'' assertions.
 
-One such provenance model is Memarian et al.'s PVI \cite{}, in which pointers are
-annotated with the identity of the object they first pointed to. This annotation is
-propagated when the pointer is copied and when operations are performed on it---even
-integer-only operations.
+\subsection{Events and Traces}
+\label{sec:events}
 
-We can model this as a trio of additional security-relevant operations: one which
-declares a register to contain a valid pointer, one which transmits the provenance
-of a pointer from one element to another, and one which clears the provenance
-(for instance, when a pointer is modified in place in a way that makes it invalid.)
+We abstract over the events that can be observed in the system, defining them
+only as a set \(\OBSS\) that contains at least the element \(\tau\), the silent
+event. Other events might represent certain function calls (i.e., system calls)
+or writes to special addresses representing mmapped regions.
+A {\em trace} is a nonempty, finite or infinite sequence
+of events, ranged over by \(\obsT\).
+We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces, reserving ``::''
+for list-cons.
 
-In addition to the normal call stack, our security context will carry a map \(\rho\) from
-elements to memory regions, represented as a base and a bound \(\context = (V, \sigma, \rho)\).
-Existing operations are extended to keep the value of \(\rho\) the same, and the new operations
-work as follows:
+We write the trace of execution from a state up to the first
+state below depth \(d\) via the \(\hookrightarrow\) operator, defined coinductively.
+When \(d = 0\), the trace will always be infinite. In this case we
+omit \(d\) and just write \(\hookrightarrow s\).
 
-\judgmentbr[Promote]
-           {\(\psi = \mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},\mathit{sz})\)}
-           {\(\rho' = \rho[\reg_{dst} \mapsto \mathit{range} ~ \reg_{base} ~ \mathit{off} ~ \mathit{sz}]\)}
-           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+\judgment{\(|\sigma| < d\)}
+         {\(d \hookrightarrow (\mach,(V,\sigma)) = \tau\)}
 
-\judgmentbr[Propagate]
-           {\(\psi = \mathbf{propagate} ~ \component_{src} ~ \component_{dst}\)}
-           {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
-           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+\judgmentthree{\((\mach,(V,\sigma)) \stepstounder{} (\mach',\context',\obs)\)}
+              {\(|\sigma| \geq d\)}
+              {\(d \hookrightarrow (\mach',\context') = \obsT\)}
+              {\(d \hookrightarrow (\mach,(V,\sigma)) = \notfinished{\obs}{\obsT}\)}
 
-\judgment[Clear]
-         {\(\psi = \mathbf{clear} ~ \component\)}
-         {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho[\component \mapsto \emptyset])\)}
 
-We now have a notion of provenance, and must integrate it into the definition of
-stack safety. We essentially generalize the above notion of passing: we will consider
-a caller to have intentionally passed an object if that object is reachable by
-a capability that has been passed to the callee. This includes capabilities passed
-indirectly, by being stored in an object that is in turn passed. Formally, we call
-this set \(\mathit{capped}\), and define it recursively:
-%
-\[\begin{split}
-& \mathit{capped} ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{\component\} \cup \mathit{capped} ~ \components' ~ \rho \textnormal{ where} \\
-& \components' = \{\component' |\rho[\component] = (\mathit{base},\mathit{bound})
-\land \mathit{base} \leq \component' < \mathit{bound}\} \\
-\end{split}\]
+Two event traces $\obsT_1$ and $\obsT_2$ are {\em similar},
+written \(\obsT_1 \eqsim \obsT_2\), if the sequence of non-silent events
+is the same. That is, we compare up to deletion of \(\tau\) events.
 
-We then tweak the call operation to seal only objects that are in \(\mathit{capped}\), or
-the previously defined \(\mathit{passed}\).
+\begin{minipage}{.4\columnwidth}
+  \judgment{}{\(\obsT \eqsim \obsT\)}
+\end{minipage}
+\begin{minipage}{.4\columnwidth}
+  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
+           {\(\notfinished{\obs}{\obsT_1} \eqsim \notfinished{\obs}{\obsT_2}\)}
+\end{minipage}
 
-\judgmentbrbrbr[]
-               {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
-               {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
-                 \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
-               {\(\components = \{\addr | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \cup (\mathit{capped} ~ \overline{\reg_{args}} ~ \rho) \}\)}
-               {\(V'' = V'\llbracket \components \mapsto \sealed \rrbracket\)}
-               {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) =
-                 (V'',V::\sigma,\rho)\)}
+\begin{minipage}{.4\columnwidth}
+  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
+           {\(\notfinished{\tau}{\obsT_1} \eqsim \obsT_2\)}
+\end{minipage}
+\begin{minipage}{.4\columnwidth}
+  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
+           {\(\obsT_1 \eqsim \notfinished{\tau}{\obsT_2}\)}
+\end{minipage}
 
-Note that we have a degree of monotonicity here. Once an object is sealed (because its
-capability has not been passed to a callee), subsequent nested calls can never unseal it.
-On the other hand, an object that is passed via a pointer may be passed on indefinitely.
+\paragraph*{Variants and Irrelevant Values}
+
+For a given system, assume an compatibility equivalence relation \(\sim\) on values.
+Two states are variants with respect to a set of elements \(\components\)
+if they agree on the value of every element not in \(\components\) and
+and have compatible values for every element in \(\components\).
+Our notion of non-interference involves comparing the traces of such
+\(\components\)-variants. We use this to define sets of irrelevant elements,
+and secrets in general.
+
+\definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
+written \(\mach \approx_\components \nach\), if, for
+all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]\)
+and for all \(\component \in \components\), \(\mach[\component] \sim \nach[\component]\).
+
+\definition An element set \(\components\) in state \((\mach,\context)\) contains
+irrelevant values, written \((\mach,\context) \parallel \components\), if for all
+\(\nach\) such that \(\mach \approx_{\components} \nach\),
+\(\hookrightarrow (\mach,\context)  \eqsim \hookrightarrow (\nach,\context)\).
+
+\subsection{Properties at Return}
+\label{sec:facts}
+
+Here we define some logical operations to reason about the behavior of the
+system over time. These have a temporal-logic flavor, as they reflect
+the expected behavior of the system in the future, after a possible return.
+
+\paragraph*{On-return}
+
+The intuition behind integrity (below) is that a caller may expect its
+sealed data to be unchanged when control returns to it. In fact, the callee
+may overwrite such data---when the data are found in callee-saved registers
+this is perfectly legal---as long as it either restores it, or has some guarantee
+that its changes will not impact the caller.
+
+We start by defining a second-order logical operator
+\(d \uparrow P\), pronounced ``\(P\) holds on return from depth \(d\),''
+where \(P\) is a predicate on machine states. This is a coinductive relation
+similar to ``weak until'' in temporal logic---it also holds if the program never
+returns from depth \(d\).
+
+\judgmenttwo[Returned]
+            {\(|\sigma| < d\)}
+            {\(P ~ \mach\)}
+            {\((d \uparrow P) ~ (\mach, (V,\sigma))\)}
+
+\judgmenttwobrlong[Step]
+                  {\(|\sigma| \geq d\)}
+                  {\((d \uparrow P) ~ (\mach', \context')\)}
+                  {\((\mach, (V,\sigma)) \stepstounder{\overline{\psi}} (\mach', \context',\obs)\)}
+                  {\((d \uparrow P) ~ (\mach, (V,\sigma))\)}
+
+Similarly, for confidentiality, we will want to compare pairs of future states,
+so we give a binary equivalent, \(d \Uparrow R\), where
+\((\mach,\context) ~ (d \Uparrow R) ~ (\mach',\context')\) holds if \(R\) holds on the
+first states that return from depth \(d\) after \((\mach,\context)\) and \((\mach',\context')\),
+respectively. Once again, \(\Uparrow\) is coinductive.
+
+\judgmentthree[Returned]
+              {\(|\sigma_1| < d\)}
+              {\(|\sigma_2| < d\)}
+              {\(\mach_1 ~ R ~ \mach_2\)}
+              {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
+
+\judgmenttwobrlong[Left]
+                  {\(|\sigma_1| \geq d\)}
+                  {\((\mach_1,(V_1,\sigma_1)) \stepstounder{\overline{\psi}} (\mach_1',\context_1',\obs)\)}
+                  {\((\mach_1',\context_1') ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
+                  {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
+
+\judgmenttwobrlong[Right]
+                  {\(|\sigma_2| \geq d\)}
+                  {\((\mach_2,(V_2,\sigma_2)) \stepstounder{\overline{\psi}} (\mach_2',\context_2',\obs)\)}
+                  {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,\context_2')\)}
+                  {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
+
+\subsection{Properties}
+\label{app:props}
+
+[TODO: back-propagate abbreviations used here]
+
+Finally, with the preliminaries out of the way, we can define our core properties. We write
+``when \(s\) is called'' as a shorthand for quantifying over all \(s\) reachable in any execution
+such that \(s \stepstounder{\overline{\psi}} s'\) and
+\(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\).
+
+Let \(\Delta(\mach,\mach')\) be the set of elements \(\component\)
+such that \(\mach[\component] \not = \mach'[\component]\).
+The {\em corrupted set} \(\bar{\Diamond}(\mach,\mach',\nach,\nach')\)
+is the set \((\Delta(\mach,\mach') \cup \Delta(\nach,\nach')) \cap \Delta(\mach',\nach')\).
+This treats \(\mach\) and \(\nach\) as the initial states and
+\(\mach'\) and \(\nach'\) as their corresponding final states, and is the
+set of elements that were corrupted between them.
+
+\begin{table*}
+  \begin{align*}
+    \mathit{WBCF} \triangleq & |\sigma| \uparrow \ret
+    && \textnormal{ where } \ret ~ \mach' \textnormal{ iff }
+    \mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]+4\}
+    && \textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called} \\
+    %
+    \mathit{ClrI} \triangleq & (|\sigma| \uparrow \intProp) ~ (\mach,(V,\sigma))
+    && \textnormal{ where } \intProp ~ \mach' \textnormal{ iff }
+    \mach' \parallel \sealed(V) \cap \Delta(\mach,\mach')
+    && \textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called} \\
+    %
+    \mathit{ClrC} \triangleq & \forall \nach \textnormal{ s.t. } \mach \approx_{\sealed(V)} \nach, &&
+    && \textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called} \\
+    & |\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma)) \\
+    & \textnormal{ and } (\mach,(V,\sigma)) ~ (|\sigma| \Uparrow \confProp) ~ (\nach,(V,\sigma))
+    && \textnormal{ where } (\mach' ~ \confProp ~ \nach') \textnormal{ iff }
+    \mach' \parallel \bar{\Diamond}(\mach,\nach,\mach',\nach') \\
+    %
+    \mathit{CleC} \triangleq & (|\sigma| \uparrow \cconfProp) ~ (\mach,(V,\sigma))
+    && \textnormal{ where } \cconfProp ~ \mach' \textnormal{ iff }
+    \mach' \parallel \unsealed(V) \cap \Delta(\mach,\mach')
+    && \textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called} \\
+    %
+    \mathit{CleI} \triangleq & \forall \nach \textnormal{ s.t. } \mach \approx_{\unsealed(V)} \nach, &&
+    && \textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called} \\
+    & |\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma)) \\
+    & \textnormal{ and } (\mach,(V,\sigma)) ~ (|\sigma| \Uparrow \confProp) ~ (\nach,(V,\sigma))
+    && \textnormal{ where } (\mach' ~ \cintProp ~ \nach') \textnormal{ iff }
+    \mach' \parallel \bar{\Diamond}(\mach,\nach,\mach',\nach') \\
+  \end{align*}
+  \caption{Properties}
+  \label{tbl:props}
+\end{table*}
 
 \section{Validation through Random Testing}
 \label{sec:testing}
@@ -1382,7 +1486,7 @@ control flow information so that programs will usually---but not always---return
 %the program being generated: each time a call or return sequence is
 %generated, we ensure that the appropriate policy tags and code
 %annotations are set for the entry or return points.% At the same time,
-%%we allow the generation to sometimes relax those constraints,
+%%we allow the generation to sometimes relax constraints,
 %%introducing potentially ill-formed flows: this causes our programs
 %%to failstop when executed in conjunction with the policy monitor,
 %%but also allows for revealing errors in our setup.\apt{??}
@@ -1640,213 +1744,74 @@ QuickChick.
 
 \appendix
 
+\subsection{Provenance, Capabilities, and Protecting Objects}
+\label{app:ptr}
 
-\subsection{Events and Traces}
-\label{sec:events}
+What if we want to express a finer-grained notion of safety, in which
+stack objects are protected unless the function that owns them intentionally
+passes a pointer to them? This can be thought of as a {\it capability}-based
+notion of security. Capabilities are unforgeable tokens that grant access to
+a region of memory, typically corresponding to valid pointers to that region.
+So, in order to express such a property, we need our machine to carry some notion
+of {\it pointer provenance}---a distinction between a pointer that is intended to
+point to a given object, and non-pointer integers as well as pointers to other objects.
 
-We abstract over the events that can be observed in the system, defining them
-only as a set \(\OBSS\) that contains at least the element \(\tau\), the silent
-event. Other events might represent certain function calls (i.e., system calls)
-or writes to special addresses representing mmapped regions.
-A {\em trace} is a nonempty, finite or infinite sequence
-of events, ranged over by \(\obsT\).
-We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces, reserving ``::''
-for list-cons.
+One such provenance model is Memarian et al.'s PVI \cite{}, in which pointers are
+annotated with the identity of the object they first pointed to. This annotation is
+propagated when the pointer is copied and when operations are performed on it---even
+integer-only operations.
 
-We write that execution from a state produces an observation trace
-\(\mach,\context \hookrightarrow \obsT\) as follows, coinductively:
+We can model this as a trio of additional security-relevant operations: one which
+declares a register to contain a valid pointer, one which transmits the provenance
+of a pointer from one element to another, and one which clears the provenance
+(for instance, when a pointer is modified in place in a way that makes it invalid.)
 
-\judgmenttwo{\((\mach,\context) \stepstounder{} (\mach',\context',\obs)\)}
-            {\((\mach',\context') \hookrightarrow \obsT\)}
-            {\((\mach,\context) \hookrightarrow \notfinished{\obs}{\obsT}\)}
+In addition to the normal call stack, our security context will carry a map \(\rho\) from
+elements to memory regions, represented as a base and a bound \(\context = (V, \sigma, \rho)\).
+Existing operations are extended to keep the value of \(\rho\) the same, and the new operations
+work as follows:
 
-We define another relation that takes a trace until we have returned from the
-active principal.
-We write this \(d \downarrow (\mach,\context) \hookrightarrow \obsT\), where
-\(d\) is the depth of the current call.
+\judgmentbr[Promote]
+           {\(\psi = \mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},\mathit{sz})\)}
+           {\(\rho' = \rho[\reg_{dst} \mapsto \mathit{range} ~ \reg_{base} ~ \mathit{off} ~ \mathit{sz}]\)}
+           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
 
-\judgment{\(|\sigma| < d\)}
-         {\(d \downarrow (\mach,(V,\sigma)) \hookrightarrow \tau\)}
+\judgmentbr[Propagate]
+           {\(\psi = \mathbf{propagate} ~ \component_{src} ~ \component_{dst}\)}
+           {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
+           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
 
-\judgmenttwobrlong{\((\mach,(V,\sigma)) \stepstounder{} (\mach',\context',\obs)\)}
-                  {\(|\sigma| \geq d\)}
-                  {\(d \downarrow (\mach',\context') \hookrightarrow \obsT\)}
-                  {\(d \downarrow (\mach,(V,\sigma)) \hookrightarrow \notfinished{\obs}{\obsT}\)}
+\judgment[Clear]
+         {\(\psi = \mathbf{clear} ~ \component\)}
+         {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho[\component \mapsto \emptyset])\)}
 
-\paragraph*{Observational Similarity}
-
-We say that two event traces $\obsT_1$ and $\obsT_2$ are {\em similar},
-written \(\obsT_1 \eqsim \obsT_2\), if the sequence of non-silent events
-is the same. That is, we compare up to deletion of \(\tau\) events.
-
-\begin{minipage}{.4\columnwidth}
-  \judgment{}{\(\obsT \eqsim \obsT\)}
-\end{minipage}
-\begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
-           {\(\notfinished{\obs}{\obsT_1} \eqsim \notfinished{\obs}{\obsT_2}\)}
-\end{minipage}
-
-\begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
-           {\(\notfinished{\tau}{\obsT_1} \eqsim \obsT_2\)}
-\end{minipage}
-\begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
-           {\(\obsT_1 \eqsim \notfinished{\tau}{\obsT_2}\)}
-\end{minipage}
-
-\paragraph*{Variants and Irrelevant Values}
-
-For a given system, assume an compatibility equivalence relation \(\sim\) on values.
-Two states are variants with respect to a set of elements \(\components\)
-if they agree on the value of every element not in \(\components\) and
-and have compatible values for every element in \(\components\).
-Our notion of non-interference involves comparing the traces of such
-\(\components\)-variants. We use this to define sets of irrelevant elements,
-and secrets in general.
-
-\definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
-written \(\mach \approx_\components \nach\), if, for
-all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]\)
-and for all \(\component \in \components\), \(\mach[\component] \sim \nach[\component]\).
-
-\definition An element set \(\components\) in state \((\mach,\context)\) contains
-irrelevant values, written \((\mach,\context) \parallel \components\), if for all
-\(\nach\) such that \(\mach \approx_{\components} \nach\), if
-\((\mach,\context) \hookrightarrow \obsT\) and
-\((\nach,\context) \hookrightarrow \obsT'\), then
-\(\obsT \eqsim \obsT'\).
-
-\subsection{Properties at Return}
-\label{sec:facts}
-
-Here we define some logical operations to reason about the behavior of the
-system over time. These have a temporal-logic flavor, as they reflect
-the expected behavior of the system in the future, after a possible return.
-
-\paragraph*{On-return}
-
-The intuition behind integrity (below) is that a caller may expect its
-sealed data to be unchanged when control returns to it. In fact, the callee
-may overwrite such data---when the data are found in callee-saved registers
-this is perfectly legal---as long as it either restores it, or has some guarantee
-that its changes will not impact the caller.
-
-We start by defining a second-order logical operator
-\(d \uparrow P\), pronounced ``\(P\) holds on return from depth \(d\),''
-where \(P\) is a predicate on machine states. This is a coinductive relation
-similar to ``weak until'' in temporal logic---it also holds if the program never
-returns from depth \(d\).
-
-\judgmenttwo[Returned]
-            {\(|\sigma| < d\)}
-            {\(P ~ (\mach,(V,\sigma))\)}
-            {\((d \uparrow P) ~ (\mach, (V,\sigma))\)}
-
-\judgmenttwobrlong[Step]
-                  {\(|\sigma| \geq d\)}
-                  {\((d \uparrow P) ~ (\mach', \context')\)}
-                  {\((\mach, (V,\sigma)) \stepstounder{\overline{\psi}} (\mach', \context',\obs)\)}
-                  {\((d \uparrow P) ~ (\mach, (V,\sigma))\)}
-
-Similarly, for confidentiality, we will want to compare pairs of future states,
-so we give a binary equivalent, \(d \Uparrow R\), where
-\((\mach,\context) ~ (d \Uparrow R) ~ (\mach',\context')\) holds if \(R\) holds on the
-first states that return from depth \(d\) after \((\mach,\context)\) and \((\mach',\context')\),
-respectively. Once again, \(\Uparrow\) is coinductive.
-
-\judgmenttwobrlong[Returned]
-            {\(|\sigma_1| < d\)}
-            {\(|\sigma_2| < d\)}
-            {\((\mach_1,(V_1,\sigma_1)) ~ R ~ (\mach_2,(V_2,\sigma_2))\)}
-            {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
-
-\judgmenttwobrlong[Left]
-              {\(|\sigma_1| \geq d\)}
-              {\((\mach_1,(V_1,\sigma_1)) \stepstounder{\overline{\psi}} (\mach_1',\context_1',\obs)\)}
-              {\((\mach_1',\context_1') ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
-              {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
-
-\judgmenttwobrlong[Right]
-              {\(|\sigma_2| \geq d\)}
-              {\((\mach_2,(V_2,\sigma_2)) \stepstounder{\overline{\psi}} (\mach_2',\context_2',\obs)\)}
-              {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,\context_2')\)}
-              {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
-
-\subsection{Properties}
-\label{app:props}
-
-\paragraph*{Well-bracketed Control Flow}
-
-\definition We define a correct return from \(\mach\) as:
+We now have a notion of provenance, and must integrate it into the definition of
+stack safety. We essentially generalize the above notion of passing: we will consider
+a caller to have intentionally passed an object if that object is reachable by
+a capability that has been passed to the callee. This includes capabilities passed
+indirectly, by being stored in an object that is in turn passed. Formally, we call
+this set \(\mathit{capped}\), and define it recursively:
 %
-\[\ret(\mach) = \{(\mach',\context') \mid \mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]+4\}\]
+\[\begin{split}
+& \mathit{capped} ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{\component\} \cup \mathit{capped} ~ \components' ~ \rho \textnormal{ where} \\
+& \components' = \{\component' |\rho[\component] = (\mathit{base},\mathit{bound})
+\land \mathit{base} \leq \component' < \mathit{bound}\} \\
+\end{split}\]
 
-\definition
-A system enjoys  well-bracketed control flow if, whenever
-\((\mach,\context) \stepstounder{\overline{\psi}} (\mach',(V,\sigma),\obs)\) where
-\(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\),
-\(|\sigma| \uparrow \ret(\mach)\) holds on \((\mach',(V,\sigma))\).
+We then tweak the call operation to seal only objects that are in \(\mathit{capped}\), or
+the previously defined \(\mathit{passed}\).
 
-\paragraph*{Integrity}
+\judgmentbrbrbr[]
+               {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
+               {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
+                 \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
+               {\(\components = \{\addr | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \cup (\mathit{capped} ~ \overline{\reg_{args}} ~ \rho) \}\)}
+               {\(V'' = V'\llbracket \components \mapsto \sealed \rrbracket\)}
+               {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) =
+                 (V'',V::\sigma,\rho)\)}
 
-\definition Let \(\Delta(\mach,\mach')\) be the set of elements \(\component\)
-such that \(\mach[\component] \not = \mach'[\component]\).
-
-\definition We define \(\intProp(\mach,V)\), to hold on a state \((\mach',\context')\) when
-\(\{\component \mid V ~ \component = \sealed\} \cap \Delta(\mach,\mach')\)
-is irrelevant in \((\mach', \context')\).
-
-\definition A system enjoys {\it stack integrity} if, whenever
-\((\mach,\context) \stepstounder{\overline{\psi}} (\mach',(V,\sigma),\obs)\) with
-\(\mathbf{call} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \bar{\psi}\),
-we have:
-\[(|\sigma'| \uparrow \intProp(\mach',V)) ~ (\mach',(V,\sigma))\]
-
-\paragraph*{Caller Confidentiality}
-
-\definition Let \((\mach,\context)\) be a state with \(\context = (V,\sigma)\), and
-\(\components = \{\component \mid V ~ \component \in \{\sealed, \unsealed\}\}\).
-Then \((\mach,\context)\) enjoys {\it internal confidentiality} with respect to \(\components\)
-if, for any \(\nach\) that is a \(\components\)-variant of \(\mach\), we can take
-\(|\sigma| \uparrow (\mach,\context) \hookrightarrow \obsT\) and
-\(|\sigma| \uparrow (\nach,\context) \hookrightarrow \obsT'\) and have that
-\(\obsT \simeq \obsT'\).
-
-\definition The {\em corrupted set} \(\bar{\Diamond}(\mach,\mach',\nach,\nach')\)
-is the set \((\Delta(\mach,\mach') \cup \Delta(\nach,\nach')) \cap \Delta(\mach',\nach')\).
-This treats
-\(\mach\) and \(\nach\) as the initial states and
-\(\mach'\) and \(\nach'\) as their corresponding final states, and is the
-set of elements that were corrupted between them.
-
-\definition We define the relation \(\conf(\mach,\nach)\) to hold on a pair of states
-\((\mach',\context)\) and \((\nach',\context')\) when
-\(\bar{\Diamond}(\mach,\nach,\mach',\nach')\) is irrelevant in \((\mach',\context)\).
-
-\definition A state \((\mach,(V,\sigma))\) enjoys {\it return-time confidentiality}
-if, for \(\components = \{\component \mid V ~ \component \in \{\sealed, \unsealed\}\}\)
-and any \(\nach\) that is a \(\components\)-variant of \(\mach\), we have:
-\[(\mach,(V,\sigma)) ~ (|\sigma| \Uparrow \conf(\mach,\nach) ~ (\nach,(V,\sigma))\]
-
-\definition A system enjoys {\it caller confidentiality} if, whenever
-\((\mach,\context) \stepstounder{\overline{\psi}} (\mach',\context',\obs)\)
-with \(\mathbf{call} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\),
-\((\mach',\context')\) enjoys both internal and return-time confidentiality.
-
-\paragraph*{Callee Confidentiality}
-
-\definition We define \(\cconf(\mach,V)\), to hold on a state \((\mach',\context')\) when
-\(\{\component \mid V ~ \component = \unsealed\} \cap \Delta(\mach,\mach')\)
-is irrelevant in \((\mach', \context')\).
-
-\definition A system enjoys {\it callee confidentiality} if, whenever
-\((\mach,\context) \stepstounder{\overline{\psi}} (\mach',(V,\sigma),\obs)\)
-with \(\mathbf{call} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\),
-% or \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} ~ \overline{sa} \in \psi\),
-we have:
-\[(|\sigma| \uparrow \cconf(\mach',V)) ~ (\mach',\context')\]
-
+Note that we have a degree of monotonicity here. Once an object is sealed (because its
+capability has not been passed to a callee), subsequent nested calls can never unseal it.
+On the other hand, an object that is passed via a pointer may be passed on indefinitely.
               
 \end{document}
