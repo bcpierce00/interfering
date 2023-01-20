@@ -9,6 +9,7 @@ Require Import coqutil.Word.Naive.
 Require Import coqutil.Word.Properties.
 Require Import riscv.Spec.Machine.
 Require Import riscv.Spec.Decode.
+(* Require Import riscv.Spec.PseudoInstructions. *)
 Require Import Coq.ZArith.BinInt. Local Open Scope Z_scope.
 
 Require Import riscv.Spec.Machine.
@@ -57,8 +58,10 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
   (* TODO: More interesting state/abstract *)
   Inductive myTag : Type :=
   | Tcall
+  | Ttailcall
   | Th1
   | Th2
+  | Th3 (* noop/entry point for tail calls *)
   | Tinstr
   | Tpc (n : nat)
   | Tr1
@@ -72,8 +75,10 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
   Definition tag_eqb (t1 t2 : myTag) : bool :=
     match t1, t2 with
     | Tcall, Tcall
+    | Ttailcall, Ttailcall
     | Th1, Th1
     | Th2, Th2
+    | Th3, Th3
     | Tinstr, Tinstr
     | Tr1, Tr1
     | Tr2, Tr2
@@ -194,8 +199,13 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       end
     | [Tinstr; Th2] =>
       match tpc, trs, trd with
-      | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth] |>)
+      | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Th3] |>)
       | _, _, _ => (*trace ("Failstop in ImmArith: Th2" ++ nl)*) None
+      end
+    | [Tinstr; Th3] =>
+      match tpc, trs, trd with
+      | [Tpc depth; Th3], [], [] => Some (p <| pctags := [Tpc depth] |>)
+      | _, _, _ => (*trace ("Failstop in ImmArith: Th3" ++ nl)*) None
       end
     | [Tinstr; Tr1] =>
       (*trace ("r1" ++ nl)*)
@@ -213,6 +223,14 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       Some (p <| nextid := newid |>
               <| pctags := [Tpc newid; Th1] |>
               <| regtags := map.put (regtags p) rd [Tpc old] |>)
+    | [Tpc old], Some [Tinstr; Ttailcall] =>
+      (* TODO Current policy is based on depth, no change on tail calls *)
+      (* let newid := S (nextid p) in *)
+      Some (p
+              (* <| nextid := newid |> *)
+              <| pctags := [Tpc old (* newid *); Th3] |>
+              (* <| regtags := map.put (regtags p) rd [Tpc old] |> *)
+        )
     | _, _ => (*trace ("Failstop on Jal" ++ nl)*) None
     end.
 
