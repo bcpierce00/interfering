@@ -520,12 +520,15 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
        ( 10, 40, [] )].
 
   Definition prop_lazyConfidentiality :=
-    forAll GenRISCVLazyOrig.cex04 (fun '(m,cm) =>
+    forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
                       (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
 
 End TestPropsRISCVSimple.
 
 Extract Constant defNumTests => "1".
+
+(* Print Assumptions TestPropsRISCVSimple.prop_lazyConfidentiality. *)
+(* Time QuickCheck TestPropsRISCVSimple.prop_laziestIntegrity. *)
 
 (* Print Assumptions TestPropsRISCVSimple.prop_lazyConfidentiality. *)
 Time QuickCheck TestPropsRISCVSimple.prop_lazyConfidentiality.

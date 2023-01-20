@@ -43,12 +43,14 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
   Inductive stackKind : Type :=
   | Knormal
   | Krelarg
+  | Krefarg (* added but unused, unified treatment of stack-based args *)
   .
 
   Definition stackKind_eqb (t1 t2 : stackKind) :=
     match t1, t2 with
     | Knormal, Knormal
-    | Krelarg, Krelarg => true
+    | Krelarg, Krelarg
+    | Krefarg, Krefarg => true
     | _, _ => false
     end.
 
