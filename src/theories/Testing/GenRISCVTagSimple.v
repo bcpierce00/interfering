@@ -566,6 +566,50 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
       )
     ))).
 
+  (* TODO refactoring with callHead *)
+  Definition tailcallHead
+    offset f
+    (i : LayoutInfo) (m : MachineState)
+    (callee:FunctionProfile) :
+    G (list (InstructionI * TagSet * FunID * Operations)) :=
+    (* pass relative arguments (generated constants) *)
+    (* quick and dirty, related to MAX_REL_ARGS, programmatically later *)
+    bindGen (genTargetReg m) (fun rt =>
+    bindGen (genImm (dataHi i)) (fun imm1 =>
+    bindGen (genImm (dataHi i)) (fun imm2 =>
+    let args :=
+      if (callee.(relative_args) =? 1)%nat
+      then [(Addi rt 0 imm1, [Tinstr],          f, [(*noops*)]);
+            (Sw sp rt (-4),  [Tinstr; Tsetarg], f, [(*noops*)])]
+      else [] in
+    let call_args :=
+      if (callee.(relative_args) =? 1)%nat
+      then [(sp, -4, -1)]
+      else [] in
+    let refs :=
+      if (List.length callee.(reference_args) =? 1)%nat
+      then let hd := nth_default (0, 0) callee.(reference_args) 0 in
+           [(Addi rt 0 imm2,       [Tinstr],          f, [(*noops*)]);
+            (Sw sp rt (-8),        [Tinstr; Tsetarg], f, [(*noops*)]);
+            (Addi argReg sp (-8),  [Tinstr],          f, [(*noops*)])]
+      else [] in
+    let refs_args :=
+      if (List.length callee.(reference_args) =? 1)%nat
+      then [(sp, -8, -5)] (* or (argReg _ _) *)
+      else [] in
+    ret
+      (args ++ refs ++
+         [(
+             Jal r0 (offset + 8), (* discard RA, skip H1/H2 *)
+             [Tinstr; Ttailcall],
+             f,
+             [(Tailcall callee.(id) callee.(register_args) (call_args ++ refs_args))]
+         )]
+      )
+    ))).
+
+  (* NOTE headerHead vs initSeq are rather arbitrary, especially after adding a
+     third instruction to support tail calls *)
   Definition headerHead f:
     list (InstructionI * TagSet * FunID * Operations) :=
     [(Sw sp ra 0, [Tinstr; Th1], f, [(*noops*)])].
@@ -574,16 +618,21 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     list (InstructionI * TagSet * FunID * Operations) :=
     let sz := 4 * (frameSizeWords prof) in
     (* For now, just allocating all at once. The extra 1 is for the return address*)
-    [  (Addi sp sp sz , [Tinstr; Th2], prof.(id), [(Alloc 0 sz)])
+    [  (Addi sp sp sz , [Tinstr; Th2], prof.(id), [(Alloc 0 sz)]);
+       (Addi r0 r0 0  , [Tinstr; Th3], prof.(id), [(*noop*)])
 (*       (Sw sp 8 (-8)  , [Tinstr]     , f, normal);
        (Sw sp 9 (-4)  , [Tinstr]     , f, normal)*)
     ].
-  
+
+  (* TODO Refine this behavior by determining in advance which functions can be
+     tail called *)
   Definition callSeq
     offset f
     (i : LayoutInfo) (m : MachineState)
     (callee:FunctionProfile) :=
-    callHeadInstrs <- callHead offset f i m callee;;
+    callHeadInstrs <-
+      freq [ (4,     callHead offset f i m callee)
+           ; (1, tailcallHead offset f i m callee) ]%nat;;
     ret (callHeadInstrs ++ headerHead (callee.(id)) ++ initSeq callee).
 
   (* Based on Rob's 
