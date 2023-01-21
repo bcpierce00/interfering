@@ -328,6 +328,154 @@ observational properties are even weaker than necessary to support Roessler and 
   section, some even in key ideas? It still feels a little out of order to me,
   and occasionally too detailed for the introduction?}
 
+\rb{\textbf{A menagerie of protection mechanisms.}
+%
+We have made explicit the key point that there is \emph{not} a single stack
+abstraction. This paves the way for a \emph{general} idea of stack protection
+that is widely applicable with high-level concepts that remain unchanged (and I
+think it's particularly important to at least introduce these more immutable
+parts early on). The fact that this general ``framework'' requires low-level or
+specific specializations is a predictable consequence of the protean nature of
+the call stack.
+%
+\\
+%
+Let us return to a selection of representative policies in our menagerie and
+consider how they fit into the framework. At the highest level, we can classify
+all those techniques into two large groups, software-based and hardware-based.
+Traditionally, most practical protections are implemented in software, so we
+start by considering this first group.
+%
+\\
+%
+We can make two general observations about these software based techniques.
+Firstly, (as we will see: discussion? technical details?) these techniques are
+\emph{less modular} than their hardware counterparts. That is, the
+countermeasures are tightly coupled with the program code they protect, and
+consequently more effort is required to disentangle the program from the
+protections, and to understand the impact of the latter on the former. This is
+true of any systematic attempt to study the security of stack protection
+policies, including their adaptation to our framework. (Owing to this added
+complexity, software policies will not be the cleanest or most elegant exemplars
+of use of the framework, its salient features and practical utility; this partly
+motivates the focus on hardware policies.)
+%
+\\
+%
+(The above remark holds \emph{at least in a ``single-level model''} that
+considers assembly language/machine code programs. In general, (low-level)
+protections are introduced by a compiler or similar tool. One could consider a
+multi-level extension of the framework pairing models of high-level programs and
+the security transformations performed by a (stack-secure) compiler.)
+%
+\\
+%
+Secondly, the guarantees generally offered by software-based policies are
+\emph{less absolute}, being defined more or less informally and usually
+providing few definite guarantees of absence of \emph{general} classes of
+errors. (The following discussion elaborates on this. It is conceivable that an
+extended and more sophisticated framework could add \emph{probabilistic
+reasoning} capabilities to capture and reason about the effects of less strict
+protection mechanisms. This would be another orthogonal development to what is
+presented here. In this paper, we are interested in assessing the complete
+\emph{absence} of broad classes of vulnerabilities --- modulo any modeling gaps
+or defects. In passing, this would extend the security properties to e.g. larger
+system verification efforts.)
+%
+\\
+%
+One by one, consider the following specimens of software protection mechanisms
+(quick explanations inlined?):
+%
+\\
+%
+\begin{itemize}
+%
+\item \emph{Stack canaries}. The purpose of canaries is to \emph{increase} the
+  difficulty of some attacks on the stack, usually (always?) buffer overflows.
+  They can never provide any absolute security guarantees and therefore do not
+  satisfy any of our properties (some of the properties, e.g. confidentiality,
+  are completely out of scope.) Although tedious, we could we could model this
+  mechanism in our framework with the appropriate adaptations --- and
+  unsurprisingly, testing would find property violations, which we already know
+  are there: the results of this effort would be unsurprising and not as useful
+  or instructive as other experiments.
+%
+\item \emph{Bounds checking}. This is fundamentally a high-level technique, even
+  more obviously so than stack canaries (which could still detect violations
+  caused by external code). Bounds checking only applies to code that has been
+  instrumented by the ``secure compiler'' (i.e., to whole programs); it does not
+  impose any constraints on adversarial code. The attacker model is therefore
+  rather weak. (Certain variants, like SoftBound, are good targets for lifting
+  our framework to the source level by e.g. using a C-language semantics and
+  using Tagged C for security modeling; the lifted versions of our properties
+  would likely hold under the expected assumptions. HardBound is probably an
+  interesting transitional case because it uses capability-like hardware
+  primitives for enforcement; it could be close to ongoing and future work to
+  verify stack safety on capability machines, e.g. based on Cerise -- discuss
+  together?)
+%
+\item \emph{Shadow stacks}. Like stack canaries, shadow stacks are
+  ``probabilistic techniques'' in that they ``restrict the flexibility available
+  in creating gadget chains'' (Shanbhogue et al.). This technique is solely
+  concerned with control-flow integrity, and so closely related to our
+  well-bracketed control flow. Nevertheless, and again, it is only an
+  approximate technique, and our testing framework would be able to find the
+  expected attacks against our security property.
+%
+\item \emph{Split stacks}. The security claims of split stacks are stronger than
+  those of most software countermeasures, i.e., they are meant to guarantee
+  their titular code-pointer integrity. They explicitly offer no protections on
+  stack data (i.e., integrity and confidentiality), and so restrict themselves
+  to well-bracketed control flow. (This is probably closer to our framework than
+  most other software techniques, and it seems like it would be easier to model
+  as well. However, this is again work based on high-level languages and would
+  benefit from a higher level of abstraction.)
+%
+\item \ldots
+%
+\end{itemize}
+%
+Opposed to the above group of software techniques we have hardware-based
+protection policies (more in background/technical preliminaries?). Although
+programs must effectively leverage the protection mechanisms offered by the
+hardware, the distinction between those protections and the program logic itself
+is much cleaner: it is fairly simple to separate the use of the security
+features in the hardware (and their effects in program code) from regular
+program code. They also tend to aspire to offer complete protection against
+entire classes of attacks. Both aspects make this family of techniques a better
+fit for illustrating and showcasing our techniques.
+%
+\\
+%
+Why favor micro-policies? Their design is more flexible and arguably more
+general than capability machines (of course, they pay a performance price for
+this). This generality and ease of programming make them good candidates for an
+exploration the design space of stack protection policies and proof of concept
+implementations. On the practical side, there is a number of existing policies
+available to examine (not just lazy policies!) --- and we find how they satisfy
+our properties, how they do not, and errors in some of them, and see how to
+correct them. Lazy enforcement is particularly novel, but not the only
+possibility. This additional breadth is beneficial for the proof of concept
+stage.
+%
+\\
+%
+Regarding capability machines, we know that most designs based on capability
+machines do not satisfy our properties (or do so incurring significant costs),
+and that fixes are not trivial and involve new types of capabilities (in a
+sense, are they any more ``realistic?'' Only the latest Cerise paper would seem
+to satisfy our properties, is directly influenced by previous versions of this
+work, and is a reasonable target for ongoing/further study -- but this is not
+easy, and even the author(s) estimate it would be a significant amount of work,
+especially full proofs (references, communications, etc.).
+%
+\\
+%
+\ldots
+%
+}
+
 \subsection{Contributions}
 
 In sum, we offer the following contributions:
