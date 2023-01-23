@@ -4,7 +4,7 @@ coq-quickchick (testing on 1.6.4)
 zarith (testing on 1.12)
 coqutil, coq-recordupdate, and riscv-coq should be present and built, update their paths
 in \_CoqProject or use included submodules (must be built separately, pinned
-commits work with Coq 8.11 and 8.12, more recent versions require other commits
+commits work with Coq 8.11, 8.12 and 8.13, more recent versions require other commits
 and propagation of API changes throughout the code)
 
 Core/ contains the abstract machine and policy models, as well as the RISCV
