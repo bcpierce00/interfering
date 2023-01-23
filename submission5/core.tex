@@ -168,10 +168,16 @@ property suitable for testing lazy enforcement.
 We propose a novel characterization of stack safety using the formal tools of language-based
 security~\cite{sabelfeld2003language}, decomposing stack safety into
 the {\em integrity} and {\em confidentiality} of the caller’s local state
-during the callee's execution, the confidentiality of the callee's local state
-afterward, and the control flow protection of {\em well-bracketed control
-  flow (WBCF)}~\cite{SkorstengaardSTKJFP}. We also extend WBCF to a setting with exceptions,
+and the callee's behavior during the callee's execution, plus the control flow protection
+of {\em well-bracketed control flow}~\cite{SkorstengaardSTKJFP} (\(\wbcf\)).
+\ifexceptions
+We also extend WBCF to a setting with exceptions,
 in which there may be multiple points at which a callee can ``return.''
+\fi
+
+This gives us a total of five core properties: \(\wbcf\)
+caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
+callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)).
 
 To demonstrate the utility of our formal characterization, we use these
 properties to validate and improve an existing enforcement mechanism, the
@@ -228,8 +234,8 @@ that are parameterized by (1).
 
 We treat stack safety as multiple properties, rather than one multi-faceted property, because
 not all enforcement mechanisms attempt to implement all aspects of stack safety. Some focus
-exclusively on control flow, others protect the confidentiality of the caller but not the
-callee, etc.
+exclusively on control flow, some enforce integrity but not confidentiality, and many
+focus on the caller over the callee.
 
 \paragraph*{Permissiveness, Laziness, and Tagged Architectures}
 
@@ -247,27 +253,27 @@ Roessler and DeHon find that the intuitive way to enforce stack safety in this s
 is inefficient when allocating and clearing stack frames, because each word must be initialized
 with a tag corresponding to the (depth of the) current function activation. They propose
 {\em Lazy Tagging and Clearing}, in which tags are not initialized at allocation, but only
-when a function writes to memory. This means that such writes cannot be protected. Instead
-the micro-policy enforces that memory be read by the same fuction that wrote it. This
-lazy enforcement is incompatible with existing models of stack safety,
-because an attacker can modify another function's data. But the owner of
-the data will never see the changes, so it is secure in the sense that the attacker is
-unsuccessful at changing program behavior (except, perhaps, by causing a fault.) We aim to elaborate
-that sense, and to test whether the micro-policy fulfills it.
+when a function writes to memory. This means that writes cannot be prevented, necessarily
+violating existing models of stack safety. Instead the micro-policy enforces that memory be
+read by the same fuction that wrote it. The owner of the data will never see the changes,
+so it is secure in the sense that the attacker is unsuccessful at changing program behavior
+(except, perhaps, by causing a fault.) We elaborate that sense, and test whether the
+micro-policy fulfills it.
 
 This key motivation leads us to present integrity and confidentiality as predicates on (pairs of)
 machine states that make claims about the future observable behavior of execution from those states.
 That is not to say that our properties are specialized for lazy micro-policies. It also supports
-normal ``eager'' micro-policies, and should support other enforcement mechanisms. In fact, our
-observational properties are even weaker than necessary to support Roessler and Dehon's micro-policy.
+normal ``eager'' micro-policies, and should support other enforcement mechanisms. In fact, \(\clri\)
+and \(\clrc\) are even weaker than necessary to support Roessler and Dehon's micro-policy,
+while \(\clec\) and \(\clei\) are stronger properties that they do not attempt to enforce.
 
 \subsection{Contributions}
 
 In sum, we offer the following contributions:
 
 \begin{itemize}
-\item We formalize permissive stack confidentiality and integrity properties.
-  Both are parameterized over a notion of external
+\item We formalize permissive stack confidentiality and integrity properties,
+  which are parameterized over a notion of external
   observation, and are violated only if accessing secrets or overwriting
   data causes a visible change in system behavior.
 \item We instantiate these definitions with a realistic
@@ -275,7 +281,7 @@ In sum, we offer the following contributions:
   on the stack, callee-saves registers, and tail-call elimination.
   Our model is modular enough that adding these features is straightforward.
 \item Our formalization of well-bracketed control flow in the presence of tail-call
-  elimination is a slight novelty over existing models.
+  elimination \ifexceptions and exceptions \fi is a novelty over existing models.
 \item We use property-based random testing to validate the relationship between
   our properties and micro-policies.
 \end{itemize}
@@ -338,8 +344,9 @@ but the theory does not depend on this choice.
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
 \cref{tab:psi}. Those that we explore in detail in \cref{sec:example}
 are shown in white: calls, returns, and the allocation and deallocation of local memory.
-In \cref{sec:machine}), we cover additional operations add parameters to the examples', to support
-various forms of memory sharing and tail-call elimination. These are shown in light gray.
+In \cref{sec:machine}), we cover additional operations that add parameters to the examples',
+to support various forms of memory sharing \ifexceptions , exceptions, \fi
+and tail-call elimination. These are shown in light gray.
 We give a proof-of-concept formalization of a more sophisticated, heap-like sharing model
 based on pointer provenance in \cref{app:ptr}, represented by the dark grey
 operations, but we do not test this.
@@ -390,23 +397,17 @@ in an allocated object that is accessible to the current principal (\(\object\))
 available to be allocated (\(\unsealed\)), or
 always accessible (\(\public\)).
 
+\sna{Might like a better name than object, because morally it ought to apply to arguments as well.}
+
 \paragraph*{The Properties and their Hierarchy}
 
-We have five different properties to introduce:
-
-\begin{itemize}
-\item Well=bracketed Control Flow (\(WBCF\))
-\item Caller Integrity (\(CLRI\))
-\item Caller Confidentiality (\(CLRC\))
-\item Callee Confidentiality (\(CLEC\))
-\item Callee Integrity (\(CLEI\))
-\end{itemize}
-
-The properties form a rough hierarchy; although they are technically separate and need
-not coexist in any particular combination, some are likely to take priority in terms of their
+The properties form a hierarchy, shown in [TODO: diagram].
+Within properties that are orthogonal
+some are likely to take priority in terms of their
 importance to security. Almost all stack-safety enforcement mechanisms will try to enforce \(WBCF\),
 as control-flow attacks such as ROP are a major vulnerability that can be targeted via the stack.
-Many also cover some degree of (caller) integrity. [TODO: more hierarchy].
+Many also cover some degree of (caller) integrity. Caller confidentiality has been fairly neglected,
+and callee-oriented properties even moreso.
 
 \paragraph*{Events}
 
@@ -431,7 +432,10 @@ In particular, while we are agnostic as to the source
 language, we certainly aim to support C, and so any source function might contain undefined
 behavior resulting in its compilation to arbitrary machine code. A given enforcement
 mechanism may place additional constraints, particularly on the behavior of
-call and return sequences.
+call and return sequences. For instance, extant implementations tend to assume
+implicitly that callee-saved registers are treated appropriately by whichever compiler
+generated their code. Our properties explicitly require them to be treated as belonging
+to the caller, which could be enforced by a micro-policy or by a well-behaved compiler.
 
 In general, it is impossible to distinguish buggy machine code from an attacker; in
 our examples we will identify one function or another as an attacker, but we do not
@@ -601,9 +605,14 @@ The security semantics for this program is based
 on the security-relevant events noted in the right columns of Figures~\ref{fig:main}
 and~\ref{fig:f}, namely execution of instructions that allocate or deallocate space,
 make a call, or make a return.
-Figure \ref{fig:exec1} shows how the corresponding security context
-develops over the first few steps of the program, beginning with
-the start of {\tt main} (\(\PCname = 0\)) and with the stack pointer at address 1000.
+
+Recall that our security semantics attach a security context to the machine state,
+which consists of a view \(V\) and a stack \(\sigma\) of pending activations' views.
+(See \cref{sec:machine} for details.)
+Figure \ref{fig:exec1} shows how the security context develops over the first few
+steps of the program, according to the rules in \cref{fig:advops}, slightly simplified.
+It begins at the start of {\tt main}, where the program counter (\(\PCname\)) is zero,
+and with the stack pointer (\(\SP\)) at address 1000.
 State transitions are numbered and labeled with a list of security operations, written
 \(\downarrow \overline{\psi}\) between steps.
 
@@ -702,8 +711,7 @@ are detected as security violations.
 \paragraph*{Well-bracketed Control Flow}
 
 To begin with, what if {\tt f} returns to an unexpected place (i.e. \(\PCname \neq 20\) or
-\(\SP \neq 980\))? We consider this to
-violate well-bracketed control flow (WBCF). WBCF is a relationship between
+\(\SP \neq 980\))? We consider this to violate \(\wbcf\). \(\wbcf\) is a relationship between
 call steps and their corresponding return steps: just after the return, the program
 counter should be at the next instruction following the call,
 and the stack pointer should be the same as it was before the call.
@@ -721,7 +729,7 @@ WBCF requires that if \(\mach\) is the state at that point, then \(\ret ~ \mach\
 %For nested calls, where the pending stack is initially larger, the same principle
 %applies: \(\ret ~ \mach\) must hold the next time the pending stack is the same size or smaller.
 
-To see why WBCF also cares about the stack pointer, consider the attack in
+To see why \(\wbcf\) also cares about the stack pointer, consider the attack in
 Figure \ref{subfig:WBCF2}. Here the attacker returns with \(\SP' = 998\) instead of the
 correct \(\SP = 980\). In this scenario, given the layout of {\tt main}'s frame,
 \begin{center}
@@ -743,23 +751,6 @@ read part of the return address, and its attempt to output
 % Even absent other
 % kinds of data protection, the stack pointer {\it must} be restored
 % for the program to behave predictably.
-
-In typical compiled code, WBCF is maintained by the compiler's call and return sequences.
-As long as a function deallocates the same-sized frame that it allocates, and properly
-saves and restores the return address, it should have WBCF---unless an error in the middle
-subverts those sequences by overwriting one of the relevant elements, or by jumping into
-the middle of the call or return sequence. We can therefore enforce WBCF by (1) ensuring that
-these ``blessed'' call and return sequences execute in order and (2) permitting only blessed
-sequences to write to \(\SP\), {\tt ra}, and the address in memory where {\tt ra} is stored.
-
-To perform this enforcement using tags, we can take
-\(\mathcal{T} ::= \mathit{gen} \mathrel{|} \mathit{bseq} ~ n ~ m \mathrel{|} \mathit{prot}\), named for general
-execution, blessed sequence, and protected, respectively. Blessed sequences of length \(m\) are
-tagged \(\mathit{bseq} ~ 1 ~ m\) through \(\mathit{bseq} ~ m ~ l\), and the micro-policy enforces
-that they execute in order. The stack pointer and {\tt ra}
-are tagged \(\mathit{prot}\). Only instructions tagged \(\mathit{bseq}\) may write to memory
-or registers tagged \(\mathit{prot}\). Store instructions tagged \(\mathit{bseq}\) tag their
-targets \(\mathit{prot}\).
 
 \paragraph*{Stack Integrity}
 
@@ -787,20 +778,18 @@ a callee overwrites some data of its caller, but the caller never accesses that 
 essentially using the caller's memory as scratch space, but the caller never seeing any change.
 
 To characterize this situation in a property, we borrow the idea of \emph{variant} states
-from the theory of non-interference.
-For a set of elements \(\components\),
+from the theory of non-interference. For a set of elements \(\components\),
 a pair of states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if
 their values an only disagree on elements in \(\components\). We further require that
 the respective values in \(\components\) be \emph{compatible}, meaning that even though
 their payloads may differ, their tags (or whatever other data is important to
 the machine's security enforcement mechanism) must be identical.
-
 We say that the elements of \(\components\) are \emph{irrelevant}
 in \(\mach\) if they can be replaced by compatible values without changing the
-observable behavior of the machine. (We will formalize this in Section~\ref{sec:events}
-by saying that every \(\components\)-variant state produces
-an equivalent observation trace.) All other elements are \emph{relevant}.
-We characterize \emph{observational integrity} as the property that
+observable behavior of the machine. All other elements are \emph{relevant}.
+Variants and relevance are defined in \cref{sec:props}.
+
+We characterize \(\clri\) as the property that
 every relevant element that is \(\sealed\) under the callee's view is restored
 to its original value at the return point.
 
@@ -837,11 +826,12 @@ affect the caller after the callee returns.
 
 Consider the state \(\mach\) after step 5, whose context is \((V_2,\sigma)\), with the attacker from
 Figure \ref{subfig:direct}. We take a variant state over the set of element(s) that are
-\(\sealed\) or \(\unsealed\) in \(V_2\), which happens to be the entire stack (see
-Figure \ref{fig:variant2}.) If we take a trace of execution from each state until it returns,
+\(\sealed\) in \(V_2\) (see Figure \ref{fig:variant2}.)
+            [TODO: fix figure to avoid varying the entire stack.]
+If we take a trace of execution from each state until it returns,
 the traces may differ, in this case outputting 5 (the original value of {\tt secret}) and
 4 (its value in the variant) respectively. This is a violation of
-{\it internal confidentiality}.
+{\it internal confidentiality} (\cref{tab:props}, line 3a.)
 
 \begin{figure}
   \includegraphics[width=\columnwidth]{variants2.png}
@@ -854,7 +844,7 @@ by reading it and then returning it, in a context where the caller would output 
 value. Figure \ref{fig:variant3} shows the behavior of the same variants under this attacker,
 but in this case, there is no output during the call. Instead the value of {\tt secret} is
 extracted and placed in {\tt a0}, the return value register. We wish to identify this as
-a confidentiality violation, again by considering variants of the \(\sealed\) and \(\unsealed\)
+a confidentiality violation, again by considering variants of the \(\sealed\)
 elements in \(V_2\), but capturing the required property is subtle.
 
 To illustrate the issues, note that {\tt f} has also stores a 0 below the stack pointer.
@@ -880,7 +870,7 @@ and the variant, although only one of these would be necessary), and its final v
 differs between the variants.
 Therefore, it must depend on a secret (in fact, the variable {\tt secret}).
 Unless {\tt a0} happens to be irrelevant, this is a violation of what
-we term {\it return-time confidentiality}.
+we term {\it return-time confidentiality} (\cref{tab:props}, line 3b.)
 
 Structurally, return-time confidentiality resembles integrity, but now dealing with
 variants. We begin with a state immediately following
@@ -897,55 +887,41 @@ are the same in \(\mach\) and \(\nach\). We then define
 return-time confidentiality as holding if \(\confProp\) holds on the matching return states
 from \(\mach\) and \(\nach\), respectively.
 
-Finally, we define caller confidentiality as the
+Finally, we define \(\clrc\) as the
 combination of internal and return-time confidentiality.
-While we have separated the definitions of integrity and confidentiality,
-in terms of tag-based enforcement, Depth Isolation and Lazy Tagging and Clearing
-both enforce both properties.
 
-\paragraph*{Callee Confidentiality}
+\paragraph*{The Callee's Perspective}
 
-Although we presented our initial example from the perspective of the caller, a callee
-may also have data that must be kept secret from its caller. Consider a callee that makes
-a privileged system call to obtain a secret key, and uses that key to perform a specific
-task. An untrustworthy or erroneous caller might attempt to read the key out of the callee's
-memory after return.
+We presented our initial example from the perspective of the caller, a callee
+may also have privilege that its caller lacks, and which must be protected from the
+caller. Consider a function that makes a privileged system call to obtain a secret key,
+and uses that key to perform a specific task. An untrustworthy or erroneous caller might
+attempt to read the key out of the callee's memory after return, or to influence the callee
+to cause it to misuse the key itself!
 
-We model this as nearly dual to caller integrity: the callee's secrets are those
-values that it has stored in \(\unsealed\) elements. So, callee confidentiality means that
-at the state following the callee's return, any relevant element that was \(\unsealed\) under
-the callee's view retains its original value.
+Where the caller's confidentiality and integrity are concerned with protecting specific,
+identifiable state---the caller's stack frame---their callee equivalents are concerned
+with enforcing the expected interface between caller and callee. Communication between
+the principals should occur only through the state elements that are designated for the
+purpose: those which we label \(\public\) and (in the presence of memory sharing) \(\object\).
 
-Once again, both tag-based approaches do enforce callee confidentiality, but it is
-worth keeping separate because some enforcement mechanisms might not, and it has not
-historically been acknowledged by all formal treatments of stack safety \cite{Georges22:TempsDesCerise}.
+The properties themselves correspond to their caller equivalents, inverted.
 
 \paragraph*{The Hierarchy of Stack Safety}
 
-The forms of stack safety described above are largely independent of one another, and
-can potentially be enforced separately in various combinations. This is important, because
+The forms of stack safety described above can potentially be enforced separately
+in various combinations. This is important, because
 many existing enforcement mechanisms enforce only some of the stack safety
 properties. Stricter enforcement may have greater performance impacts, leading to decisions
 about trade-offs between different degrees of stack safety.
 
-In principle, these properties can exist in any combination, but in practice we see examples
-of certain combinations that form a hierarchy. Many enforcement techniques focus purely on
+ \(\clec\) subsumes \(\clri\), and \(\clei\) subsumes
+\(\clrc\), but integrity and confidentiality are in general orthogonal to each other
+and to \(\wbcf\). Despite this, many enforcement techniques focus purely on
 well-bracketed control flow. Stack canaries aim to prevent certain attacks on the return
 address, and shadow stacks with protection (e.g. Return Address Defender \cite{Chiueh2001RAD})
-to enforce it completely.
-
-Others combine this protection with some degree of memory protection,
-chiefly focusing on integrity. Skorstengaard et al. \cite{SkorstengaardSTK} characterize stack
-safety as the combination of WBCF and {\it local state encapsulation} (LSE), and prove that their
-capability-based enforcement satisfies both. LSE corresponds to integrity, plus the
-confidentiality of the caller's frame, but not of the unallocated stack or data left
-behind in it by previous callees.
-They offer a fully abstract overlay semantics, which formalizes WBCF and LSE
-together as a safe-by-construction abstract machine. That machine does not allow a callee to
-read or write its caller's frame, but might allow it to read data that is left behind below
-the caller's frame, which is weaker than our full caller confidentiality and rules out
-callee confidentiality entirely. Georges et al. \cite{Georges22:TempsDesCerises} correct
-both limitations.\bcp{Then why are we not comparing to them instead??}
+to enforce it completely. Others combine this protection with some degree of memory protection,
+chiefly focusing on integrity.
 
 \section{Machine and Security Semantics, Formally}
 \label{sec:machine}
@@ -971,8 +947,6 @@ both limitations.\bcp{Then why are we not comparing to them instead??}
   \caption{RISC-V integer register set}
   \label{fig:RISCVregs}
 \end{figure}
-
-\paragraph*{Terminology and Notation}
 
 The building blocks of a machine are {\em words} and {\em registers}.
 Words are ranged over by \(\word\) and, when used as addresses, \(\addr\),
@@ -1086,6 +1060,9 @@ is the same. That is, we compare up to deletion of \(\tau\) events.
 \end{minipage}
 
 \subsection{Public Allocations}
+
+[TODO: this section could use some trimming. I think we have room for this
+discussion, it's just more verbose than everything else and therefore feels weird.]
 
 The full machine supports public stack allocations that can
 be accessed by anyone until they are deallocated on their owner's return,
@@ -1341,9 +1318,7 @@ respectively. Once again, \(\Uparrow\) is coinductive.
                   {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,\context_2')\)}
                   {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
-[TODO: back-propagate abbreviations used here]
-
-Finally, we can define our core properties. They can be found in \cref{tbl:props},
+Finally, we can define our core properties. They can be found in \cref{tab:props},
 arranged to show their commonalities and distinctions. Each definition gives a criterion
 quantified over states \(s\) that immediately follow call (or tail-call) steps.
 If an execution can reach a state \(s\) such that \(s \stepstounder{\overline{\psi}} s'\)
@@ -1361,44 +1336,64 @@ and a ``return-time'' clause, that any potentially corrupted memory at their ret
 is irrelevant.
 
 \begin{table*}[h]
-  \begin{align*}
-    \wbcf \triangleq & |\sigma| \uparrow \ret
-    && \textnormal{ where } \ret ~ \mach' \textnormal{ iff }
-    \mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]+4\}
-    && \textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called} \\
+  \setlength{\tabcolsep}{1pt}
+  \center
+  \begin{tabular}{l r l l l}
+    \rowcolor{black!20}
+    1
+    & \(\wbcf \triangleq\) & \(|\sigma| \uparrow \ret\)
+    & \(\textnormal{ where } \ret ~ \mach' \textnormal{ iff }\)
+    \(\mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]+4\)
+    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called}\) \\
     %
-    \clri \triangleq & (|\sigma| \uparrow \intProp) ~ (\mach,(V,\sigma))
-    && \textnormal{ where } \intProp ~ \mach' \textnormal{ iff }
-    \mach' \parallel \sealed(V) \cap \Delta(\mach,\mach')
-    && \textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called} \\
+    \rowcolor{black!10}
+    2
+    & \(\clri \triangleq\) & \((|\sigma| \uparrow \intProp) ~ (\mach,(V,\sigma))\)
+    & \(\textnormal{ where } \intProp ~ \mach' \textnormal{ iff }
+    \mach' \parallel \sealed(V) \cap \Delta(\mach,\mach')\)
+    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called}\) \\
     %
-    \clrc \triangleq & \forall \nach \textnormal{ s.t. } \mach \approx_{\sealed(V)} \nach, &&
-    && \textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called} \\
-    & |\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma)) \\
-    & \textnormal{ and } (\mach,(V,\sigma)) ~ (|\sigma| \Uparrow \confProp) ~ (\nach,(V,\sigma))
-    && \textnormal{ where } (\mach' ~ \confProp ~ \nach') \textnormal{ iff }
-    \mach' \parallel \bar{\Diamond}(\mach,\nach,\mach',\nach') \\
+    \rowcolor{black!20}
+    3
+    & \(\clrc \triangleq\) & \(\forall \nach \textnormal{ s.t. } \mach \approx_{\components} \nach,\)
+    & \(\textnormal{ where } \components = \sealed(V)\)
+    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
+    \rowcolor{black!20}
+    3a & & \(|\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma))\) & & \\
+    \rowcolor{black!20}
+    3b & & \(\textnormal{ and } (\mach,(V,\sigma)) ~ (|\sigma| \Uparrow \confProp) ~ (\nach,(V,\sigma))\)
+    & \(\textnormal{ where } (\mach' ~ \confProp ~ \nach') \textnormal{ iff }
+    \mach' \parallel \bar{\Diamond}(\mach,\nach,\mach',\nach')\) & \\
     %
-    \clec \triangleq & (|\sigma| \uparrow \cconfProp) ~ (\mach,(V,\sigma))
-    && \textnormal{ where } \cconfProp ~ \mach' \textnormal{ iff }
-    \mach' \parallel \unsealed(V) \cap \Delta(\mach,\mach')
-    && \textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called} \\
+    \rowcolor{black!10}
+    4
+    & \(\clec \triangleq\) & \((|\sigma| \uparrow \cconfProp) ~ (\mach,(V,\sigma))\)
+    & \(\textnormal{ where } \cconfProp ~ \mach' \textnormal{ iff }
+    \mach' \parallel \Delta(\mach,\mach') - \components\)
+    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
+    \rowcolor{black!10}
+    & & & \(\textnormal{ where } \components = \public(V) \cup \object(V)\) & \\
     %
-    \clei \triangleq & \forall \nach \textnormal{ s.t. } \mach \approx_{\unsealed(V)} \nach, &&
-    && \textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called} \\
-    & |\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma)) \\
-    & \textnormal{ and } (\mach,(V,\sigma)) ~ (|\sigma| \Uparrow \confProp) ~ (\nach,(V,\sigma))
-    && \textnormal{ where } (\mach' ~ \cintProp ~ \nach') \textnormal{ iff }
-    \mach' \parallel \bar{\Diamond}(\mach,\nach,\mach',\nach') \\
-  \end{align*}
+    \rowcolor{black!20}
+    5
+    & \(\clei \triangleq & \forall \nach \textnormal{ s.t. } \mach \approx_{\components} \nach,\)
+    & \(\textnormal{ where } \components = \public(V) \cup \object(V)\)
+    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
+    \rowcolor{black!20}
+    5a & & \(|\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma))\) & & \\
+    \rowcolor{black!20}
+    5b & & \(\textnormal{ and } (\mach,(V,\sigma)) ~ (|\sigma| \Uparrow \confProp) ~ (\nach,(V,\sigma))\)
+    & \(\textnormal{ where } (\mach' ~ \cintProp ~ \nach') \textnormal{ iff }
+    \mach' \parallel \bar{\Diamond}(\mach,\nach,\mach',\nach')\) & \\
+  \end{tabular}
   \caption{Properties}
-  \label{tbl:props}
+  \label{tab:props}
 \end{table*}
-
-[TODO: words about the complementary properties.]
 
 \section{Validation through Random Testing}
 \label{sec:testing}
+
+[TODO: this is still last submission's test. Kept here to get a sense of length.]
 
 There are several ways to evaluate whether an enforcement mechanism enforces
 stack safety properties. Ideally such validation would be done through formal proof over
