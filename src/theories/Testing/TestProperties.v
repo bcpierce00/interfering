@@ -56,6 +56,10 @@ Notation " 'get' X <- A , B ; C" := (match A with
 Notation " 'iff' B , X <- A ; C" := (X <- (if B then A else ret X) ;; C)
                                       (at level 60, X at level 60, A at level 60, B at level 200, C at level 200).
 
+Definition trace := false.
+Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
+                          (at level 60).
+
 (* NOTE Not concentrating on eager properties at the moment, focusing changes on
    lazy properties (not including lockstep integrity). *)
 Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
@@ -314,8 +318,8 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   Definition variant_frame (fuel : nat) (m : State) : G (nat * State * BinCondition) :=
     let '(ms, cs) := m in
     let secret := List.filter (fun k => confidentialityComponent cs k) (getElements ms) in
-    Show.trace ("Generating variant for: " ++ show secret ++ nl) (
-    ns <- GenRISCVLazyOrig.genVariantByList secret ms;;
+    ("Generating variant for: " ++ show secret ++ nl) !
+    (ns <- GenRISCVLazyOrig.genVariantByList secret ms;;
     let n := (ns, cs) in
     let test := (fun m' n' => cond_confidentiality m m' n n') in
     ret (fuel, n, (depthOf cs, test))).
@@ -360,6 +364,9 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
           get ops <- (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst m)))), ("Bad-PC: " ++ show (proj (fst m) PC) ++ nl);
           (* Take a step in the primary and the shadow states *)
           let '(m', _ops, obs) := cstep m cm in
+          if weq (projw (fst m') PC) (projw (fst m) PC)
+          then collect "Failstop" true
+          else
           let '(n', _, obs') := step n cm in
           let d := depthOf (snd m) in
           let d' := depthOf (snd m') in
@@ -380,7 +387,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                let witnesses := seq.flatten (map fst results) in
                (* Update the shadow state *)
                n'' <- GenRISCVLazyOrig.genVariantByList witnesses n';;
-               Show.trace ("New shadow variants: " ++ show (map (fun k => (k, proj n'' k)) witnesses) ++ nl)
+               ("New shadow variants: " ++ show (map (fun k => (k, proj n'' k)) witnesses) ++ nl) !
                (aux fuel' m' n'' stk'' tr')
           else aux fuel' m' n' stk tr'
   end in
@@ -525,7 +532,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
 
 End TestPropsRISCVSimple.
 
-Extract Constant defNumTests => "1".
+Extract Constant defNumTests => "1000".
 
 (* Print Assumptions TestPropsRISCVSimple.prop_lazyConfidentiality. *)
 (* Time QuickCheck TestPropsRISCVSimple.prop_laziestIntegrity. *)

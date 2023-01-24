@@ -36,6 +36,10 @@ Import RecordSetNotations.
 
 From QuickChick Require Import QuickChick.
 
+Definition trace := true.
+Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
+                          (at level 60).
+
 Module TagPolicyLazyOrig <: TagPolicy RISCV.
   Import RISCV.
   Module PM := MachineModule.Properties RISCV.
@@ -64,6 +68,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
   | Th3 (* noop/entry point for tail calls *)
   | Tinstr
   | Tpc (n : nat)
+  | Trai (* initial tag for return address *)
   | Tr1
   | Tr2
   | Tr3
@@ -84,6 +89,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     | Tr2, Tr2
     | Tr3, Tr3
     | Tsp, Tsp
+    | Trai, Trai
     | Tsetarg, Tsetarg => true
     | Tpc n1, Tpc n2 => Nat.eqb n1 n2
     | Tstack n1 k1, Tstack n2 k2 => Nat.eqb n1 n2 && stackKind_eqb k1 k2
@@ -173,8 +179,8 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       if (negb (existsb (tag_eqb Tsp) trs1))
          && negb (existsb (tag_eqb Tsp) trs2)
           then Some p
-          else (*trace ("Failstop in Arith" ++ nl)*) None
-    | _, _, _ => (*trace ("Failstop in Arith" ++ nl)*) None
+          else ("Failstop in Arith" ++ nl) ! None
+    | _, _, _ => ("Failstop in Arith" ++ nl) ! None
     end.
 
   Definition policyBranch (p : PolicyState) (pc : word) (rs1 rs2 : Z) : option PolicyState :=
@@ -183,7 +189,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     trs2 <- map.get (regtags p) rs2;
     match tinstr, existsb (tag_eqb Tsp) trs1, existsb (tag_eqb Tsp) trs2 with
     | [Tinstr], false, false => Some p
-    | _, _, _ => (*trace ("Failstop in Branch" ++ nl)*) None
+    | _, _, _ => ("Failstop in Branch" ++ nl) ! None
     end.
 
   Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
@@ -195,25 +201,25 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     | [Tinstr] =>
       match existsb (tag_eqb Tsp) trs, existsb (tag_eqb Tsp) trd with
       | false, false => Some (p <| regtags := map.put (regtags p) rd [] |>)
-      | _, _ => (*trace ("Failstop in ImmArith: just instr" ++ nl)*) None
+      | _, _ => ("Failstop in ImmArith: just instr" ++ nl) ! None
       end
     | [Tinstr; Th2] =>
       match tpc, trs, trd with
       | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Th3] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Th2" ++ nl)*) None
+      | _, _, _ => ("Failstop in ImmArith: Th2" ++ nl) ! None
       end
     | [Tinstr; Th3] =>
       match tpc, trs, trd with
       | [Tpc depth; Th3], [], [] => Some (p <| pctags := [Tpc depth] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Th3" ++ nl)*) None
+      | _, _, _ => ("Failstop in ImmArith: Th3" ++ nl) ! None
       end
     | [Tinstr; Tr1] =>
       (*trace ("r1" ++ nl)*)
       match tpc, trs, trd with
       | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Tr1" ++ nl)*) None
+      | _, _, _ => ("Failstop in ImmArith: Tr1" ++ nl) ! None
       end
-    | _ => (*trace ("Failstop in ImmArith: no tag" ++ nl)*) None
+    | _ => ("Failstop in ImmArith: no tag" ++ nl) ! None
     end.
 
   Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState :=
@@ -231,7 +237,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
               <| pctags := [Tpc old (* newid *); Th3] |>
               (* <| regtags := map.put (regtags p) rd [Tpc old] |> *)
         )
-    | _, _ => (*trace ("Failstop on Jal" ++ nl)*) None
+    | _, _ => ("Failstop on Jal" ++ nl) ! None
     end.
 
   Definition policyJalr (p : PolicyState) (pc : word) (rd rs : Z) : option PolicyState :=
@@ -243,7 +249,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     | [Tinstr] =>
       match tpc, ttarget, treturn with
       | [Tpc _], [], [] => Some p
-      | _, _, _ => (*trace ("Failstop on Jalr" ++ nl)*) None
+      | _, _, _ => ("Failstop on Jalr" ++ nl) ! None
       end
     | [Tinstr; Tr3] =>
       (*trace ("r3" ++ nl)*)
@@ -251,10 +257,10 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       | [Tpc current; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
                                                  <| regtags := map.put (regtags p) rd [] |>
                                                  <| nextid := pred current |>)
-      | _, _ => (*trace ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
-                                               ++ " rd@" ++ show treturn ++ nl)*) None
+      | _, _ => ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
+                                         ++ " rd@" ++ show treturn ++ nl) ! None
       end
-    | _ => (*trace ("Failstop on Jalr" ++ nl)*) None
+    | _ => ("Failstop on Jalr" ++ nl) ! None
     end.
 
   Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : option PolicyState :=
@@ -268,22 +274,24 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       match tpc, taddr with
       | [Tpc pcdepth], [Tstack memdepth Knormal] =>
         if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
-        else (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
+        else ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
       | [Tpc pcdepth], [Tstack memdepth Krelarg] =>
         if Nat.eqb pcdepth (S memdepth) then Some (p <| regtags := map.put (regtags p) rd [] |>)
-        else (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
+        else ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
 
       | _, _ =>
-        (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
+        ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
       end
     | [Tinstr; Tr2] =>
       (*trace ("r2" ++ nl)*)
       match tpc, trs, taddr with
-      | [Tpc depth; Tr2], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr3] |>
-                                                    <| regtags := map.put (regtags p) rd taddr |>)
-      | _, _, _ => (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
+      | [Tpc depth; Tr2], [Tsp], [Tpc _]
+      | [Tpc depth; Tr2], [Tsp], [Trai] =>
+          Some (p <| pctags := [Tpc depth; Tr3] |>
+                   <| regtags := map.put (regtags p) rd taddr |>)
+      | _, _, _ => ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
       end
-    | _ => (*trace ("Failstop on Load: no tag!" ++ nl)*) None
+    | _ => ("Failstop on Load: no tag!" ++ nl) ! None
     end.
 
   Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
@@ -299,22 +307,24 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       | [Tpc memdepth], [], []
       | [Tpc memdepth], [], [Tstack _ _]
         => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth Knormal] |>)
-      | _, _, _ => (*trace ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      | _, _, _ => ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
       end
     | [Tinstr; Tsetarg] =>
       match tpc, trs, tmem with
       | [Tpc memdepth], [], []
       | [Tpc memdepth], [], [Tstack _ _]
         => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth Krelarg] |>)
-      | _, _, _ => (*trace ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      | _, _, _ => ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
       end
     | [Tinstr; Th1] =>
       match tpc, trs, trd with
-      | [Tpc depth; Th1], [Tpc od], [Tsp] => Some (p <| pctags := [Tpc depth; Th2] |>
-                                                     <| memtags := map.put (memtags p) addr [Tpc od] |>)
-      | _, _, _ => (*trace ("Failstop on h1 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
+      | [Tpc depth; Th1], [Tpc _], [Tsp]
+      | [Tpc depth; Th1], [Trai], [Tsp]
+        => Some (p <| pctags := [Tpc depth; Th2] |>
+                   <| memtags := map.put (memtags p) addr trs |>)
+      | _, _, _ => ("Failstop on h1 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
       end
-  | _ => (*trace ("Failstop on Store" ++ nl)*) None
+  | _ => ("Failstop on Store" ++ nl) ! None
   end.
 
   Definition decodeI (w : w32) : option InstructionI :=
