@@ -1,30 +1,58 @@
-\rb{\textbf{The call stack and its security.} Maybe a few opening words to set
-  the stage and bring two things to the front: (1) functions and subroutines as
-  fundamental building blocks of any kind of structured programming; and (2) the
-  stack as the natural abstraction to manage these in a computer. And also maybe
-  a little bit more about the width, the gravity and the \emph{foundational
-  nature} of attacks on the stack, which the sentence below touches on
-  summarily.
-\rb{(+SNA) Connection to functions (and adversarial code?). Attacks on the stack
-  are also attacks on this fundamental abstraction (functions, subroutines,
-  procedures, methods, however you call them)}
-}
+\subsection{The Call Stack and Its Security}
+
+Computer programming at any scale relies on \emph{functions} (variously known as
+subroutines, procedures, methods, etc.) as a \emph{foundational abstraction} to
+structure programs into building blocks representing units of computation that
+can \emph{call} one another to create larger computations.
 %
-The call stack is a perennial target for low-level attacks, leading to
-dire consequences from leakage and corruption of private stack data
+At a low level, a function call comprises its own data (private or shared), as
+well as information about its \emph{caller} and \emph{callee} functions. The
+runtime must keep track of the local contexts of all active function activations
+at any given time; the \emph{fundamental data structure} charged with realizing
+this abstraction is the \emph{(call) stack}.
+%
+\rb{This should be well known, so no need for illustration?}
+
+The correct execution on a program---and its security---is contingent on all of
+its functions properly implementing this abstraction by means of a careful use
+of the call stack. Be it accidental or intentional, incorrect management of the
+stack is at the root of a myriad of faults whose effects range from (rarely)
+innocuous to (usually) catastrophic.
+%
+From a security perspective, attacks on the stack (say, from a malicious
+function that chooses to abuse its access to the contents of this data
+structure) are as fundamental, varied and pervasive as the functional
+abstraction itself.
+%
+\rb{Begins to prefigure the idea of multiple stack implementations.}
+
+%% \rb{\textbf{The call stack and its security.} Maybe a few opening words to set
+%%   the stage and bring two things to the front: (1) functions and subroutines as
+%%   fundamental building blocks of any kind of structured programming; and (2) the
+%%   stack as the natural abstraction to manage these in a computer. And also maybe
+%%   a little bit more about the width, the gravity and the \emph{foundational
+%%   nature} of attacks on the stack, which the sentence below touches on
+%%   summarily.
+%% \rb{(+SNA) Connection to functions (and adversarial code?). Attacks on the stack
+%%   are also attacks on this fundamental abstraction (functions, subroutines,
+%%   procedures, methods, however you call them)}
+%% }
+
+Indeed, the call stack is a perennial target for low-level attacks, leading to
+dire consequences, from leakage and corruption of private stack data
 to control-flow hijacking.
 %
-\rb{We can mention things like e.g. the most recent CWE Top 25 Most Dangerous
-    Software Weaknesses from MITRE, cf.
-    \url{https://cwe.mitre.org/top25/archive/2022/2022_cwe_top25.html}, where
-    e.g. \#1 (Out-of-bounds Write), \#5 (Out-of-bounds Read) and \#7 (Use After
-    Free), that is a good number of the most important and prevalent
-    vulnerability types are closely related to the stack. These will show up in
-    other popular rankings as well.
-\rb{(+SNA) List major CWEs? No matter the class of weakness considered, many
-  involve a \emph{flow} going through the stack (cf. Eternal war on memory).}
-}
+Even a cursory glance at the most recent release of the authoritative CWE Top 25
+Most Dangerous Software Weaknesses
+list\footnote{\url{https://cwe.mitre.org/top25/archive/2022/2022_cwe_top25.html}}
+shows general classes of vulnerabilities closely related to the stack \rb{(though not exclusively)}
+consistently at and near the top, e.g., \#1 (CWE-787, Out-of-bounds Write), \#5 (CWE-125, Out-of-bounds Read), \#7 (CWE-416, Use
+After Free) or \#11 (CWE-476, NULL Pointer Dereference).
 %
+Moreover, many other types of faults involve some kind of control or data flow
+using data stored in the stack \rb{cf. Eternal war in memory, Google/Microsoft
+memory safety statistics, etc.}.
+
 To foil such attacks, a menagerie of
 software and hardware protections have been proposed,
 %
@@ -33,7 +61,8 @@ bounds checking~\cite{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
 split stacks~\cite{Kuznetsov+14},
 shadow stacks~\cite{Dang+15,Shanbhogue+19},
 capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJFP,Georges+21},
-and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18}.
+and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18}---we discuss these in more
+detail in \cref{XXX}.
   \ifaftersubmission\apt{Mostly from
   nick; there could be more}\bcp{Yes, going back to MIT days---we should
   include several more of these, if only to give readers the impression that
@@ -41,10 +70,32 @@ this is a well-studied mechanism (so formalizing its protections is
 useful).}
 \fi
 %
-\rb{Did we want to add even more techniques? Is this selection broad enough?
-  Anyway reference that we'll be looking at these more closely later.}
+\rb{Broad enough? Do we want to add more techniques?}
+%
+Yet despite this wealth of potential solutions, the stack remains a central
+security concern---why?
+%
+Security mechanisms designed to prevent a certain attack can be brittle---successfully
+eliminating the attack as it exists at the time of publication, but leaving room for attackers
+to find new, similar attacks.
+%
+%% \rb{And so the cat-and-mouse game continues.}
 
-The protections offered by such mechanisms are commonly described by giving
+To mitigate this risk, \rb{we claim that} mechanisms should aim to enforce \emph{formal
+properties} of correct \rb{safe?} behavior that can be proven or tested. Such properties become the
+\emph{specification} against which enforcement can be validated; even enforcement mechanisms that do
+not fulfill a property benefit from the ability to articulate \emph{why} they fail.
+%
+%% \rb{Good stuff! There is some overlap between this discussion and the opening
+%%   motivation, maybe we could restructure things a bit so that those threads are
+%%   unified?}
+%
+This is the problem we begin to address in this paper \rb{or some such
+  connecting words}.
+
+\subsection{Security Properties for Stack Safety}
+
+The protections offered by stack protection mechanisms are commonly described by giving
 concrete examples of attacks that they can prevent---corruption of return
 addresses, buffer overflows, use of uninitialized variables, etc.---leaving
 a more formal characterization to the reader's intuition.
@@ -132,19 +183,9 @@ confidentiality, albeit at some performance cost.
 
 \subsection{Motivation}
 
-Security mechanisms designed to prevent a certain attack can be brittle---successfully
-eliminating the attack as it exists at the time of publication, but leaving room for attackers
-to find new, similar attacks. To mitigate this risk, mechanisms should aim to enforce formal
-properties of correct behavior that can be proven or tested. Such properties become the
-specification against which enforcement can be validated; even enforcement mechanisms that do
-not fulfill the property benefit from the ability to articulate {\it why} they fail.
-%
-\rb{Good stuff! There is some overlap between this discussion and the opening
-  motivation, maybe we could restructure things a bit so that those threads are
-  unified?}
 
 Stack safety is challenging to specify in full generality, because the stack is fundamentally
-an architecture-specific construct. (Contrast Acevedo de Amorim et al.'s \cite{} work on heap safety,
+an architecture-specific construct. (Contrast Azevedo de Amorim et al.'s \cite{DBLP:conf/post/AmorimHP18} work on heap safety,
 which is broadly consistent across architectures and language semantics, and therefore amenable
 to a very general approach.)
 The desired behavior of the stack varies based on ISA, calling convention,
