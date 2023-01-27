@@ -108,6 +108,9 @@ a more formal characterization to the reader's intuition.
 To make these notions more precise, we review a selection of specimens from the
 menagerie and begin to consider the difficulties involved in specifying and
 verifying the protection they offer.
+%
+For an assessment of these methods in the context of our stack security
+framework, see \cref{XXX} below.
 
 \subsubsection{Software Techniques}
 
@@ -195,54 +198,92 @@ penalties and attempt to offer greater levels of protection.
 \rb{(There is plenty of variety here, should we focus on the Cerise-and-friends
   (CHERI-adjacent) work exclusively?)}
 %
-Capability machines are able to represent and manipulate unforgeable tokens of
-authority over specific memory regions using a combination of dedicated
-out-of-band memory and a collection of specialized ISA instructions.
+Capability machines can represent and manipulate their homonymous
+capabilities---unforgeable tokens of authority over specific regions of
+memory---using a combination of dedicated out-of-band memory and a collection of
+specialized ISA instructions.
 %
-These hardware capabilities can be used to implement \emph{secure calling
-conventions} \ldots
+The most prominent contemporary representative of this long line of work is
+CHERI \cite{}, a modern architecture designed to provide efficient fine-grained
+memory protection and compartmentalization.
+%
+Previous work has demonstrated the use of these general principles \rb{in
+  simplified models} to implement \emph{secure calling conventions} for the call
+stack \cite{}. Those conventions can be seen as combining the advantages and
+protections of various families of software-based methods.
+%
+They are closely related \rb{too strong?} to this work; we discuss them in more
+detail in \cref{XXX}.
+%
+\rb{HardBound is also related to this}
 
 \paragraph{Micro-Policies}
 %
-\rb{(This partly overlaps with the technical preliminaries)}
+\rb{(This partly overlaps with the technical preliminaries, try to offer a quick
+  synthesis here.)}
 %
-\ldots
+Micro-policy machines are a family of tagged architectures that decorate
+addressable memory and registers with arbitrary metadata tags, and extend the
+processor with a programmable hardware monitor that uses custom rules on
+metadata tags to implement security policies of various types.
+%
+This flexibility can be harnessed to implement a wide array of stack protection policies with relative ease, covering and going beyond the capabilities \rb{word?} of the various software-based techniques \cite{} \rb{as demonstrated by}.
+%
+They comprise very general forms of \emph{lazy enforcement}, which can tolerate
+potential but harmless violations \rb{the system programmer's motto: ``trust me,
+  I know what I'm doing''} while still detecting them if and when their effects
+become tangible.
+%
+Micro-policies are one of the centerpieces of our technical development; we
+present them in more detail in \cref{XXX}.
 
 \subsection{A Language-Based View of Stack Safety}
 
-Stack safety is challenging to specify in full generality, because the stack is fundamentally
-an architecture-specific construct. (Contrast Azevedo de Amorim et al.'s \cite{DBLP:conf/post/AmorimHP18} work on heap safety,
-which is broadly consistent across architectures and language semantics, and therefore amenable
-to a very general approach.)
-The desired behavior of the stack varies based on ISA, calling convention,
-and the features of whichever programming language originated the code.
-For instance, the current state-of-the-art stack-safety specification from Georges et al.
-\cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
-control flow, and therefore defines {\it Well-bracketed Control Flow} (WBCF) under the assumption that
-a callee should always return to its caller. But, in the presence of tail-call elimination, a
-return from a callee to a distant ancestor is perfectly reasonable. Any addition of new features
-must be accompanied by tweaks to the model.
+As we begin to intuit, the security of the call stack and its contents can be
+viewed through many different lenses. Each of these points of view results in a
+\emph{unique specification} of the meaning of \emph{stack safety} for a
+particular protection mechanism---mostly an informal specification if one is
+produced, and almost always left implicit to some degree.
 %
-\rb{This point is extremely important!}
+Moreover, different protections operate under different threat models, further
+complicating their comparison and the assessment of the safeguards they
+effectively offer their clients---the programs themselves.
+%
+On the face of it, it seems perplexing that there is not a \emph{standard
+specification} (or set of specifications) for such a fundamental problem.
+Instead of reverse engineering an specific enforcement mechanism obtain a
+(necessarily approximate) specification, we turn the problem around on its head
+and seek more general solutions from first principles.
+%
+\rb{(Problems/notes: ``backward specs'' not the most useful to their clients,
+  not designed with their security needs in mind---goes in the direction of
+  program logics---; to reason about security in complex systems an explicit and
+  clear spec is preferable; many of the informal specs are at least
+  superficially similar and overlapping; hopefully all of them can be understood
+  from a small number of fundamental concepts)}
 
 We propose a novel characterization of stack safety using the formal tools of language-based
 security~\cite{sabelfeld2003language}, decomposing stack safety into
 the {\em integrity} and {\em confidentiality} of the caller’s local state
-and the callee's behavior during the callee's execution, plus the control flow protection
+and the callee's behavior during the callee's execution, plus the control-flow protection
 of {\em well-bracketed control flow}~\cite{SkorstengaardSTKJFP} (\(\wbcf\)).
 \ifexceptions
 We also extend WBCF to a setting with exceptions,
 in which there may be multiple points at which a callee can ``return.''
 \fi
 %
-\rb{Connect this to the shortcomings of previous work. I'd give at least a quick
-  explanation of what the various properties roughly entail in practice (e.g.,
-  secrecy of private data, etc.). The comment about the single extension of
-  exceptions seems disconnected from the rest.}
-
-This gives us a total of five core properties: \(\wbcf\)
+We treat stack safety as multiple properties, rather than one multi-faceted property, because
+not all enforcement mechanisms attempt to implement all aspects of stack safety. Some focus
+exclusively on control flow, some enforce integrity but not confidentiality, and many
+focus on the caller over the callee.
+%
+\rb{Return to this after extended discussion?}
+%
+This gives us a total of five core properties: \(\wbcf\),
 caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
 callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)).
+%
+\rb{Forward references?}
 
 We are not attempting to create a universal definition of stack safety for all systems.
 Rather, we define the stack safety of a single, fairly realistic system, decomposed into
@@ -253,16 +294,89 @@ the formal criteria for integrity, confidentiality, and control flow
 to obey the requirements. We consider the criteria in (3) to represent universal definitions
 that are parameterized by (1).
 %
-\rb{Sharpen, contrast the universal definitions (or a framework of parametric
-  definitions, say) with the concrete instance we study, again with its interest
-  properly motivated.}
+\rb{FIXME: Contrast some universal definitions (or a parametric framework) with
+  the concrete instance we study, again with its interest properly motivated.
+  (Coming in key ideas?) No ``gold standard''?}
 
-We treat stack safety as multiple properties, rather than one multi-faceted property, because
-not all enforcement mechanisms attempt to implement all aspects of stack safety. Some focus
-exclusively on control flow, some enforce integrity but not confidentiality, and many
-focus on the caller over the callee.
+Stack safety is challenging to specify in full generality, because the stack is fundamentally
+an architecture-specific construct. (Contrast Azevedo de Amorim et al.'s \cite{DBLP:conf/post/AmorimHP18} work on heap safety,
+which is broadly consistent across architectures and language semantics, and therefore amenable
+to a very general approach.)
+The desired behavior of the stack varies based on ISA, calling convention,
+and the features of whichever programming language originated the code.
 %
-\rb{Also sharpen after extended discussion?}
+\rb{(Extremely important!)}
+%
+For instance, the current state-of-the-art stack-safety specification from Georges et al.
+\cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
+control flow, and therefore defines {\it Well-bracketed Control Flow} (WBCF) under the assumption that
+a callee should always return to its caller. But, in the presence of tail-call elimination, a
+return from a callee to a distant ancestor is perfectly reasonable. Any addition of new features
+must be accompanied by tweaks to the model.
+%
+\rb{(Make this second point later?)}
+
+To demonstrate the utility of our formal characterization, we use these
+properties to validate and improve an existing enforcement mechanism, the
+{\em stack safety micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, re-implemented
+in the Coq proof assistant on top of a \rb{formal} RISC-V specification.  We
+use QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
+tool for Coq, to generate random programs and check
+that Roessler and DeHon's micro-policies correctly detect the ones that
+attempt to violate one of our properties. Furthermore, we
+check that the testing framework is able to generate counterexamples
+that violate our properties but are \emph{not} halted by incorrect
+variants of the enforcement mechanisms, including ones that we accidentally created
+while implementating the micro-policy and ones that we
+intentionally crafted to increase our confidence in the effectiveness
+of our testing.
+%
+\rb{This and the following paragraph could start more generally (we need to
+  answer the question of why these experiments, what is their interest), and
+  probably motivate the use of PBT (experiment results below show there's
+  benefit in them!) and, somewhere at least, talk about other points in the
+  spectrum.}
+
+We find that Roessler and DeHon's \emph{Lazy Tagging and Clearing}
+violates the temporal aspect of confidentiality in
+cases where data can leak across repeated calls to the same callee,
+and also violates integrity if the leak uses the caller's frame. We
+propose a variant of {\em Lazy Tagging and Clearing} that testably enforces
+confidentiality, albeit at some performance cost.
+%
+\rb{Anything to add from personal communications? More details later? Shows
+  these things are very hard to get right -- like the latest work on Cerise,
+  also motivated by this very work.
+\rb{(+SNA) At the very least, these models are subtle and getting them right,
+  and describing them unambiguously, is hard without a framework like this.}
+}
+
+\subsection{Contributions}
+
+In sum, we offer the following contributions:
+
+\begin{itemize}
+\item We formalize permissive stack confidentiality and integrity properties,
+  which are parameterized over a notion of external
+  observation, and are violated only if accessing secrets or overwriting
+  data causes a visible change in system behavior.
+\item We instantiate these definitions with a realistic
+  system with features such as argument passing
+  on the stack, callee-saves registers, and tail-call elimination.
+  Our model is modular enough that adding these features is straightforward.
+\item Our formalization of well-bracketed control flow in the presence of tail-call
+  elimination \ifexceptions and exceptions \fi is a novelty over existing models.
+\item We use property-based random testing to validate the relationship between
+  our properties and micro-policies.
+\end{itemize}
+
+Our artifact contains Coq formalizations of our properties for illustrative purposes
+as well as their testing implementation. There are no proofs---we use primarily Coq for the
+QuickChick library and to ensure that the formalizations are unambiguous.
+%
+\rb{Will have another look after the full pass.}
+
+\rb{*** KEY IDEAS FROM HERE? ***}
 
 \paragraph*{Permissiveness, Laziness, and Tagged Architectures}
 
@@ -327,57 +441,54 @@ property suitable for testing lazy enforcement.
   just one that is specialized to a specific policy, i.e. lazy micro-policies
   (I'd try to present these more gradually as well).}
 
-\begin{table*}
-  \begin{tabular}{| l | l | l | l | l | l | l | l | l |}
-    \hline
-    Technique       & Approximate & Deferred & High-level & Partial & Well-bracketed & Integrity & Confidentiality & Formal \\
-    \hline
-    Stack canaries  & Yes         & Yes      & No         & Yes     & Yes            & No        & No              & XXX    \\
-    Shadow stacks   & Yes         & Yes      & No         & Yes     & Yes            & No        & No              & XXX    \\
-    Bounds checking & No          & No       & Yes        & No      & Yes            & XXX       & XXX             & XXX    \\
-    Split stacks    & No          & No       & Yes        & Yes     & Yes            & No        & No              & XXX    \\
-    Capabilities    &             &          &            &         &                &           &                 & XXX    \\
-    Micro-policies  &             & Yes      &            & Yes     & Yes            & Yes       & Yes             & XXX    \\
-    \hline
+\newcommand*{\rot}[1]{\hbox to1em{\hss\rotatebox[origin=br]{-60}{#1}}}
+\newcommand*{\tabyes}{\CIRCLE\xspace}
+\newcommand*{\tabno}{\Circle\xspace}
+\newcommand*{\tabjein}{\RIGHTcircle\xspace}
+
+\begin{table}
+\begin{threeparttable}
+  \begin{tabular}{l | c c c c | c c c | c}
+    \toprule
+    \multicolumn{1}{l |}{Mechanism}
+    & \multicolumn{4}{l |}{Features}
+    & \multicolumn{3}{l |}{Properties}
+    & %% Formal criteria
+    \\
+    \midrule
+    %% Technique
+    \multicolumn{1}{c}{}
+    & \rot{Strict enforcement}
+    & \rot{Deferred checking}
+    & \rot{Low-level code support}
+    & \multicolumn{1}{c}{\rot{Partial program support}}
+    & \rot{Well-bracketed control flow}
+    & \rot{Data integrity}
+    & \multicolumn{1}{c}{\rot{Data confidentiality}}
+    & \rot{Formal criteria}
+    \\
+    \midrule
+    Stack canaries  & \tabno   & \tabjein & \tabyes  & \tabyes  & \tabyes  & \tabno   & \tabno   &          \\
+    Shadow stacks   & \tabno   & \tabjein &          & \tabyes  & \tabyes  & \tabno   & \tabno   &          \\
+    Bounds checking & \tabyes  & \tabno   & \tabno   & \tabno   & \tabyes  &          &          &          \\
+    Split stacks    & \tabyes  & \tabno   & \tabno   & \tabyes  & \tabyes  & \tabno   & \tabno   &          \\
+    \midrule
+    Capabilities    &          & \tabno   &          & \tabyes  &          &          &          & \tabjein \\
+    Micro-policies  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  \\
+    \bottomrule
   \end{tabular}
   \caption{Comparison of Stack Protection Mechanisms}
+  \begin{tablenotes}
+  \item \tabyes indicates a protection mechanism possesses the feature
+  \item \tabno indicates the mechanism lacks the feature
+  \item \tabjein indicates partial or incomplete support
+  \item \rb{Complete and check columns, describe. Capitalize?}
+  \item \rb{Order? Split int/conf? Deferred/lazy at the end of features}
+  \item \rb{2+ lines for capabilities, before and after using our draft?}
+  \end{tablenotes}
   \label{tab:relwork}
-\end{table*}
-
-To demonstrate the utility of our formal characterization, we use these
-properties to validate and improve an existing enforcement mechanism, the
-{\em stack safety micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, re-implemented
-in the Coq proof assistant on top of a \rb{formal} RISC-V specification.  We
-use QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
-tool for Coq, to generate random programs and check
-that Roessler and DeHon's micro-policies correctly detect the ones that
-attempt to violate one of our properties. Furthermore, we
-check that the testing framework is able to generate counterexamples
-that violate our properties but are \emph{not} halted by incorrect
-variants of the enforcement mechanisms, including ones that we accidentally created
-while implementating the micro-policy and ones that we
-intentionally crafted to increase our confidence in the effectiveness
-of our testing.
-%
-\rb{This and the following paragraph could start more generally (we need to
-  answer the question of why these experiments, what is their interest), and
-  probably motivate the use of PBT (experiment results below show there's
-  benefit in them!) and, somewhere at least, talk about other points in the
-  spectrum.}
-
-We find that Roessler and DeHon's \emph{Lazy Tagging and Clearing}
-violates the temporal aspect of confidentiality in
-cases where data can leak across repeated calls to the same callee,
-and also violates integrity if the leak uses the caller's frame. We
-propose a variant of {\em Lazy Tagging and Clearing} that testably enforces
-confidentiality, albeit at some performance cost.
-%
-\rb{Anything to add from personal communications? More details later? Shows
-  these things are very hard to get right -- like the latest work on Cerise,
-  also motivated by this very work.
-\rb{(+SNA) At the very least, these models are subtle and getting them right,
-  and describing them unambiguously, is hard without a framework like this.}
-}
+\end{threeparttable}
+\end{table}
 
 \rb{\textbf{A menagerie of protection mechanisms.}
 %
@@ -500,6 +611,18 @@ fit for illustrating and showcasing our techniques.
 %
 \\
 %
+CHERI and lightweight formal methods?
+%
+Questionably that they are strictly more realistic in the sense that it is very
+costly or requires special sophisticated/experimental types of capability not
+available/perhaps not very feasible to implement.
+%
+Problems of adapting this work to capability machines: security semantics tightly
+coupled to regular machine semantics and to a complex calling convention, with
+more complex side conditions...
+%
+\\
+%
 Why favor micro-policies? Their design is more flexible and arguably more
 general than capability machines (of course, they pay a performance price for
 this). This generality and ease of programming make them good candidates for an
@@ -542,31 +665,6 @@ especially full proofs (references, communications, etc.).
   compiler suffice to model many existing techniques, coming e.g. from systems
   programming and C-like languages.}
 
-\subsection{Contributions}
-
-In sum, we offer the following contributions:
-
-\begin{itemize}
-\item We formalize permissive stack confidentiality and integrity properties,
-  which are parameterized over a notion of external
-  observation, and are violated only if accessing secrets or overwriting
-  data causes a visible change in system behavior.
-\item We instantiate these definitions with a realistic
-  system with features such as argument passing
-  on the stack, callee-saves registers, and tail-call elimination.
-  Our model is modular enough that adding these features is straightforward.
-\item Our formalization of well-bracketed control flow in the presence of tail-call
-  elimination \ifexceptions and exceptions \fi is a novelty over existing models.
-\item We use property-based random testing to validate the relationship between
-  our properties and micro-policies.
-\end{itemize}
-
-Our artifact contains Coq formalizations of our properties for illustrative purposes
-as well as their testing implementation. There are no proofs---we use primarily Coq for the
-QuickChick library and to ensure that the formalizations are unambiguous.
-%
-\rb{Will have another look after the full pass.}
-
 \paragraph*{Limitations}
 
 %Our concurrency model is fairly
@@ -586,3 +684,10 @@ the property vacuously.
 \rb{Limitations in the introduction or later? Orthogonality of the heap, morally
   similar interesting setups on the stack? Termination sensitivity and
   capability machine semantics?}
+
+%%%
+
+\rb{Connect this (novel characterization?) to the shortcomings of previous work (later!). I'd give at least a quick
+  explanation of what the various properties roughly entail in practice (e.g.,
+  secrecy of private data, etc.). The comment about the single extension of
+  exceptions (still in intro) seems disconnected from the rest.}
