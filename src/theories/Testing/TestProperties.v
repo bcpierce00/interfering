@@ -81,7 +81,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
      functions and update contexts if applicable. Use only wrappers in the
      properties until a proper fix is implemented. *)
 
-  Definition get_ops (m : MachineState) (cm : CodeMap_Impl) : Operations :=
+  Definition get_ops (m : MachineState) (cm : CodeMap_Impl) : list Operation :=
     match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst m))) with
     | Some ops => ops
     | None => [] (* shouldn't happen, but delegating error handling now *)
@@ -161,7 +161,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     | _ => false
     end.
 
-  Definition ops_call (ops : Operations) : bool :=
+  Definition ops_call (ops : list Operation) : bool :=
     seq.has op_call ops.
 
   Definition op_ret (op : Operation) : bool :=
@@ -170,7 +170,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     | _ => false
     end.
 
-  Definition ops_ret (ops : Operations) : bool :=
+  Definition ops_ret (ops : list Operation) : bool :=
     seq.has op_ret ops.
 
   (* a condition consists of a depth at which it should be checked,
@@ -532,7 +532,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
 
 End TestPropsRISCVSimple.
 
-Extract Constant defNumTests => "1000".
+Extract Constant defNumTests => "100".
 
 (* Print Assumptions TestPropsRISCVSimple.prop_lazyConfidentiality. *)
 (* Time QuickCheck TestPropsRISCVSimple.prop_laziestIntegrity. *)

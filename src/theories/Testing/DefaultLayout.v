@@ -46,7 +46,7 @@ Module DefaultLayout (M:Machine) <: LayoutInfo M.
       Some O
     else None.
 
-  Definition CodeMap_Impl : Type := Zkeyed_map (option Operations).
+  Definition CodeMap_Impl : Type := Zkeyed_map (option (list Operation)).
   Definition CodeMap_fromImpl (cm : CodeMap_Impl) : CodeMap :=
     fun addr => match map.get cm (wtoz addr) with
                 | Some cs => cs

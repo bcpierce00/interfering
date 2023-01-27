@@ -25,7 +25,7 @@ Import ListNotations.
 
 Require Import ExtLib.Structures.Monad. Import MonadNotation. Open Scope monad_scope.
 
-Definition trace := false.
+Definition trace := true.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
 
@@ -156,9 +156,10 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     mkfunprofile {
         id : FunID;
         entry : Addr;
+        tc_entry : option Addr;
         register_args : list Register;
         relative_args : nat;
-        reference_args : list (Register * Z); (* argument register, size (words)? *)
+        reference_args : list (Register * Z); (* argument register, size (words) *)
         locals : list (positive * localKind);
       }.
 
@@ -181,6 +182,21 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     let words_rel_args := Z.of_nat MAX_REL_ARGS in
     let words_locals := Z.of_nat MAX_LOCAL_WORDS in (* includes ref_args *)
     words_ra + words_rel_args + words_locals.
+
+  (* Once we've allocated the frame by moving the sp,
+     we need our locals to be at (negative) offsets from the sp.
+     The frame is laid out as follows (| is the sp):
+     [ra][locals][space for relargs]|
+   *)
+  Definition local_bases (locs : list positive) : list Z :=
+    let fix from_zero locs :=
+      match locs with
+      | [] => ([],0)
+      | l::ls =>
+          let '(offs,base) := from_zero ls in
+          (base-(Zpos l)::offs, base-(Zpos l))
+      end in
+    map (fun base => base-(Z.of_nat MAX_REL_ARGS)) (fst (from_zero locs)).
 
   Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
              (mp : MachineState)
@@ -298,109 +314,108 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
 
   Definition if_true_n (b:bool) (n:nat) :=
     if b then n else O.
+
+  Open Scope nat.
   
   Definition genStackbasedWrite (i : LayoutInfo) (mp : MachineState)
-                                (functions : list FunctionProfile)
+             (priority_offset : Z) (other_offset : Z)
+             (priority_source : Register) (other_source : Register)
     : G InstructionI :=
     let spVal := projw mp (Reg SP) in
-    bindGen (genSourceReg mp)
-            (fun rs =>
-               freq [ (10%nat, ret (Sw sp rs (-4)))
-                    ; (10%nat, ret (Sw sp rs (-8)))
-                    ; (if_true_n (512 <? (wtoz spVal)) 1%nat, ret (Sw sp rs (-12)))
-                    ; (if_true_n (516 <? spVal) 2%nat, (ret (Sw sp rs (-16))))
-                    ; (if_true_n (520 <? spVal) 2%nat, (ret (Sw sp rs (-20))))
-                    ; (1%nat, bindGen (choose (spVal - 500, spVal))
-                                      (fun off => ret (Sw sp rs (- off))))
-                    ; (1%nat, bindGen (choose (0, 600 - spVal))
-                                      (fun off => ret (Sw sp rs off)))
-            ]).
+    off <- freq_ (ret priority_offset)
+                 [(4, ret priority_offset);
+                  (1, ret other_offset)];;
+    rs <- freq_ (ret priority_source)
+                 [(4, ret priority_source);
+                  (1, ret other_source)];;
+    ret (Sw sp rs off).
+  
+  Definition genStackbasedRead (i : LayoutInfo) (mp : MachineState)
+             (priority_offset : Z) (other_offset : Z)
+             (priority_source : Register) (other_source : Register)
+    : G InstructionI :=
+    let spVal := projw mp (Reg SP) in
+    off <- freq_ (ret priority_offset)
+                 [(4, ret priority_offset);
+                  (1, ret other_offset)];;
+    rd <- freq_ (ret priority_source)
+                 [(4, ret priority_source);
+                  (1, ret other_source)];;
+    ret (Lw rd sp off).
 
-    Definition genStackbasedRead (i : LayoutInfo) (mp : MachineState)
-                                 (f : FunID) (functions : list FunctionProfile)
-      : G InstructionI :=
-      let spVal := projw mp (Reg SP) in
-      let ofprof := find (fun fp => Nat.eqb f fp.(id)) functions in
-      let nth_rel_arg p :=
-        match ofprof with
-        | Some fprof => (fprof.(relative_args) <=? (Pos.to_nat p))%nat
-        | None => false
-        end in
-      let frameSize :=
-        match ofprof with
-        | Some fprof => 4 * frameSizeWords fprof
-        | None => 0
-        end in
-      let has_ref_arg :=
-        match ofprof with
-        | Some fprof => (List.length fprof.(reference_args) =? 1)%nat
-        | None => false
-        end in
-      bindGen (genTargetReg mp)
-              (fun rd =>
-                 freq [ (10%nat, ret (Lw rd sp (-4)))
-                      ; (10%nat, ret (Lw rd sp (-8)))
-                      ; (if_true_n (512 <? spVal) 1%nat, ret (Lw rd sp (-12)))
-                      ; (if_true_n (516 <? spVal) 2%nat, ret (Lw rd sp (-16)))
-                      ; (if_true_n (520 <? spVal) 2%nat, ret (Lw rd sp (-20)))
-                      ; (1%nat, bindGen (choose (spVal - 500, spVal))
-                                        (fun off => ret (Lw rd sp (- off))))
-                      ; (1%nat, bindGen (choose (0, 600 - spVal))
-                                        (fun off => ret (Lw rd sp off)))
-                      (* relative arguments
-                         quick and dirty, related to MAX_REL_ARGS
-                         generate programmatically later *)
-                      ; (if_true_n (nth_rel_arg 1%positive) 1%nat, ret (Lw rd sp (-frameSize - 4)))
-                      (* ; (if_true_n (nth_rel_arg 2%positive) 1%nat, ret (Lw rd sp (-frameSize - 8))) *)
-                      (* ; (if_true_n (nth_rel_arg 3%positive) 1%nat, ret (Lw rd sp (-frameSize - 12))) *)
-                      (* reference arguments
-                         quick and dirty, similar to relative arguments
-                         now technically a stack read, could be more general *)
-                      ; (if_true_n has_ref_arg 1%nat, ret (Lw rd argReg 0))
-              ]).
+(* Helpful argument stuff from Rob, to reuse later. *)
+(*
+    let nth_rel_arg p :=
+      match ofprof with
+      | Some fprof => (fprof.(relative_args) <=? (Pos.to_nat p))%nat
+      | None => false
+      end in
+    let frameSize :=
+      match ofprof with
+      | Some fprof => 4 * frameSizeWords fprof
+      | None => 0
+      end in
+    let has_ref_arg :=
+      match ofprof with
+      | Some fprof => (List.length fprof.(reference_args) =? 1)%nat
+      | None => false
+      end in
+    rd <- genTargetReg mp;;
+    freq [ (10%nat, ret (Lw rd sp (-4)))
+           ; (10%nat, ret (Lw rd sp (-8)))
+           ; (if_true_n (512 <? spVal) 1%nat, ret (Lw rd sp (-12)))
+           ; (if_true_n (516 <? spVal) 2%nat, ret (Lw rd sp (-16)))
+           ; (if_true_n (520 <? spVal) 2%nat, ret (Lw rd sp (-20)))
+           ; (1%nat, bindGen (choose (spVal - 500, spVal))
+                             (fun off => ret (Lw rd sp (- off))))
+           ; (1%nat, bindGen (choose (0, 600 - spVal))
+                             (fun off => ret (Lw rd sp off)))
+           (* relative arguments
+              quick and dirty, related to MAX_REL_ARGS
+              generate programmatically later *)
+           ; (if_true_n (nth_rel_arg 1%positive) 1%nat, ret (Lw rd sp (-frameSize - 4)))
+               (* ; (if_true_n (nth_rel_arg 2%positive) 1%nat, ret (Lw rd sp (-frameSize - 8))) *)
+               (* ; (if_true_n (nth_rel_arg 3%positive) 1%nat, ret (Lw rd sp (-frameSize - 12))) *)
+           (* reference arguments
+              quick and dirty, similar to relative arguments
+              now technically a stack read, could be more general *)
+           ; (if_true_n has_ref_arg 1%nat, ret (Lw rd argReg 0))
+      ].*)
 
-  (*
-    -- TODO: This might need to be further generalized in the future
-    genInstr :: PolicyPlus -> Machine_State -> PIPE_State ->
-    (TagSet -> Bool) -> (TagSet -> Bool) ->
-    (Instr_I -> Gen TagSet) -> Gen (Instr_I, TagSet)
-   *)
-  Definition genInstr (i : LayoutInfo) (t : TagInfo)
+  
+  Definition genArith (i : LayoutInfo) (t : TagInfo)
              (m : MachineState) (cm : CodeMap_Impl)
              (dataP codeP : TagSet -> bool) (f : FunID)
-             (functions : list FunctionProfile)
-    : G (InstructionI * TagSet * FunID * Operations) :=
+    : G (InstructionI * TagSet * FunID * list Operation) :=
     let groups := groupRegisters i t m dataP codeP in
-    let a := arith groups in
-    let d := dataPtr groups in
-    let c := codePtr groups in
-    let l := loadPtr groups in
-    (*  trace ("Grouped loads: " ++ show l ++ nl)%string *)
-    let def_a := {| aID := 0 |} in
-    let def_dp := {| pID := 0; pVal := 0;
+    let a := groups.(arith) in
+    let def_a := {| aID := 0%Z |} in
+    let noops : list Operation := [] in
+    let onNonEmpty {A} (l : list A) n :=
+      match l with
+      | [] => O
+      | _  => n
+      end in
+    freq [(onNonEmpty a 1, ai <- elems_ def_a a;;
+                           rd <- genTargetReg m;;
+                           imm <- genImm (dataHi i);;
+                           let instr := Addi rd (aID ai) imm in
+                           ret (instr, [Tinstr], f, noops));
+          (onNonEmpty a 1, ai1 <- elems_ def_a a;;
+                               ai2 <- elems_ def_a a;;
+                               rd <- genTargetReg m;;
+                               let instr := Add rd (aID ai1) (aID ai2) in
+                               ret (instr, [Tinstr], f, noops)) ].
+    
+
+  (* This is from Leo's old tag-aware code-gen. Mine as needed. *)
+(*    let def_dp := {| pID := 0; pVal := 0;
                      pMinImm := 0; pMaxImm := 0;
                      pTag := dataTag t
-                  |} in
+                  |} in*)
 
       (*  trace (show (l, badPtr groups)%string) *)
-    let onNonEmpty {A} (l : list A) n :=
-        match l with
-        | [] => O
-        | _  => n
-        end in
-    let noops : Operations := [] in
-    freq [ (onNonEmpty a 1%nat,
-            bindGen (elems_ def_a a) (fun ai =>
-            bindGen (genTargetReg m) (fun rd =>
-            bindGen (genImm (dataHi i)) (fun imm =>
-            let instr := Addi rd (aID ai) imm in
-            ret (instr, [Tinstr], f, noops)))))
-         ; (4%nat, bindGen (genStackbasedWrite i m functions)
-                           (fun instr =>
-                              (ret (instr, [Tinstr], f, noops))))
-         ; (4%nat, bindGen (genStackbasedRead i m f functions)
-                           (fun instr =>
-                              ret (instr, [Tinstr], f, noops)))
+  
 (*           ;  (3%nat, match map.get (getRegs m) sp with
                       | Some spVal' =>
                         let spVal := word.unsigned spVal' in
@@ -432,13 +447,6 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                  let imm := pMinImm pi + imm' in
                  let instr := Sw (pID pi) rs imm in
                  ret (instr, [Tinstr], f, normal))))) *)
-           ;   (onNonEmpty a 1%nat,
-                bindGen (elems_ def_a a) (fun ai1 =>
-                bindGen (elems_ def_a a) (fun ai2 =>
-                bindGen (genTargetReg m) (fun rd =>
-                let instr := Add rd (aID ai1) (aID ai2) in
-                ret (instr, [Tinstr], f, noops)))))
-    ].
 
   (*
 -- TODO: Uncomment this and add stack.dpl rule
@@ -453,7 +461,10 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
 --                  return (instr, tag)
 --              )
             ]
- *)
+   *)
+
+  Close Scope nat.
+  Open Scope Z.
 
   Fixpoint count_list (n:nat) :=
     match n with
@@ -523,17 +534,15 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     (* local_count <- choose (0,3)%nat;; *)
     let local_count := MAX_LOCAL_WORDS in
     let locals := List.repeat (1%positive,Lsecret) local_count in
-    ret (mkfunprofile id addr (count_list reg_args) rel_args ref_args locals).
+    ret (mkfunprofile id addr (Some (addr + 2)) (count_list reg_args) rel_args ref_args locals).
 
   Definition main : FunctionProfile :=
-    mkfunprofile O 0 [] 0 [] [(3%positive,Lsecret)].
+    mkfunprofile O 0 (Some 2) [] 0 [] [(3%positive,Lsecret)].
 
   (* NOTE No argument clearing at the moment *)
   Definition callHead
-    offset f
-    (i : LayoutInfo) (m : MachineState)
-    (callee:FunctionProfile) :
-    G (list (InstructionI * TagSet * FunID * Operations)) :=
+    offset f (i : LayoutInfo) (m : MachineState) (callee:FunctionProfile) :
+    G (list (InstructionI * TagSet * FunID * list Operation)) :=
     (* pass relative arguments (generated constants) *)
     (* quick and dirty, related to MAX_REL_ARGS, programmatically later *)
     bindGen (genTargetReg m) (fun rt =>
@@ -575,7 +584,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     offset f
     (i : LayoutInfo) (m : MachineState)
     (callee:FunctionProfile) :
-    G (list (InstructionI * TagSet * FunID * Operations)) :=
+    G (list (InstructionI * TagSet * FunID * list Operation)) :=
     (* pass relative arguments (generated constants) *)
     (* quick and dirty, related to MAX_REL_ARGS, programmatically later *)
     bindGen (genTargetReg m) (fun rt =>
@@ -613,7 +622,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     ))).
 
   Definition initSeq (prof:FunctionProfile) :
-    list (InstructionI * TagSet * FunID * Operations) :=
+    list (InstructionI * TagSet * FunID * list Operation) :=
     let sz := 4 * (frameSizeWords prof) in
     (* For now, just allocating all at once. The extra 1 is for the return address*)
     [ (Sw sp ra 0, [Tinstr; Th1], prof.(id), [(*noops*)]);
@@ -644,7 +653,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
              (cm : CodeMap_Impl)
              (f : FunID)
              (existing : list FunctionProfile) :
-    G (list (InstructionI * TagSet * FunID * Operations) * (list FunctionProfile)) :=
+    G (list (InstructionI * TagSet * FunID * list Operation) * (list FunctionProfile)) :=
     let nextF := length existing in
     newF <- genFun nextF (100*(Z.of_nat nextF));;
     let existing :=
@@ -661,56 +670,152 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     ; (Jalr ra ra 0     , [Tinstr; Tr3], f, [Return])
     ].
 
-  Definition genRetSeq (m : MachineState) (cm : CodeMap_Impl) (f : FunID) :=
+  Definition genRetSeq (m : MachineState) (f : FunID) :=
     let spv := projw m (Reg sp) in
     if (512 <? (wtoz spv))%Z 
     then Some (returnGen (returnSeq f))
     else None.
 
+  (* The current function's expected behavior. We use the strat like a probabilistic
+     state-machine: each step we have some chance of transitioning to a different
+     strat, weighted by special events such as entering a function for the first
+     time or having control return to us. *)
+  Inductive strat :=
+  | initialize          
+  | compute             
+  | call (f:FunID)      
+  | returned (f:FunID)  (* We just got back from f, and are likely to use the
+                           return register as a source, along with any memory
+                           that we passed by reference. *)
+  | bored               (* We have been following a pre-generated control path
+                           for too long. It's time to change it up by creating a
+                           branch that will lead us somewhere else. *)
+  | tired               
+  | accomplice          (* This represents the current function being either erroneous
+                           or compromised in service to an attacker. It will attempt
+                           to place values with "interesting" tags in places where they
+                           might be accessible later. This strategy is aware of the tagging
+                           mechanism and will avoid making loads and stores that would
+                           failstop. *)
+  | smart_attacker      (* The counterpart to accomplice, this strategy will attempt to
+                           violate the properties by loading or storing at an illegal
+                           address. It is tag-aware and will search the state for
+                           tags that will let it do so without a failstop. *)
+  | dumb_attacker
+  .
+
+  Close Scope Z.
+  Open Scope nat.
+
+  Definition strat_options (s : strat) (i : LayoutInfo) (t : TagInfo) (m : MachineState)
+             (dataP codeP : TagSet -> bool) (cm : CodeMap_Impl)
+             (f:FunID) (functions : list FunctionProfile) :
+    list (nat * G (list (InstructionI * TagSet * FunID * list Operation))) :=
+    let spVal := projw m (Reg SP) in
+    let noops : list Operation := [] in
+    let ofprof := find (fun fp => Nat.eqb f fp.(id)) functions in
+    match s,ofprof with
+    | initialize, Some fprof =>
+        (* The current function has just been called.
+           We are likely to write to our frame, but will not read it.
+           We are likely to read from function arguments in memory (TODO)
+           and use register arguments. *)
+        [(1,
+           priority_offset <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
+           priority_register <- elems_ 0%Z (fprof.(register_args));;
+           instr <- genStackbasedWrite i m
+                                         priority_offset priority_offset
+                                         priority_register priority_register;;
+             ret ([(instr, [Tinstr], f, noops)]))]
+    | compute, Some fprof =>
+        (* We are in the bulk of execution. We will make reads and
+           writes, primarily in the stack frame, as well as outside
+           of the stack entirely. *)
+        [(1,
+           priority_offset <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
+           priority_register <- elems_ 0%Z (map.keys (getRegs (fst m)));;
+           instr <- genStackbasedWrite i m
+                                       priority_offset priority_offset
+                                       priority_register priority_register;;
+           ret ([(instr, [Tinstr], f, noops)]));
+         (1,
+           priority_offset <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
+           priority_register <- elems_ 0%Z (map.keys (getRegs (fst m)));;
+           instr <- genStackbasedRead i m
+                                        priority_offset priority_offset
+                                        priority_register priority_register;;
+             ret ([(instr, [Tinstr], f, noops)]));
+         (1, res <- genArith i t m cm dataP codeP f;;
+             ret [res])]
+    | call f', Some fprof =>
+        (* We are preparing to call f. We will tend to choose f's
+           arguments as destinations for operations. At some point,
+           we will make the call. *)
+        match find (fun fp => Nat.eqb f fp.(id)) functions,
+          find (fun fp => Nat.eqb f' fp.(id)) functions with
+        | Some callee, Some caller =>
+            [(1, callHead callee.(entry) f' i m callee)]
+        | _, _ => []
+        end
+    | tired, Some fprof =>
+        (* We have been executing for a long time, and want to return.
+           We are likely to choose the return register as a destination
+           and to make a return. *)
+        match genRetSeq m f with
+        | None => []
+        | Some g => [(1,g)]
+        end
+    | dumb_attacker, Some fprof =>
+        (* After failing to find an attack for long enough, the smart
+           attacker becomes a dumb attacker, which will just start trying
+           things without regard to the tags. Anything goes! *)
+        [(1,
+           let spVal' := wtoz spVal in
+           let minImm := (spVal' - stackLo i)%Z in
+           let maxImm := (stackHi i - spVal)%Z in
+           imm' <- (genImm (maxImm - minImm));;
+           let imm := (minImm + imm')%Z in
+           rd <- (genTargetReg m);;
+           let instr := Lw rd sp imm in
+           ret [(instr, [Tinstr], f, noops)]);
+         (1,
+           let spVal' := wtoz spVal in
+           let minImm := (spVal' - stackLo i)%Z in
+           let maxImm := (stackHi i - spVal)%Z in
+           imm' <- (genImm (maxImm - minImm));;
+           let imm := (minImm + imm')%Z in
+           rs <- (genTargetReg m);;
+           let instr := Sw sp rs imm in
+           ret [(instr, [Tinstr], f, noops)])]
+    | _, _ => exception "Not yet implemented"
+    end.
+  
   Definition genInstrSeq
              (l : LayoutInfo) (t : TagInfo)
              (mp : MachineState)
              (dataP codeP : TagSet -> bool)
              (cm : CodeMap_Impl) (f : FunID) (functions : list FunctionProfile)
-             (fSteps : list nat)
-    : G (list (InstructionI * TagSet * FunID * Operations) * (list nat) * (list FunctionProfile)) :=
-    let fromInstr :=
-        itf <- (genInstr l t mp cm dataP codeP f functions);;
-        ret [itf] in
-    let '(fFuel, rest) :=
-        match fSteps with
-        | (S fFuel)::rest => ("Current fun has " ++ show fFuel ++ " remaining." ++ nl)%string ! (fFuel, rest)
-        | O::rest => "Current fun is out of fuel." ! (O, rest)
-        | _ => "There are no functions?" ! (O, [])
-        end in
-    let returnFreq := (funMaxFuel - fFuel)%nat in
-    let instrFreq := 5%nat in
-    let callFreq := 1%nat in
-    ("Likelihoods - Ret: " ++ show returnFreq ++ " Call: " ++ show callFreq ++ " Instr: " ++ show instrFreq ++ nl)%string !
-    (let instGen := bindGen fromInstr (fun g => ret (g,fFuel::rest,functions)) in
-    let retGen g := bindGen g (fun g => ret (g,rest,functions)) in
-    let callGen := bindGen (genCall l t mp cm f functions) (fun '(g,fs) => ret (g,funMaxFuel::rest,fs)) in
-    match genRetSeq mp cm f with
-    | None => freq_ instGen ([(instrFreq, instGen);
-                              (callFreq, callGen)])%nat
-    | Some g => freq_ instGen ([(instrFreq, instGen);
-                                (returnFreq, retGen g);
-                                (callFreq, callGen)])%nat
-    end).
-
+             (s : strat)
+    : G (list (InstructionI * TagSet * FunID * list Operation) * (list FunctionProfile)) :=
+    let options := strat_options s l t mp dataP codeP cm f functions in
+       match options with
+       | (_, opt)::options' =>
+           seq <- freq_ opt options;;
+           returnGen (seq, functions)
+       | _ => exception "No options"
+       end.
+  
   (* variantOf (fun k => fst c k = Sealed d) m n -> *)
-  Definition genVariantOf (d : nat)
-             (c : Ctx) (m : MachineState)
+  Definition genVariantOf (d : nat) (c : Ctx) (m : MachineState)
   : G MachineState :=
     foldGen (fun macc k =>
                (*trace (show ("Varying:", k, fst c k)) *)
                (match fst c k with
                 | public =>
-                  returnGen macc
+                  ret macc
                 | _ =>
-                  bindGen (genImm 40) (fun z =>
-                                         (*               trace ("Trying to set: " ++ show k ++ " to " ++ show z ++ " which was " ++ show (fst c k) ++ nl ++ "Previous value was: " ++ show (proj macc k) ++ nl ++ " Next value will be: " ++ show (proj (jorp macc k z) k) ++ nl ++ nl)%string *)
-                                         (returnGen (jorpw macc k z)))
+                    z <- (genImm 40);;
+                    (ret (jorpw macc k z))
                 end)
             )
             (getElements m) m .
@@ -723,9 +828,46 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                end)
           ks m.
 
-  Instance ShowStuff : Show (InstructionI * TagSet * FunID * Operations) :=
+  Instance ShowStuff : Show (InstructionI * TagSet * FunID * list Operation) :=
     {| show '(i, ts, f, a) := (show i ++ "@" ++ show ts ++ "|" ++ show f)%string |}.
   
+  Definition step_strat (functions : list FunctionProfile) (s : strat) (f : FunID)
+             (funSteps : list nat) (ops : list Operation) : G (strat * list nat) :=
+    if existsb isCall ops
+    then s' <- freq_ (ret initialize) [(9,ret initialize); (1, ret dumb_attacker)];;
+         ret (s', funMaxFuel::funSteps)
+    else
+      match funSteps with
+      | fFuel::rest =>
+          if existsb isTailcall ops
+          then s' <- freq_ (ret initialize) [(9, ret initialize); (1, ret dumb_attacker)];;
+               ret (s', funMaxFuel::rest)
+          else if existsb isReturn ops
+            then s' <- freq_ (ret (returned f)) [(9, ret (returned f)); (1, ret dumb_attacker)];;
+                 ret (s', rest)
+            else s' <-
+                match s with
+                | initialize => freq_ (ret compute) [(1, ret initialize); (1, ret compute)]
+                | compute => 
+                    freq_ (ret compute)
+                          [(1, ret compute); (1, elems_ compute
+                                                        (map (fun fp => call fp.(id))
+                                                             functions))]
+                | call f => ret s
+                | returned f => freq_ (ret compute) [(2, ret (returned f)); (1, ret compute)]
+                | bored => ret compute
+                | tired => ret tired
+                | accomplice => ret compute
+                | smart_attacker => ret compute
+                | dumb_attacker => freq_ (ret compute) [(1, ret dumb_attacker); (1, ret compute)]
+                end;;
+              ret (s', (pred fFuel)::rest)
+      | [] => ret (s,[])
+      end.
+  
+  Close Scope nat.
+  Open Scope Z.
+
   (*
     -- | Generation by execution receives an initial machine X PIPE state and
     -- | generates instructions until n steps have been executed.
@@ -738,12 +880,12 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
    *)
   Fixpoint gen_exec_aux (steps : nat)
            (funSteps : list nat)
-           (li : LayoutInfo) (ti : TagInfo)
+           (li : LayoutInfo) (ti : TagInfo) (s : strat)
            (mp0 : MachineState)
            (mp  : MachineState)
            (cm : CodeMap_Impl) (f : FunID)
            (functions : list FunctionProfile)
-           (its : list (InstructionI * TagSet * FunID * Operations))
+           (its : list (InstructionI * TagSet * FunID * list Operation))
            (dataP codeP : TagSet -> bool)
     (* num calls? *)
     : G (MachineState * CodeMap_Impl) :=
@@ -758,39 +900,36 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
       | Some _ =>
         match its with
         | [] =>
-          (* Instruction already exists, step... *)
-          match mpstep (m,p), funSteps with
-          | (mp',_t,_), (S n)::ns =>
+            (* Instruction already exists, step... *)
+            let '(mp',ops,_) := step mp in
             (* ...and recurse. *)
-            gen_exec_aux steps' (n::ns) li ti mp0 mp' cm f functions its codeP dataP 
-          | (mp',_t,_), _ =>
-            gen_exec_aux steps' funSteps li ti mp0 mp' cm f functions its codeP dataP 
-          end
+            '(s', funSteps') <- step_strat functions s f funSteps ops;;
+            gen_exec_aux steps' funSteps' li ti s' mp0 mp' cm f functions its codeP dataP
         | _ =>
           ("Existing instruction mid-sequence" ++ nl)%string !
           (ret (m0, p0, cm))
         end
       | None =>
-          '(it, its', funSteps') <-
+          '(it, its', s', funSteps') <-
             (* Check if there is anything left to put *)
             (match its with
              | [] =>
                  (* There isn't. Generate an instruction sequence. *)
-                 '(its',funSteps',functions') <- genInstrSeq li ti mp dataP codeP cm f functions funSteps;;
+                 '(its',functions') <- genInstrSeq li ti mp dataP codeP cm f functions s;;
                  match its' with
                  | it :: its'' =>
-                     ("Steps left: " ++ show steps ++ ", Pending: " ++ show its ++ ", Gen: " ++ show it ++ ", " ++ show its'' ++ nl)%string !
-                     ret (it, its'',funSteps')
+                     let '(_,_,_,ops) := it in
+                     '(s', funSteps') <- step_strat functions s f funSteps ops;;
+                     ("Steps left: " ++ show steps ++ ", Pending: " ++ show its ++ ", Gen: " ++
+                                     show it ++ ", " ++ show its'' ++ nl)%string !
+                     ret (it, its'', s', funSteps')
                  | _ => exception "EmptyInstrSeq"
                  end
              | it::its' =>
+                 let '(_,_,_,ops) := it in
+                 '(s', funSteps') <- step_strat functions s f funSteps ops;;
                  ("Steps left: " ++ show steps ++ ", Pending: " ++ show its ++ ", Take: " ++ show it ++ ", Leave: " ++ show its' ++ nl)%string !
-                 match funSteps with
-                 | (S n)::rest =>
-                     ret (it, its', (n::rest))
-                 | _ =>
-                     ret (it, its', funSteps)
-                 end
+                 ret (it, its', s', funSteps')
              end);;
           let '(i,t,f',a) := it in
           let mp0' := setInstrI (getPc m) mp0 i in
@@ -802,7 +941,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
           if weq (projw mp''' PC) (projw mp PC) then
             ("Failstopped" ++ nl) ! (ret (mp0'',cm'))
           else
-            (gen_exec_aux steps' funSteps' li ti mp0'' mp''' cm' f' functions its' dataP codeP)
+            (gen_exec_aux steps' funSteps' li ti s' mp0'' mp''' cm' f' functions its' dataP codeP)
       end
     end.
 
@@ -814,23 +953,21 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         end in
     aux n.
   
-  Definition genGPRs (t : TagInfo)
-             (mp : MachineState)
-    : G MachineState :=
+  Definition genGPRs (t : TagInfo) (mp : MachineState) : G MachineState :=
     let (m,p) := mp in
-    bindGen (replicateGen 3 (genImm 40)) (fun ds =>
-    bindGen (replicateGen 3 (returnGen (regTag t))) (fun ts =>
+    ds <- (replicateGen 3 (genImm 40));;
+    ts <- (replicateGen 3 (returnGen (regTag t)));;
     let regs :=
-        List.fold_left (fun '(i,m) r =>
-                          (i+1, map.put m i (word.of_Z r)))
-                       ds (minReg, getRegs m) in
+      List.fold_left (fun '(i,m) r =>
+                        (i+1, map.put m i (word.of_Z r)))
+                     ds (minReg, getRegs m) in
     let tags : Z * TagMap :=
-        List.fold_left (fun '(i,m) (t : TagSet) =>
-                          (i+1, map.put m i t))
-                       ts (minReg, regtags p) in
-    returnGen (withRegs (snd regs) m,
-               p <| regtags := snd tags |>))).
-
+      List.fold_left (fun '(i,m) (t : TagSet) =>
+                        (i+1, map.put m i t))
+                     ts (minReg, regtags p) in
+    ret (withRegs (snd regs) m,
+          p <| regtags := snd tags |>).
+  
   Definition genDataMemory
              (i : LayoutInfo) (t : TagInfo)
              (mp : MachineState)
@@ -857,17 +994,15 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
              (cm0 : CodeMap_Impl)
              (dataP codeP : TagSet -> bool)
     : G (MachineState * CodeMap_Impl) :=
-    bindGen (genDataMemory i t mp0)
-            (fun '(mps) =>
-               bindGen (genGPRs t mps)
-                       (fun mps' =>
-                          (* Something about sp?
-                             let ms'' = ms' & fgpr . at sp ?~ (instrHigh pplus + 4)
-                             ps' <- genGPRTs pplus ps (genGPRTag pplus)
-                             let ps'' = ps' & pgpr . at sp ?~ spTag
-                           *)
-                          (gen_exec_aux maxFuel [funMaxFuel] i t mps' mps' cm0 O [main]
-                                        (initSeq main) dataP codeP))).
+    mps <- (genDataMemory i t mp0);;
+    mps' <- (genGPRs t mps);;
+    (* Something about sp?
+       let ms'' = ms' & fgpr . at sp ?~ (instrHigh pplus + 4)
+       ps' <- genGPRTs pplus ps (genGPRTag pplus)
+       let ps'' = ps' & pgpr . at sp ?~ spTag
+     *)
+    (gen_exec_aux maxFuel [funMaxFuel] i t initialize mps' mps' cm0 O [main]
+                  (initSeq main) dataP codeP).
 
   Definition zeroedRiscvMachine: RiscvMachine := {|
     getRegs :=
@@ -890,7 +1025,6 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     getLog := nil;
                                                 |}.
 
-  
   Definition zeroedPolicyState : PolicyState :=
     {| nextid := 0
        ; pctags := [Tpc 0; Th1]
@@ -941,7 +1075,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
      starting at 500). *)
 
   Definition ex_gen
-    (mem : list (Z * InstructionI * TagSet * option Operations))
+    (mem : list (Z * InstructionI * TagSet * option (list Operation)))
     (regs : list (Z * Z * TagSet)) :
     G (MachineState * CodeMap_Impl) :=
     (* Machine state components from example description *)

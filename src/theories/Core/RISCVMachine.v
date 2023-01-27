@@ -123,7 +123,9 @@ Module RISCV <: Machine.
   Definition Zero := 0.
   Definition RA := 1.
   Definition SP := 2.
-  Definition regEqb : Register -> Register -> bool := Z.eqb.
+  Definition Reg_eq_dec :
+    forall (r1 r2 : Register),
+      { r1 = r2 } + { r1 <> r2 } := Z.eq_dec.
 
   Inductive Sec :=
   | sealed
@@ -160,7 +162,7 @@ Module RISCV <: Machine.
   Definition keqb (k1 k2 : Element) : bool :=
     match k1, k2 with
     | Mem a1, Mem a2 => Z.eqb a1 a2
-    | Reg r1, Reg r2 => regEqb r1 r2
+    | Reg r1, Reg r2 => if Reg_eq_dec r1 r2 then true else false
     | PC, PC => true
     | _, _ => false
     end.
@@ -295,6 +297,10 @@ Module RISCV <: Machine.
     end.
 
   Definition FunID := nat.
+  Definition Fun_eq_dec :
+    forall f1 f2 : FunID, { f1 = f2 } + { f1 <> f2 }.
+  Proof. decide equality. Qed.
+  
   Definition StackID := nat.
 
   (* Definition EntryMap := Addr -> bool. *)
@@ -344,11 +350,33 @@ Module RISCV <: Machine.
   | Dealloc (off:Z) (sz:Z)
   .
 
+  Lemma Op_eq_dec (op op' : Operation) :
+    {op = op'} + {op <> op'}.
+  Proof.
+    repeat decide equality; try apply Reg_eq_dec; apply Fun_eq_dec.
+  Qed.
+
+  Definition isCall (op : Operation) : bool :=
+    match op with
+    | Call _ _ _ => true
+    | _ => false
+    end.
+
+  Definition isTailcall (op : Operation) : bool :=
+    match op with
+    | Tailcall _ _ _ => true
+    | _ => false
+    end.
+
+  Definition isReturn (op : Operation) : bool :=
+    match op with
+    | Return => true
+    | _ => false
+    end.
+  
   Derive Show for Operation.
 
-  Definition Operations := list Operation.
-
-  Definition CodeMap := Addr -> option Operations.
+  Definition CodeMap := Addr -> option (list Operation).
   
   (* FIXME: operations *)
   (* A Machine State can step to a new Machine State plus an Observation. *)
@@ -394,7 +422,7 @@ Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
   Definition Register := Register.
   Definition RA := RA.
   Definition SP := SP.
-  Definition regEqb := regEqb.
+  Definition Reg_eq_dec := Reg_eq_dec.
 
   Inductive Sec :=
   | sealed
@@ -555,6 +583,8 @@ Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
     findDiff mOld mNew.
 
   Definition FunID := nat.
+  Definition Fun_eq_dec := Fun_eq_dec.
+  
   Definition StackID := nat.
 
   (* Definition EntryMap := Addr -> bool. *)
@@ -604,22 +634,54 @@ Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
   | Dealloc (off:Z) (sz:Z)
   .
 
+  Lemma Op_eq_dec (op op' : Operation) :
+    {op = op'} + {op <> op'}.
+  Proof.
+    repeat decide equality; try apply Reg_eq_dec; apply Fun_eq_dec.
+  Qed.
+
+  Definition isCall (op : Operation) : bool :=
+    match op with
+    | Call _ _ _ => true
+    | _ => false
+    end.
+
+  Definition isTailcall (op : Operation) : bool :=
+    match op with
+    | Tailcall _ _ _ => true
+    | _ => false
+    end.
+
+  Definition isReturn (op : Operation) : bool :=
+    match op with
+    | Return => true
+    | _ => false
+    end.
+
   Derive Show for Operation.
 
   Definition coercion4 (op : RISCV.Operation) :=
     match op with
     | RISCV.Call f reg_args stk_args => Call f reg_args stk_args
-    | RISCV.Tailcall f reg_args stk_args => Call f reg_args stk_args
+    | RISCV.Tailcall f reg_args stk_args => Tailcall f reg_args stk_args
     | RISCV.Return => Return
     | RISCV.Alloc off sz => Alloc off sz
     | RISCV.Dealloc off sz => Dealloc off sz
     end.
 
-  Coercion coercion4 : RISCV.Operation >-> Operation.
+  Definition coercion5 (op : Operation) :=
+    match op with
+    | Call f reg_args stk_args => RISCV.Call f reg_args stk_args
+    | Tailcall f reg_args stk_args => RISCV.Tailcall f reg_args stk_args
+    | Return => RISCV.Return
+    | Alloc off sz => RISCV.Alloc off sz
+    | Dealloc off sz => RISCV.Dealloc off sz
+    end.
   
-  Definition Operations := list Operation.
-
-  Definition CodeMap := Addr -> option Operations.
+  Coercion coercion4 : RISCV.Operation >-> Operation.
+  Coercion coercion5 : Operation >-> RISCV.Operation.
+  
+  Definition CodeMap := Addr -> option (list Operation).
   
   (* TODO: operations *)
   (* A Machine State can step to a new Machine State plus an Observation. *)

@@ -59,7 +59,7 @@ Module Type Machine.
 
   Parameter RA : Register.
   Parameter SP : Register.
-  Parameter regEqb : Register -> Register -> bool.
+  Parameter Reg_eq_dec : forall (r1 r2 : Register), { r1 = r2 } + { r1 <> r2 }.
 
   Inductive Sec :=
   | sealed
@@ -100,6 +100,7 @@ Module Type Machine.
   Parameter obs_eqb : Observation -> Observation -> bool.
 
   Parameter FunID : Type.
+  Parameter Fun_eq_dec : forall (f1 f2 : FunID), { f1 = f2 } + { f1 <> f2 }.
 
   Definition StackID := nat.
 
@@ -113,14 +114,35 @@ Module Type Machine.
   | Dealloc (off:Z) (sz:Z)
   .
 
-  (* TODO Replace [list Operation] in existing code *)
-  Definition Operations := list Operation.
+  Lemma Op_eq_dec (op op' : Operation) :
+    {op = op'} + {op <> op'}.
+  Proof.
+    repeat decide equality; try apply Reg_eq_dec; apply Fun_eq_dec.
+  Qed.
 
+  Definition isCall (op : Operation) : bool :=
+    match op with
+    | Call _ _ _ => true
+    | _ => false
+    end.
+
+  Definition isTailcall (op : Operation) : bool :=
+    match op with
+    | Tailcall _ _ _ => true
+    | _ => false
+    end.
+
+  Definition isReturn (op : Operation) : bool :=
+    match op with
+    | Return => true
+    | _ => false
+    end.
+    
   (* NOTE A code map used to assign an optional annotation to an address. Now it
      assigns a optional list of operations (which can be empty!). Attention: not
      all lists are reasonable (e.g., [[Call; Return]])! We still allow unmapped
      addresses, which will be lifted to empty lists. *)
-  Definition CodeMap := Addr -> option Operations.
+  Definition CodeMap := Addr -> option (list Operation).
 
   (* Stack ID of stack pointer *)
   Definition activeStack (sm: StackMap) (m: MachineState) :
@@ -155,12 +177,12 @@ Module Properties (M:Machine).
     let '(r,off,sz) := range in
     wle (wplus (projw m (Reg r)) off) a &&
       wlt a (wplus (wplus (projw m (Reg r)) off) sz).    
-
+  
   Definition arg_view (m:MachineState) (V:View) (reg_args:list Register)
              (stk_args:list (Register*Z*Z)) : View :=
                 fun k => match k, V k with
                          | Reg r, _ =>
-                             if existsb (regEqb r) reg_args
+                             if existsb (fun r' => if Reg_eq_dec r r' then true else false) reg_args
                              then public
                              else reg_defaults r
                          | Mem a, object => 
