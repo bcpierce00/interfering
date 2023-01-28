@@ -532,7 +532,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
 
 End TestPropsRISCVSimple.
 
-Extract Constant defNumTests => "100".
+Extract Constant defNumTests => "1000".
 
 (* Print Assumptions TestPropsRISCVSimple.prop_lazyConfidentiality. *)
 (* Time QuickCheck TestPropsRISCVSimple.prop_laziestIntegrity. *)
