@@ -6,8 +6,278 @@ stack safety that derive from the security semantics in \cref{sec:props}.
 \Cref{sec:testing} describes the testing framework, and
 \cref{sec:relwork,sec:future} discuss related and future work.
 The remainder of this section introduces ideas that will be important throughout.
+%
+%% \rb{Or shorter: references in contributions + final sentence at end of intro}
 
-\paragraph*{Security Semantics and Property Structure}
+%% \rb{Turn these back into paragraphs later?}
+\subsection{Permissiveness, Laziness, and Tagged Architectures}
+
+Security properties tend to be conservative, identifying violations that would be
+harmless in practice. But enforcement mechanisms make trade-offs in the name of performance
+and of compatibility with existing codebases. In a crucial motivating example for this work,
+Roessler and DeHon \cite{} present a collection of tag-based enforcement mechanisms
+using PIPE \cite{???}, a tagged hardware reference monitor. In monitors such as PIPE and
+STAR \cite{???}, every value in memory and registers is paired with a {\em metadata tag}.
+A set of software-defined rules, termed a micro-policy, determines the tags for operation
+results based on the tags of their inputs---or, if the input tags are in a dangerous
+combination, it may halt the machine (a ``failstop.'')
+
+Roessler and DeHon find that the intuitive way to enforce stack safety in this setting
+is inefficient when allocating and clearing stack frames, because each word must be initialized
+with a tag corresponding to the (depth of the) current function activation. They propose
+{\em Lazy Tagging and Clearing}, in which tags are not initialized at allocation, but only
+when a function writes to memory. This means that writes cannot be prevented, necessarily
+violating existing models of stack safety. Instead the micro-policy enforces that memory be
+read by the same fuction that wrote it. The owner of the data will never see the changes,
+so it is secure in the sense that the attacker is unsuccessful at changing program behavior
+(except, perhaps, by causing a fault.) We elaborate that sense, and test whether the
+micro-policy fulfills it.
+
+This key motivation leads us to present integrity and confidentiality as predicates on (pairs of)
+machine states that make claims about the future observable behavior of execution from those states.
+That is not to say that our properties are specialized for lazy micro-policies. It also supports
+normal ``eager'' micro-policies, and should support other enforcement mechanisms. In fact, \(\clri\)
+and \(\clrc\) are even weaker than necessary to support Roessler and Dehon's micro-policy,
+while \(\clec\) and \(\clei\) are stronger properties that they do not attempt to enforce.
+%
+\rb{Emphasize the point about eager properties, here, when discussing other
+  enforcement types?}
+%
+\rb{(Mentioned properties are still ``forward references'' of a sort as they
+  haven't been formally introduced yet)}
+%% \rb{Does this discussion (at least in part) belong in the general background
+%%   section, some even in key ideas? It still feels a little out of order to me,
+%%   and occasionally too detailed for the introduction?}
+
+\rb{Moved last bit to the framework discussion below, does this work?}
+
+\rb{Test: the comparison of enforcement mechanisms \emph{and} the hierarchy of
+  properties \emph{before} the security semantics. Does this work? Easy to move
+  around/consolidate. Some things still feel a bit out of order. The comparison
+  motivates the hierarchy, and also parts of the security semantics -- too much
+  at once? Also: bad subsection/paragraph title ahead.}
+
+\subsection{A Formal and Flexible Security Framework}
+
+While a concrete aim is to provide a stack-safety property suitable for testing
+lazy enforcement for a micro-policy architecture, the formal framework we
+develop could be adapted to other protection mechanisms.
+%
+The need for these policy-specific adaptations is a natural and predictable
+consequence of the protean nature of the call stack (discussed in \cref{XXX}),
+and does not detract from the generality of our properties and their
+underlying \rb{high-level?} design principles.
+%
+Nevertheless, some enforcement methods lends themselves to modeling more easily
+than others. Micro-policies in particular stand out for their elegance, which
+results in particularly clean instances of our properties, and their
+flexibility, which enables them to implement very general forms of stack
+protection \rb{(and so we get to exercise our properties fully)}.
+
+Let us revisit our menagerie of stack protections from \cref{XXX} to motivate
+our choices. \cref{tab:relwork} summarizes and compares those techniques along
+several representative axes.
+
+\newcommand*{\rot}[1]{\hbox to1em{\hss\rotatebox[origin=br]{-60}{#1}}}
+\newcommand*{\tabyes}{\CIRCLE\xspace}
+\newcommand*{\tabno}{\Circle\xspace}
+\newcommand*{\tabjein}{\RIGHTcircle\xspace}
+
+\begin{table}
+\begin{threeparttable}
+  \begin{tabular}{l | c c c c | c c c | c}
+    \toprule
+    \multicolumn{1}{l |}{Mechanism}
+    & \multicolumn{4}{l |}{Features}
+    & \multicolumn{3}{l |}{Properties}
+    & %% Formal criteria
+    \\
+    \midrule
+    %% Technique
+    \multicolumn{1}{c}{}
+    & \rot{Strict enforcement}
+    & \rot{Deferred checking}
+    & \rot{Low-level code support}
+    & \multicolumn{1}{c}{\rot{Partial program support}}
+    & \rot{Well-bracketed control flow}
+    & \rot{Data integrity}
+    & \multicolumn{1}{c}{\rot{Data confidentiality}}
+    & \rot{Formal criteria}
+    \\
+    \midrule
+    Stack canaries  & \tabno   & \tabjein & \tabyes  & \tabyes  & \tabjein & \tabno   & \tabno   &          \\
+    Shadow stacks   & \tabno   & \tabjein &          & \tabyes  & \tabjein & \tabno   & \tabno   &          \\
+    Bounds checking & \tabyes  & \tabno   & \tabno   & \tabno   & \tabyes  &          &          &          \\
+    Split stacks    & \tabyes  & \tabno   & \tabno   & \tabyes  & \tabyes  & \tabno   & \tabno   &          \\
+    \midrule
+    Capabilities    &          & \tabno   &          & \tabyes  &          &          &          & \tabjein \\
+    Micro-policies  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  \\
+    \bottomrule
+  \end{tabular}
+  \caption{Comparison of Stack Protection Mechanisms}
+  \begin{tablenotes}
+  \item \tabyes indicates a protection mechanism possesses the feature
+  \item \tabno indicates the mechanism lacks the feature
+  \item \tabjein indicates partial or incomplete support
+  \item \rb{Complete and check columns, describe. Capitalize?}
+  \item \rb{Order? Split int/conf? Deferred/lazy at the end of features}
+  \item \rb{2+ lines for capabilities, before and after using our draft?}
+  \end{tablenotes}
+  \label{tab:relwork}
+\end{threeparttable}
+\end{table}
+
+\subsubsection{Strict Property Enforcement}
+%
+We are primarily interested in the \emph{strict} enforcement of a set of
+security properties of choice, i.e., no violations are allowed. Some \rb{most?}
+of the most commonly deployed countermeasures, like stack canaries and shadow
+stacks, offer only \emph{approximate} enforcement. As such, they will not
+satisfy any of our properties per se. We could use our framework to model them
+with some effort, but the interest of this exercise would be limited: testing
+would easily find the expected, unavoidable property violations. A more complex,
+\emph{probabilistic} version of the framework could offer adequate reasoning
+capabilities for these defenses.
+
+\subsubsection{Deferred and Lazy Properties}
+%
+We seek to support both \emph{eager} property enforcement (where potential
+violations are detected immediately) as well as more permissive \emph{lazy}
+properties (as motivated in \cref{XXX}).
+%
+Micro-policies are well suited to both types of properties. There is an
+interesting connection between lazy enforcement and the deferred checks of stack
+canaries and shadow stacks. Other techniques, like split stacks and bounds
+checking---and the closely related hardware capabilities---are fundamentally
+eager techniques.
+
+\subsubsection{Low-Level Component Support}
+%
+Our framework considers a \emph{single-, low-level view} of all program code and
+data; a key advantage of this approach is that it allows us to remain
+\emph{language-agnostic}.
+%
+Some software-based protection mechanisms are designed specifically with
+a \emph{high-level language} in mind, e.g. bounds checking and split stacks.
+They tend to offer stronger security guarantees than other software techniques.
+In exchange, their threat model becomes weaker, as they make additional
+assumptions about the admissible behavior of program components
+%
+(for example, bounds checking only applies to code that has been instrumented by
+a \emph{secure compiler} \ref{}).
+%
+In general, a multi-level extension of the framework offering adequate reasoning
+capabilities for this class of policies would need to model multiple source
+language and a notion of code provenance---a reflection of the call stack as the
+melting pot of language abstractions.
+%
+The common case of one source and one target language mediated by a compiler may
+be solved by a simpler lifting of our framework from the machine to the source
+level \rb{e.g., SoftBound could use a C language semantics and Tagged C for
+security modeling (lifted properties would likely hold under the expected
+assumptions)}.
+
+\subsubsection{Partial Program Protection}
+%
+A consequence of the use of high-level software techniques is the difficulty of
+keeping their shields up against a \emph{low-level attacker} that is not bound
+to play by their rules.
+%
+Insofar as their protections continue to work against untrusted code, like split
+stacks, they do so by relying on additional support, e.g. from the operating
+system.
+%
+\rb{(The same remarks about the language-agnostic framework apply here. Split
+  stacks are probably relatively easy to model without big changes, but would
+  still benefit from a higher level of abstraction.)}
+%
+\rb{(partial programs and split stacks? jein?)}
+
+\subsubsection{Enforced Properties}
+%
+\rb{(FIXME: Present with the hierarchy of properties? Basically all policies try
+  to protect {\wbcf}. Without it things are quite strange. Some of the more
+  restrictive software methods and the hardware methods can cover additional
+  properties.)}
+
+\subsubsection{Software vs. Hardware}
+%
+One first general observation about software-based techniques is that they
+are \emph{less modular} than their hardware counterparts, that is, the
+countermeasures are more tightly coupled with the program code they protect.
+%
+By contrast, although programs must effectively leverage the protection
+mechanisms offered by the hardware, the distinction between those protections
+and the program logic itself is much cleaner.
+%
+Our framework relies on a \emph{separation} of security-relevant operations and
+regular program code \rb{stress that any scalable, composable solution must do
+this!}.
+%
+While the various extensions suggested in this section could help abstract the
+complexities of software safeguards, hardware techniques remain the most elegant
+and general exemplars for the methods we seek to demonstrate.
+%
+\rb{(This is also related to our single-level model)}
+
+\subsubsection{Formal Models}
+%
+A second general observation about software-based techniques is that they tend
+to be \emph{less absolute}: they enforce weaker properties or under stronger
+assumptions, and their threat models are usually fairly informal.
+%
+%
+The closest previous attempt
+to produce a formal characterization of stack safety does so using a {\em fully abstract overlay semantics},
+a style of correct-by-construction machine \cite{SkorstengaardSTKJFP}.
+But this approach
+builds the security properties into the semantics of the machine without externalizing them or their meaning.
+It is also not suitable for the {\em lazy} enforcement mechanism
+of Roessler and DeHon, in which stores are not checked, and illegal stores are
+only caught when their location is later read.
+%
+\rb{Need to discuss overlay semantics, but also note that it is very intensional
+  and very specific, as the authors acknowledge. I'd introduce this a bit more
+  gradually. Also, if phrased this way, it sounds like its main drawback is a
+  lack of generality, to which we should contrast a more general approach, not
+  just one that is specialized to a specific policy, i.e. lazy micro-policies
+  (I'd try to present these more gradually as well).}
+%
+\rb{Also, testing certainly (and motivate), but not only?}
+
+Overall, the generality and flexibility of micro-policies, arising from an
+elegant design that clearly separates the program from its security, are the
+most appropriate choice for an exploration of this new framework.
+%
+\rb{FIXME: Finish motivation. We focus on micro-policies, but\ldots Something
+  about existing policies, exercising the framework most generally,
+  representative experiments?}
+
+\rb{Begins to anticipate subsequent discussion. This is even something of an
+  understatement: some papers (esp. newer ones?), make concrete claims, though
+  they remain informal. Arguably, none have a truly formal characterization in
+  mind (with the qualified exception of \cite{SkorstengaardSTKJFP}): this is one
+  of the novelties of this work!
+\rb{(+SNA) Indeed, this point needs to be made carefully. We claim to go further
+  than previous work, without showing a fully general framework (which would be
+  highly parametric, etc.). Tie to the idea of micro-policies as a good place to
+  start because of their flexibility, elegance, enabling a wide of interesting
+  experiments, etc.
+\rb{Basically, none reach the point of being an independent (and executable) specification}
+}
+}
+
+\subsection{The Properties and Their Hierarchy}
+
+The properties form a hierarchy, shown in [TODO: diagram].
+Within properties that are orthogonal
+some are likely to take priority in terms of their
+importance to security. Almost all stack-safety enforcement mechanisms will try to enforce \(WBCF\),
+as control-flow attacks such as ROP are a major vulnerability that can be targeted via the stack.
+Many also cover some degree of (caller) integrity. Caller confidentiality has been fairly neglected,
+and callee-oriented properties even moreso.
+
+\subsection{Security Semantics and Property Structure}
 
 A {\it security semantics} extends a machine
 with additional context about the identity of current and pending
@@ -88,17 +358,7 @@ always accessible (\(\public\)).
 
 \sna{Might like a better name than object, because morally it ought to apply to arguments as well.}
 
-\paragraph*{The Properties and their Hierarchy}
-
-The properties form a hierarchy, shown in [TODO: diagram].
-Within properties that are orthogonal
-some are likely to take priority in terms of their
-importance to security. Almost all stack-safety enforcement mechanisms will try to enforce \(WBCF\),
-as control-flow attacks such as ROP are a major vulnerability that can be targeted via the stack.
-Many also cover some degree of (caller) integrity. Caller confidentiality has been fairly neglected,
-and callee-oriented properties even moreso.
-
-\paragraph*{Events}
+\subsection{Events}
 
 It is common to specify the behavior of a system, including security properties, in
 terms of traces of observable {\em events} rather than details of the machine state.
@@ -106,7 +366,7 @@ Lazy enforcement works because the deferred check catches errors before they app
 in the trace. The nature of events is a parameter of the machine, and can be specialized
 to any notion of observable behavior.
 
-\paragraph*{Threat Model}
+\subsection{Threat Model}
 
 We must trust that our method of distinguishing security-relevant operations is accurate; if it
 involves labels placed on code by a compiler, that means trusting that the compiler placed
@@ -134,241 +394,149 @@ even buggy code.
 This is a strong threat model, but it does omit some important aspects of
 security enforcement: In particular, hardware and timing attacks are out of scope.
 
+\subsection{Limitations}
+
+%Our concurrency model is fairly
+%simplistic, assuming a fixed number of threads each with its own dedicated processor.
+We model memory-safe stack objects, but not a heap. Regions outside of
+stacks can be used however the compiler likes, including as a heap, but no protection is
+built in and our properties assume that if a pointer to a stack object is stored there,
+it is permanently compromised.
+
+Our properties are termination insensitive: in order to support enforcement mechanisms
+that failstop rather than execute dangerous code, the properties must treat failstops
+as invisible to the attacker. We extend this insensitivity to all errors for simplicity.
+This is consistent with our treatment of properties that specify the state after a return,
+in that a callee that diverges for any reason will never reach the return, and will fulfill
+the property vacuously.
+%
+\rb{Merge with threat model? Orthogonality of the heap, morally
+  similar interesting setups on the stack? Termination sensitivity and
+  capability machine semantics?}
+
 %%%
-
-\paragraph*{Permissiveness, Laziness, and Tagged Architectures}
-
-Security properties tend to be conservative, identifying violations that would be
-harmless in practice. But enforcement mechanisms make trade-offs in the name of performance
-and of compatibility with existing codebases. In a crucial motivating example for this work,
-Roessler and DeHon \cite{} present a collection of tag-based enforcement mechanisms
-using PIPE \cite{???}, a tagged hardware reference monitor. In monitors such as PIPE and
-STAR \cite{???}, every value in memory and registers is paired with a {\em metadata tag}.
-A set of software-defined rules, termed a micro-policy, determines the tags for operation
-results based on the tags of their inputs---or, if the input tags are in a dangerous
-combination, it may halt the machine (a ``failstop.'')
-
-Roessler and DeHon find that the intuitive way to enforce stack safety in this setting
-is inefficient when allocating and clearing stack frames, because each word must be initialized
-with a tag corresponding to the (depth of the) current function activation. They propose
-{\em Lazy Tagging and Clearing}, in which tags are not initialized at allocation, but only
-when a function writes to memory. This means that writes cannot be prevented, necessarily
-violating existing models of stack safety. Instead the micro-policy enforces that memory be
-read by the same fuction that wrote it. The owner of the data will never see the changes,
-so it is secure in the sense that the attacker is unsuccessful at changing program behavior
-(except, perhaps, by causing a fault.) We elaborate that sense, and test whether the
-micro-policy fulfills it.
-
-This key motivation leads us to present integrity and confidentiality as predicates on (pairs of)
-machine states that make claims about the future observable behavior of execution from those states.
-That is not to say that our properties are specialized for lazy micro-policies. It also supports
-normal ``eager'' micro-policies, and should support other enforcement mechanisms. In fact, \(\clri\)
-and \(\clrc\) are even weaker than necessary to support Roessler and Dehon's micro-policy,
-while \(\clec\) and \(\clei\) are stronger properties that they do not attempt to enforce.
-%
-\rb{Does this discussion (at least in part) belong in the general background
-  section, some even in key ideas? It still feels a little out of order to me,
-  and occasionally too detailed for the introduction?}
-
-\rb{Begins to anticipate subsequent discussion. This is even something of an
-  understatement: some papers (esp. newer ones?), make concrete claims, though
-  they remain informal. Arguably, none have a truly formal characterization in
-  mind (with the qualified exception of \cite{SkorstengaardSTKJFP}): this is one
-  of the novelties of this work!
-\rb{(+SNA) Indeed, this point needs to be made carefully. We claim to go further
-  than previous work, without showing a fully general framework (which would be
-  highly parametric, etc.). Tie to the idea of micro-policies as a good place to
-  start because of their flexibility, elegance, enabling a wide of interesting
-  experiments, etc.
-\rb{Basically, none reach the point of being an independent (and executable) specification}
-}
-}
-%
-Previous attempts
-to produce a formal characterization do so using a {\it fully abstract overlay semantics},
-a style of correct-by-construction machine \cite{SkorstengaardSTKJFP}.
-But this approach is not suitable for the {\em lazy} enforcement mechanism
-of Roessler and DeHon, in which stores are not checked, and illegal stores are
-only caught when their location is later read. We aim to provide a stack-safety
-property suitable for testing lazy enforcement.
-%
-\rb{Need to discuss overlay semantics, but also note that it is very intensional
-  and very specific, as the authors acknowledge. I'd introduce this a bit more
-  gradually. Also, if phrased this way, it sounds like its main drawback is a
-  lack of generality, to which we should contrast a more general approach, not
-  just one that is specialized to a specific policy, i.e. lazy micro-policies
-  (I'd try to present these more gradually as well).}
-
-\newcommand*{\rot}[1]{\hbox to1em{\hss\rotatebox[origin=br]{-60}{#1}}}
-\newcommand*{\tabyes}{\CIRCLE\xspace}
-\newcommand*{\tabno}{\Circle\xspace}
-\newcommand*{\tabjein}{\RIGHTcircle\xspace}
-
-\begin{table}
-\begin{threeparttable}
-  \begin{tabular}{l | c c c c | c c c | c}
-    \toprule
-    \multicolumn{1}{l |}{Mechanism}
-    & \multicolumn{4}{l |}{Features}
-    & \multicolumn{3}{l |}{Properties}
-    & %% Formal criteria
-    \\
-    \midrule
-    %% Technique
-    \multicolumn{1}{c}{}
-    & \rot{Strict enforcement}
-    & \rot{Deferred checking}
-    & \rot{Low-level code support}
-    & \multicolumn{1}{c}{\rot{Partial program support}}
-    & \rot{Well-bracketed control flow}
-    & \rot{Data integrity}
-    & \multicolumn{1}{c}{\rot{Data confidentiality}}
-    & \rot{Formal criteria}
-    \\
-    \midrule
-    Stack canaries  & \tabno   & \tabjein & \tabyes  & \tabyes  & \tabyes  & \tabno   & \tabno   &          \\
-    Shadow stacks   & \tabno   & \tabjein &          & \tabyes  & \tabyes  & \tabno   & \tabno   &          \\
-    Bounds checking & \tabyes  & \tabno   & \tabno   & \tabno   & \tabyes  &          &          &          \\
-    Split stacks    & \tabyes  & \tabno   & \tabno   & \tabyes  & \tabyes  & \tabno   & \tabno   &          \\
-    \midrule
-    Capabilities    &          & \tabno   &          & \tabyes  &          &          &          & \tabjein \\
-    Micro-policies  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  & \tabyes  \\
-    \bottomrule
-  \end{tabular}
-  \caption{Comparison of Stack Protection Mechanisms}
-  \begin{tablenotes}
-  \item \tabyes indicates a protection mechanism possesses the feature
-  \item \tabno indicates the mechanism lacks the feature
-  \item \tabjein indicates partial or incomplete support
-  \item \rb{Complete and check columns, describe. Capitalize?}
-  \item \rb{Order? Split int/conf? Deferred/lazy at the end of features}
-  \item \rb{2+ lines for capabilities, before and after using our draft?}
-  \end{tablenotes}
-  \label{tab:relwork}
-\end{threeparttable}
-\end{table}
 
 \rb{\textbf{A menagerie of protection mechanisms.}
 %
-We have made explicit the key point that there is \emph{not} a single stack
-abstraction. This paves the way for a \emph{general} idea of stack protection
-that is widely applicable with high-level concepts that remain unchanged (and I
-think it's particularly important to at least introduce these more immutable
-parts early on). The fact that this general ``framework'' requires low-level or
-specific specializations is a predictable consequence of the protean nature of
-the call stack.
-%
-\\
-%
-Let us return to a selection of representative policies in our menagerie and
-consider how they fit into the framework. At the highest level, we can classify
-all those techniques into two large groups, software-based and hardware-based.
-Traditionally, most practical protections are implemented in software, so we
-start by considering this first group.
-%
-\\
-%
-We can make two general observations about these software based techniques.
-Firstly, (as we will see: discussion? technical details?) these techniques are
-\emph{less modular} than their hardware counterparts. That is, the
-countermeasures are tightly coupled with the program code they protect, and
-consequently more effort is required to disentangle the program from the
-protections, and to understand the impact of the latter on the former. This is
-true of any systematic attempt to study the security of stack protection
-policies, including their adaptation to our framework. (Owing to this added
-complexity, software policies will not be the cleanest or most elegant exemplars
-of use of the framework, its salient features and practical utility; this partly
-motivates the focus on hardware policies.)
-%
-\\
-%
-(The above remark holds \emph{at least in a ``single-level model''} that
-considers assembly language/machine code programs. In general, (low-level)
-protections are introduced by a compiler or similar tool. One could consider a
-multi-level extension of the framework pairing models of high-level programs and
-the security transformations performed by a (stack-secure) compiler.)
-%
-\\
-%
-Secondly, the guarantees generally offered by software-based policies are
-\emph{less absolute}, being defined more or less informally and usually
-providing few definite guarantees of absence of \emph{general} classes of
-errors. (The following discussion elaborates on this. It is conceivable that an
-extended and more sophisticated framework could add \emph{probabilistic
-reasoning} capabilities to capture and reason about the effects of less strict
-protection mechanisms. This would be another orthogonal development to what is
-presented here. In this paper, we are interested in assessing the complete
-\emph{absence} of broad classes of vulnerabilities --- modulo any modeling gaps
-or defects. In passing, this would extend the security properties to e.g. larger
-system verification efforts.)
-%
-\\
-%
-One by one, consider the following specimens of software protection mechanisms
-(quick explanations inlined?):
-%
-\\
-%
-\begin{itemize}
-%
-\item \emph{Stack canaries}. The purpose of canaries is to \emph{increase} the
-  difficulty of some attacks on the stack, usually (always?) buffer overflows.
-  They can never provide any absolute security guarantees and therefore do not
-  satisfy any of our properties (some of the properties, e.g. confidentiality,
-  are completely out of scope.) Although tedious, we could we could model this
-  mechanism in our framework with the appropriate adaptations --- and
-  unsurprisingly, testing would find property violations, which we already know
-  are there: the results of this effort would be unsurprising and not as useful
-  or instructive as other experiments.
-  \rb{(+SNA) They are kind of lazy, aren't they?}
-%
-\item \emph{Bounds checking}. This is fundamentally a high-level technique, even
-  more obviously so than stack canaries (which could still detect violations
-  caused by external code). Bounds checking only applies to code that has been
-  instrumented by the ``secure compiler'' (i.e., to whole programs); it does not
-  impose any constraints on adversarial code. The attacker model is therefore
-  rather weak. (Certain variants, like SoftBound, are good targets for lifting
-  our framework to the source level by e.g. using a C-language semantics and
-  using Tagged C for security modeling; the lifted versions of our properties
-  would likely hold under the expected assumptions. HardBound is probably an
-  interesting transitional case because it uses capability-like hardware
-  primitives for enforcement; it could be close to ongoing and future work to
-  verify stack safety on capability machines, e.g. based on Cerise -- discuss
-  together?)
-%
-\item \emph{Shadow stacks}. Like stack canaries, shadow stacks are
-  ``probabilistic techniques'' in that they ``restrict the flexibility available
-  in creating gadget chains'' (Shanbhogue et al.). This technique is solely
-  concerned with control-flow integrity, and so closely related to our
-  well-bracketed control flow. Nevertheless, and again, it is only an
-  approximate technique, and our testing framework would be able to find the
-  expected attacks against our security property.
-%
-\item \emph{Split stacks}. The security claims of split stacks are stronger than
-  those of most software countermeasures, i.e., they are meant to guarantee
-  their titular code-pointer integrity. They explicitly offer no protections on
-  stack data (i.e., integrity and confidentiality), and so restrict themselves
-  to well-bracketed control flow. (This is probably closer to our framework than
-  most other software techniques, and it seems like it would be easier to model
-  as well. However, this is again work based on high-level languages and would
-  benefit from a higher level of abstraction.)
-%
-\item \ldots
-%
-\end{itemize}
-%
-Opposed to the above group of software techniques we have hardware-based
-protection policies (more in background/technical preliminaries?). Although
-programs must effectively leverage the protection mechanisms offered by the
-hardware, the distinction between those protections and the program logic itself
-is much cleaner: it is fairly simple to separate the use of the security
-features in the hardware (and their effects in program code) from regular
-program code. They also tend to aspire to offer complete protection against
-entire classes of attacks. Both aspects make this family of techniques a better
-fit for illustrating and showcasing our techniques.
-%
-\\
-%
+%% We have made explicit the key point that there is \emph{not} a single stack
+%% abstraction. This paves the way for a \emph{general} idea of stack protection
+%% that is widely applicable with high-level concepts that remain unchanged (and I
+%% think it's particularly important to at least introduce these more immutable
+%% parts early on). The fact that this general ``framework'' requires low-level or
+%% specific specializations is a predictable consequence of the protean nature of
+%% the call stack.
+%% %
+%% \\
+%% %
+%% Let us return to a selection of representative policies in our menagerie and
+%% consider how they fit into the framework. At the highest level, we can classify
+%% all those techniques into two large groups, software-based and hardware-based.
+%% Traditionally, most practical protections are implemented in software, so we
+%% start by considering this first group.
+%% %
+%% \\
+%% %
+%% We can make two general observations about these software based techniques.
+%% Firstly, (as we will see: discussion? technical details?) these techniques are
+%% \emph{less modular} than their hardware counterparts. That is, the
+%% countermeasures are tightly coupled with the program code they protect, and
+%% consequently more effort is required to disentangle the program from the
+%% protections, and to understand the impact of the latter on the former. This is
+%% true of any systematic attempt to study the security of stack protection
+%% policies, including their adaptation to our framework. (Owing to this added
+%% complexity, software policies will not be the cleanest or most elegant exemplars
+%% of use of the framework, its salient features and practical utility; this partly
+%% motivates the focus on hardware policies.)
+%% %
+%% \\
+%% %
+%% (The above remark holds \emph{at least in a ``single-level model''} that
+%% considers assembly language/machine code programs. In general, (low-level)
+%% protections are introduced by a compiler or similar tool. One could consider a
+%% multi-level extension of the framework pairing models of high-level programs and
+%% the security transformations performed by a (stack-secure) compiler.)
+%% %
+%% \\
+%% %
+%% Secondly, the guarantees generally offered by software-based policies are
+%% \emph{less absolute}, being defined more or less informally and usually
+%% providing few definite guarantees of absence of \emph{general} classes of
+%% errors. (The following discussion elaborates on this. It is conceivable that an
+%% extended and more sophisticated framework could add \emph{probabilistic
+%% reasoning} capabilities to capture and reason about the effects of less strict
+%% protection mechanisms. This would be another orthogonal development to what is
+%% presented here. In this paper, we are interested in assessing the complete
+%% \emph{absence} of broad classes of vulnerabilities --- modulo any modeling gaps
+%% or defects. In passing, this would extend the security properties to e.g. larger
+%% system verification efforts.)
+%% %
+%% \\
+%% %
+%% One by one, consider the following specimens of software protection mechanisms
+%% (quick explanations inlined?):
+%% %
+%% \\
+%% %
+%% \begin{itemize}
+%% %
+%% \item \emph{Stack canaries}. The purpose of canaries is to \emph{increase} the
+%%   difficulty of some attacks on the stack, usually (always?) buffer overflows.
+%%   They can never provide any absolute security guarantees and therefore do not
+%%   satisfy any of our properties (some of the properties, e.g. confidentiality,
+%%   are completely out of scope.) Although tedious, we could we could model this
+%%   mechanism in our framework with the appropriate adaptations --- and
+%%   unsurprisingly, testing would find property violations, which we already know
+%%   are there: the results of this effort would be unsurprising and not as useful
+%%   or instructive as other experiments.
+%%   \rb{(+SNA) They are kind of lazy, aren't they?}
+%% %
+%% \item \emph{Bounds checking}. This is fundamentally a high-level technique, even
+%%   more obviously so than stack canaries (which could still detect violations
+%%   caused by external code). Bounds checking only applies to code that has been
+%%   instrumented by the ``secure compiler'' (i.e., to whole programs); it does not
+%%   impose any constraints on adversarial code. The attacker model is therefore
+%%   rather weak. (Certain variants, like SoftBound, are good targets for lifting
+%%   our framework to the source level by e.g. using a C-language semantics and
+%%   using Tagged C for security modeling; the lifted versions of our properties
+%%   would likely hold under the expected assumptions. HardBound is probably an
+%%   interesting transitional case because it uses capability-like hardware
+%%   primitives for enforcement; it could be close to ongoing and future work to
+%%   verify stack safety on capability machines, e.g. based on Cerise -- discuss
+%%   together?)
+%% %
+%% \item \emph{Shadow stacks}. Like stack canaries, shadow stacks are
+%%   ``probabilistic techniques'' in that they ``restrict the flexibility available
+%%   in creating gadget chains'' (Shanbhogue et al.). This technique is solely
+%%   concerned with control-flow integrity, and so closely related to our
+%%   well-bracketed control flow. Nevertheless, and again, it is only an
+%%   approximate technique, and our testing framework would be able to find the
+%%   expected attacks against our security property.
+%% %
+%% \item \emph{Split stacks}. The security claims of split stacks are stronger than
+%%   those of most software countermeasures, i.e., they are meant to guarantee
+%%   their titular code-pointer integrity. They explicitly offer no protections on
+%%   stack data (i.e., integrity and confidentiality), and so restrict themselves
+%%   to well-bracketed control flow. (This is probably closer to our framework than
+%%   most other software techniques, and it seems like it would be easier to model
+%%   as well. However, this is again work based on high-level languages and would
+%%   benefit from a higher level of abstraction.)
+%% %
+%% \item \ldots
+%% %
+%% \end{itemize}
+%% %
+%% Opposed to the above group of software techniques we have hardware-based
+%% protection policies (more in background/technical preliminaries?). Although
+%% programs must effectively leverage the protection mechanisms offered by the
+%% hardware, the distinction between those protections and the program logic itself
+%% is much cleaner: it is fairly simple to separate the use of the security
+%% features in the hardware (and their effects in program code) from regular
+%% program code. They also tend to aspire to offer complete protection against
+%% entire classes of attacks. Both aspects make this family of techniques a better
+%% fit for illustrating and showcasing our techniques.
+%% %
+%% \\
+%% %
 CHERI and lightweight formal methods?
 %
 Questionably that they are strictly more realistic in the sense that it is very
@@ -414,38 +582,20 @@ especially full proofs (references, communications, etc.).
 \ldots
 %
 }
-\rb{(+SNA) Any interesting tables comparing specimens in the menagerie?}
-\rb{(+SNA) A general multi-level extension of the framework would need to model
-  multiple source languages. Among other things, the stack is the meeting place
-  of all sorts of different language abstractions! One of the advantages of the
-  single-level model is that it lets us be agnostic about the language. (On the
-  other hand, it is likely that a single source and target mediated by the
-  compiler suffice to model many existing techniques, coming e.g. from systems
-  programming and C-like languages.}
-
-\paragraph*{Limitations}
-
-%Our concurrency model is fairly
-%simplistic, assuming a fixed number of threads each with its own dedicated processor.
-We model memory-safe stack objects, but not a heap. Regions outside of
-stacks can be used however the compiler likes, including as a heap, but no protection is
-built in and our properties assume that if a pointer to a stack object is stored there,
-it is permanently compromised.
-
-Our properties are termination insensitive: in order to support enforcement mechanisms
-that failstop rather than execute dangerous code, the properties must treat failstops
-as invisible to the attacker. We extend this insensitivity to all errors for simplicity.
-This is consistent with our treatment of properties that specify the state after a return,
-in that a callee that diverges for any reason will never reach the return, and will fulfill
-the property vacuously.
-%
-\rb{Limitations in the introduction or later? Orthogonality of the heap, morally
-  similar interesting setups on the stack? Termination sensitivity and
-  capability machine semantics?}
-
-%%%
+%% \rb{(+SNA) Any interesting tables comparing specimens in the menagerie?}
+%% \rb{(+SNA) A general multi-level extension of the framework would need to model
+%%   multiple source languages. Among other things, the stack is the meeting place
+%%   of all sorts of different language abstractions! One of the advantages of the
+%%   single-level model is that it lets us be agnostic about the language. (On the
+%%   other hand, it is likely that a single source and target mediated by the
+%%   compiler suffice to model many existing techniques, coming e.g. from systems
+%%   programming and C-like languages.}
 
 \rb{Connect this (novel characterization?) to the shortcomings of previous work (later!). I'd give at least a quick
   explanation of what the various properties roughly entail in practice (e.g.,
   secrecy of private data, etc.). The comment about the single extension of
   exceptions (still in intro) seems disconnected from the rest.}
+
+\rb{Deferred/lazy connection of canaries and shadow stacks -- arguably these helps them support things other software policies need more help with?}
+
+\rb{Capabilities and HardBound?}
