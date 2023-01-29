@@ -25,7 +25,7 @@ Import ListNotations.
 
 Require Import ExtLib.Structures.Monad. Import MonadNotation. Open Scope monad_scope.
 
-Definition trace := false.
+Definition trace := true.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
 
@@ -62,9 +62,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
 
   Definition defTagInfo :=
     {| regTag  := nil
-     ; codeTag := [Tinstr]
-     ; dataTag := nil                    
-     ; pcTag   := [Tpc 0]
+    ; codeTag := [Tinstr]
+    ; dataTag := nil                    
+    ; pcTag   := [Tpc 0]
     |}.
 
   Record PtrInfo := { pID     : Register
@@ -72,7 +72,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                     ; pMinImm : Z
                     ; pMaxImm : Z
                     ; pTag : TagSet
-                    }.
+    }.
 
   Instance ShowPtrInfo : Show PtrInfo :=
     {| show p :=
@@ -336,29 +336,14 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Open Scope nat.
   
   Definition genStackbasedWrite (i : LayoutInfo) (mp : MachineState)
-             (priority_offset : Z) (other_offset : Z)
-             (priority_source : Register) (other_source : Register)
+             (off : Z) (rs : Register)
     : G InstructionI :=
-    let spVal := projw mp (Reg SP) in
-    off <- freq_ (ret priority_offset)
-                 [(4, ret priority_offset);
-                  (1, ret other_offset)];;
-    rs <- freq_ (ret priority_source)
-                 [(4, ret priority_source);
-                  (1, ret other_source)];;
     ret (Sw sp rs off).
   
   Definition genStackbasedRead (i : LayoutInfo) (mp : MachineState)
-             (priority_offset : Z) (other_offset : Z)
-             (priority_source : Register) (other_source : Register)
+             (off : Z) (rd : Register)
     : G InstructionI :=
     let spVal := projw mp (Reg SP) in
-    off <- freq_ (ret priority_offset)
-                 [(4, ret priority_offset);
-                  (1, ret other_offset)];;
-    rd <- freq_ (ret priority_source)
-                 [(4, ret priority_source);
-                  (1, ret other_source)];;
     ret (Lw rd sp off).
 
 (* Helpful argument stuff from Rob, to reuse later. *)
@@ -695,12 +680,6 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     ; (Jalr ra ra 0     , [Tinstr; Tr3], f, [Return])
     ].
 
-  Definition genRetSeq (m : MachineState) (f : FunID) :=
-    let spv := projw m (Reg sp) in
-    if (512 <? (wtoz spv))%Z 
-    then Some (returnGen (returnSeq f))
-    else None.
-
   (* The current function's expected behavior. We use the strat like a probabilistic
      state-machine: each step we have some chance of transitioning to a different
      strat, weighted by special events such as entering a function for the first
@@ -729,6 +708,8 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   | dumb_attacker
   .
 
+  Derive Show for strat.
+
   Close Scope Z.
   Open Scope nat.
 
@@ -747,29 +728,23 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
            We are likely to read from function arguments in memory (TODO)
            and use register arguments. *)
         [(1,
-           priority_offset <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
-           priority_register <- elems_ 0%Z (fprof.(register_args));;
-           instr <- genStackbasedWrite i m
-                                         priority_offset priority_offset
-                                         priority_register priority_register;;
+           off <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
+           reg <- elems_ 0%Z (fprof.(register_args));;
+           instr <- genStackbasedWrite i m off reg;;
              ret ([(instr, [Tinstr], f, noops)]))]
     | compute, Some fprof =>
         (* We are in the bulk of execution. We will make reads and
            writes, primarily in the stack frame, as well as outside
            of the stack entirely. *)
         [(1,
-           priority_offset <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
-           priority_register <- elems_ 0%Z (map.keys (getRegs (fst m)));;
-           instr <- genStackbasedWrite i m
-                                       priority_offset priority_offset
-                                       priority_register priority_register;;
+           off <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
+           reg <- genTargetReg m;;
+           instr <- genStackbasedWrite i m off reg;;
            ret ([(instr, [Tinstr], f, noops)]));
          (1,
-           priority_offset <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
-           priority_register <- elems_ 0%Z (map.keys (getRegs (fst m)));;
-           instr <- genStackbasedRead i m
-                                        priority_offset priority_offset
-                                        priority_register priority_register;;
+           off <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
+           reg <- genTargetReg m;;
+           instr <- genStackbasedRead i m off reg;;
              ret ([(instr, [Tinstr], f, noops)]));
          (1, res <- genArith i t m cm dataP codeP f;;
              ret [res])]
@@ -777,20 +752,16 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         (* We are preparing to call f. We will tend to choose f's
            arguments as destinations for operations. At some point,
            we will make the call. *)
-        match find (fun fp => Nat.eqb f fp.(id)) functions,
-          find (fun fp => Nat.eqb f' fp.(id)) functions with
-        | Some callee, Some caller =>
-            [(1, callHead (callee.(entry) - pcVal) f' i m callee)]
-        | _, _ => []
+        match find (fun fp => Nat.eqb f' fp.(id)) functions with
+        | Some callee =>
+            [(1, callHead (callee.(entry) - pcVal) f i m callee)]
+        | _ => []
         end
     | tired, Some fprof =>
         (* We have been executing for a long time, and want to return.
            We are likely to choose the return register as a destination
            and to make a return. *)
-        match genRetSeq m f with
-        | None => [(1, ret [(Addi r0 r0 0,[Tinstr],f,[])])]
-        | Some g => [(1,g)]
-        end
+        [(1, ret (returnSeq f))]
     | dumb_attacker, Some fprof =>
         (* After failing to find an attack for long enough, the smart
            attacker becomes a dumb attacker, which will just start trying
@@ -860,7 +831,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition step_strat (functions : list FunctionProfile) (s : strat) (f : FunID)
              (funSteps : list nat) (ops : list Operation) : G (strat * list nat) :=
     let or_attack s :=
-      freq_ (ret s) [(9, ret s); (1, ret dumb_attacker)]
+      freq_ (ret s) [(19, ret s); (1, ret dumb_attacker)]
     in
     if existsb isCall ops
     then s' <- or_attack initialize;;
@@ -882,9 +853,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                    | compute =>
                        if fFuel <? 10 then or_attack tired else
                          s' <- freq_ (ret compute)
-                                     [(1, ret compute); (1, elems_ compute
-                                                                   (map (fun fp => call fp.(id))
-                                                                        functions))];;
+                                     ([(1, ret compute)] ++
+                                      map (fun fp => (if fp.(id) =? f then 1 else 2,
+                                                       ret (call fp.(id)))) functions);;
                          or_attack s'
                    | call f => ret s
                    | returned f =>
@@ -923,13 +894,13 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
            (its : list (InstructionI * TagSet * FunID * list Operation))
            (dataP codeP : TagSet -> bool)
     (* num calls? *)
-    : G (MachineState * CodeMap_Impl) :=
+    : G (MachineState * strat * MachineState * CodeMap_Impl) :=
     let '(m0,p0) := mp0 in
     let '(m,p) := mp in
     match steps with
     | O =>
         (* Out-of-fuel: End generation. *)
-        "Out of Fuel" ! (ret (mp0, cm))
+        "Out of Fuel" ! (ret (mp, s, mp0, cm))
     | S steps' =>
       match map.get (getMem m) (getPc m) with
       | Some _ =>
@@ -942,7 +913,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
             gen_exec_aux steps' funSteps' li ti s' mp0 mp' cm f functions its codeP dataP
         | _ =>
           ("Existing instruction mid-sequence" ++ nl)%string !
-          (ret (m0, p0, cm))
+          (ret (mp, s, mp0, cm))
         end
       | None =>
           '(it, its', s', funSteps') <-
@@ -974,7 +945,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
           let cm' := map.put cm (word.unsigned (getPc m)) (Some a) in
           let '(mp''',_,_) := mpstep mp'' in
           if weq (projw mp''' PC) (projw mp PC) then
-            ("Failstopped" ++ nl) ! (ret (mp0'',cm'))
+            ("Failstopped" ++ nl) ! (ret (mp''',s,mp0'',cm'))
           else
             (gen_exec_aux steps' funSteps' li ti s' mp0'' mp''' cm' f' functions its' dataP codeP)
       end
@@ -1031,8 +1002,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     mps <- (genDataMemory i t mp0);;
     mps' <- (genGPRs t mps);;
     '(m', fps, cm0) <- genFuns 5 mps';;
-    (gen_exec_aux maxFuel [funMaxFuel] i t initialize m' m' cm0 O fps
-                  [] dataP codeP).
+    '(m_post, s, m'', cm) <- (gen_exec_aux maxFuel [maxFuel] i t initialize m' m' cm0 O fps
+                                        [] dataP codeP);;
+    (show s ++ nl ++ show (m_post,cm)) ! ret (m'',cm).
 
   Definition zeroedRiscvMachine : RiscvMachine := {|
     getRegs :=
@@ -1079,7 +1051,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   let dataP := fun tt => true in
   m <- genMachine defLayoutInfo defTagInfo (zeroedRiscvMachine,zeroedPolicyState)
                   dataP codeP;;
-  (show m) ! (ret m).
+  (ret m).
 
   (* Constant generator for explicit program listings. These follow the same
      conventions as the initial machine: reserved registers (zero, RA, SP) and

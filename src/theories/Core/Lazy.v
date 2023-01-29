@@ -232,11 +232,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     | [Tpc old], Some [Tinstr; Ttailcall] =>
       (* TODO Current policy is based on depth, no change on tail calls *)
       (* let newid := S (nextid p) in *)
-      Some (p
-              (* <| nextid := newid |> *)
-              <| pctags := [Tpc old (* newid *); Th3] |>
-              (* <| regtags := map.put (regtags p) rd [Tpc old] |> *)
-        )
+      Some (p <| pctags := [Tpc old (* newid *); Th3] |>)
     | _, _ => ("Failstop on Jal" ++ nl) ! None
     end.
 
@@ -322,7 +318,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       | [Tpc depth; Th1], [Trai], [Tsp]
         => Some (p <| pctags := [Tpc depth; Th2] |>
                    <| memtags := map.put (memtags p) addr trs |>)
-      | _, _, _ => ("Failstop on h1 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
+      | _, _, _ => ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " rd@" ++ show trd ++ nl) ! None
       end
   | _ => ("Failstop on Store" ++ nl) ! None
   end.
