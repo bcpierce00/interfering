@@ -201,21 +201,6 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     let words_locals := Z.of_nat MAX_LOCAL_WORDS in (* includes ref_args *)
     words_ra + words_rel_args + words_locals.
 
-  (* Once we've allocated the frame by moving the sp,
-     we need our locals to be at (negative) offsets from the sp.
-     The frame is laid out as follows (| is the sp):
-     [ra][locals][space for relargs]|
-   *)
-  Definition local_bases (locs : list positive) : list Z :=
-    let fix from_zero locs :=
-      match locs with
-      | [] => ([],0)
-      | l::ls =>
-          let '(offs,base) := from_zero ls in
-          (base-(Zpos l)::offs, base-(Zpos l))
-      end in
-    map (fun base => base-(Z.of_nat MAX_REL_ARGS)) (fst (from_zero locs)).
-
   Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
              (mp : MachineState)
              (dataP codeP : TagSet -> bool)
@@ -328,23 +313,48 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition genSourceReg (m : MachineState) : G Register :=
     freq [ (1%nat, ret r0)
          ; (noRegs, choose (minReg, maxReg))
-         ].
+      ].
+
+  Definition genLocalOffset (m : MachineState) (fp : FunctionProfile) : G (option Z) :=
+    let dataSize := (frameSizeWords fp) - 1 in
+    if 0 <? dataSize
+    then off <- choose (1,dataSize);; ret (Some (-4*off))
+    else ret None.
 
   Definition if_true_n (b:bool) (n:nat) :=
     if b then n else O.
 
   Open Scope nat.
   
-  Definition genStackbasedWrite (i : LayoutInfo) (mp : MachineState)
-             (off : Z) (rs : Register)
-    : G InstructionI :=
-    ret (Sw sp rs off).
+  Definition stackbasedWrite (off : Z) (rs : Register) : InstructionI := Sw sp rs off.
   
-  Definition genStackbasedRead (i : LayoutInfo) (mp : MachineState)
-             (off : Z) (rd : Register)
-    : G InstructionI :=
-    let spVal := projw mp (Reg SP) in
-    ret (Lw rd sp off).
+  Definition stackbasedRead (off : Z) (rd : Register) : InstructionI := Lw rd sp off.
+
+  Definition genLocalWrite (m : MachineState) (fp : FunctionProfile) (arg : bool) :
+    G (list (InstructionI * TagSet * FunID * list Operation)) :=
+    ooff <- genLocalOffset m fp;;
+    match ooff with
+    | Some off =>
+        reg <- (if arg
+                then elems_ 0%Z (fp.(register_args))
+                else genTargetReg m);;
+        let instr := stackbasedWrite off reg in
+        ret ([(instr, [Tinstr], fp.(id), [])])
+    | None =>
+        ret ([((Addi 0 0 0)%Z, [Tinstr], fp.(id), [])])
+    end.
+
+  Definition genLocalRead (m : MachineState) (fp : FunctionProfile) :
+    G (list (InstructionI * TagSet * FunID * list Operation)) := 
+    ooff <- genLocalOffset m fp;;
+    match ooff with
+    | Some off =>
+        reg <- genTargetReg m;;
+        let instr := stackbasedRead off reg in
+        ret ([(instr, [Tinstr], fp.(id), [])])
+    | None =>
+        ret ([((Addi 0 0 0)%Z, [Tinstr], fp.(id), [])])
+    end.
 
 (* Helpful argument stuff from Rob, to reuse later. *)
 (*
@@ -579,18 +589,18 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
       else [] in
     let call_args :=
       if (callee.(relative_args) =? 1)%nat
-      then [(sp, -4, -1)]
+      then [(sp, -4, 4)]
       else [] in
     let refs :=
       if (List.length callee.(reference_args) =? 1)%nat
       then let hd := nth_default (0, 0) callee.(reference_args) 0 in
-           [(Addi rt 0 imm2,       [Tinstr],          f, [(*noops*)]);
-            (Sw sp rt (-8),        [Tinstr; Tsetarg], f, [(*noops*)]);
-            (Addi argReg sp (-8),  [Tinstr],          f, [(*noops*)])]
+           [(Addi rt 0 imm2,       [Tinstr],         f, [(*noops*)]);
+            (Sw sp rt (-8),        [Tinstr; Tvar 0], f, [(*noops*)]);
+            (Addi argReg sp (-8),  [Tinstr; Tvar 0], f, [(*noops*)])]
       else [] in
     let refs_args :=
       if (List.length callee.(reference_args) =? 1)%nat
-      then [(sp, -8, -5)] (* or (argReg _ _) *)
+      then [(sp, -8, 4)] (* or (argReg _ _) *)
       else [] in
     ret
       (args ++ refs ++
@@ -620,7 +630,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
       else [] in
     let call_args :=
       if (callee.(relative_args) =? 1)%nat
-      then [(sp, -4, -1)]
+      then [(sp, -4, 4)]
       else [] in
     let refs :=
       if (List.length callee.(reference_args) =? 1)%nat
@@ -631,7 +641,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
       else [] in
     let refs_args :=
       if (List.length callee.(reference_args) =? 1)%nat
-      then [(sp, -8, -5)] (* or (argReg _ _) *)
+      then [(sp, -8, 4)] (* or (argReg _ _) *)
       else [] in
     ret
       (args ++ refs ++
@@ -685,8 +695,8 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
      strat, weighted by special events such as entering a function for the first
      time or having control return to us. *)
   Inductive strat :=
-  | initialize          
-  | compute             
+  | initialize
+  | compute
   | call (f:FunID)      
   | returned (f:FunID)  (* We just got back from f, and are likely to use the
                            return register as a source, along with any memory
@@ -727,25 +737,13 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
            We are likely to write to our frame, but will not read it.
            We are likely to read from function arguments in memory (TODO)
            and use register arguments. *)
-        [(1,
-           off <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
-           reg <- elems_ 0%Z (fprof.(register_args));;
-           instr <- genStackbasedWrite i m off reg;;
-             ret ([(instr, [Tinstr], f, noops)]))]
+        [(1, genLocalWrite m fprof true)]
     | compute, Some fprof =>
         (* We are in the bulk of execution. We will make reads and
            writes, primarily in the stack frame, as well as outside
            of the stack entirely. *)
-        [(1,
-           off <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
-           reg <- genTargetReg m;;
-           instr <- genStackbasedWrite i m off reg;;
-           ret ([(instr, [Tinstr], f, noops)]));
-         (1,
-           off <- elems_ 0%Z (local_bases (map fst fprof.(locals)));;
-           reg <- genTargetReg m;;
-           instr <- genStackbasedRead i m off reg;;
-             ret ([(instr, [Tinstr], f, noops)]));
+        [(1, genLocalWrite m fprof false);
+         (1, genLocalRead m fprof);
          (1, res <- genArith i t m cm dataP codeP f;;
              ret [res])]
     | call f', Some fprof =>
