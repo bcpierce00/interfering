@@ -201,6 +201,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     let words_locals := Z.of_nat MAX_LOCAL_WORDS in (* includes ref_args *)
     words_ra + words_rel_args + words_locals.
 
+  Definition frameSizeBytes (fp : FunctionProfile) : Z :=
+    4 * frameSizeWords fp.
+
   Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
              (mp : MachineState)
              (dataP codeP : TagSet -> bool)
@@ -559,7 +562,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         let base := (Z.of_nat n) * 100 in
         '(m',fps,cm) <- (genFuns n m);;
         fp <- (if n =? O then ret main else genFun n (base))%nat;;
-        let sz := 4 * (frameSizeWords fp) in
+        let sz := frameSizeBytes fp in
         let m'' := setInstrs [(base, Sw sp ra 0);
                              (base+4, Addi sp sp sz);
                               (base+8, Addi r0 r0 0)] m' in
@@ -684,8 +687,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     callInstrs <- callSeq (choice.(entry) - (projw mp PC)) f l mp choice;;
     ret (callInstrs, existing).
   
-  Definition returnSeq (f : FunID) :=
-    [ (Addi sp sp (-12) , [Tinstr; Tr1], f, [(Dealloc 0 12)])
+  Definition returnSeq (f : FunID) (fp : FunctionProfile) :=
+    let sz := frameSizeBytes fp in
+    [ (Addi sp sp (-sz) , [Tinstr; Tr1], f, [(Dealloc 0 sz)])
     ; (Lw   ra sp 0     , [Tinstr; Tr2], f, [(*noops*)])
     ; (Jalr ra ra 0     , [Tinstr; Tr3], f, [Return])
     ].
@@ -759,7 +763,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         (* We have been executing for a long time, and want to return.
            We are likely to choose the return register as a destination
            and to make a return. *)
-        [(1, ret (returnSeq f))]
+        [(1, ret (returnSeq f fprof))]
     | dumb_attacker, Some fprof =>
         (* After failing to find an attack for long enough, the smart
            attacker becomes a dumb attacker, which will just start trying
