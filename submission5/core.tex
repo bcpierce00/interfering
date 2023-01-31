@@ -777,50 +777,43 @@ is the same. That is, we compare up to deletion of \(\tau\) events.
 
 \apt{Remainder of this section should be moved to AFTER the rest of the formalization.}
 
-\subsection{Memory Sharing}
+\subsection{Sharing Stack Memory}
+In our examples so far, we have presented a vision of stack safety in which
+the interface between caller and callee is in the registers that pass
+arguments and return values. This is frequently not the case in a realistic
+setting. Arguments may be passed on the stack due to being spilled, as an implementation
+of variadic arguments, or because they are reference objects that inherently have
+pass-by-reference semantics. The caller may also take the address of a local object and
+pass that as a pointer to its callee.
 
-[TODO: this section could use some trimming. I think we have room for this
-discussion, it's just more verbose than everything else and therefore feels weird.]
+We refine our call operation to make use of the information that we have about
+which memory contain arguments, \(\overline{sa}\). \(\overline{sa}\) is a set of
+triples of a register, an offset from the value of that register, and a size.
+We first define the helpful set \(\mathit{passed} ~ \overline{sa} ~ \mach\),
+then extend the call operation to keep all objects in \(\mathit{passed}\) marked
+as \(\object\) and seal everything else (\cref{sfig:stkargs}).
 
-The full machine supports public stack allocations that can
-be accessed by anyone until they are deallocated on their owner's return,
-represented by \(\mathbf{alloc} ~ \mathbf{t} \dots\).
-For example, consider the following code:
- 
-{\tt
-  void g() \{
+In this mechanism, we can describe an argument being passed by their relative address
+with the operation \(\mathbf{call} ~ \dots ~ (\SP, \mathit{off}, \mathit{sz})\).
+In the case of pass-by-reference semantics, if the compiler designates register
+\(\reg\) as holding the reference, then the operations is
+\(\mathbf{call} ~ \dots ~ (\reg, 0, \mathit{sz})\).
 
-  ~ ~ int x[3];
+In both cases, the immediate callee retains access to the passed object, but future
+callees will not---unless the object is passed-by-reference further down the stack.
+On the other hand, in the case of a caller explicitly taking the address of an
+object and passing it as a pointer, we have no way obvious way to limit the scope
+of such sharing. 
 
-  ~ ~ int y;
-
-  ~ ~ h(\&x);
-
-  \}
-}
-
-Here we have allocated several arrays and variables; {\tt y}
-will behave as normal with \(\mathbf{alloc} ~ \mathbf{f} \dots\), but
-{\tt x} has its address taken and passed to another function. That
-function might do anything at all to {\tt x}, and might store its pointer
-elsewhere (in the heap, for instance) so that the scope of legitimate accesses
-to {\tt x} are uncertain. We default to assuming that any address-taken local
-should be public. Meanwhile {\tt y} is still private.
-
-In the likely event that the space for the return address, {\tt x}, and {\tt y}
-are all allocated in a single step, that step makes multiple allocation operations:
-\[\bar{\psi} = [\mathbf{alloc} ~ \mathbf{f} ~ (-20,4);
- \mathbf{alloc} ~ \mathbf{t} ~ (-16,12) ; \mathbf{alloc} ~ \mathbf{f} ~ (-4,4)]\]
-
+Our primary machine treats this scenario as the caller allocating a ``public''
+object that can be accessed by anyone until it's deallocated. We extend the
+\(\mathbf{alloc}\) operation with a boolean flag, where {\bf t} indicates
+that the allocation is public, and {\bf f} is private.
+In the likely event that the space for multiple objects is allocated in a single step,
+that step can make multiple allocation operations, each labeled appropriately.
 Allocating public objects affects the call stack very similarly to private ones,
 but instead of labeling them \(\object\) they become \(\public\), so they are
-not sealed at a call. This makes these
-regions of memory able to transmit information between caller and callee without
-violating the stack safety properties. Note that there is no way to seal a location
-once it has become \(\public\); only when {\tt x} is deallocated will its region
-be available to allocate privately. We define a helper function, \(\mathit{range}\),
-to map an offset from a register and a size into a set of addresses, and update
-the operation's security semantics as shown in \cref{sfig:publicalloc}.
+never sealed at a call (\cref{sfig:publicalloc}).
 
 \begin{figure*}
   \begin{subfigure}{0.4\textwidth}
@@ -865,85 +858,12 @@ the operation's security semantics as shown in \cref{sfig:publicalloc}.
     \judgment{\(\sigma = (V,\addr_{ret},\addr_{sp})::\sigma'\)}
              {\(Op ~ \mach ~ \mathbf{return} ~ (\_, \sigma) = (V, \sigma)\)}
 
-    \caption{Argument Passing on }
+    \caption{Calls with Argument Passing on the Stack}
     \label{sfig:stkargs}
   \end{subfigure}
   \caption{Operations}
   \label{fig:advops}
 \end{figure*}
-           
-\subsection{Stack Arguments}
-
-So far, we have not dealt with arguments spilled onto the stack, variadic arguments,
-or arguments that are passed by reference without their addresses being taken
-explicitly (i.e., structs and arrays passed directly.) Consider the simplest case,
-where a function has more than 8 arguments and therefore must (in RISC-V) spill one
-to the stack.
-
-{\tt
-  void main() \{
-
-  ~ f(1,2,3,4,5,6,7,8,9);
-
-  ~ g(42);
-
-  \}
-}
-
-\vspace{\abovedisplayskip}
-
-\begin{tabular}{r l | l}
-  \labeledrow{0:}{addi sp,sp,-12}{\(\mathbf{alloc} ~ (-12,12)\)}
-  \labeledrow{4:}{sd ra,4(sp)}{}
-  \labeledrow{8:}{li a5,9}{}
-  \labeledrow{12:}{sd a5,0(sp)}{}
-  \labeledrow{16:}{li a7,8}{}
-  \dots \\
-  \labeledrow{48:}{jal 100,ra}{\(\mathbf{call} ~ \{\mathtt{a0-a7}\} ~ \{(\SP,0,4)\}\)}
-  \labeledrow{52:}{li a0,42}{}
-  \labeledrow{56:}{jal 200,ra}{\(\mathbf{call} ~ \{\mathtt{a0}\} ~ \emplist\)}
-  \dots \\
-\end{tabular}
-
-Under a typical calling convention, the callee expects the ninth argument to
-be passed to it at bottom of the caller's frame, so the caller allocates extra
-space for it. Then the call to {\tt f} identifies that we expect a range of four
-bytes from the stack pointer to be passed as an object instead of sealed.
-
-So we must refine our call operation to make use of the information that we have about
-which memory contain arguments, \(\overline{sa}\). \(\overline{sa}\) is a set of
-triples of a register, an offset from the value of that register, and a size.
-We first define the helpful set \(\mathit{passed} ~ \overline{sa} ~ \mach\),
-then extend the call operation to keep all objects in \(\mathit{passed}\) marked
-as \(\object\) and seal everything else (\cref{sfig:stkargs}).
-
-The remaining definitions are unchanged. Now a stack-spilled argument can be allocated
-and remain accessible in the callee, while its memory is sealed for calls that do not
-use that memory as an argument.
-
-This same structure works for pass-by-reference arguments. In this case {\tt main}
-passes an array {\tt x} directly, which is compiled as a pass-by-reference.
-
-{\tt
-  int main() \{
-
-  ~ int x[1];
-
-  ~ f(x);
-
-  ~ g();
-
-  ~ return x[0];
-
-  \}
-}
-
-Unlike the address-taken array, we can clearly delineate the scope in which {\tt x} may be
-accessed without violating stack safety: {\tt f} should be allowed to access it, but further
-calls from {\tt f} should not (unless {\tt f} passes it to them) and {\tt g} certainly
-should not. Say the compiler opts to pass the pointer to {\tt x} in register {\tt a0}.
-The {\tt f} is specifically being given access to the four bytes starting at that address.
-The call operation is \(\mathbf{call} ~ \emplist ~ \{(\mathtt{a0},0,4)\}\).
 
 \subsection{Tail Calls}
 
@@ -1280,40 +1200,6 @@ Unfortunately, Lazy Per-activation Tagging and Clearing
 puts severe pressure on the tag cache, so it may not be usable in practice.
 However, we conjecture that no lazy scheme can be fully stack safe
 without using unique per-activation identifiers.
-
-\section{Related Work}
-\label{sec:relwork}
-
-\paragraphx{Formal Stack Safety on Capability Machines}
-%
-To our knowledge, the only line of work to date that has attempted
-a positive and formal characterization of stack safety
-begins with Skorstengaard et al. \cite{SkorstengaardSTKJFP} and is improved
-by Georges et al. \cite{Georges22:TempsDesCerises}. The former's
-StkTokens system enforces stack safety on hardware equipped with
-memory capabilities, similar to those used in the Cheri system~\cite{Woodruff+14,Chisnall+15}, but
-with additional support for linear capabilities, while the latter offer a calling
-convention that can replace the expensive and likely-impractical linear capabilities
-with more efficient ``directed'' capabilities.
-
-Both works define stack safety as the conjunction of local state encapsulation (LSE) and
-well-bracketed control flow (WBCF).
-Informally, LSE means that the current activation can only access its own frame,
-and WBCF means that the topmost frame can only return to
-the immediately adjacent frame below. Formally, these properties are defined
-with reference to a capability machine with a built-in call stack and call and return
-instructions; this machine is proven fully abstract with respect to a more
-concrete capability machine, an approach termed ``fully abstract overlay semantics.''
-
-[TODO: more detailed comparison with Aina's work primarily.]
-
-\paragraphx{Heap Safety as a Security Property}
-%
-Azevedo de Amorim et al.~\cite{DBLP:conf/post/AmorimHP18} show that
-heap safety may be framed as a security property using
-the language of noninterference. Their paper was a significant inspiration
-for the present work, and we believe that their safety conditions should
-combine smoothly into ours.
 
 \section{Future Work}
 \label{sec:future}
