@@ -86,18 +86,6 @@ in an allocated object that is accessible to the current principal (\(\object\))
 available to be allocated (\(\unsealed\)), or
 always accessible (\(\public\)).
 
-\sna{Might like a better name than object, because morally it ought to apply to arguments as well.}
-
-\paragraph*{The Properties and their Hierarchy}
-
-The properties form a hierarchy, shown in [TODO: diagram].
-Within properties that are orthogonal
-some are likely to take priority in terms of their
-importance to security. Almost all stack-safety enforcement mechanisms will try to enforce \(WBCF\),
-as control-flow attacks such as ROP are a major vulnerability that can be targeted via the stack.
-Many also cover some degree of (caller) integrity. Caller confidentiality has been fairly neglected,
-and callee-oriented properties even moreso.
-
 \paragraph*{Events}
 
 It is common to specify the behavior of a system, including security properties, in
@@ -105,6 +93,10 @@ terms of traces of observable {\em events} rather than details of the machine st
 Lazy enforcement works because the deferred check catches errors before they appear
 in the trace. The nature of events is a parameter of the machine, and can be specialized
 to any notion of observable behavior.
+
+\paragraph*{Variants and Non-interference}
+
+We model confidentiality by drawing on 
 
 \paragraph*{Threat Model}
 
@@ -132,4 +124,36 @@ require any static division between trusted and untrusted code, and we aim to pr
 even buggy code.
 
 This is a strong threat model, but it does omit some important aspects of
-security enforcement: In particular, hardware and timing attacks are out of scope.
+security enforcement: in particular, hardware and timing attacks are out of scope.
+
+\paragraph*{Tagged Architectures and Laziness}
+
+In \cref{sec:testing}, we apply our properties to test the existing stack-safety
+mechanism of Roessler and DeHon \cite{}, who present a collection of tag-based enforcement
+mechanisms using PIPE \cite{???}, a tagged hardware reference monitor.
+In monitors such as PIPE and STAR \cite{???}, \apt{double-check this} every value in memory
+and registers is paired with a {\em metadata tag}.
+A set of software-defined rules, termed a micro-policy, determines the tags for operation
+results based on the tags of their inputs---or, if the input tags are in a dangerous
+combination, it may halt the machine (a ``failstop.'')
+
+We are particularly interested in their {\em Lazy Tagging and Clearing} micro-policy.
+In their conventional micro-policies, they tag each word
+in a stack frame with the (depth of) its owning function activation.
+Roessler and DeHon find that it is inefficient, because tag setting
+and clearing must be performed at every allocation, even on elements that are never accessed,
+or that are initialized again and accessed long afterward. This is quite common, e.g. in code
+that allocates large local arrays.
+
+Instead they offer Lazy Tagging and Clearing, in which tags are not initialized at allocation, but only
+when a function writes to memory. This means that writes cannot be prevented, which in turn means
+that the existing line of stack safety specifications from Georges et al. will deem it unsafe.
+Instead the micro-policy enforces that memory be read by the same function activation that wrote it.
+The owner of the data will never see the changes,
+so it is secure in the sense that the attacker is unsuccessful at changing program behavior
+(except, perhaps, by causing a fault). We elaborate this notion of observational safety, and test whether the
+micro-policy fulfills it.
+
+\paragraph*{Randomized Property-based Testing}
+
+[TODO: Brief discussion of PBT and why we use it, explain the lack of proofs.]

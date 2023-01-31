@@ -1,49 +1,15 @@
 \subsection{The Call Stack and Its Security}
 
-\rb{A.K.A. motivation}
-
-Computer programming % at any scale
-relies on \emph{functions} (variously known as
-subroutines, procedures, methods, etc.) as a foundational abstraction.
-\apt{General comment: I think it's better to reserve italics for terms being defined, and avoid using them just for rhetorical emphasis.}
-Functions are units of computation that
-can \emph{call} one another to realize larger computations.
+Computer programming relies on functions (subroutines, procedures, methods, etc.)
+as a foundational abstraction. Functions are units of computation that
+can call one another to realize larger computations.
 %
-At a low level, a function call \apt{``activation''?} comprises its own data (private or shared), as
-well as information about its \emph{caller} and \emph{callee} functions. The
-runtime must keep track of the local contexts \apt{not defined} of all function activations
-at any given time; the fundamental data structure charged with realizing
-this abstraction is the \emph{(call) stack}. But at the level of the ABI
-\sna{Do we need to unpack the acronym ABI?}, the specification of a well-behaved
-stack is minimal. It is not concerned with such questions as whether a caller's
-frame should be readable or writable to its callee, leaving those concerns
-to be determined by a high-level language built atop the stack.
-
-The correct execution---and the security!---of a program is contingent on all of
-its functions properly implementing the intended abstraction by means of a careful use
-of the call stack. Be it accidental or intentional, incorrect management of the
-stack is at the root of many faults whose effects range from (rarely)
-innocuous to (usually) catastrophic.\apt{Long-winded.}
-%
-From a security perspective, attacks on the stack (say, from a malicious
-function that chooses to abuse its access to the contents of this data
-structure) are as fundamental, varied and pervasive as the functional
-abstraction itself
-%
-
-\apt{I think this is all well-known.}
-
-%% \rb{\textbf{The call stack and its security.} Maybe a few opening words to set
-%%   the stage and bring two things to the front: (1) functions and subroutines as
-%%   fundamental building blocks of any kind of structured programming; and (2) the
-%%   stack as the natural abstraction to manage these in a computer. And also maybe
-%%   a little bit more about the width, the gravity and the \emph{foundational
-%%   nature} of attacks on the stack, which the sentence below touches on
-%%   summarily.
-%% \rb{(+SNA) Connection to functions (and adversarial code?). Attacks on the stack
-%%   are also attacks on this fundamental abstraction (functions, subroutines,
-%%   procedures, methods, however you call them)}
-%% }
+At a low level, a function activation comprises its own data, as
+well as information about its \emph{caller} function, to which it must return.
+The \emph{(call) stack} is the fundamental data structure charged with realizing
+this abstraction. From a security perspective, attacks on the stack are attacks
+on the fundamental functional abstraction itself, and are therefore every bit as
+pervasive.
 
 Indeed, the call stack is a perennial target for low-level attacks, leading to
 dire consequences, from leakage and corruption of private stack data
@@ -82,38 +48,151 @@ useful).}
 \rb{Broad enough? Do we want to add more techniques?}
 \sna{I think this is plenty unless there's a really major thing we're forgetting.}
 %
-Yet despite this wealth of potential solutions, the stack remains a central
-security concern---why?
-\apt{Mainly because preventing common stack problems generally causes a performance hit.
-  And, to a (much) lesser extent, because C/C++ don't carry length information with
-  arrays.  The sequencing here seems to suggest that we are going to \emph{solve} the
-  problem of enforcing stack safety by defining it better---which I don't buy at all!}
 
-\paragraph{Formal Properties}
+\paragraph{Towards a Formal Property for Stack Safety}
 
 Security mechanisms designed to prevent a certain attack can be brittle---successfully
 eliminating the attack as it exists at the time of publication, but leaving room for attackers
 to find new, similar attacks.
-%
-%% \rb{And so the cat-and-mouse game continues.}
-%
-To mitigate this risk, we claim that mechanisms should aim to enforce \emph{formal
-properties} of safe behavior that can be proven or tested. Such properties become the
+
+To mitigate this risk, mechanisms should aim to enforce \emph{formal properties}
+of safe behavior that can be proven or tested. Such properties become the
 \emph{specification} against which enforcement can be validated; even enforcement mechanisms that do
 not fulfill a property benefit from the ability to articulate \emph{why} they fail.
 
-%
-%% \rb{Good stuff! There is some overlap between this discussion and the opening
-%%   motivation, maybe we could restructure things a bit so that those threads are
-%%   unified?}
-%
+But most such properties are described at the level of a high-level programming language.
+The stack as an abstraction exists below the level of
+any language that uses it, and at the level of the ABI
+\sna{Do we need to unpack the acronym ABI?}, the specification of a well-behaved
+stack is minimal. It is not concerned with such questions as whether a caller's
+frame should be readable or writable to its callee, leaving those concerns
+to be determined by a high-level language built atop the stack.
 
-\subsection{Related Work}
+Specifying stack safety in full generality would not merely be a matter of handling
+a wide range of architectural variations. The basic security behavior that we expect
+of the stack varies based on calling convention, compiler behavior, and the features of
+whichever programming language originated the code.
+(Contrast Azevedo de Amorim et al.'s \cite{DBLP:conf/post/AmorimHP18} work on heap safety,
+which is broadly consistent across language semantics, and therefore
+amenable to a very general approach.)
+
+For instance, the current state-of-the-art stack-safety specification from Georges et al.
+\cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
+control flow, and therefore defines {\it Well-bracketed Control Flow} (WBCF) under the assumption that
+a callee should always return to its caller. But, in the presence of tail-call elimination, a
+return from a callee to a distant ancestor is perfectly reasonable.
+
+In this work, we propose an explicit specification, built from first principles
+in the hopes that it will be widely applicable, and demonstrate that it supports
+an enforcement mechanism that does not yet have one.
+We use the formal tools of language-based
+security~\cite{sabelfeld2003language}, decomposing stack safety into
+the {\em integrity} and {\em confidentiality} of the caller’s local state
+and the callee's behavior during the callee's execution, plus the control-flow protection
+of {\em well-bracketed control flow}~\cite{SkorstengaardSTKJFP} (\(\wbcf\)).
+\ifexceptions
+We also extend WBCF to a setting with exceptions,
+in which there may be multiple points at which a callee can ``return.''
+\fi
+%
+We treat stack safety as multiple properties, rather than one multi-faceted property, because
+not all enforcement mechanisms attempt to implement all aspects of stack safety (see \cref{???}.)
+%
+This gives us a total of five core properties: \(\wbcf\),
+caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
+callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)), defined formally
+in \cref{sec:props}.
+
+We are not attempting to create a universal definition of stack safety for all systems.
+Rather, we define the stack safety of a single, fairly realistic system, decomposed into
+(1) a lightweight model of the system and its security-relevant features, from which we
+derive the integrity, confidentiality, and control-flow requirements of each call and
+return, (2) the application of that model to a particular target system, and (3)
+the formal criteria for integrity, confidentiality, and control flow
+to obey the requirements. This decomposition can be thought of as a step toward
+a universal definition, in that the definitions in (3) capture fundamental
+notions of security that can then be applied flexibly to other systems by varying
+the model in (1) and (2).
+%
+\rb{FIXME: Contrast some universal definitions (or a parametric framework) with
+  the concrete instance we study, again with its interest properly motivated.
+  (Coming in key ideas?) No ``gold standard''?}
+\apt{Yes, there are at least two different kinds of parameterization going on.
+  One has to do with which properties we want to, or are able to, enforce; e.g.,
+  for a language with tail calls or exceptions, we need a more complex definition of the WBCF property itself.
+  Another has to do with how standard features, like argument passing, are implemented
+  by particular hardware/ABIs -- which shouldn't show up in the property definition.
+  We need to be clearer about this.}
+\sna{In discussion above, I tried to carve out some separation there, but more may be needed.}
+
+To demonstrate the utility of our formal characterization, we use these
+properties to validate and improve an existing enforcement mechanism, the
+{\em stack safety micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, re-implemented
+in the Coq proof assistant on top of a \rb{formal} RISC-V specification.  We
+use QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
+tool for Coq, to generate random programs and check
+that Roessler and DeHon's micro-policies correctly detect the ones that
+attempt to violate one of our properties. Furthermore, we
+check that the testing framework is able to generate counterexamples
+that violate our properties but are \emph{not} halted by incorrect
+variants of the enforcement mechanisms, including ones that we accidentally created
+while implementating the micro-policy and ones that we
+intentionally crafted to increase our confidence in the effectiveness
+of our testing.
+%
+\rb{This and the following paragraph could start more generally (we need to
+  answer the question of why these experiments, what is their interest), and
+  probably motivate the use of PBT (experiment results below show there's
+  benefit in them!) and, somewhere at least, talk about other points in the
+  spectrum.}
+
+We find that Roessler and DeHon's \emph{Lazy Tagging and Clearing}
+violates the temporal aspect of confidentiality in
+cases where data can leak across repeated calls to the same callee,
+and also violates integrity if the leak uses the caller's frame. We
+propose a variant of {\em Lazy Tagging and Clearing} that testably enforces
+confidentiality, albeit at some performance cost.
+%
+\rb{Anything to add from personal communications? More details later? Shows
+  these things are very hard to get right -- like the latest work on Cerise,
+  also motivated by this very work.
+\rb{(+SNA) At the very least, these models are subtle and getting them right,
+  and describing them unambiguously, is hard without a framework like this.}
+}
+
+\subsection{Contributions}
+
+In sum, we offer the following contributions:
+
+\begin{itemize}
+\item We formalize permissive stack confidentiality and integrity properties,
+  which are parameterized over a notion of external
+  observation, and are violated only if accessing secrets or overwriting
+  data causes a visible change in system behavior.
+\item We instantiate these definitions with a realistic
+  system with features such as argument passing
+  on the stack, callee-saves registers, and tail-call elimination.
+  Our model is modular enough that adding these features is straightforward.
+\item Our formalization of well-bracketed control flow in the presence of tail-call
+  elimination \ifexceptions and exceptions \fi is a novelty over existing models.
+\item We use property-based random testing to validate the relationship between
+  our properties and micro-policies.
+\end{itemize}
+
+Our artifact contains Coq formalizations of our properties for illustrative purposes
+as well as their testing implementation. There are no proofs---we use primarily Coq for the
+QuickChick library and to ensure that the formalizations are unambiguous.
+
+\subsection{Related Work: The Stack Safety Menagerie}
 
 \apt{This section was a nice summary of enforcement approaches, but I am not
   yet seeing why it justifies so much paper real estate, especially if we only 
   actually apply our property definitions to (lazy) micropolicies. And in any case,
   it makes for a huge delay before getting to our work and contributions.}
+\sna{I've tried out moving it here. To my mind, its main purpose is to justify
+  our claims about the wide variation in stack-safety enforcement, and therefore
+  to help argue that our properties not necessarily being universal is
+  not a flaw.}
 
 The protections offered by stack protection mechanisms are commonly described by giving
 concrete examples of attacks that they can prevent---corruption of return
@@ -263,8 +342,7 @@ become observable.
 Micro-policies are one of the centerpieces of our technical development; we
 present them in more detail in \cref{XXX}.
 
-
-\subsection{A Language-Based View of Stack Safety}
+\paragraph{Summary}
 
 We begin to see that the security of the call stack and its contents is not
 clearly defined. Different protection mechanisms aim to protect the stack
@@ -276,126 +354,3 @@ complicating their comparison and the assessment of the safeguards they
 effectively offer their clients---the programs themselves.
 It would be far preferable to have a \emph{standard}, \emph{explicit} specification.
 Only a handful of works have offered any explicit specification.
-
-Stack safety is challenging to specify in full generality, because the stack is
-fundamentally an architecture-specific construct.
-(Contrast Azevedo de Amorim et al.'s \cite{DBLP:conf/post/AmorimHP18} work on heap safety,
-which is broadly consistent across architectures and language semantics, and therefore
-amenable to a very general approach.)
-The desired behavior of the stack varies based on ISA, calling convention,
-and the features of whichever programming language originated the code.
-%
-For instance, the current state-of-the-art stack-safety specification from Georges et al.
-\cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
-control flow, and therefore defines {\it Well-bracketed Control Flow} (WBCF) under the assumption that
-a callee should always return to its caller. But, in the presence of tail-call elimination, a
-return from a callee to a distant ancestor is perfectly reasonable.
-
-In this work, we propose an explicit specification, built from first principles
-in the hopes that it will be widely applicable, and demonstrate that it supports
-an enforcement mechanism that does not yet have one.
-We use the formal tools of language-based
-security~\cite{sabelfeld2003language}, decomposing stack safety into
-the {\em integrity} and {\em confidentiality} of the caller’s local state
-and the callee's behavior during the callee's execution, plus the control-flow protection
-of {\em well-bracketed control flow}~\cite{SkorstengaardSTKJFP} (\(\wbcf\)).
-\ifexceptions
-We also extend WBCF to a setting with exceptions,
-in which there may be multiple points at which a callee can ``return.''
-\fi
-%
-We treat stack safety as multiple properties, rather than one multi-faceted property, because
-not all enforcement mechanisms attempt to implement all aspects of stack safety. Some focus
-exclusively on control flow, some enforce integrity but not confidentiality, and many
-focus on the caller over the callee.
-%
-\rb{Return to this after extended discussion? Forward ref?}
-%
-This gives us a total of five core properties: \(\wbcf\),
-caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
-callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)), defined formally
-in \cref{sec:props}.
-%
-
-We are not attempting to create a universal definition of stack safety for all systems.
-Rather, we define the stack safety of a single, fairly realistic system, decomposed into
-(1) a lightweight model of the system and its security-relevant features, from which we
-derive the integrity, confidentiality, and control-flow requirements of each call and
-return, (2) the application of that model to a particular target system, and (3)
-the formal criteria for integrity, confidentiality, and control flow
-to obey the requirements. This decomposition can be thought of as a step toward
-a universal definition, in that the definitions in (3) capture fundamental
-notions of security that can then be applied flexibly to other systems by varying
-the model in (1) and (2).
-%
-\rb{FIXME: Contrast some universal definitions (or a parametric framework) with
-  the concrete instance we study, again with its interest properly motivated.
-  (Coming in key ideas?) No ``gold standard''?}
-\apt{Yes, there are at least two different kinds of parameterization going on.
-  One has to do with which properties we want to, or are able to, enforce; e.g.,
-  for a language with tail calls or exceptions, we need a more complex definition of the WBCF property itself.
-  Another has to do with how standard features, like argument passing, are implemented
-  by particular hardware/ABIs -- which shouldn't show up in the property definition.
-  We need to be clearer about this.}
-
-\sna{Not sure what your FIXME means exactly. Can you elaborate?}
-
-To demonstrate the utility of our formal characterization, we use these
-properties to validate and improve an existing enforcement mechanism, the
-{\em stack safety micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, re-implemented
-in the Coq proof assistant on top of a \rb{formal} RISC-V specification.  We
-use QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
-tool for Coq, to generate random programs and check
-that Roessler and DeHon's micro-policies correctly detect the ones that
-attempt to violate one of our properties. Furthermore, we
-check that the testing framework is able to generate counterexamples
-that violate our properties but are \emph{not} halted by incorrect
-variants of the enforcement mechanisms, including ones that we accidentally created
-while implementating the micro-policy and ones that we
-intentionally crafted to increase our confidence in the effectiveness
-of our testing.
-%
-\rb{This and the following paragraph could start more generally (we need to
-  answer the question of why these experiments, what is their interest), and
-  probably motivate the use of PBT (experiment results below show there's
-  benefit in them!) and, somewhere at least, talk about other points in the
-  spectrum.}
-
-We find that Roessler and DeHon's \emph{Lazy Tagging and Clearing}
-violates the temporal aspect of confidentiality in
-cases where data can leak across repeated calls to the same callee,
-and also violates integrity if the leak uses the caller's frame. We
-propose a variant of {\em Lazy Tagging and Clearing} that testably enforces
-confidentiality, albeit at some performance cost.
-%
-\rb{Anything to add from personal communications? More details later? Shows
-  these things are very hard to get right -- like the latest work on Cerise,
-  also motivated by this very work.
-\rb{(+SNA) At the very least, these models are subtle and getting them right,
-  and describing them unambiguously, is hard without a framework like this.}
-}
-
-\subsection{Contributions}
-
-In sum, we offer the following contributions:
-
-\begin{itemize}
-\item We formalize permissive stack confidentiality and integrity properties,
-  which are parameterized over a notion of external
-  observation, and are violated only if accessing secrets or overwriting
-  data causes a visible change in system behavior.
-\item We instantiate these definitions with a realistic
-  system with features such as argument passing
-  on the stack, callee-saves registers, and tail-call elimination.
-  Our model is modular enough that adding these features is straightforward.
-\item Our formalization of well-bracketed control flow in the presence of tail-call
-  elimination \ifexceptions and exceptions \fi is a novelty over existing models.
-\item We use property-based random testing to validate the relationship between
-  our properties and micro-policies.
-\end{itemize}
-
-Our artifact contains Coq formalizations of our properties for illustrative purposes
-as well as their testing implementation. There are no proofs---we use primarily Coq for the
-QuickChick library and to ensure that the formalizations are unambiguous.
-%
-\rb{Will have another look after the full pass.}
