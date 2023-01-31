@@ -3,6 +3,8 @@ From StackSafety Require Import RISCVMachine PolicyModule.
 Require Coq.Strings.String. Open Scope string_scope.
 Require Import Coq.Lists.List.
 Import List.ListNotations.
+(* FIXME? BoolNotations only from Coq 8.12 on
+   Could break direct compatibility with Cerise (8.11) *)
 Require Import Bool. Import BoolNotations.
 
 Require Import coqutil.Word.Naive.
