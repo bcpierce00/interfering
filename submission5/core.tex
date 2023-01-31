@@ -72,7 +72,7 @@
   \IEEEauthorblockA{
     University of Pennsylvania\\
     bcpierce@cis.upenn.edu\\
-  }
+   }
   \and
   \IEEEauthorblockN{
     Andrew Tolmach
@@ -99,17 +99,20 @@ memory. But, unlike ``the heap,'' the stack does not correspond to a single
 high-level language concept, making a formal specification elusive.
 Protection mechanisms typically lack precise specifications, relying instead
 on informal descriptions and examples of bad behaviors that they prevent.
+\apt{Can we connect stack safety more explicitly to a broader idea of ``subroutine safety''
+  as discussed in the intro? Note that this also includes registers.}
 
 When the prevented behaviors are straightforward, describing them may be sufficient
 to justify an enforcement mechanism's effectiveness. Less intuitive enforcement
 mechanisms instead leave us to ask: what security do we actually hope to gain,
-and are we successful?
+and are we successful?\apt{For this audience, the need for a \emph{formal}
+  characterization doesn't need to be belabored.}
 
-In this paper we focus on one such non-intuitive enforcement mechanism,
+In this paper we focus \apt{Is this still accurate?} on one such non-intuitive enforcement mechanism,
 the ``lazy'' stack safety micro-policies proposed by
 Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}. These permit functions
 to write into one another's frames, but taint the result so that the frame's
-owner cannot access it. No existent characterization of stack safety
+owner cannot access it. No existing characterization of stack safety
 captures this style of safety.
 
 We propose a formal characterization of ``observable'' stack safety based on
@@ -124,7 +127,7 @@ space of supported enforcement mechanisms to include those that
 allow certain (intuitively incorrect) behaviors but prevent them
 from causing harm.
 
-The stack governs a large number of language features that are often excluded
+The stack interacts with a large number of language features that are often excluded
 from discussion of stack safety. Our properties support a system with
 both caller- and callee-saved registers, arguments passed on the stack,
 tail-call elimination, [exceptions, and concurrency.] They are modular by
@@ -222,8 +225,7 @@ it should not---instead it will output the results of {\tt f}.
 
 Suppose that {\tt f} is actually an attacker seeking
 to leak {\tt secret}. It might do so in a number of ways, shown as snippets of
-assembly code in Figure \ref{fig:f}.\footnote{We arrange that all the snippets
-have the same length just to simplify some later explanations.}
+assembly code in Figure \ref{fig:f}.
 %
 In Figure \ref{subfig:direct}, {\tt f} takes an offset from the stack
 pointer, accesses {\tt secret}, and directly outputs it. But more
@@ -238,9 +240,12 @@ Attacks of this kind do not violate {\tt main}'s confidentiality, but
 rather its {\it integrity}.
 In Figure \ref{subfig:WBCF}, the attacker arranges to return to the
 wrong instruction, thereby bypassing the check and publishing {\tt secret} regardless,
-violating the program's {\it well-bracketed control flow} (WBCF.) In
-Figure \ref{subfig:WBCF2}, a different attack violates WBCF, this time
+violating the program's {\it well-bracketed control flow} (WBCF.)
+%
+In Figure \ref{subfig:WBCF2}, a different attack violates WBCF, this time
 by returning to the correct program counter but with the wrong stack pointer.
+\footnote{We pad the last two variants with {\tt nop}s just so that all the
+snippets have the same length, which simplifies some later explanations.}
 
 \begin{figure}
   \begin{subfigure}[b]{\columnwidth}
@@ -299,7 +304,8 @@ by returning to the correct program counter but with the wrong stack pointer.
     \label{subfig:WBCF2}
   \end{subfigure}
 
-  \caption{Assembly code for {\tt f} as an attacker}
+  \caption{Assembly code alternatives for {\tt f} as an attacker.
+  }
   \label{fig:f}
 \end{figure}
 
@@ -308,11 +314,11 @@ on the security-relevant events noted in the right columns of Figures~\ref{fig:m
 and~\ref{fig:f}, namely execution of instructions that allocate or deallocate space,
 make a call, or make a return.
 
-Recall that our security semantics attach a security context to the machine state,
+Recall\apt{can't; we've lost these} that our security semantics attach a security context to the machine state,
 which consists of a view \(V\) and a stack \(\sigma\) of pending activations' views.
 (See \cref{sec:machine} for details.)
-Figure \ref{fig:exec1} shows how the security context develops over the first few
-steps of the program, according to the rules in \cref{fig:advops}, slightly simplified.
+Figure \ref{fig:exec1} shows how the security context evolves over the first few
+steps of the program.  (The rules governing this evolution are formalized in \cref{fig:advops}.)
 It begins at the start of {\tt main}, where the program counter (\(\PCname\)) is zero,
 and with the stack pointer (\(\SP\)) at address 1000.
 State transitions are numbered and labeled with a list of security operations, written
@@ -394,14 +400,15 @@ effect of marking those bytes \(\object\), assuming they were previously
 \label{fig:exec1}
 \end{figure*}
 %
-At step 5, the formerly active principal's record is pushed onto the inactive list.
+At step 5, the current principal's record is pushed onto the inactive list.
 Its return target is the return address of the call,
 and the stack pointer target is the stack pointer at the moment of call.
 The callee's view is updated from the caller's such that all \(\object\) locations
 become \(\sealed\). (In more complex settings, objects that are intentionally passed
 to the callee will not get sealed, but for now we assume no sharing of memory between activations.)
-For registers, \(\overline{\reg_{args}}\) tells us which registers are used as arguments,
-in this case just {\tt a0}. These are mapped to \(\public\), while any non-argument, caller-saved
+For registers, \(\overline{\reg_{args}}\) tells us which registers are used as arguments, 
+in this case just {\tt a0}. \apt{We've lost the explanation of the arguments to call, and they are used inconsistent now too, so this is utterly mysterious.}
+These are mapped to \(\public\), while any non-argument, caller-saved
 registers remain mapped to \(\unsealed\). All callee-save registers remain \(\sealed\) for all calls.
 At step 9, {\tt f} returns, and the topmost inactive view, that of {\tt main}, is restored.
 
@@ -489,15 +496,15 @@ the machine's security enforcement mechanism) must be identical.
 We say that the elements of \(\components\) are \emph{irrelevant}
 in \(\mach\) if they can be replaced by compatible values without changing the
 observable behavior of the machine. All other elements are \emph{relevant}.
-Variants and relevance are defined in \cref{sec:props}.
+Variants and relevance are defined formally in \cref{sec:props}.
 
-We characterize \(\clri\) as the property that
+We define \emph{caller integrity} (\(\clri\))  as the property that
 every relevant element that is \(\sealed\) under the callee's view is restored
 to its original value at the return point.
 
 \begin{figure}
   \includegraphics[width=\columnwidth]{variants.png}
-  \caption{Integrity Violation}
+  \caption{Integrity Violation\apt{Needs a machine-drawn version, as do the rest.}}
   \label{fig:variant}
 \end{figure}
 
@@ -533,7 +540,7 @@ Figure \ref{subfig:direct}. We take a variant state over the set of element(s) t
 If we take a trace of execution from each state until it returns,
 the traces may differ, in this case outputting 5 (the original value of {\tt secret}) and
 4 (its value in the variant) respectively. This is a violation of
-{\it internal confidentiality} (\cref{tab:props}, line 3a.)
+{\it internal confidentiality} (formalized in \cref{tab:props}, line 3a).
 
 \begin{figure}
   \includegraphics[width=\columnwidth]{variants2.png}
@@ -572,7 +579,7 @@ and the variant, although only one of these would be necessary), and its final v
 differs between the variants.
 Therefore, it must depend on a secret (in fact, the variable {\tt secret}).
 Unless {\tt a0} happens to be irrelevant, this is a violation of what
-we term {\it return-time confidentiality} (\cref{tab:props}, line 3b.)
+we term {\it return-time confidentiality} (formalized in \cref{tab:props}, line 3b).
 
 Structurally, return-time confidentiality resembles integrity, but now dealing with
 variants. We begin with a state immediately following
@@ -582,24 +589,27 @@ i.e., any element that is not used legitimately to pass arguments. Caller confid
 therefore can be thought of as the callee's insensitivity to elements in its initial state
 that are not part of the caller-callee interface.
 
-In place of a predicate we define \(\confProp\) as a binary relation on states,
+In place of a predicate, we define \(\confProp\) as a binary relation on states,
 which holds on eventual return states \(\mach'\) and \(\nach'\)
 iff all relevant elements that changed between \(\mach\) and \(\mach'\) or \(\nach\) and \(\nach'\)
 are the same in \(\mach\) and \(\nach\). We then define
 return-time confidentiality as holding if \(\confProp\) holds on the matching return states
 from \(\mach\) and \(\nach\), respectively.
 
-Finally, we define \(\clrc\) as the
-combination of internal and return-time confidentiality.
+Finally, we define \emph{caller confidentiality} (\(\clrc\)) as the
+combination of internal and return-time confidentiality (\cref{tab:props}, line 3).
 
 \paragraph*{The Callee's Perspective}
 
-We presented our initial example from the perspective of the caller, a callee
+We presented our initial example from the perspective of the caller, but a callee
 may also have privilege that its caller lacks, and which must be protected from the
 caller. Consider a function that makes a privileged system call to obtain a secret key,
 and uses that key to perform a specific task. An untrustworthy or erroneous caller might
 attempt to read the key out of the callee's memory after return, or to influence the callee
 to cause it to misuse the key itself!
+\apt{I believe this is the first point at which we suggest that our properties might be
+  useful for enforcing (conventional) security goals --- which are definitely \emph{not}
+  part of the usual targets for ``stack safety'' mechanisms. This needs a lot more foreshadowing!}
 
 Where the caller's confidentiality and integrity are concerned with protecting specific,
 identifiable state---the caller's stack frame---their callee equivalents are concerned
@@ -607,10 +617,14 @@ with enforcing the expected interface between caller and callee. Communication b
 the principals should occur only through the state elements that are designated for the
 purpose: those which we label \(\public\) and (in the presence of memory sharing) \(\object\).
 
-The properties themselves correspond to their caller equivalents, inverted.
+The properties themselves correspond to their caller equivalents, inverted. \apt{Need at least their
+  names, with references to formalizations in the table. And for the discussion in the next paragraph
+  to make sense, we will need more than that. Especially because the formalization section now has
+nothing to say!}
 
 \paragraph*{The Hierarchy of Stack Safety}
 
+\apt{This discussion should be merged with others on same topic, and maybe moved.}
 The forms of stack safety described above can potentially be enforced separately
 in various combinations. This is important, because
 many existing enforcement mechanisms enforce only some of the stack safety
@@ -705,8 +719,8 @@ rules for each operation. We have already seen the intuition behind the rules fo
 \(\mathbf{alloc}\), \(\mathbf{call}\), and \(\mathbf{ret}\).
 The full machine defines additional operations, and extends some of the old ones.
 We add a field \(\overline{sa}\) to the \(\mathbf{call}\) operation: a set of
-triples of a register \(\reg\), a base offset \(off\), and a size \(sz\), denoting
-that the object at the offset \(off\) from \(\reg\) is to be passed as an argument.
+triples of a register \(\reg\), a base offset \(\mathit{off}\), and a size \(sz\), denoting
+that the object at the offset \(\mathit{off}\) from \(\reg\) is to be passed as an argument.
 The new \(\mathbf{tailcall}\) operation has the same fields, but deals with tail-call
 optimizations in which the callee will reuse the caller's stack. The \(\mathbf{alloc}\) operation
 gains a boolen flag indicating whether the allocation is to be public, accessible to
@@ -760,6 +774,8 @@ is the same. That is, we compare up to deletion of \(\tau\) events.
   \judgment{\(\obsT_1 \eqsim \obsT_2\)}
            {\(\obsT_1 \eqsim \notfinished{\tau}{\obsT_2}\)}
 \end{minipage}
+
+\apt{Remainder of this section should be moved to AFTER the rest of the formalization.}
 
 \subsection{Memory Sharing}
 
@@ -947,6 +963,8 @@ behaviors may require sequences of {\bf dealloc}, {\bf tailcall}, then {\bf allo
 \section{Formal properties}
 \label{sec:props}
 
+\apt{Duplicates title of last section.}
+
 Now we are ready to introduce the formal properties that define correctly enforced
 security semantics. First, we must give a few prelimaries: the generation and comparison
 of traces, variant states, and ``on-return'' assertions.
@@ -1023,11 +1041,11 @@ respectively. Once again, \(\Uparrow\) is coinductive.
 Finally, we can define our core properties. They can be found in \cref{tab:props},
 arranged to show their commonalities and distinctions. Each definition gives a criterion
 quantified over states \(s\) that immediately follow call (or tail-call) steps.
-If an execution can reach a state \(s\) such that \(s \stepstounder{\overline{\psi}} s'\)
-where \(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then \(s'\) is the target
+If an execution can reach a state \(s'\) such that \(s' \stepstounder{\overline{\psi}} s\)
+where \(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then \(s\) is the target
 of a call. Likewise, if \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then
-\(s'\) is the target of a tailcall. As a shorthand, we write that each property is defined
-by a criterion that must hold ``when \(s'\) is called,'' i.e., for every such \(s'\).
+\(s\) is the target of a tailcall. As a shorthand, we write that each property is defined
+by a criterion that must hold ``for all (tail)call targets \(s\).'
 
 \(\wbcf\), \(\clri\), and \(\clec\) are each straightforward: they define predicates that must
 hold on return from the call. \(\clrc\) and \(\clei\) both compare the execution of the
@@ -1046,20 +1064,23 @@ is irrelevant.
     & \(\wbcf \triangleq\) & \(|\sigma| \uparrow \ret\)
     & \(\textnormal{ where } \ret ~ \mach' \textnormal{ iff }\)
     \(\mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]+4\)
-    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called}\) \\
+%    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called}\) \\
+    & \(\textnormal{ for all call targets } (\mach,(V,\sigma))\) \\
     %
     \rowcolor{black!10}
     2
     & \(\clri \triangleq\) & \((|\sigma| \uparrow \intProp) ~ (\mach,(V,\sigma))\)
     & \(\textnormal{ where } \intProp ~ \mach' \textnormal{ iff }
     \mach' \parallel \sealed(V) \cap \Delta(\mach,\mach')\)
-    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called}\) \\
+%    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called}\) \\
+    & \(\textnormal{ for all call targets } (\mach,(V,\sigma))\) \\
     %
     \rowcolor{black!20}
     3
     & \(\clrc \triangleq\) & \(\forall \nach \textnormal{ s.t. } \mach \approx_{\components} \nach,\)
     & \(\textnormal{ where } \components = \sealed(V)\)
-    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
+%    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
+    & \(\textnormal{ for all (tail)call targets } (\mach,(V,\sigma))\) \\
     \rowcolor{black!20}
     3a & & \(|\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma))\) & & \\
     \rowcolor{black!20}
@@ -1072,7 +1093,8 @@ is irrelevant.
     & \(\clec \triangleq\) & \((|\sigma| \uparrow \cconfProp) ~ (\mach,(V,\sigma))\)
     & \(\textnormal{ where } \cconfProp ~ \mach' \textnormal{ iff }
     \mach' \parallel \Delta(\mach,\mach') - \components\)
-    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
+%    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
+    & \(\textnormal{ for all (tail)call targets } (\mach,(V,\sigma))\) \\
     \rowcolor{black!10}
     & & & \(\textnormal{ where } \components = \public(V) \cup \object(V)\) & \\
     %
@@ -1080,8 +1102,9 @@ is irrelevant.
     5
     & \(\clei \triangleq\) & \(\forall \nach \textnormal{ s.t. } \mach \approx_{\components} \nach,\)
     & \(\textnormal{ where } \components = \public(V) \cup \object(V)\)
-    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
-    \rowcolor{black!20}
+%    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
+    & \(\textnormal{ for all (tail)call targets } (\mach,(V,\sigma))\) \\
+   \rowcolor{black!20}
     5a & & \(|\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma))\) & & \\
     \rowcolor{black!20}
     5b & & \(\textnormal{ and } (\mach,(V,\sigma)) ~ (|\sigma| \Uparrow \confProp) ~ (\nach,(V,\sigma))\)

@@ -2,15 +2,17 @@
 
 \rb{A.K.A. motivation}
 
-Computer programming at any scale relies on \emph{functions} (variously known as
-subroutines, procedures, methods, etc.) as a \emph{foundational abstraction} to
-structure programs into building blocks representing units of computation that
-can \emph{call} one another to create larger computations.
+Computer programming % at any scale
+relies on \emph{functions} (variously known as
+subroutines, procedures, methods, etc.) as a foundational abstraction.
+\apt{General comment: I think it's better to reserve italics for terms being defined, and avoid using them just for rhetorical emphasis.}
+Functions are units of computation that
+can \emph{call} one another to realize larger computations.
 %
-At a low level, a function call comprises its own data (private or shared), as
+At a low level, a function call \apt{``activation''?} comprises its own data (private or shared), as
 well as information about its \emph{caller} and \emph{callee} functions. The
-runtime must keep track of the local contexts of all function activations
-at any given time; the \emph{fundamental data structure} charged with realizing
+runtime must keep track of the local contexts \apt{not defined} of all function activations
+at any given time. The fundamental data structure charged with realizing
 this abstraction is the \emph{(call) stack}.
 %
 \rb{This should be well known, so no need for illustration?}
@@ -19,18 +21,20 @@ this abstraction is the \emph{(call) stack}.
   the ABI and the fact that things like private vs. shared data are fundamentally
   not specified.}
 
-The correct execution on a program---and its security!---is contingent on all of
+The correct execution of a program---and its security!---is contingent on all of
 its functions properly implementing this abstraction by means of a careful use
 of the call stack. Be it accidental or intentional, incorrect management of the
-stack is at the root of a myriad of faults whose effects range from (rarely)
-innocuous to (usually) catastrophic.
+stack is at the root of a myriad of faults whose effects range from % (rarely)
+innocuous to % (usually)
+catastrophic.
 %
 From a security perspective, attacks on the stack (say, from a malicious
 function that chooses to abuse its access to the contents of this data
 structure) are as fundamental, varied and pervasive as the functional
-abstraction itself.
+abstraction itself
 %
 \rb{Begins to prefigure the idea of multiple stack implementations.}
+\apt{I think this is all well-known.}
 
 %% \rb{\textbf{The call stack and its security.} Maybe a few opening words to set
 %%   the stage and bring two things to the front: (1) functions and subroutines as
@@ -53,11 +57,12 @@ Most Dangerous Software Weaknesses
 list\footnote{\url{https://cwe.mitre.org/top25/archive/2022/2022_cwe_top25.html}}
 shows general classes of vulnerabilities closely related to the stack \rb{(though not exclusively)}
 consistently at and near the top, e.g., \#1 (CWE-787, Out-of-bounds Write), \#5 (CWE-125, Out-of-bounds Read), \#7 (CWE-416, Use
-After Free) or \#11 (CWE-476, NULL Pointer Dereference).
+After Free) or \#11 (CWE-476, NULL Pointer Dereference).\apt{That last one is not usually a stack issue.}
 %
 Moreover, many other types of faults involve some kind of control or data flow
 using data stored in the stack \rb{cf. Eternal war in memory, Google/Microsoft
 memory safety statistics, etc.}.
+\apt{OK to say, but this is well-known.}
 %
 To foil such attacks, a menagerie of
 software and hardware protections have been proposed,
@@ -80,6 +85,10 @@ useful).}
 %
 Yet despite this wealth of potential solutions, the stack remains a central
 security concern---why?
+\apt{Mainly because preventing common stack problems generally causes a performance hit.
+  And, to a (much) lesser extent, because C/C++ don't carry length information with
+  arrays.  The sequencing here seems to suggest that we are going to \emph{solve} the
+  problem of enforcing stack safety by defining it better---which I don't buy at all!}
 
 Security mechanisms designed to prevent a certain attack can be brittle---successfully
 eliminating the attack as it exists at the time of publication, but leaving room for attackers
@@ -91,18 +100,22 @@ To mitigate this risk, \rb{we claim that} mechanisms should aim to enforce \emph
 properties} of safe behavior that can be proven or tested. Such properties become the
 \emph{specification} against which enforcement can be validated; even enforcement mechanisms that do
 not fulfill a property benefit from the ability to articulate \emph{why} they fail.
+
 %
 %% \rb{Good stuff! There is some overlap between this discussion and the opening
 %%   motivation, maybe we could restructure things a bit so that those threads are
 %%   unified?}
 %
-This is the problem we begin to address in this paper \rb{or a few more such
-  connecting words}.
 
 \subsection{A Menagerie of Stack Protection Mechanisms}
 
 \rb{A.K.A. related work (part 1?). I wonder if this goes before or after a first
   look at the idea of the properties.}
+
+\apt{This section was a nice summary of enforcement approaches, but I am not
+  yet seeing why it justifies so much paper real estate, especially if we only 
+  actually apply our property definitions to (lazy) micropolicies. And in any case,
+  it makes for a huge delay before getting to our work and contributions.}
 
 The protections offered by stack protection mechanisms are commonly described by giving
 concrete examples of attacks that they can prevent---corruption of return
@@ -242,10 +255,11 @@ This flexibility can be harnessed to implement a wide array of stack protection 
 These policies comprise very general forms of \emph{lazy enforcement}, which can tolerate
 potential but harmless violations \rb{the system programmer's motto: ``trust me,
   I know what I'm doing''} while still detecting them if and when their effects
-become tangible.
+become observable. 
 %
 Micro-policies are one of the centerpieces of our technical development; we
 present them in more detail in \cref{XXX}.
+
 
 \subsection{A Language-Based View of Stack Safety}
 
@@ -313,6 +327,12 @@ that are parameterized by (1).
 \rb{FIXME: Contrast some universal definitions (or a parametric framework) with
   the concrete instance we study, again with its interest properly motivated.
   (Coming in key ideas?) No ``gold standard''?}
+\apt{Yes, there are at least two different kinds of parameterization going on.
+  One has to do with which properties we want to, or are able to, enforce; e.g.,
+  for a language with tail calls or exceptions, we need a more complex definition of the WBCF property itself.
+  Another has to do with how standard features, like argument passing, are implemented
+  by particular hardware/ABIs -- which shouldn't show up in the property definition.
+  We need to be clearer about this.}
 
 Stack safety is challenging to specify in full generality, because the stack is fundamentally
 an architecture-specific construct. (Contrast Azevedo de Amorim et al.'s \cite{DBLP:conf/post/AmorimHP18} work on heap safety,

@@ -12,25 +12,30 @@ The remainder of this section introduces ideas that will be important throughout
 %% \rb{Turn these back into paragraphs later?}
 \subsection{Permissiveness, Laziness, and Tagged Architectures}
 
-Security properties tend to be conservative, identifying violations that would be
+Security properties tend to be conservative, identifying violations that may be
 harmless in practice. But enforcement mechanisms make trade-offs in the name of performance
 and of compatibility with existing codebases. In a crucial motivating example for this work,
 Roessler and DeHon \cite{} present a collection of tag-based enforcement mechanisms
 using PIPE \cite{???}, a tagged hardware reference monitor. In monitors such as PIPE and
-STAR \cite{???}, every value in memory and registers is paired with a {\em metadata tag}.
+STAR \cite{???}, \apt{double-check this} every value in memory and registers is paired with a {\em metadata tag}.
 A set of software-defined rules, termed a micro-policy, determines the tags for operation
 results based on the tags of their inputs---or, if the input tags are in a dangerous
 combination, it may halt the machine (a ``failstop.'')
 
-Roessler and DeHon find that the intuitive way to enforce stack safety in this setting
-is inefficient when allocating and clearing stack frames, because each word must be initialized
-with a tag corresponding to the (depth of the) current function activation. They propose
+The most obvious way to enforce stack safety in this setting is to tag each word
+in the stack frame with the (depth of) its owning function activation: tags are
+set when the frame is allocated, checked against the current activation tag at each read or write,
+and cleared when the frame is deallocated. 
+However, Roessler and DeHon find that this approach is inefficient, because tag setting
+and clearing must be performed even on elements of the frame that are never accessed,
+which is quite common, e.g. in code that allocates unnecessarily large local arrays.
+They therefore propose
 {\em Lazy Tagging and Clearing}, in which tags are not initialized at allocation, but only
 when a function writes to memory. This means that writes cannot be prevented, necessarily
-violating existing models of stack safety. Instead the micro-policy enforces that memory be
-read by the same fuction that wrote it. The owner of the data will never see the changes,
+violating existing models of stack safety.\apt{Like what??}  Instead the micro-policy enforces that memory be
+read by the same function activation that wrote it. The owner of the data will never see the changes,
 so it is secure in the sense that the attacker is unsuccessful at changing program behavior
-(except, perhaps, by causing a fault.) We elaborate that sense, and test whether the
+(except, perhaps, by causing a fault). We elaborate this notion of observational safety, and test whether the
 micro-policy fulfills it.
 
 This key motivation leads us to present integrity and confidentiality as predicates on (pairs of)
@@ -58,6 +63,13 @@ while \(\clec\) and \(\clei\) are stronger properties that they do not attempt t
   at once? Also: bad subsection/paragraph title ahead.}
 
 \subsection{A Formal and Flexible Security Framework}
+
+\apt{Sorry, but I don't understand what this section is trying to achieve.
+What is the ``comparison'' in Table~\cite{tab:relwork} for?
+It would be great if we could describe how our properties are suitable
+for describing the kinds of things various protection mechanisms are trying
+to acheive, and I can see a sketch of this going in related/future work, but 
+in fact we DON'T have any evidence for anything except micropolicies.}
 
 While a concrete aim is to provide a stack-safety property suitable for testing
 lazy enforcement for a micro-policy architecture, the formal framework we
@@ -153,7 +165,7 @@ canaries and shadow stacks. Other techniques, like split stacks and bounds
 checking---and the closely related hardware capabilities---are fundamentally
 eager techniques.
 
-\subsubsection{Low-Level Component Support}
+\subsubsection{Low-Level Component\apt{``Code''?} Support}
 %
 Our framework considers a \emph{single-, low-level view} of all program code and
 data; a key advantage of this approach is that it allows us to remain
@@ -277,10 +289,10 @@ most appropriate choice for an exploration of this new framework.
 The properties form a hierarchy, shown in [TODO: diagram].
 Within properties that are orthogonal
 some are likely to take priority in terms of their
-importance to security. Almost all stack-safety enforcement mechanisms will try to enforce \(WBCF\),
+importance to security. Almost all stack-safety enforcement mechanisms will try to enforce {\wbcf},
 as control-flow attacks such as ROP are a major vulnerability that can be targeted via the stack.
 Many also cover some degree of (caller) integrity. Caller confidentiality has been fairly neglected,
-and callee-oriented properties even moreso.
+and callee-oriented properties even more so.
 
 \subsection{Security Semantics and Property Structure}
 
@@ -308,7 +320,7 @@ but the theory does not depend on this choice.
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
 \cref{tab:psi}. Those that we explore in detail in \cref{sec:example}
 are shown in white: calls, returns, and the allocation and deallocation of local memory.
-In \cref{sec:machine}), we cover additional operations that add parameters to the examples',
+In \cref{sec:machine}), we cover additional operations that add parameters to the examples,
 to support various forms of memory sharing \ifexceptions , exceptions, \fi
 and tail-call elimination. These are shown in light gray.
 We give a proof-of-concept formalization of a more sophisticated, heap-like sharing model
@@ -361,7 +373,7 @@ in an allocated object that is accessible to the current principal (\(\object\))
 available to be allocated (\(\unsealed\)), or
 always accessible (\(\public\)).
 
-\sna{Might like a better name than object, because morally it ought to apply to arguments as well.}
+\sna{Might like a better name than object, because morally it ought to apply to arguments as well.\apt{Maybe ``active'' ?}}
 
 \subsection{Events}
 
