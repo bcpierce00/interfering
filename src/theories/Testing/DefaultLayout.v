@@ -20,12 +20,12 @@ Module DefaultLayout (M:Machine) <: LayoutInfo M.
   Definition LayoutInfo := myLayoutInfo.
 
   Definition defLayoutInfo :=
-    {| dataLo := 1000
-     ; dataHi := 1020
+    {| dataLo := 10000
+     ; dataHi := 10020
      ; instLo := 0
-     ; instHi := 499
-     ; stackLo  := 500
-     ; stackHi  := 600
+     ; instHi := 4999
+     ; stackLo  := 5000
+     ; stackHi  := 5100
     |}.
 
   Definition initCtx : Ctx :=

@@ -36,7 +36,7 @@ Import RecordSetNotations.
 
 From QuickChick Require Import QuickChick.
 
-Definition trace := true.
+Definition trace := false.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
 
@@ -218,8 +218,8 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       end
     | [Tinstr; Th3] =>
       match tpc, trs, trd with
-      | [Tpc depth; Th3], [], [] => Some (p <| pctags := [Tpc depth] |>)
-      | _, _, _ => ("Failstop in ImmArith: Th3" ++ nl) ! None
+      | [Tpc depth; Th3], _, _ => Some (p <| pctags := [Tpc depth] |>)
+      | _, _, _ => ("Failstop in ImmArith: I@" ++ show tinstr ++ " pc@" ++ show tpc ++ " rs@" ++ show trs ++ " rd@" ++ show trd ++ nl) ! None
       end
     | [Tinstr; Tr1] =>
       (*trace ("r1" ++ nl)*)
@@ -240,7 +240,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     | [Tpc old], Some [Tinstr; Ttailcall] =>
       (* TODO Current policy is based on depth, no change on tail calls *)
       (* let newid := S (nextid p) in *)
-      Some (p <| pctags := [Tpc old (* newid *); Th3] |>)
+      Some (p <| pctags := [Tpc old; Th3] |>)
     | _, _ => ("Failstop on Jal" ++ nl) ! None
     end.
 
@@ -276,11 +276,12 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     match tinstr with
     | [Tinstr] =>
       match tpc, trs, taddr with
-      | [Tpc pcdepth], [], [Tstack memdepth Knormal] =>
+      | [Tpc pcdepth], _, [Tstack memdepth Knormal] =>
           if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
           else ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
-      | [Tpc pcdepth], [], [Tstack memdepth Krelarg] =>
-          if Nat.eqb pcdepth (S memdepth) then Some (p <| regtags := map.put (regtags p) rd [] |>)
+      | [Tpc pcdepth], _, [Tstack memdepth Krelarg] =>
+          if Nat.eqb pcdepth (S memdepth) || Nat.eqb pcdepth memdepth
+          then Some (p <| regtags := map.put (regtags p) rd [] |>)
           else ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
       | [Tpc pcdepth], _, [Tstack memdepth (Krefarg memid)] =>
           if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
@@ -322,21 +323,21 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       | _, [Tref refdepth refid], []
       | _, [Tref refdepth refid], [Tstack _ _] =>
           Some (p <| memtags := map.put (memtags p) addr [Tstack refdepth (Krefarg refid)] |>)         
-      | _, _, _ => ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
+      | _, _, _ => ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
       end
     | [Tinstr; Tvar id] =>
         match tpc, tmem with
         | [Tpc memdepth], []
         | [Tpc memdepth], [Tstack _ _] =>
             Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth (Krefarg id)] |>)         
-        |  _, _ => ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
+        |  _, _ => ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
       end
     | [Tinstr; Tsetarg] =>
         match tpc, trs, tmem with
         | [Tpc memdepth], [], []
         | [Tpc memdepth], [], [Tstack _ _]
           => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth Krelarg] |>)
-        | _, _, _ => ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
+        | _, _, _ => ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
         end
     | [Tinstr; Th1] =>
         match tpc, trs, trd with
@@ -344,7 +345,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
         | [Tpc depth; Th1], [Trai], [Tsp]
           => Some (p <| pctags := [Tpc depth; Th2] |>
                      <| memtags := map.put (memtags p) addr trs |>)
-        | _, _, _ => ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " rd@" ++ show trd ++ nl) ! None
+        | _, _, _ => ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " rd@" ++ show trd ++ nl) ! None
         end
     | _ => ("Failstop on Store" ++ nl) ! None
     end.
