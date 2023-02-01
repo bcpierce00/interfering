@@ -30,31 +30,51 @@ including stack canaries~\cite{Cowan+98},
 bounds checking~\cite{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
 split stacks~\cite{Kuznetsov+14},
 shadow stacks~\cite{Dang+15,Shanbhogue+19},
-capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJFP,Georges+21},
-and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18}---we discuss these in more
-detail in \cref{XXX}. Few of these articulate any formal property that they aim to enforce,
-with the exception of Skorstengaard and Georges. Some are fundamentally ill-suited for
-formalization, as they aim to impede attackers but could not provide universal protection.
+capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJFP,Georges22:TempsDesCerises},
+and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18}.
 
-In this work, we propose such a property, built from first principles
-in the hopes that it will be widely applicable, and demonstrate that it supports
-an enforcement mechanism that does not yet have one.
-We use the formal tools of language-based
-security~\cite{sabelfeld2003language}, decomposing stack safety into
+Of these mechanisms, many are fundamentally ill-suited for offering formal guarantees,
+as they aim to impede attackers but cannot provide universal protection. Stack canaries,
+for instance, aim to reduce the ability of attackers to find gadgets, not to categorically
+rule out attacks. Others may be amenable to formalization but do not offer it.
+The Cerise work of Skorstengaard et al. \cite{SkorstengaardSTKJFP} and
+Georges et al. \cite{Georges22:TempsDesCerises} is so far the sole line of work
+to offer (various) stack safety formalizations.
+
+Meanwhile, Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} present an array of tag-based
+micro-policies for stack safety, at least some of which should be amenable to making
+formal guarantees. Among these is their ``Lazy Tagging and Clearing'' \(LTC\) micropolicy,
+which is is peculiar in that function activations may write into one another's stack frames,
+as long as the data cannot be accessed afterward. As a result, \(LTC\) definitely would not
+fulfill a tag-based adaptation Georges et al.'s state-of-the-art property.
+Roessler and DeHon themselves do not claim that it intends to enforce stack safety,
+only an approximation.
+
+We disagree. \(LTC\) does not always protect individual addresses on the stack, but it aims
+to prevent one function activation from interfering with another's behavior---to protect
+the functional abstraction. We argue that a formal characterization of \(LTC\)'s protections
+should fall under the umbrella of stack safety.
+
+In this work, we propose such a characterization, built from first principles
+in the hopes that it will be broadly applicable, and demonstrate
+that it can distinguish between correct and flawed versions of Roessler and DeHon's
+micro-policies. We use the formal tools of language-based
+security~\cite{sabelfeld2003language}, decomposing stack safety into a family of
+properties describing
 the {\em integrity} and {\em confidentiality} of the caller’s local state
 and the callee's behavior during the callee's execution, plus the control-flow protection
 of {\em well-bracketed control flow}~\cite{SkorstengaardSTKJFP} (\(\wbcf\)).
+
+The structure of our properties enables them to be easily extended to systems with
+sophisticated features such as callee-save registers, argument-passing on the stack,
+and tailcall-elimination. We likewise extend \(LTC\) to protect these features, and
+test the extended micro-policy.
 \ifexceptions
-We also extend WBCF to a setting with exceptions,
+We extend WBCF to a setting with exceptions,
 in which there may be multiple points at which a callee can ``return.''
 \fi
-
-Our target for validation is the ``Lazy Tagging and Clearing'' \(LTC\) micropolicy of Roessler
-and DeHon \cite{DBLP:conf/sp/RoesslerD18}. \(LTC\) is peculiar in that function activations
-may write into one another's stack framess, as long as the data cannot be accessed afterward.
-It is therefore too weak to be characterized by the state-of-the-art properties from
-Georges et al. We give a characterization that does apply to it, and expand the features that
-it supports.
+It also enables us to separate out only those properties that an enforcement mechanism
+actually attempts to enforce.
 
 \paragraph{Towards a Formal Property for Stack Safety}
 
