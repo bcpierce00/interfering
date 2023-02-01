@@ -133,12 +133,18 @@ Module RISCV <: Machine.
   | object
   | public
   .
-  
-  (* TODO - make some callee-save *)
+
+  (* Defaults as per the RISC-V ABI *)
   Definition reg_defaults (r : Register) : Sec :=
     match r with
     | 0 | 2 => public
     | 1 => sealed
+    | 5 | 6 | 7 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 28 | 29 | 30 | 31 =>
+      sealed (* other caller-saved (+ RA) *)
+    | 8 | 9 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 =>
+      public (* other callee-saved (+ SP) *)
+    | 3 | 4 =>
+      public (* neither caller- nor callee-saved (+ R0) *)
     | _ => free
     end.
 

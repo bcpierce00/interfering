@@ -43,9 +43,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition r0 : Register := 0.
   Definition ra : Register := 1.
   Definition sp : Register := 2.
-  Definition a0 : Register := 8.
+  Definition a0 : Register := 10.
   
-  Definition minReg : Register := 8.
+  Definition minReg : Register := 10.
   Definition noRegs : nat := 3%nat.
   Definition maxReg : Register := minReg + Z.of_nat noRegs - 1.
   (* TEMP: Keep argument register(s), in particular those used to pass arguments
