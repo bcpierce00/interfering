@@ -11,9 +11,7 @@ this abstraction. From a security perspective, attacks on the stack are attacks
 on the fundamental functional abstraction itself, and are therefore every bit as
 pervasive.
 
-Indeed, the call stack is a perennial target for low-level attacks, leading to
-dire consequences, from leakage and corruption of private stack data
-to control-flow hijacking.
+Indeed, the call stack is a perennial target for low-level attacks.
 %
 The most recent release of the authoritative CWE Top 25
 Most Dangerous Software Weaknesses
@@ -24,12 +22,9 @@ consistently at and near the top, e.g., \#1 (CWE-787, Out-of-bounds Write), \#5 
 Moreover, many other types of faults involve some kind of control or data flow
 using data stored in the stack \rb{cf. Eternal war in memory, Google/Microsoft
   memory safety statistics, etc.}.
-\sna{Trying to think how to make the case that these CWEs are about the stack, since they are
-  primarily described as memory attacks.}\apt{Agree: the out-of-bounds ones are often on the stack, but the NULL pointer deref is not \rb{Indeed, removed the last one.}
-Also, this story is very well known, and doesn't need belaboring.}
-%
-To foil such attacks, a menagerie of
-software and hardware protections have been proposed,
+
+The variety in attacks on the stack is mirrored by the 
+software and hardware protections that aim to prevent them,
 %
 including stack canaries~\cite{Cowan+98},
 bounds checking~\cite{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
@@ -37,48 +32,11 @@ split stacks~\cite{Kuznetsov+14},
 shadow stacks~\cite{Dang+15,Shanbhogue+19},
 capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJFP,Georges+21},
 and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18}---we discuss these in more
-detail in \cref{XXX}.
-  \ifaftersubmission\apt{Mostly from
-  nick; there could be more}\bcp{Yes, going back to MIT days---we should
-  include several more of these, if only to give readers the impression that
-this is a well-studied mechanism (so formalizing its protections is
-useful).}
-\fi
+detail in \cref{XXX}. Few of these articulate any formal property that they aim to enforce,
+with the exception of Skorstengaard and Georges. Some are fundamentally ill-suited for
+formalization, as they aim to impede attackers but could not provide universal protection.
 
-\paragraph{Towards a Formal Property for Stack Safety}
-
-Security mechanisms designed to prevent a certain attack can be brittle---successfully
-eliminating the attack as it exists at the time of publication, but leaving room for attackers
-to find new, similar attacks.
-
-To mitigate this risk, mechanisms should aim to enforce \emph{formal properties}
-of safe behavior that can be proven or tested. Such properties become the
-\emph{specification} against which enforcement can be validated; even enforcement mechanisms that do
-not fulfill a property benefit from the ability to articulate \emph{why} they fail.
-
-But most such properties are described at the level of a high-level programming language.
-The stack as an abstraction exists below the level of
-any language that uses it, and at the level of the ABI
-\sna{Do we need to unpack the acronym ABI?}, the specification of a well-behaved
-stack is minimal. It is not concerned with such questions as whether a caller's
-frame should be readable or writable to its callee, leaving those concerns
-to be determined by a high-level language built atop the stack.
-
-Specifying stack safety in full generality would not merely be a matter of handling
-a wide range of architectural variations. The basic security behavior that we expect
-of the stack varies based on calling convention, compiler behavior, and the features of
-whichever programming language originated the code.
-(Contrast Azevedo de Amorim et al.'s \cite{DBLP:conf/post/AmorimHP18} work on heap safety,
-which is broadly consistent across language semantics, and therefore
-amenable to a very general approach.)
-
-For instance, the current state-of-the-art stack-safety specification from Georges et al.
-\cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
-control flow, and therefore defines {\it Well-bracketed Control Flow} (WBCF) under the assumption that
-a callee should always return to its caller. But, in the presence of tail-call elimination, a
-return from a callee to a distant ancestor is perfectly reasonable.
-
-In this work, we propose an explicit specification, built from first principles
+In this work, we propose such a property, built from first principles
 in the hopes that it will be widely applicable, and demonstrate that it supports
 an enforcement mechanism that does not yet have one.
 We use the formal tools of language-based
@@ -90,14 +48,37 @@ of {\em well-bracketed control flow}~\cite{SkorstengaardSTKJFP} (\(\wbcf\)).
 We also extend WBCF to a setting with exceptions,
 in which there may be multiple points at which a callee can ``return.''
 \fi
-%
-We treat stack safety as multiple properties, rather than one multi-faceted property, because
-not all enforcement mechanisms attempt to implement all aspects of stack safety (see \cref{???}.)
-%
-This gives us a total of five core properties: \(\wbcf\),
-caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
-callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)), defined formally
-in \cref{sec:props}.
+
+Our target for validation is the ``Lazy Tagging and Clearing'' \(LTC\) micropolicy of Roessler
+and DeHon \cite{DBLP:conf/sp/RoesslerD18}. \(LTC\) is peculiar in that function activations
+may write into one another's stack framess, as long as the data cannot be accessed afterward.
+It is therefore too weak to be characterized by the state-of-the-art properties from
+Georges et al. We give a characterization that does apply to it, and expand the features that
+it supports.
+
+\paragraph{Towards a Formal Property for Stack Safety}
+
+Security mechanisms can be brittle, successfully eliminating one attack while leaving room for
+other, similar attacks. To avoid this, we seek formal properties of safe behavior that can be proven
+or tested. Such properties become the specification against which enforcement can be validated;
+even enforcement mechanisms that do not fulfill a property benefit from the ability to articulate
+\emph{why} they fail.
+
+But most such properties are described at the level of a high-level programming language.
+The stack as an abstraction exists below the level of
+any language that uses it, and at the level of the ABI, the specification of a well-behaved
+stack is minimal. It is not concerned with such questions as whether a caller's
+frame should be readable or writable to its callee, leaving those concerns
+to be determined by a high-level language built atop the stack.
+(Contrast Azevedo de Amorim et al.'s \cite{DBLP:conf/post/AmorimHP18} work on heap safety,
+which is broadly consistent across language semantics, and therefore
+amenable to a very general approach.)
+
+For instance, the current state-of-the-art stack-safety specification from Georges et al.
+\cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
+control flow, and therefore defines {\it Well-bracketed Control Flow} (WBCF) under the assumption that
+a callee should always return to its caller. But, in the presence of tail-call elimination, a
+return from a callee to a distant ancestor is perfectly reasonable.
 
 We are not attempting to create a universal definition of stack safety for all systems.
 Rather, we define the stack safety of a single, fairly realistic system, decomposed into
@@ -110,19 +91,20 @@ a universal definition, in that the definitions in (3) capture fundamental
 notions of security that can then be applied flexibly to other systems by varying
 the model in (1) and (2).
 %
-\rb{FIXME: Contrast some universal definitions (or a parametric framework) with
-  the concrete instance we study, again with its interest properly motivated.
-  (Coming in key ideas?) No ``gold standard''?}
-\apt{Yes, there are at least two different kinds of parameterization going on.
-  One has to do with which properties we want to, or are able to, enforce; e.g.,
-  for a language with tail calls or exceptions, we need a more complex definition of the WBCF property itself.
-  Another has to do with how standard features, like argument passing, are implemented
-  by particular hardware/ABIs -- which shouldn't show up in the property definition.
-  We need to be clearer about this.}
-\sna{In discussion above, I tried to carve out some separation there, but more may be needed.}
+We treat stack safety as multiple properties, rather than one multi-faceted property, because
+not all enforcement mechanisms attempt to implement all aspects of stack safety (see \cref{???}.)
+%
+This gives us a total of five core properties: \(\wbcf\),
+caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
+callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)), defined formally
+in \cref{sec:props}.
 
-To demonstrate the utility of our formal characterization, we use these
-properties to validate and improve an existing enforcement mechanism, the
+We demonstrate that our properties are general in that they apply easily to systems with various
+features, and that they support ``al la carte'' enforcement based on the security needs of the
+system.
+
+To validate our formal characterization, we use these
+properties to test and improve an existing enforcement mechanism, the
 {\em stack safety micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, re-implemented
 in the Coq proof assistant on top of a \rb{formal} RISC-V specification.  We
 use QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
