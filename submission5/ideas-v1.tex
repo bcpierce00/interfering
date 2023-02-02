@@ -1,6 +1,12 @@
 The paper is structured as follows. In \cref{sec:example}, we will walk through a function
 call in a simple example machine and discuss how each of our properties applies to it,
-informally. Then in \cref{sec:machine} we will introduce the machine model that we test, and give
+informally. In the process we discuss some motivation for the properties, from a security
+perspective: we consider a simple attacker, and discuss the harm that it can do to
+its caller. This perspective is essential to understanding how lazy enforcement can
+be safe: even if an attacker can overwrite some memory, if it cannot accomplish
+its bigger-picture goals, the system is safe.
+
+Then in \cref{sec:machine} we will introduce the machine model that we test, and give
 its {\em security semantics}, described in brief below. We formalize the definitions of
 stack safety that derive from the security semantics in \cref{sec:props}.
 \Cref{sec:testing} describes the testing framework, and
@@ -29,6 +35,12 @@ instructions might also be used for other things. An instantiation of an operati
 might require some external mechanism for distinguishing which instructions are
 security-relevant; the most obvious technique is to add optional labels to instructions,
 but the theory does not depend on this choice.
+
+Whatever the mechanism for labeling transitions, we get a base
+machine transition \(\mach \xrightarrow{\bar{\psi}, \obs} \mach'\), where \(\obs\) is
+an event (see below) and \(\bar{\psi}\) is a list of security-relevant operations.
+We then lift this into a transition between pairs of machine states and contexts,
+\((\mach,\context) \stepstounder{\overline{\psi},\obs} (\mach', \context')\).
 
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
 \cref{tab:psi}. Those that we explore in detail in \cref{sec:example}
@@ -96,64 +108,19 @@ to any notion of observable behavior.
 
 \paragraph*{Variants and Non-interference}
 
-We model confidentiality by drawing on 
+To characterize confidentiality, we borrow the idea of \emph{variant} states
+from the theory of non-interference. Non-interference is a way of expressing
+the flow of information through the system. If we begin with a state \(\mach\)
+and modify it to \(\nach = \mach[\component \mapsto v]\) for arbitrary \(v\),
+then execute both \(\mach\) and \(\nach\), any differences in the outputs they
+produce must be the result of accessing \(\component\).
 
-\paragraph*{Threat Model}
+\paragraph*{Putting It Together}
 
-We must trust that our method of distinguishing security-relevant operations is accurate; if it
-involves labels placed on code by a compiler, that means trusting that the compiler placed
-those labels correctly. If operations occur that are not recognized, those operations
-might not be guaranteed to protect their principals---for instance, an unlabeled call
-might not protect the caller's data from the callee. On the flip side, applying an incorrect
-label most likely means that the property becomes too strong to be enforced.
-
-Otherwise, we do not assume that the code adheres to any particular
-calling convention or implements a source language construct.
-In particular, while we are agnostic as to the source
-language, we certainly aim to support C, and so any source function might contain undefined
-behavior resulting in its compilation to arbitrary machine code. A given enforcement
-mechanism may place additional constraints, particularly on the behavior of
-call and return sequences. For instance, extant implementations tend to assume
-implicitly that callee-saved registers are treated appropriately by whichever compiler
-generated their code. Our properties explicitly require them to be treated as belonging
-to the caller, which could be enforced by a micro-policy or by a well-behaved compiler.
-
-In general, it is impossible to distinguish buggy machine code from an attacker; in
-our examples we will identify one function or another as an attacker, but we do not
-require any static division between trusted and untrusted code, and we aim to protect
-even buggy code.
-
-This is a strong threat model, but it does omit some important aspects of
-security enforcement: in particular, hardware and timing attacks are out of scope.
-
-\paragraph*{Tagged Architectures and Laziness}
-
-In \cref{sec:testing}, we apply our properties to test the existing stack-safety
-mechanism of Roessler and DeHon \cite{}, who present a collection of tag-based enforcement
-mechanisms using PIPE \cite{???}, a tagged hardware reference monitor.
-In monitors such as PIPE and STAR \cite{???}, \apt{double-check this} every value in memory
-and registers is paired with a {\em metadata tag}.
-A set of software-defined rules, termed a micro-policy, determines the tags for operation
-results based on the tags of their inputs---or, if the input tags are in a dangerous
-combination, it may halt the machine (a ``failstop.'')
-
-We are particularly interested in their {\em Lazy Tagging and Clearing} micro-policy.
-In their conventional micro-policies, they tag each word
-in a stack frame with the (depth of) its owning function activation.
-Roessler and DeHon find that it is inefficient, because tag setting
-and clearing must be performed at every allocation, even on elements that are never accessed,
-or that are initialized again and accessed long afterward. This is quite common, e.g. in code
-that allocates large local arrays.
-
-Instead they offer Lazy Tagging and Clearing, in which tags are not initialized at allocation, but only
-when a function writes to memory. This means that writes cannot be prevented, which in turn means
-that the existing line of stack safety specifications from Georges et al. will deem it unsafe.
-Instead the micro-policy enforces that memory be read by the same function activation that wrote it.
-The owner of the data will never see the changes,
-so it is secure in the sense that the attacker is unsuccessful at changing program behavior
-(except, perhaps, by causing a fault). We elaborate this notion of observational safety, and test whether the
-micro-policy fulfills it.
-
-\paragraph*{Randomized Property-based Testing}
-
-[TODO: Brief discussion of PBT and why we use it, explain the lack of proofs.]
+Putting these ideas together, we get the basic structure of a property in our model.
+First we define the security-relevant operations that we support, a security context,
+and the function according to which the security context updates with each step.
+Then, we define a predicate on states and contexts that expresses the requirements
+for our security property, using variants, assertions about future states, and comparison
+of event traces. Finally, in order to apply the property to a specific machine, we
+must determine how the machine's execution translates into security relevant operations.

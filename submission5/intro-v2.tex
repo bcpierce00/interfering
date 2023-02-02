@@ -36,9 +36,10 @@ capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJF
 and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18}.
 
 Of these mechanisms, many are fundamentally ill-suited for offering formal guarantees,
-as they aim to impede attackers but cannot provide universal protection. Stack canaries,
-for instance, aim to reduce the ability of attackers to find gadgets, not to categorically
-rule out attacks. Others may be amenable to formalization but do not offer it.
+as they aim to impede attackers but cannot provide universal protection. Shadow stacks,
+for instance, aim to ``restrict the flexibility available in creating gadget chains''
+\cite{Shanbhogue+19} not to categorically
+rule out attacks. Other mechanisms are stronger, but relatively few formally state their guarantees.
 The Cerise work of Skorstengaard et al. \cite{SkorstengaardSTKJFP} and
 Georges et al. \cite{Georges22:TempsDesCerises} is so far the sole line of work
 to offer (various) stack safety formalizations.
@@ -49,11 +50,9 @@ formal guarantees. Among these is their ``Lazy Tagging and Clearing'' \(LTC\) mi
 which is is peculiar in that function activations may write into one another's stack frames,
 as long as the data cannot be accessed afterward. As a result, \(LTC\) definitely would not
 fulfill a tag-based adaptation Georges et al.'s state-of-the-art property.
-\rb{(Do we explain why anywhere?)}
-Roessler and DeHon themselves do not claim that it intends to enforce stack safety,
-only an approximation.
 
-We disagree. \(LTC\) does not always protect individual addresses on the stack, but it aims
+We believe that, nevertheless, \(LTC\) enforces stack safety.
+It does not always protect individual addresses on the stack, but it aims
 to prevent one function activation from interfering with another's behavior---to protect
 the functional abstraction. We argue that a formal characterization of \(LTC\)'s protections
 should fall under the umbrella of stack safety.
@@ -77,22 +76,35 @@ this flaw.
 
 \paragraph{Towards a Formal Property for Stack Safety}
 
-%Security mechanisms can be brittle, successfully eliminating one attack while leaving room for
-%other, similar attacks. To avoid this, we seek formal properties of safe behavior that can be proven
-%or tested. Such properties become the specification against which enforcement can be validated;
-%even enforcement mechanisms that do not fulfill a property benefit from the ability to articulate
-%\emph{why} they fail.
+Security mechanisms can be brittle, successfully eliminating one attack while leaving room for
+other, similar attacks. To avoid this, we seek formal properties of safe behavior that can be proven
+or tested. Such properties become the specification against which enforcement can be validated;
+even enforcement mechanisms that do not fulfill a property benefit from the ability to articulate
+\emph{why} they fail.
 
+We take the view that security properties should be motivated by security requirements,
+and flexible enough to support various sets of security requirements depending on the
+goals of the system that they validate.
+Following this reasoning, our vision of stack safety is as a collection of properties
+describing the security needs of a system with regard to its functional abstractions.
+While the stack still plays a key role, our stack safety is about functions. The most
+dramatic consequence of this is that we treat registers as part of a function activation's
+state, and hold them to the same protection requirements as stack memory.
+
+Flexibility is especially important for stack safety.
+%
 Most security properties are described at the level of a high-level programming language,
 and translated to the target-level via a secure compiler. Stack safety cannot
 be defined in this way, as the abstraction is completely transparent in most source languages.
 (Contrast Azevedo de Amorim et al.'s \cite{DBLP:conf/post/AmorimHP18} work on heap safety,
 which is broadly consistent across language semantics, and therefore
 amenable to a very general high-level approach.)
+%
 But it is not satisfying as a low-level property; at the level of the ABI, the
-specification of a well-behaved stack is minimal. It is not concerned with such
+specification of a well-behaved stack is minimal. The ABI is not concerned with such
 questions as whether a caller's frame should be readable or writable to its callee,
 leaving those concerns to be determined by a high-level language built atop the stack.
+These are high-level security questions.
 
 For instance, the current state-of-the-art stack-safety specification from Georges et al.
 \cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
@@ -102,90 +114,112 @@ return from a callee to a distant ancestor is perfectly reasonable. Related, the
 Skorstengaard et al. \cite{SkorstengaardSTKJFP} made no mention of confidentiality, even though
 their enforcement mechanism did protect the confidentiality of the caller (not the callee.)
 
-These two cases represent two dimensions of generality that make stack safety difficult to
-define as a single, universal property: what constitutes safe behavior may differ between
-systems that support different features, and different types of security may be more or less
-desirable depending on context.
+These two cases represent two dimensions in which a stack safety definition requires
+flexibility: what constitutes safe behavior differs between systems that support different
+features, and different contexts have different top-level security requirements.
 
-We are not attempting to present a universal definition of stack safety for all systems.
-Rather, we define the stack safety of a single, fairly realistic system (one with common
-features such as memory arguments and tailcall elimination), decomposed into
+We are not attempting to present a universal definition of stack safety for all systems,
+but we do construct our definition with these dimensions of flexibility in mind.
+Our model is decomposed into:
 (1) a lightweight model of the system and its security-relevant features, from which we
 derive the integrity, confidentiality, and control-flow requirements of each call and
 return, (2) the application of that model to a particular target system, and (3)
-the formal criteria for integrity, confidentiality, and control flow
-to obey the requirements. This decomposition can be thought of as a step toward
-a universal definition, in that the definitions in (3) capture fundamental
-notions of security that can then be applied flexibly to other systems by varying
-the model in (1) and (2).
+the formal criteria for the integrity, confidentiality, and control flow
+requirements.
 
-To address the second class of generality, we present a total of five core properties:
+We show that we can extend our system to new features by first introducing a simple
+example model, and then moving to a more realistic model with multiple new features:
+callee-save registers, argument passing on the stack, and tailcall elimination, simply
+by refining a few definitions in (1). This becomes the model that we validate.
+In \cref{???}, we extend the model further with arbitrary sharing of memory-safe
+pointers. Our criteria in (3) cover a total of five core requirements:
 \(\wbcf\), caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
-callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)). These are defined
-formally in \cref{sec:props}. They are related to one another as seen in
+callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)).
+They are related to one another as seen in
 \cref{fig:propertydiagram}: \(\clei\) subsumes \(\clrc\) and \(\clec\) subsumes
-\(\clri\), but otherwise the properties are orthogonal. We further define two
-important combinations of properties: full stack safety \(\textnormal{\sc FSS}\),
-and caller safety \(\textnormal{\sc ClrS}\). Of these, most existing concepts of
-stack safety correspond to either \(\wbcf\) or \(\textnormal{\sc ClrS}\), which are
-concerned with the basic guarantees that the caller recieves during the call, while
-\(\textnormal{\sc FSS}\) is a natural extension that enforces a higher-level concept
-of a correct interface between caller and callee. \sna{Blah. Needs work.}
+\(\clri\), but otherwise the properties are orthogonal and can be taken piecemeal
+according to the needs of a system.
 
-To validate our formal characterization, we use these
-properties to test and improve an existing enforcement mechanism, the
-{\em stack safety micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, re-implemented
-in the Coq proof assistant on top of a \rb{formal} RISC-V specification.  We
-use QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
-tool for Coq, to generate random programs and check
-that Roessler and DeHon's micro-policies correctly detect the ones that
-attempt to violate one of our properties. Furthermore, we
+In particular, many enforcement techniques focus purely on
+well-bracketed control flow. Stack canaries aim to prevent certain attacks on the return
+address, and shadow stacks with protection (e.g. Return Address Defender \cite{Chiueh2001RAD})
+to enforce it completely. Others combine this protection with some degree of memory protection,
+chiefly focusing on integrity. Interestingly, Skorstengaard et al. \cite{SkorstengaardSTKJFP}
+describe their ``local state encapsulation'' in terms of integrity, but it is equivalent
+to the combination of \(\clri\) and \(\clrc\). It is not until Georges et al. \cite{Georges22:TempsDesCerises}
+that the Cerise line of work considers confidentiality; they also consider \(\clec\), but not
+\(\clei\). \sna{It is really tempting to find a way to take credit for this.}
+
+%These are defined
+%formally in \cref{sec:props}. . We further define two
+%important combinations of properties: full stack safety \(\textnormal{\sc FSS}\),
+%and caller safety \(\textnormal{\sc ClrS}\). Of these, most existing concepts of
+%stack safety correspond to either \(\wbcf\) or \(\textnormal{\sc ClrS}\), which are
+%concerned with the basic guarantees that the caller recieves during the call, while
+%\(\textnormal{\sc FSS}\) is a natural extension that enforces a higher-level concept
+%of a correct interface between caller and callee. \sna{Blah. Needs work.}
+
+Flexibility aside, we show that our properties are useful for their purpose:
+distinguishing correct enforcement from incorrect. We use
+QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
+tool for Coq, to generate random programs and check that the
+stack safety {\em micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}
+correctly detect the ones that attempt to violate one of our properties. Furthermore, we
 check that the testing framework is able to generate counterexamples
 that violate our properties but are \emph{not} halted by incorrect
-variants of the enforcement mechanisms, including ones that we accidentally created
-while implementating the micro-policy and ones that we
-intentionally crafted to increase our confidence in the effectiveness
-of our testing.
-%
-\rb{This and the following paragraph could start more generally (we need to
-  answer the question of why these experiments, what is their interest), and
-  probably motivate the use of PBT (experiment results below show there's
-  benefit in them!) and, somewhere at least, talk about other points in the
-  spectrum.}
-
-We find that Roessler and DeHon's \emph{Lazy Tagging and Clearing}
-violates the temporal aspect of confidentiality in
-cases where data can leak across repeated calls to the same callee,
-and also violates integrity if the leak uses the caller's frame. We
-propose a variant of {\em Lazy Tagging and Clearing} that testably enforces
-confidentiality, albeit at some performance cost.
-%
-\rb{Anything to add from personal communications? More details later? Shows
-  these things are very hard to get right -- like the latest work on Cerise,
-  also motivated by this very work.
-\rb{(+SNA) At the very least, these models are subtle and getting them right,
-  and describing them unambiguously, is hard without a framework like this.}
-}
+variants of the enforcement mechanisms---including the original \(LTC\)!
 
 \subsection{Contributions}
 
 In sum, we offer the following contributions:
 
 \begin{itemize}
-\item We formalize permissive stack confidentiality and integrity properties,
-  which are parameterized over a notion of external
-  observation, and are violated only if accessing secrets or overwriting
-  data causes a visible change in system behavior.
-\item We instantiate these definitions with a realistic
-  system with features such as argument passing
+\item A novel characterization of stack safety as a collection of properties:
+  confidentiality and integrity for callee and caller, and well-bracketed
+  control-flow. These can characterize the security requirements of systems
+  that support only some portion of stack safety, and are
+  parameterized over a notion of external observation, so that they can characterize
+  lazy enforcement.
+\item An instantiation of these definitions in a realistic
+  setting with features such as argument passing
   on the stack, callee-saves registers, and tail-call elimination.
   Our model is modular enough that adding these features is straightforward.
-\item Our formalization of well-bracketed control flow in the presence of tail-call
-  elimination \ifexceptions and exceptions \fi is a novelty over existing models.
-\item We use property-based random testing to validate the relationship between
-  our properties and micro-policies.
+\item The validation, via property-based randomize testing, of tag-based
+  stack-safety policies. We find that \emph{Lazy Tagging and Clearing}
+  falls short of stack safety, and propose a fix.
 \end{itemize}
 
 Our artifact contains Coq formalizations of our properties for illustrative purposes
 as well as their testing implementation. There are no proofs---we use primarily Coq for the
 QuickChick library and to ensure that the formalizations are unambiguous.
+
+\subsection{Threat Model and Limitations}
+
+When our properties are used to evaluate a system, the threat model will depend on the
+details of that system. However, there are some constraints that our design puts on
+any system. We must trust that the method of distinguishing security-relevant operations is accurate; if it
+involves labels placed on code by a compiler, that means trusting that the compiler placed
+those labels correctly. If operations occur that are not recognized, those operations
+might not be guaranteed to protect their principals---for instance, an unlabeled call
+might not protect the caller's data from the callee. On the flip side, applying an incorrect
+label most likely means that the property becomes too strong to be enforced.
+
+Otherwise, we do not assume that the code adheres to any particular
+calling convention or implements a source language construct.
+In particular, while we are agnostic as to the source
+language, we certainly aim to support C, and so any source function might contain undefined
+behavior resulting in its compilation to arbitrary machine code. A given enforcement
+mechanism may place additional constraints, particularly on the behavior of
+call and return sequences. For instance, extant implementations tend to assume
+implicitly that callee-saved registers are treated appropriately by whichever compiler
+generated their code. Our properties explicitly require them to be treated as belonging
+to the caller, which could be enforced by a micro-policy or by a well-behaved compiler.
+
+In general, it is impossible to distinguish buggy machine code from an attacker; in
+our examples we will identify one function or another as an attacker, but we do not
+require any static division between trusted and untrusted code, and we aim to protect
+even buggy code.
+
+This is a strong threat model, but it does omit some important aspects of
+security enforcement: in particular, hardware and timing attacks are out of scope, and
+we do not address concurrency.
