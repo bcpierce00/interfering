@@ -55,19 +55,19 @@
   }
   \and
   \IEEEauthorblockN{
-    Leonidas Lampropoulos
-  }
-  \IEEEauthorblockA{
-    University of Maryland, College Park\\
-    leonidas@umd.edu\\
-  }
-  \and
-  \IEEEauthorblockN{
     Roberto Blanco
   }
   \IEEEauthorblockA{
     Max Planck Institute for Security and Privacy\\
     roberto.blanco@mpi-sp.org\\
+  }
+  \and
+  \IEEEauthorblockN{
+    Leonidas Lampropoulos
+  }
+  \IEEEauthorblockA{
+    University of Maryland, College Park\\
+    leonidas@umd.edu\\
   }
   \linebreakand
   \IEEEauthorblockN{
@@ -155,9 +155,9 @@ or calls, returns, and private allocations.
 %\(\mathcal{V} ::= \mathcal{W} \times \mathcal{T}\),
 %for some type  of tags to be elaborated later, with \(|(w,t)| = w\).
 Figure \ref{fig:main} gives C code and corresponding compiled 32-bit RISC-V code
-for a function {\tt main}, which  
+for a function {\tt main}, which
 takes an argument {\tt secret} and initializes a local variable {\tt sensitive} to contain
-potentially sensitive data. 
+potentially sensitive data.
 Then {\tt main} calls another function {\tt f},
 and afterward performs a test on {\tt sensitive} to decide whether
 to output {\tt secret}.  Since {\tt sensitive} is initialized to 0,
@@ -167,7 +167,7 @@ and we assume that such writes are the only observable events in the system.
 
 The C code is compiled using the standard RISC-V calling conventions~\cite{RISC-V-CC}.
 In particular, the first function argument and the function
-return value are both passed in {\tt a0}.  
+return value are both passed in {\tt a0}.
 Memory is byte-addressed and the stack grows towards
 lower addresses. We assume that {\tt main} begins at address 0 and its callee {\tt f} at address 100.
 
@@ -330,10 +330,10 @@ State transitions are numbered and labeled with a list of security operations, w
 
 The initial view \(V_0\) maps all stack addresses below \(\SP\) to \(\unsealed\) and the remainder of
 memory to \(\public\). The sole used argument register, {\tt a0}, is mapped to \(\object\);
-other caller-save registers are mapped to \(\unsealed\) and callee-save registers to \(\sealed\). 
+other caller-save registers are mapped to \(\unsealed\) and callee-save registers to \(\sealed\).
 Step 1 allocates a word each for {\tt secret}, {\tt sensitive}, and {\tt res}, as well
 as two words for the return address. This has the
-effect of marking those bytes \(\object\). 
+effect of marking those bytes \(\object\).
 (We use \(V\llbracket\cdot\rrbracket\) to denote updates to \(V\).)
 %
 
@@ -349,8 +349,8 @@ effect of marking those bytes \(\object\).
     \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox
         \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\pubbox} \!\! \pubbox \pubbox \dots}_\public
-      ~ \stackrel{\mathtt{a0}}{\pubbox} ~ \stackrel{\mathtt{a1}}{\freebox}
-%      ~ \stackrel{\mathtt{s0}}{\sealbox}
+      ~ \stackrel{\mathtt{a0}}{\pubbox\pubbox} ~ \stackrel{\mathtt{a1}}{\freebox\freebox}
+      ~ \stackrel{\mathtt{s0}}{\sealbox\sealbox}
       \)} \\
     \cline{1-3}
     0 & 1000 & \(V_0, \emplist\)
@@ -361,8 +361,8 @@ effect of marking those bytes \(\object\).
     \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\objbox} \!\! \objbox \objbox \objbox \objbox}_\object
       \! \underbrace{\pubbox \pubbox \pubbox \dots}_\public
-      ~ \stackrel{\mathtt{a0}}{\pubbox} ~ \stackrel{\mathtt{a1}}{\freebox}
-%      ~ \stackrel{\mathtt{s0}}{\sealbox}
+      ~ \stackrel{\mathtt{a0}}{\pubbox\pubbox} ~ \stackrel{\mathtt{a1}}{\freebox\freebox}
+      ~ \stackrel{\mathtt{s0}}{\sealbox\sealbox}
       \)}
     \\
     \cline{1-3}
@@ -378,8 +378,8 @@ effect of marking those bytes \(\object\).
     \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\sealbox} \!\! \sealbox \sealbox \sealbox \sealbox}_\sealed
       \! \underbrace{\pubbox \pubbox \pubbox \dots}_\public
-      ~ \stackrel{\mathtt{a0}}{\freebox} ~ \stackrel{\mathtt{a1}}{\freebox}
-%      ~ \stackrel{\mathtt{s0}}{\sealbox}
+      ~ \stackrel{\mathtt{a0}}{\freebox\freebox} ~ \stackrel{\mathtt{a1}}{\freebox\freebox}
+      ~ \stackrel{\mathtt{s0}}{\sealbox\sealbox}
       \)}
     \\
     \cline{1-3}
@@ -393,8 +393,8 @@ effect of marking those bytes \(\object\).
     \multicolumn{3}{l}{} & \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\objbox} \!\! \objbox \objbox \objbox \objbox}_\object
       \! \underbrace{\pubbox \pubbox \pubbox \dots}_\public
-      ~ \stackrel{\mathtt{a0}}{\pubbox} ~ \stackrel{\mathtt{a1}}{\freebox}
- %     ~ \stackrel{\mathtt{s0}}{\sealbox}
+      ~ \stackrel{\mathtt{a0}}{\pubbox\pubbox} ~ \stackrel{\mathtt{a1}}{\freebox\freebox}
+      ~ \stackrel{\mathtt{s0}}{\sealbox\sealbox}
       \)}
     \\
     \cline{1-3}
@@ -415,14 +415,17 @@ The callee's view is updated from the caller's such that all \(\object\) memory 
 become \(\sealed\). (For now we assume no sharing of memory between activations; data is
 passed only through argument registers, which remain active. In the presence of memory
 sharing, some memory would remain active, too.)
-
-\apt{needs review}
-{\tt f} does not take any arguments; if it did, any registers containing them would be 
-mapped to \(\object\), while any non-argument, caller-saved
-registers are mapped to \(\unsealed\). All callee-save registers remain \(\sealed\) for all calls.
+Function {\tt f} does not take any arguments; if it did, any registers containing them would be 
+mapped to \(\object\), while any non-argument, caller-saved 
+registers are mapped to \(\unsealed\). In the current example, only register {\tt a0} has a change in
+security class. All callee-save registers remain \(\sealed\) for all calls.
+Thus, if we varied the assembly code for the example slightly so that {\tt sensitive} was stored
+in a callee-save register (e.g. {\tt s0}) rather than in memory, its security class would still be \(\sealed\)
+at the entry to {\tt f}.
+%
 At step 9, {\tt f} returns, and the topmost inactive view, that of {\tt main}, is restored.
 
-We now show how this security semantics can be used define notions of confidentiality,
+We now show how this security semantics can be used to define notions of confidentiality,
 integrity, and correct control flow in such a way that many classes of
 bad behavior, including the attacks in Figure~\ref{fig:f}, are
 detected as security violations.
@@ -474,7 +477,7 @@ WBCF requires that if \(\mach\) is the state at that point, then \(\ret ~ \mach\
 \paragraph*{Stack Integrity}
 
 Like WBCF, stack integrity defines a condition at the call that must hold upon
-return. This time the condition applies to all of the memory in the function's 
+return. This time the condition applies to all of the memory in the function's
 frame. In Figure \ref{fig:exec1} we see the lifecycle of an allocated frame:
 upon allocation, the view labels it \(\object\), and when a call is made, it instead
 becomes \(\sealed\). Intuitively, the integrity of {\tt main}
@@ -899,7 +902,7 @@ is irrelevant.
     \rowcolor{black!10}
     2
     & \(\clri \triangleq\) & \((|\sigma| \uparrow \intProp) ~ (\mach,(V,\sigma))\)
-    & \(\textnormal{ where } \intProp ~ \mach' \triangleq 
+    & \(\textnormal{ where } \intProp ~ \mach' \triangleq
     \mach' \parallel \sealed(V) \cap \Delta(\mach,\mach')\)
 %    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called}\) \\
     & \(\textnormal{ for all call targets } (\mach,(V,\sigma))\) \\
@@ -914,7 +917,7 @@ is irrelevant.
     3a & & \(|\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma))\) & & \\
     \rowcolor{black!20}
     3b & & \(\textnormal{ and } (\mach,(V,\sigma)) ~ (|\sigma| \Uparrow \confProp) ~ (\nach,(V,\sigma))\)
-    & \(\textnormal{ where } (\mach' ~ \confProp ~ \nach') \triangleq 
+    & \(\textnormal{ where } (\mach' ~ \confProp ~ \nach') \triangleq
     \mach' \parallel \bar{\Diamond}(\mach,\nach,\mach',\nach')\) & \\
     %
     \rowcolor{black!10}
@@ -988,7 +991,7 @@ In both cases, the immediate callee retains access to the passed object, but fut
 callees will not---unless the object is passed-by-reference further down the stack.
 On the other hand, in the case of a caller explicitly taking the address of an
 object and passing it as a pointer, we have no way obvious way to limit the scope
-of such sharing. 
+of such sharing.
 
 Our primary machine treats this scenario as the caller allocating a ``public''
 object that can be accessed by anyone until it's deallocated. We extend the
@@ -1004,12 +1007,12 @@ never sealed at a call (\cref{sfig:publicalloc}).
   \begin{subfigure}{0.4\textwidth}
     \[\mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach \triangleq
     \{\mach[\reg]+i | \mathit{off} \leq i < \mathit{off+sz}\}\]
-    
+
     \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
                  \{\addr \mid V ~ \addr = \unsealed\}\)}
                {\(V' = V \llbracket \addr \mapsto \sealed \mid \addr \in \components \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{f} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
-             
+
     \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
                  \{\addr \mid V ~ \addr = \unsealed\}\)}
                {\(V' = V \llbracket \addr \mapsto \public \mid \addr \in \components \rrbracket\)}
@@ -1066,6 +1069,8 @@ in place, easily modeled by including them in \(\overline{sa}\). More sophistica
 behaviors may require sequences of {\bf dealloc}, {\bf tailcall}, then {\bf alloc}.
 
 \section{Enforcement}
+
+\bcp{Bits missing here!}
 
 \paragraph{Depth Isolation}
 
@@ -1290,5 +1295,5 @@ the previously defined \(\mathit{passed}\).
 Note that we have a degree of monotonicity here. Once an object is sealed (because its
 capability has not been passed to a callee), subsequent nested calls can never unseal it.
 On the other hand, an object that is passed via a pointer may be passed on indefinitely.
-              
+
 \end{document}
