@@ -88,15 +88,31 @@ about the history of security-relevant operations, which inform the criterion a 
 must satisfy in order to correctly obey the properties.
 
 The security principals in our account of stack safety are function
-activations: at any given time, pending activations
-have security requirements that are recorded in a call stack, and the current
-activation tracks context information that will inform its requirements when
-it makes a call. Each activation has a {\it view}
-of the system that maps each state element to a {\it security class}:
-it may be private to an inactive principal (\(\sealed\)),
-in an allocated object that is accessible to the current principal (\(\object\)),
-available to be allocated (\(\unsealed\)), or
-always accessible (\(\public\)).
+activations: the context tracks, for the active function and all pending
+functions, their {\em view} of the security state of the system.
+
+\paragraph*{Views}
+
+The security context consists of a stack of views: functions that map
+each state element to a {\it security class}. The security classes are
+\(\public\), \(\unsealed\), \(\object\), and \(\sealed\).
+
+State elements that are outside of the stack---general-purpose memory used for
+globals and the heap, as well as the code region and globally-relevant
+registers---are always labeled \(\public\). We place security requirements on some
+\(\public\) elements for purposes of \(\wbcf\), and a given enforcement mechanism
+might restrict their access (e.g., by rendering code immutable) but for integrity
+and confidentiality purposes they are considered accessible at all times.
+
+For a newly active function, every element that is available for use but uninitialized
+is seen as \(\unsealed\). From the perspective of the caller, the callee has no obligations
+regarding its use of \(\unsealed\) elements, but the callee itself 
+
+Arguments are seen as \(\object\), meaning that their contents may be safely used.
+When the active function allocates memory, that memory will also be \(\object\).
+Then, on a call, \(\object\) elements that are not being used to communicate with
+the new callee will become \(\sealed\)---reserved for an inactive principal,
+and expected to be unchanged when it becomes active again.
 
 \paragraph*{Events}
 
@@ -120,7 +136,14 @@ produce must be the result of accessing \(\component\).
 Putting these ideas together, we get the basic structure of a property in our model.
 First we define the security-relevant operations that we support, a security context,
 and the function according to which the security context updates with each step.
-Then, we define a predicate on states and contexts that expresses the requirements
-for our security property, using variants, assertions about future states, and comparison
-of event traces. Finally, in order to apply the property to a specific machine, we
-must determine how the machine's execution translates into security relevant operations.
+The security context gives each function activation a view, mapping each element to a
+security class.
+
+Then, we define our security requirements in terms of the security classes of state
+elements. These take the form of predicates on states and contexts that use variants,
+assertions about future return states, and comparison of event traces to capture the
+desired behavior without reference to implementation details.
+
+Separately, in order to apply a property to a specific machine, we do need to consider
+implementation details, by determining how the machine's execution translates into
+security relevant operations. But this step is transparent to the properties themselves.
