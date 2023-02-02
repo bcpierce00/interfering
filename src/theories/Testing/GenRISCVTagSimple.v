@@ -199,17 +199,21 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   (* Quick consistency checks *)
   Goal (MAX_LOCAL_WORDS >= MAX_REF_ARGS)%nat. now constructor. Qed.
 
+  Definition frameDataWords (fp : FunctionProfile) : Z :=
+    let words_rel_args := Z.of_nat MAX_REL_ARGS in
+    let words_locals := Z.of_nat MAX_LOCAL_WORDS in (* includes ref_args *)
+    words_rel_args + words_locals.
+
   (* If we want to allocate everything at once, we need to know the amount of
      space we need to pass arguments to any of our callees (whom we need not
      know in advance). The callee's function profile would be used by the caller
      to extend its frame before the call. *)
   Definition frameSizeWords (fp : FunctionProfile) : Z :=
     let words_ra := 1 in
-    let words_rel_args := Z.of_nat MAX_REL_ARGS in
-    let words_locals := Z.of_nat MAX_LOCAL_WORDS in (* includes ref_args *)
+    let words_data := frameDataWords fp in
     let words_callee_save_regs := Z.of_nat MAX_CALLEE_SAVE_REGS in
-    let trai_hack := 1 in
-    words_ra + words_rel_args + words_locals + words_callee_save_regs + trai_hack.
+    let trai_hack := 1 in (* HACK see notes in file *)
+    words_ra + words_data + words_callee_save_regs + trai_hack.
 
   Definition frameSizeBytes (fp : FunctionProfile) : Z :=
     4 * frameSizeWords fp.
@@ -331,18 +335,27 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
          ; (noCalleeRegs, choose (minCalleeReg, maxCalleeReg))
       ].
 
+  (* Current valid offsets span a contiguous region of each function's
+     (fixed-sized) frame. The topmost word is reserved for callee
+     RAs. The bottommost words are reserved for callee-saved register
+     storage and the current hacky padding word.
+
+     Valid local offsets start from -8 (second topmost word in the
+     frame). *)
   Definition genLocalOffset (fp : FunctionProfile) : G (option Z) :=
-    let dataSize := (frameSizeWords fp) - 1 in
+    let dataSize := frameDataWords fp in
     if 0 <? dataSize
-    then off <- choose (1,dataSize);; ret (Some (-4*off))
+    then off <- choose (0,dataSize-1);; ret (Some (-4*off - 8))
     else ret None.
 
+  (* For attackers, maybe we want some added flexibility?
+     Add tags to protect callee-saved copies or find extra attacks *)
   Definition allLocalOffsets (fp : FunctionProfile) : list Z :=
-    let dataSizeN := Z.to_nat ((frameSizeWords fp) - 1) in
+    let dataSizeN := Z.to_nat (frameDataWords fp) in
     let fix each n :=
       match n with
       | O => []
-      | S n' => (-4 * (Z.of_nat n))::each n'
+      | S n' => (-4 * (Z.of_nat n) - 4)::each n'
       end in
     each dataSizeN.
   
