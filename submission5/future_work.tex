@@ -1,0 +1,133 @@
+\subsection{Testing The Stack Safety Menagerie}
+
+In \cref{sec:intro}, we discussed the four dimensions of extensibility
+that our properties should exhibit: architectures, enforcement mechanisms,
+features, and requirements. We have focused on extending our basic system
+with advanced features; a logical next step is extending to other enforcement
+mechanisms. In the following, we discuss how different existing mechanisms
+might fit into our model.
+
+\subsubsection{Software Techniques}
+
+\paragraph{Stack Canaries and Shadow Stacks}
+%
+Canaries are special values inserted by the caller at certain points of the
+stack and checked for corruption on return, for protection against
+some classes of control-flow hijacking (i.e., overwriting the caller's
+return address through a buffer overflow that would also overwrite the canary
+detectably). A shadow stack is a mirror image of the control-relevant parts of the stack,
+maintained by the program to attempt to detect attempts to hijack its control
+flow and ``restrict the flexibility available in creating gadget chains''
+\cite{Shanbhogue+19}.
+%
+These are hardening techniques that increase the difficulty
+of some control-flow attacks on the stack, but cannot provide absolute
+guarantees on \(\wbcf\) under a normal attacker model.
+Interestingly, these are also lazy enforcement mechanisms, in that
+the attack may occur and be detected some time later, before taking the
+
+
+\paragraph{Bounds Checking}
+%
+Under a bounds checking discipline, all the pointers in a program are extended
+with some disjoint metadata, and these are combined to gate memory accesses,
+usually with the objective of enforcing some form of \emph{memory
+safety} \rb{(relate this to the basic high-level concepts and types of attacks
+we want to consider: control flow, some integrity and confidentiality?)}.
+%
+Compared to stack canaries and shadow stacks, bounds checking is eminently
+a \emph{high-level} technique, designed with a particular programming language
+in mind and implemented through a \emph{secure compiler} \cite{} that performs
+the necessary code transformations. Also unlike those techniques (which make few
+assumptions on callee code), it offers little to no protection
+against \emph{adversarial low-level} code that is not constrained to obey the
+bounds checking discipline.
+
+\paragraph{Split Stacks}
+%
+Code-pointer integrity seeks to prevent control-flow hijacking attacks by
+splitting the program memory, including the stack, into a regular region and a
+safe region; objects that require protection are placed in the latter and
+all accesses to them protected by static or dynamic checks.
+%
+Like shadow stacks, bounds checking is a high-level technique designed to
+protect code written in a high-level language, but it is designed to
+offer protection under a stronger threat model that also considers the presence
+of untrusted code. As with most other software-based methods, it purports to
+protect exclusively the control-relevant parts of the stack, making no claims
+about its data-relevant parts.
+
+\subsubsection{Hardware Techniques}
+
+In addition to the many software-based techniques developed to provide greater
+degrees of protection to the stack, often incurring a significant performance penalty,
+some proposals have turned to specialized hardware features to offset those
+costs and attempt to offer greater levels of protection.
+
+We focus in particular on two families of hardware mechanisms: capability machines
+and tag-based reference monitors. Both types of system move beyond simply
+offering hardware acceleration for software-based techniques, offering hardware
+primitives for both memory and control-flow enforcement that can offer a degree
+of protection even with minimal cooperation from the code.
+%
+\rb{Something about how realistic/practical these alternatives are? Are we
+  selecting partly based on prototypes, etc.?}
+
+\paragraph{Capabilities}
+%
+\rb{(There is plenty of variety here, should we focus on the Cerise-and-friends
+  (CHERI-adjacent) work exclusively?)}
+
+\sna{If we have good examples of other capability systems, we should absolutely
+  talk about them. No need to privilege CHERI.}
+%
+Capability machines can represent and manipulate
+unforgeable tokens of authority over specific regions of
+memory using a combination of dedicated out-of-band memory and
+specialized ISA instructions.
+%
+The most prominent contemporary representative of this long line of work is
+CHERI \cite{}, a modern architecture designed to provide efficient fine-grained
+memory protection and compartmentalization.
+%
+Previous work has uses these principles in simplified models to implement
+\emph{secure calling conventions} for the call
+stack \cite{}. Those conventions can be seen as combining the
+protections of bounds-checking with software-based methods of control-flow protection.
+%
+They are closely related \rb{too strong?} to this work; we discuss them in more
+detail in \cref{XXX}.
+%
+
+\paragraph{Micro-Policies}
+%
+\rb{(This partly overlaps with the technical preliminaries, try to offer a quick
+  synthesis here.)}
+%
+Micro-policy machines are a family of tagged architectures that decorate
+addressable memory and registers with arbitrary metadata tags, and extend the
+processor with a programmable hardware monitor that uses custom rules on
+metadata tags to implement many different kinds of security policies.
+%
+This flexibility can be harnessed to implement a wide array of stack protection policies with relative ease, covering and going beyond the capabilities \rb{word choice?} of the various software-based techniques \cite{} \rb{as demonstrated by}.
+%
+These policies comprise very general forms of \emph{lazy enforcement}, which can tolerate
+potential but harmless violations \rb{the system programmer's motto: ``trust me,
+  I know what I'm doing''} while still detecting them if and when their effects
+become observable. 
+%
+Micro-policies are one of the centerpieces of our technical development; we
+present them in more detail in \cref{XXX}.
+
+\paragraph{Summary}
+
+We begin to see that the security of the call stack and its contents is not
+clearly defined. Different protection mechanisms aim to protect the stack
+in fundamentally different ways, each offering a \emph{unique}, \emph{implicit}
+specification of the meaning of ``stack safety.'' These specifications
+may be more or less compatible with the needs of a given high-level language.
+Moreover, different protections operate under different threat models, further
+complicating their comparison and the assessment of the safeguards they
+effectively offer their clients---the programs themselves.
+It would be far preferable to have a \emph{standard}, \emph{explicit} specification.
+Only a handful of works have offered any explicit specification.
