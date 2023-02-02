@@ -636,7 +636,7 @@ Similarly, in \(\clei\), only elements marked \(\object\) at the call should inf
 behavior of the callee. This is the same principle as \(\clrc\), extended from \(\sealed\)
 elements to all non-\(\object\) ones.
 
-\section{Machine and Security Semantics, Formally}
+\section{Formalization}
 \label{sec:machine}
 
 % APT: I don't think we need this.
@@ -662,6 +662,18 @@ elements to all non-\(\object\) ones.
 %%   \label{fig:RISCVregs}
 %% \end{figure}
 
+We now give a formal description of our machine model, security semantics,
+and properties. Our definitions abstract over the details of the target machine
+architecture and ABI, the set of security-relevant operations, the rules that
+govern evolution of the security context, the set of observable events, and
+a notion of value compatibility.
+\apt{Not quite true: the property definitions require a notion of
+  call entry.}
+\apt{Any more? Give a more listlike presentation?
+  Need to clarify exactly what the parameters are, both in the initial
+  presentation and in the various extensions, including the appendix.}
+
+\subsection{Machine}
 The building blocks of a machine are {\em words} and {\em registers}.
 Words are ranged over by \(\word\) and, when used as addresses, \(\addr\),
 and are drawn from the set \(\WORDS\).
@@ -672,47 +684,66 @@ Along with the program counter, \(\PCname\), these are referred to as
 {\em state elements} \(\component\) in the set \(\COMPONENTS ::= \PCname | \WORDS | \REGS\).
 
 A {\em machine state} \(\mach \in \MACHS\) is a map from state elements to a set \(\mathcal{V}\) of
-\emph{values},  with a step function \(\mach \xrightarrow{\bar{\psi},\obs} \mach'\).
+\emph{values}.
 Each value \(v\) contains a \emph{payload} word, written \(|v|\).
+We write \(\mach[\component]\) to denote the value of \(\mach\) at
+\(\component\)  and \(\mach[v]\) as shorthand for \(\mach[|v|]\).
 The details of value structure depend on the specific machine being modelled;
 intuitively, the payload represents the part of the value that is relevant to
 the behavior of the basic machine, while the rest of the value may contain
 information relevant to a hardware enforcement mechanism (such as a tag).
-We write \(\mach[\component]\) to denote the value of \(\mach\) at
-\(\component\)  and \(\mach[v]\) as shorthand for \(\mach[|v|]\).
+We assume a given \emph{compatibility} equivalence relation \(\sim\) on values,
+and lift it element-wise to states.
+Values are compatible if their non-payload information is identical, 
+even though their payloads may differ.
+\apt{This is still not very convincing!
+  empting to say that only the payloads can affect the step function, but that is
+  too strong, right? (OK for tags, but not, e.g. capabilities?}
 
-Security classes are ranged over by \(l \in \{\public, \object, \sealed, \unsealed\}\).
-For some security class \(l\), we write \(l(V)\)
+The machine has a step function \(\mach \xrightarrow{\bar{\psi},\obs} \mach'\).
+Except for the annotations over the arrow, this function just encodes the usual
+ISA description of the machine's instruction set. The annotations serve to connect
+the machine's operation to our security setting: 
+\(\bar{\psi}\) is a list of security-relevant operations drawn from an assumed set \(\Psi\),
+and \(\obs\) is an (potentially silent) observable event; these are described further below.
+
+\subsection{Security semantics}
+
+The security semantics operates in parallel with the 
+Each state element (memory word or register) is given a \emph{security class} 
+\(l \in \{\public, \object, \sealed, \unsealed\}\).
+A \emph{view} \(V \in \mathit{VIEW}\) maps elements to security classes.
+For any security class \(l\), we write \(l(V)\)
 to denote the set of elements \(\component\) such that \(V ~ \component = l\).
 The {\it initial view} \(V_0\) maps all stack locations to \(\unsealed\),
 all other locations to \(\public\), and registers based on which set they
 belong to: \(\sealed\) for callee-saved, \(\unsealed\) for caller-saved, and \(\public\) otherwise.
+\apt{This doesn't quite match example, where there is magically an initial argument register labeled \(\active\).}
 
-A {\it context} is a pair of the current activation's view and
+A (security) \emph{context} is
+a pair of the current activation's view and
 a list of views representing the call stack (pending inactive
 principals), ranged over by \(\sigma\).
-
-A view \(V\) maps elements to security classes, and a context consists of the
-view of the active function together with a stack of inactive views.
-The initial context is \(\context_0 = (V_0, \emplist)\).
 %
 \[\context \in \CONTEXTS ::= \mathit{VIEW \times list ~ VIEW}\]
 %
-We have described informally how the security context develops as the system performs
+The initial context is \(\context_0 = (V_0, \emplist)\).
+
+\cref{sec:example} describes informally how the security context evolves as the system performs
 security-relevant operations. Formally, we combine each machine state with a context
 to create a {\it combined state} \(s = (\mach,\context)\) and a lift the transition
-to \(\stepstounder{}\) on combined states, labeled with the same operations.
-with each step, the context updates based on the function
+to \(\stepstounder{}\) on combined states. 
+At each step, the context updates based on the function
 \(Op : \MACHS \rightarrow \CONTEXTS \rightarrow \psi \rightarrow \CONTEXTS\).
-Note that \(Op\) takes as its first argument the state {\it before} the step.
+(Note that \(Op\) takes as its first argument the state {\it before} the step.)
 Since a single step might correspond to multiple operations, we apply
-\(Op\) as many times as is needed.
+\(Op\) as many times as needed, using \(\mathit{foldl}\).
 
 \judgmenttwo{\(\mach \xrightarrow{\overline{\psi},\obs} \mach' \)}
             {\(\mathit{foldl} ~ (Op ~ \mach) ~ \context ~ \overline{\psi} = \context'\)}
             {\((\mach,\context) \stepstounder{\overline{\psi},\obs} (\mach', \context')\)}
 
-The definition of \(Op\) is most convenient to present decomposed into
+A definition of \(Op\) is most convenient to present decomposed into
 rules for each operation. We have already seen the intuition behind the rules for
 \(\mathbf{alloc}\), \(\mathbf{call}\), and \(\mathbf{ret}\).
 For the machine described in the example, the \(Op\) rules would be those
@@ -756,10 +787,11 @@ of events, ranged over by \(\obsT\).
 We use ``\(\notfinished{}{}\)'' to represent ``cons'' for traces, reserving ``::''
 for list-cons.
 
-We write the trace of execution from a state up to the first
-state below depth \(d\) via the \(\hookrightarrow\) operator, defined coinductively.
-When \(d = 0\), the trace will always be infinite. In this case we
-omit \(d\) and just write \(\hookrightarrow s\).
+We are particular interested in traces that end just after a function returns.
+We define these in terms of the depth \(d\) of the security context's call stack \(\sigma\).
+We write \(d \hookrightarrow s\) for the trace of execution from a state \(s\)
+up to the first point where the stack depth is smaller than \(d\), defined
+coinductively by these rules:
 
 \judgment{\(|\sigma| < d\)}
          {\(d \hookrightarrow (\mach,(V,\sigma)) = \tau\)}
@@ -769,10 +801,14 @@ omit \(d\) and just write \(\hookrightarrow s\).
               {\(d \hookrightarrow (\mach',\context') = \obsT\)}
               {\(d \hookrightarrow (\mach,(V,\sigma)) = \notfinished{\obs}{\obsT}\)}
 
+\noindent
+When \(d = 0\), the trace will always be infinite; in this case we
+omit \(d\) and just write \(\hookrightarrow s\).
 
 Two event traces $\obsT_1$ and $\obsT_2$ are {\em similar},
 written \(\obsT_1 \eqsim \obsT_2\), if the sequence of non-silent events
 is the same. That is, we compare up to deletion of \(\tau\) events.
+\apt{Didn't we use to say something about the (arguably) odd nature of this definition?}
 
 \begin{minipage}{.4\columnwidth}
   \judgment{}{\(\obsT \eqsim \obsT\)}
@@ -791,44 +827,38 @@ is the same. That is, we compare up to deletion of \(\tau\) events.
            {\(\obsT_1 \eqsim \notfinished{\tau}{\obsT_2}\)}
 \end{minipage}
 
-\section{Formal properties}
+\subsection{Variants, corrupted sets, and ``on-return'' assertions}
 \label{sec:props}
 
-Now we are ready to introduce the formal properties that define correctly enforced
-security semantics. First, we must give a few prelimaries: the generation and comparison
-of traces, variant states, and ``on-return'' assertions.
-
-For a given system, we assume a \emph{compatibility} equivalence relation \(\sim\) on values.
-Values are compatible if their tags (or whatever other data is important to
-the machine's security enforcement mechanism) are identical,
-even though their payloads may differ.
-Two states are variants with respect to a set of elements \(\components\)
-if they agree on the value of every element not in \(\components\) and
-and have compatible values for every element in \(\components\).
+Two (compatible) states are variants with respect to a set of elements \(\components\)
+if they agree on the value of every element not in \(\components\). 
 Our notion of non-interference involves comparing the traces of such
 \(\components\)-variants. We use this to define sets of irrelevant elements,
-and secrets in general.
+and secrets in general.\apt{last phrase is cryptic}
+
+\definition The \emph{difference set} of two machine states \(\mach\) and \(\mach'\), written \(\Delta(\mach,\mach')\),
+is the set of elements \(\component\) such that \(\mach[\component] \not = \mach'[\component]\).
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
-written \(\mach \approx_\components \nach\), if, for
-all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]\)
-and for all \(\component \in \components\), \(\mach[\component] \sim \nach[\component]\).
+written \(\mach \approx_\components \nach\), if \(\mach\sim\nach\) and
+\(\Delta(\mach,\nach) \subseteq \components\). 
+%if all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]\)
+%and for all \(\component \in \components\), \(\mach[\component] \sim \nach[\component]\).
 
-\definition An element set \(\components\) in state \((\mach,\context)\) contains
-irrelevant values, written \((\mach,\context) \parallel \components\), if for all
+\definition An element set \(\components\) is \emph{irrelevant} to state \((\mach,\context)\),
+written \((\mach,\context) \parallel \components\), if for all
 \(\nach\) such that \(\mach \approx_{\components} \nach\),
 \(\hookrightarrow (\mach,\context)  \eqsim \hookrightarrow (\nach,\context)\).
-
-\definition \(\Delta(\mach,\mach')\) is the set of elements \(\component\)
-such that \(\mach[\component] \not = \mach'[\component]\).
 
 \definition The {\em corrupted set} \(\bar{\Diamond}(\mach,\mach',\nach,\nach')\)
 is the set \((\Delta(\mach,\mach') \cup \Delta(\nach,\nach')) \cap \Delta(\mach',\nach')\).
 
-Conceptually, the corrupted set treats \(\mach\) and \(\nach\) as initial states whose
-and \(\mach'\) and \(\nach'\) as their corresponding final states, such that any element
-that has changed from its initial value but does not match between the final states
-is considered to have propagated some varied data from the original pair.
+If we consider two execution sequences, one from \(\mach\) to \(\mach'\)
+and the other from \(\nach\) to \(\nach'\),
+then \(\bar{\Diamond}(\mach,\mach',\nach,\nach')\) is the set of elements that
+change in one or both executions and end up with different values. Intuitively,
+this captures the effect of any differences between \(\mach\) and \(\nach\), i.e.,
+the set of values that are ``corrupted'' by those differences.
 
 Our ``on-return'' assertions are defined using a second-order logical operator
 \(d \uparrow P\), pronounced ``\(P\) holds on return from depth \(d\),''
@@ -844,7 +874,7 @@ returns from depth \(d\).
 \judgmenttwobrlong[Step]
                   {\(|\sigma| \geq d\)}
                   {\((d \uparrow P) ~ (\mach', \context')\)}
-                  {\((\mach, (V,\sigma)) \stepstounder{\overline{\psi}} (\mach', \context',\obs)\)}
+                  {\((\mach, (V,\sigma)) \stepstounder{\overline{\psi},\obs} (\mach', \context')\)}
                   {\((d \uparrow P) ~ (\mach, (V,\sigma))\)}
 
 Similarly, we give a binary equivalent for use in confidentiality. We define \(\Uparrow\) so that
@@ -860,14 +890,14 @@ respectively. Once again, \(\Uparrow\) is coinductive.
 
 \judgmenttwobrlong[Left]
                   {\(|\sigma_1| \geq d\)}
-                  {\((\mach_1,(V_1,\sigma_1)) \stepstounder{\overline{\psi}} (\mach_1',\context_1',\obs)\)}
+                  {\((\mach_1,(V_1,\sigma_1)) \stepstounder{\overline{\psi},\obs} (\mach_1',\context_1')\)}
                   {\((\mach_1',\context_1') ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
                   {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
 \judgmenttwobrlong[Right]
                   {\(|\sigma_2| \geq d\)}
-                  {\((\mach_2,(V_2,\sigma_2)) \stepstounder{\overline{\psi}} (\mach_2',\context_2',\obs)\)}
-                  {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,\context_2')\)}
+                  {\((\mach_2,(V_2,\sigma_2)) \stepstounder{\overline{\psi},\obs} (\mach_2',\context_2')\)}
+                  {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2',\context_2')\)}
                   {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
 Finally, we can define our core properties. They can be found in \cref{tab:props},
@@ -875,9 +905,11 @@ arranged to show their commonalities and distinctions. Each definition gives a c
 quantified over states \(s\) that immediately follow call (or tail-call) steps.
 If an execution can reach a state \(s'\) such that \(s' \stepstounder{\overline{\psi}} s\)
 where \(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then \(s\) is the target
-of a call. Likewise, if \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then
-\(s\) is the target of a tailcall. As a shorthand, we write that each property is defined
-by a criterion that must hold ``for all (tail)call targets \(s\).''
+of a call.
+%Likewise, if \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then
+%\(s\) is the target of a tailcall.
+As a shorthand, we write that each property is defined
+by a criterion that must hold ``for all call targets \(s\).''
 
 \(\wbcf\), \(\clri\), and \(\clec\) are each straightforward: they define predicates that must
 hold on return from the call. \(\clrc\) and \(\clei\) both compare the execution of the
@@ -886,6 +918,8 @@ their return-time behavior. So, for some \(\nach\) that is an appropriate varian
 all states must fulfill an ``internal'' clause that their traces are similar,
 and a ``return-time'' clause, that any potentially corrupted memory at their returns
 is irrelevant.
+\apt{This paragraph needs major expansion, to paraphrase the definitions informally,
+  and TO SAY MUCH MORE ABOUT THE CALLEE PROPERTIES, which are not intuitive at all (to me)!}
 
 \begin{table*}[h]
   \setlength{\tabcolsep}{1pt}
@@ -893,7 +927,7 @@ is irrelevant.
   \begin{tabular}{l r l l l}
     \rowcolor{black!20}
     1
-    & \(\wbcf \triangleq\) & \(|\sigma| \uparrow \ret\)
+    & \(\wbcf \triangleq\) & \((|\sigma| \uparrow \ret) ~ ????\)
     & \(\textnormal{ where } \ret ~ \mach' \triangleq \)
     \(\mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]+4\)
 %    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called}\) \\
@@ -903,7 +937,7 @@ is irrelevant.
     2
     & \(\clri \triangleq\) & \((|\sigma| \uparrow \intProp) ~ (\mach,(V,\sigma))\)
     & \(\textnormal{ where } \intProp ~ \mach' \triangleq
-    \mach' \parallel \sealed(V) \cap \Delta(\mach,\mach')\)
+    \mach' \parallel (\sealed(V) \cap \Delta(\mach,\mach'))\)
 %    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called}\) \\
     & \(\textnormal{ for all call targets } (\mach,(V,\sigma))\) \\
     %
@@ -912,7 +946,7 @@ is irrelevant.
     & \(\clrc \triangleq\) & \(\forall \nach \textnormal{ s.t. } \mach \approx_{\components} \nach,\)
     & \(\textnormal{ where } \components = \sealed(V)\)
 %    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
-    & \(\textnormal{ for all (tail)call targets } (\mach,(V,\sigma))\) \\
+    & \(\textnormal{ for all call targets } (\mach,(V,\sigma))\) \\
     \rowcolor{black!20}
     3a & & \(|\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma))\) & & \\
     \rowcolor{black!20}
@@ -924,9 +958,9 @@ is irrelevant.
     4
     & \(\clec \triangleq\) & \((|\sigma| \uparrow \cconfProp) ~ (\mach,(V,\sigma))\)
     & \(\textnormal{ where } \cconfProp ~ \mach' \triangleq
-    \mach' \parallel \Delta(\mach,\mach') - \components\)
+    \mach' \parallel (\Delta(\mach,\mach') - \components)\)
 %    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
-    & \(\textnormal{ for all (tail)call targets } (\mach,(V,\sigma))\) \\
+    & \(\textnormal{ for all call targets } (\mach,(V,\sigma))\) \\
     \rowcolor{black!10}
     & & & \(\textnormal{ where } \components = \public(V) \cup \object(V)\) & \\
     %
@@ -935,7 +969,7 @@ is irrelevant.
     & \(\clei \triangleq\) & \(\forall \nach \textnormal{ s.t. } \mach \approx_{\components} \nach,\)
     & \(\textnormal{ where } \components = \public(V) \cup \object(V)\)
 %    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
-    & \(\textnormal{ for all (tail)call targets } (\mach,(V,\sigma))\) \\
+    & \(\textnormal{ for all call targets } (\mach,(V,\sigma))\) \\
    \rowcolor{black!20}
     5a & & \(|\sigma| \hookrightarrow (\mach,(V,\sigma)) \simeq |\sigma| \hookrightarrow (\nach,(V,\sigma))\) & & \\
     \rowcolor{black!20}
@@ -943,15 +977,18 @@ is irrelevant.
     & \(\textnormal{ where } (\mach' ~ \cintProp ~ \nach') \triangleq
     \mach' \parallel \bar{\Diamond}(\mach,\nach,\mach',\nach')\) & \\
   \end{tabular}
-  \caption{Properties}
+  \caption{Properties\apt{In WBCF, surely we need a state arg? But it needs to be the state \emph{before} the call,
+      doesn't it?}}
   \label{tab:props}
 \end{table*}
 
 \section{Expanding the Machine}
 
 The system we've modeled so far has been very simple, but our properties
-support an important dimension of generality: adding features. We now
-briefly introduce the features of our primary testing machine.
+support an important dimension of generality: adding features.\apt{Just what needs to be changed
+to add these features?}
+We now briefly introduce the features of our primary testing machine.\apt{Make sure
+testing has been introduced properly before now. And why ``primary''?}
 
 The full machine defines additional operations, and extends some of the old ones.
 We add a field \(\overline{sa}\) to the \(\mathbf{call}\) operation: a set of
@@ -963,14 +1000,15 @@ gains a boolen flag indicating whether the allocation is to be public, accessibl
 all functions until deallocated. The rules are given in \cref{fig:advops}; the
 rules in \cref{fig:basicops} can be recaptured by instantiating
 \(\mathbf{call}\) with \(\overline{sa}\) as the empty set, and \(\mathbf{alloc}\)
-with \(\mathbf{f}\).
+with flag \(\mathbf{f}\).
 
 \subsection{Sharing Stack Memory}
 In our examples, we have presented a vision of stack safety in which
 the interface between caller and callee is in the registers that pass
 arguments and return values. This is frequently not the case in a realistic
-setting. Arguments may be passed on the stack due to being spilled, as an implementation
-of variadic arguments, or because they are reference objects that inherently have
+setting. Arguments may be passed on the stack (e.g. because there are too many
+to pass in registers), as an implementation
+of variadic arguments, or because they are reference objects \apt{??} that inherently have
 pass-by-reference semantics. The caller may also take the address of a local object and
 pass that as a pointer to its callee.
 
@@ -981,19 +1019,24 @@ We first define the helpful set \(\mathit{passed} ~ \overline{sa} ~ \mach\),
 then extend the call operation to keep all objects in \(\mathit{passed}\) marked
 as \(\object\) and seal everything else (\cref{sfig:stkargs}).
 
-In this mechanism, we can describe an argument being passed by their relative address
+Using this mechanism, we can describe an argument being passed on the stack
+by giving its \(\SP\)-relative offset,
 with the operation \(\mathbf{call} ~ \dots ~ (\SP, \mathit{off}, \mathit{sz})\).
 In the case of pass-by-reference semantics, if the compiler designates register
 \(\reg\) as holding the reference, then the operations is
-\(\mathbf{call} ~ \dots ~ (\reg, 0, \mathit{sz})\).
+\(\mathbf{call} ~ \dots ~ (\reg, 0, \mathit{sz})\).\apt{This is unclear to me. 
+  The compiler knows where the cbr parameter lives in the caller's stack
+  frame, so why wouldn't it use a sp-relative spec for that too? Does it have
+  to do with passing a CBR parameter further down to another callee as you allude
+  to in the next para?}
 
-In both cases, the immediate callee retains access to the passed object, but future
+In both cases, the immediate callee retains access to the passed object, but deeper
 callees will not---unless the object is passed-by-reference further down the stack.
 On the other hand, in the case of a caller explicitly taking the address of an
 object and passing it as a pointer, we have no way obvious way to limit the scope
 of such sharing.
 
-Our primary machine treats this scenario as the caller allocating a ``public''
+Our primary \apt{again...} machine treats this scenario as the caller allocating a ``public''
 object that can be accessed by anyone until it's deallocated. We extend the
 \(\mathbf{alloc}\) operation with a boolean flag, where {\bf t} indicates
 that the allocation is public, and {\bf f} is private.
@@ -1065,7 +1108,7 @@ pops the top of the stack.
 Since the caller will not be returned to, it does not need integrity, though
 it should still enjoy confidentiality. We set its frame to \(\unsealed\) rather
 than \(\sealed\) to express this. Of course, some objects may be passed as arguments
-in place, easily modeled by including them in \(\overline{sa}\). More sophisticated
+in place\apt{??}, easily modeled by including them in \(\overline{sa}\). More sophisticated
 behaviors may require sequences of {\bf dealloc}, {\bf tailcall}, then {\bf alloc}.
 
 \section{Enforcement}
