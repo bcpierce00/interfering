@@ -43,15 +43,19 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition r0 : Register := 0.
   Definition ra : Register := 1.
   Definition sp : Register := 2.
-  Definition a0 : Register := 8.
+  Definition a0 : Register := 10.
   
-  Definition minReg : Register := 8.
+  Definition minReg : Register := 10.
   Definition noRegs : nat := 3%nat.
   Definition maxReg : Register := minReg + Z.of_nat noRegs - 1.
   (* TEMP: Keep argument register(s), in particular those used to pass arguments
      by reference, separate from the rest. This eases bookkeeping if we
      keep them immutable, like e.g. SP. A single register for now. *)
   Definition argReg : Register := maxReg.
+
+  Definition minCalleeReg : Register := 18.
+  Definition noCalleeRegs : nat := 3%nat.
+  Definition maxCalleeReg : Register := minCalleeReg + Z.of_nat noCalleeRegs - 1.
 
   Record TagInfo :=
     { regTag  : TagSet
@@ -179,6 +183,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         relative_args : nat;
         reference_args : list (Register * Z); (* argument register, size (words) *)
         locals : list (positive * localKind);
+        callee_save_regs : nat; (* simple layout: assume a range of consecutive
+                                   registers starting from [minCalleeReg], no
+                                   greater than the block of saved registers *)
       }.
 
   (* Constants to bound the complexity of generate functions. Note that
@@ -188,6 +195,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition MAX_REL_ARGS : nat := 1.
   Definition MAX_REF_ARGS : nat := 1.
   Definition MAX_LOCAL_WORDS : nat := 2.
+  Definition MAX_CALLEE_SAVE_REGS : nat := noCalleeRegs.
   (* Quick consistency checks *)
   Goal (MAX_LOCAL_WORDS >= MAX_REF_ARGS)%nat. now constructor. Qed.
 
@@ -199,7 +207,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     let words_ra := 1 in
     let words_rel_args := Z.of_nat MAX_REL_ARGS in
     let words_locals := Z.of_nat MAX_LOCAL_WORDS in (* includes ref_args *)
-    words_ra + words_rel_args + words_locals.
+    let words_callee_save_regs := Z.of_nat MAX_CALLEE_SAVE_REGS in
+    let trai_hack := 1 in
+    words_ra + words_rel_args + words_locals + words_callee_save_regs + trai_hack.
 
   Definition frameSizeBytes (fp : FunctionProfile) : Z :=
     4 * frameSizeWords fp.
@@ -311,11 +321,14 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     else ret 0.
 
   Definition genTargetReg (m : MachineState) : G Register :=
-    choose (minReg, maxReg).
+    freq [ (noRegs, choose (minReg, maxReg))
+         ; (noCalleeRegs, choose (minCalleeReg, maxCalleeReg))
+      ].
 
   Definition genSourceReg (m : MachineState) : G Register :=
     freq [ (1%nat, ret r0)
          ; (noRegs, choose (minReg, maxReg))
+         ; (noCalleeRegs, choose (minCalleeReg, maxCalleeReg))
       ].
 
   Definition genLocalOffset (fp : FunctionProfile) : G (option Z) :=
@@ -566,10 +579,11 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     (* local_count <- choose (0,3)%nat;; *)
     let local_count := MAX_LOCAL_WORDS in
     let locals := List.repeat (1%positive,Lsecret) local_count in
-    ret (mkfunprofile id addr (Some (addr + 8)) (count_list reg_args) rel_args ref_args locals).
+    let spilled_regs := MAX_CALLEE_SAVE_REGS%nat in (* later: choose (and tweak generation!) *)
+    ret (mkfunprofile id addr (Some (addr + 8)) (count_list reg_args) rel_args ref_args locals spilled_regs).
   
   Definition main : FunctionProfile :=
-    mkfunprofile O 0 (Some 8) [] 0 [] [(3%positive,Lsecret)].
+    mkfunprofile O 0 (Some 8) [] 0 [] [(3%positive,Lsecret)] 0.
 
   Fixpoint genFuns (n : nat) (m : MachineState) : G (MachineState * (list FunctionProfile) * CodeMap_Impl) :=
     match n with
@@ -579,15 +593,30 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         '(m',fps,cm) <- (genFuns n m);;
         fp <- (if n =? O then ret main else genFun n (base))%nat;;
         let sz := frameSizeBytes fp in
-        let m'' := setInstrs [(base,   Sw sp ra 0);
+        let m'' := setInstrs [(* regular entry sequence *)
+                              (base,   Sw sp ra 0);
                               (base+4, Addi sp sp sz);
-                              (base+8, Addi r0 r0 0)] m' in
-        let m''' := setMemTags [(base,   [Tinstr; Th1]);
-                                (base+4, [Tinstr; Th2]);
-                                (base+8, [Tinstr; Th3])] m'' in
-        let cm' := map.putmany_of_list [(base,   Some []);
-                                        (base+4, Some [Alloc 0 sz]);
-                                        (base+8, Some [])]
+                              (* nop/late entry for tail calls *)
+                              (base+8, Addi r0 r0 0);
+                              (* spill callee-saved registers (currently fixed sequence)
+                                 HACK one word above frame lower bound  *)
+                              (base+12, Sw sp minCalleeReg (-sz + 12));
+                              (base+16, Sw sp (minCalleeReg + 1) (-sz + 8));
+                              (base+20, Sw sp (minCalleeReg + 2) (-sz + 4))
+                              (* (later) initialize spilled registers? *)
+                             ] m' in
+        let m''' := setMemTags [(base,    [Tinstr; Th1]);
+                                (base+4,  [Tinstr; Th2]);
+                                (base+8,  [Tinstr; Th3]);
+                                (base+12, [Tinstr]);
+                                (base+16, [Tinstr]);
+                                (base+20, [Tinstr])] m'' in
+        let cm' := map.putmany_of_list [(base,    Some []);
+                                        (base+4,  Some [Alloc 0 sz]);
+                                        (base+8,  Some []);
+                                        (base+12, Some []);
+                                        (base+16, Some []);
+                                        (base+20, Some [])]
                                        cm in
         ret (m''', fp::fps, cm')
     end.
@@ -675,7 +704,13 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   
   Definition returnSeq (f : FunID) (fp : FunctionProfile) :=
     let sz := frameSizeBytes fp in
-    [ (Addi sp sp (-sz) , [Tinstr; Tr1], f, [(Dealloc 0 sz)])
+    [ (* restore callee-saved registers
+         HACK one word above frame lower bound *)
+      (Lw   minCalleeReg       sp (-sz + 12), [Tinstr], f, [(*noops*)]);
+      (Lw   (minCalleeReg + 1) sp (-sz + 8),  [Tinstr], f, [(*noops*)]);
+      (Lw   (minCalleeReg + 2) sp (-sz + 4),  [Tinstr], f, [(*noops*)]);
+      (* proper return sequence *)
+      (Addi sp sp (-sz) , [Tinstr; Tr1], f, [(Dealloc 0 sz)])
     ; (Lw   ra sp 0     , [Tinstr; Tr2], f, [(*noops*)])
     ; (Jalr ra ra 0     , [Tinstr; Tr3], f, [Return])
     ].
@@ -979,6 +1014,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   
   Definition genGPRs (t : TagInfo) (mp : MachineState) : G MachineState :=
     let (m,p) := mp in
+    (* first block for argument registers *)
     ds <- (replicateGen 3 (genImm 40));;
     ts <- (replicateGen 3 (returnGen (regTag t)));;
     let regs :=
@@ -989,8 +1025,20 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
       List.fold_left (fun '(i,m) (t : TagSet) =>
                         (i+1, map.put m i t))
                      ts (minReg, regtags p) in
-    ret (withRegs (snd regs) m,
-          p <| regtags := snd tags |>).
+    (* second block for callee-save registers (TODO refactor) *)
+    ds <- (replicateGen 3 (genImm 40));;
+    ts <- (replicateGen 3 (returnGen (regTag t)));;
+    let regs' :=
+      List.fold_left (fun '(i,m) r =>
+                        (i+1, map.put m i (word.of_Z r)))
+                     ds (minCalleeReg, (snd regs)) in
+    let tags' : Z * TagMap :=
+      List.fold_left (fun '(i,m) (t : TagSet) =>
+                        (i+1, map.put m i t))
+                     ts (minCalleeReg, (snd tags)) in
+    (* generator *)
+    ret (withRegs (snd regs') m,
+          p <| regtags := snd tags' |>).
   
   Definition genDataMemory
              (i : LayoutInfo) (t : TagInfo)
@@ -1036,7 +1084,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     getNextPc := ZToReg 4;
     getMem := unchecked_store_byte_list
                 (word.of_Z defLayoutInfo.(stackLo))
-                (Z32s_to_bytes (repeat 0 125))
+                (Z32s_to_bytes (repeat 0 125)) (* FIXME? revised default layout *)
                 map.empty;
     (*unchecked_store_byte_list (word.of_Z 500)
       (Z32s_to_bytes (cons 0 nil))
