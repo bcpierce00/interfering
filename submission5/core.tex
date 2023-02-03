@@ -102,7 +102,7 @@ variety of compiler, run-time, and hardware mechanisms for protecting stack
 memory. But, unlike ``the heap,'' the stack does not correspond to a single
 high-level language concept. Rather, it corresponds to the fundamental
 abstraction of functions, in all of the forms that they can take.
-The protean nature of the functional abstraction makes stack safety
+This protean nature of the functional abstraction makes stack safety
 difficult to specify.
 
 We propose a formal characterization of stack safety based on
@@ -121,7 +121,8 @@ terms of the observable behavior of the system.
 The stack interacts with a large number of language features that are often excluded
 from discussion of stack safety. Our properties support a system with
 both caller- and callee-saved registers, arguments passed on the stack,
-tail-call elimination, \ifexceptions exceptions \fi. They are modular by
+\ifexceptions tail-call elimination, and exceptions.
+\else and tail-call elimination. \fi They are modular by
 design, in order to be further extensible to other features.
 
 We validate our properties by using them to distinguish correct implementations
@@ -157,7 +158,6 @@ perennial~\cite{mitre-cwe,DBLP:conf/raid/VeendCB12,
   DBLP:conf/sp/HuSACSL16,msrc-bluehat,chromium-security}
 target for low-level attacks, frequently involving control-flow hijacking via corrupting
 the return address, and memory corruption more generally.
-
 %
 %The most recent release of the authoritative CWE Top 25
 %Most Dangerous Software Weaknesses~\cite{
@@ -179,7 +179,7 @@ capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJF
 and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18,Gollapudi+23}.
 
 Security mechanisms can be brittle, successfully eliminating one attack while leaving room for
-other, similar attacks. To avoid this, we seek formal properties of safe behavior that can be proven
+other, similar attacks. To avoid this \leo{game of whack-a-mole}, we seek formal properties of safe behavior that can be proven
 or tested. Such properties become the specification against which enforcement can be validated;
 even enforcement mechanisms that do not fulfill a property benefit from the ability to articulate
 \emph{why} they fail.
@@ -283,7 +283,7 @@ pointers. Our criteria in (3) cover a total of five core requirements:
 \(\wbcf\), caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
 callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)).
 They are related to one another as seen in
-\cref{fig:propertydiagram}: \(\clei\) subsumes \(\clrc\) and \(\clec\) subsumes
+\cref{fig:propertydiagram}:\leo{is this supposed to be \cref{tab:props}?} \(\clei\) subsumes \(\clrc\) and \(\clec\) subsumes
 \(\clri\), but otherwise the properties are orthogonal and can be taken piecemeal
 according to the needs of a system.
 
@@ -293,9 +293,8 @@ address, and shadow stacks with protection (e.g. Return Address Defender \cite{C
 to enforce it completely. Others combine this protection with some degree of memory protection,
 chiefly focusing on integrity. Interestingly, Skorstengaard et al. \cite{SkorstengaardSTKJFP}
 describe their ``local state encapsulation'' in terms of integrity, but it is equivalent
-to the combination of \(\clri\) and \(\clrc\). The follow-up work by 
-Georges et al. \cite{Georges22:TempsDesCerises} cites an early preprint of our work
-as inspiration for extending their formal discussion to include confidentiality.
+to the combination of \(\clri\) and \(\clrc\). In fact, the follow-up work by 
+Georges et al. \cite{Georges22:TempsDesCerises} was inspired by the properties presented in this paper to extend their formal discussion to include confidentiality.
 When checking if a preliminary version of these properties applied to
 the Cerise calling convention, they noted that the Skostengaard et al. calling convention
 did not enforce callee confidentiality, and made sure that their version would
@@ -351,7 +350,7 @@ In sum, we offer the following contributions:
 Our artifact contains Coq formalizations of our properties for illustrative purposes
 as well as their testing implementation. There are no proofs---we use Coq primarily
 for the QuickChick library and to ensure that the formalizations are unambiguous.
-Proofs are future work.
+Formal proofs are left as future work.
 
 \subsection{Threat Model and Limitations}
 
@@ -385,7 +384,7 @@ security enforcement: in particular, hardware and timing attacks are out of scop
 we do not address concurrency---that is a high-priority future work.
 %
 
-\paragraph{Organization}
+\paragraph*{Organization}
 
 In the next section, we will give a brief overview of the structure of properties.
 Then in \cref{sec:example}, we will walk through a function
@@ -569,15 +568,15 @@ return value are both passed in {\tt a0}.
 Memory is byte-addressed and the stack grows towards
 lower addresses. We assume that {\tt main} begins at address 0 and its callee {\tt f} at address 100.
 
-\newcommand{\freebox}[1][10px]{\tikz \filldraw[fill=blue] (0,0) rectangle (#1,#1);}
-\newcommand{\pubbox}[1][10px]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (#1,#1);}
-\newcommand{\objbox}[1][10px]{\tikz \filldraw[fill=yellow] (0,0) rectangle (#1,#1);}
-\newcommand{\sealbox}[1][10px]{\tikz \filldraw[fill=red] (0,0) rectangle (#1,#1);}
+\newcommand{\freebox}[1][10pt]{\tikz \filldraw[fill=blue] (0,0) rectangle (#1,#1);}
+\newcommand{\pubbox}[1][10pt]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (#1,#1);}
+\newcommand{\objbox}[1][10pt]{\tikz \filldraw[fill=yellow] (0,0) rectangle (#1,#1);}
+\newcommand{\sealbox}[1][10pt]{\tikz \filldraw[fill=red] (0,0) rectangle (#1,#1);}
 
-\newcommand{\textbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (30px,30px) node[pos=.5]{#1};}
-\newcommand{\numbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (20px,20px) node[pos=.5]{#1};}
-\newcommand{\leftbox}[1][]{\tikz \filldraw[fill=blue!20] (0,0) rectangle (20px,20px) node[pos=.5]{#1};}
-\newcommand{\rightbox}[1][]{\tikz \filldraw[fill=orange!20] (0,0) rectangle (20px,20px) node[pos=.5]{#1};}
+\newcommand{\textbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (30pt,30pt) node[pos=.5]{#1};}
+\newcommand{\numbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (20pt,20pt) node[pos=.5]{#1};}
+\newcommand{\leftbox}[1][]{\tikz \filldraw[fill=blue!20] (0,0) rectangle (20pt,20pt) node[pos=.5]{#1};}
+\newcommand{\rightbox}[1][]{\tikz \filldraw[fill=orange!20] (0,0) rectangle (20pt,20pt) node[pos=.5]{#1};}
 
 
 \begin{figure}
@@ -625,7 +624,7 @@ lower addresses. We assume that {\tt main} begins at address 0 and its callee {\
   \begin{subfigure}{\columnwidth}
     \center
     \vspace{\abovedisplayskip}
-    \(\textnormal{\large \dots} \pubbox[30px] \!\! \stackrel{\textsc{\normalsize sp}}{\textbox[\tt res]}
+    \(\textnormal{\large \dots} \pubbox[30pt] \!\! \stackrel{\textsc{\normalsize sp}}{\textbox[\tt res]}
     \stackrel{\textsc{\normalsize 4(sp)}}{\textbox[\tt sens]}
     \stackrel{\textsc{\normalsize 8(sp)}}{\textbox[\tt sec]}
     \stackrel{\textsc{\normalsize 12(sp)} \hfill}{\textbox[\(\mathtt{ra_1}\)]\textbox[\(\mathtt{ra_2}\)]}
