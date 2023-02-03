@@ -1512,13 +1512,46 @@ behaviors may require sequences of {\bf dealloc}, {\bf tailcall}, then {\bf allo
 
 \section{Enforcement}
 
-\bcp{Bits missing here!}
+We implement and test two micro-policies from Roessler and DeHon \cite{}:
+{\em Depth Isolation} (\(DI\)) and {\em Lazy Tagging and Clearing} (\(LTC\)).
+They share a common structure: each function activation is assigned a ``color'' \(n\)
+representing its identity. Stack locations belonging to that activation are
+tagged \(\tagStackDepth{n}\), and when it is active, the tag on the
+program counter (PC tag) is \(\tagPCDepth{n}\). The tag \(\tagNoDepth\)
+is for stack locations that are currently unused.
 
-\paragraph{Depth Isolation}
+In \(DI\), \(n\) always corresponds to the depth of the stack when
+the function is called. A functions must initialize its entire frame on a call
+in order to tag it, and then clear it on a return.
+During normal execution, the micro-policy rules only permit load and
+store operations when the target memory is tagged {\em with the same depth}
+as the current {\PCname} tag, and store operations also when the
+target memory is \(\tagNoDepth\).
 
-\paragraph{Lazy Tagging and Clearing}
+In \(LTC\), rather than initialize the entire frame,
+a function will initialize each location's tag when it writes to it. It does
+not check if those writes are legal! If the PC tag is \(\tagPCDepth{n}\),
+then any stack location that recieves a store will be tagged \(\tagStackDepth{n}\).
+On a load, the micro-policy failstops if the value that it would load
+is tagged \(\tagStackDepth{n}\) or \(\tagNoDepth\) and the PC tag doesn't
+match \(n\).
 
-\subsection{Enforcing \(\clei\) and \(\clec\)}
+\paragraph{Blessed Sequences}
+
+To implement this discipline, {\em blessed instruction sequences} appear at
+the entry and exit of each function, which manipulate tags as just described
+while performing the usual tasks of saving/restoring the return address to/from
+the stack and adjusting the stack pointer. A blessed sequence also guarantees
+that the full sequence executes from the beginning---no jumping into the middle.
+
+\paragraph{Protecting Registers}
+
+Roessler and DeHon do not protect registers, but we consider registers to be
+an extension of the stack. In particular, \(\clri\) requires callee-saved
+registers to be saved and restored properly. We extend \(DI\) and \(LTC\)
+so that callee-saved registers, too, are tagged with the color of the 
+function that is using them. In \(DI\) they are tagged as part of the entry
+sequence, while in \(LTC\) they are tagged when a value is placed in them.
 
 \section{Validation through Random Testing}
 \label{sec:testing}
@@ -1654,7 +1687,7 @@ As for \(LTC\), the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
 fails in testing, in cases where data is leaked between sequential calls.
 To round out our mutation testing we also check {\em LOAD\_NO\_CHECK\_LT},
 equivalent to its counterpart in depth isolation,
-and a version where stores succeed but fail to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
+and a version where stores succeed but fails to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
 It turns out that {\em PER\_DEPTH\_TAG} is a comparatively subtle bug,
 taking twice as long to catch as the next longest.
 
@@ -1662,9 +1695,6 @@ Our properties have allowed us to identify an enforcement mechanism as
 not really stack safe, and to validate a possible fix.
 
 \section{Related Work}
-
-\sna{Not really sure what goes here anymore.
-  We've discussed Cerise and Nick and Andre quite a bit throughout.}
 
 \section{Future Work}
 \label{sec:future}
