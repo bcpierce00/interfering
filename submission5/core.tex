@@ -1136,39 +1136,16 @@ elements to all non-\(\object\) ones.
 \section{Formalization}
 \label{sec:machine}
 
-% APT: I don't think we need this.
-%% \begin{figure}
-%%   \begin{tabular}{| l | l | l |}
-%%     \hline
-%%     Set / & Names & Purpose \\
-%%     Class & & \\
-%%     \hline
-%%     \(\mathit{CLR}\) / & {\tt t0} -- {\tt t6} & Caller-saved temps \\
-%%     \(\unsealed\) & {\tt a0} -- {\tt a1} & Caller-saved args / return vals \\
-%%     & {\tt a2} -- {\tt a7} & Caller-saved args \\
-%%     & {\tt ra} & Return Address \\
-%%     \hline
-%%     \(\mathit{CLE}\) / & {\tt s0} -- {\tt s11} & Callee-saved \\
-%%     \(\sealed\) & {\tt sp} & Stack Pointer \\
-%%     \hline
-%%     \(\mathit{PUBLIC}\) / & {\tt gp} & Global Pointer  \\
-%%     \(\public\) & {\tt tp} & Thread Pointer \\
-%%     \hline
-%%   \end{tabular}
-%%   \caption{RISC-V integer register set}
-%%   \label{fig:RISCVregs}
-%% \end{figure}
-
 We now give a formal description of our machine model, security semantics,
-and properties. Our definitions abstract over the details of the target machine
-architecture and ABI, the set of security-relevant operations, the rules that
-govern evolution of the security context, the set of observable events, and
-a notion of value compatibility.
-\apt{Not quite true: the property definitions require a notion of
-  call entry.}
+and properties. Our definitions abstract over: (1) the details of  the target machine
+architecture and ABI, (2) the set of observable events, and (3) a notion of value compatibility.
+They can be extended to a more sophisticated machine model by expanding the set of
+security-relevant events and defining 
+
 \apt{Any more? Give a more listlike presentation?
   Need to clarify exactly what the parameters are, both in the initial
   presentation and in the various extensions, including the appendix.}
+\sna{Need to come back to this.}
 
 \subsection{Machine}
 The building blocks of a machine are {\em words} and {\em registers}.
@@ -1191,11 +1168,12 @@ the behavior of the basic machine, while the rest of the value may contain
 information relevant to a hardware enforcement mechanism (such as a tag).
 We assume a given \emph{compatibility} equivalence relation \(\sim\) on values,
 and lift it element-wise to states.
-Values are compatible if their non-payload information is identical, 
-even though their payloads may differ.
+In the tagged setting, values are compatible if their tags are identical.
 \apt{This is still not very convincing!
   empting to say that only the payloads can affect the step function, but that is
   too strong, right? (OK for tags, but not, e.g. capabilities?}
+\sna{Yeah, I don't think we can say something universal about when values should be
+  considered compatible.}
 
 The machine has a step function \(\mach \xrightarrow{\bar{\psi},\obs} \mach'\).
 Except for the annotations over the arrow, this function just encodes the usual
@@ -1214,8 +1192,8 @@ For any security class \(l\), we write \(l(V)\)
 to denote the set of elements \(\component\) such that \(V ~ \component = l\).
 The {\it initial view} \(V_0\) maps all stack locations to \(\unsealed\),
 all other locations to \(\public\), and registers based on which set they
-belong to: \(\sealed\) for callee-saved, \(\unsealed\) for caller-saved, and \(\public\) otherwise.
-\apt{This doesn't quite match example, where there is magically an initial argument register labeled \(\active\).}
+belong to: \(\sealed\) for callee-saved, \(\unsealed\) for caller-saved except for those
+that contain arguments at the start of execution, which are \(\object\), and \(\public\) otherwise.
 
 A (security) \emph{context} is
 a pair of the current activation's view and
@@ -1305,7 +1283,9 @@ omit \(d\) and just write \(\hookrightarrow s\).
 Two event traces $\obsT_1$ and $\obsT_2$ are {\em similar},
 written \(\obsT_1 \eqsim \obsT_2\), if the sequence of non-silent events
 is the same. That is, we compare up to deletion of \(\tau\) events.
-\apt{Didn't we use to say something about the (arguably) odd nature of this definition?}
+Note that this results in an infinite silent trace being similar to
+any trace. So, a trace that silently diverges due to a failstop will
+fulfill this property vacuously.
 
 \begin{minipage}{.4\columnwidth}
   \judgment{}{\(\obsT \eqsim \obsT\)}
