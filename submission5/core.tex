@@ -1311,10 +1311,10 @@ fulfill this property vacuously.
 Two (compatible) states are variants with respect to a set of elements \(\components\)
 if they agree on the value of every element not in \(\components\). 
 Our notion of non-interference involves comparing the traces of such
-\(\components\)-variants. We use this to define sets of irrelevant elements,
-and secrets in general.\apt{last phrase is cryptic}
+\(\components\)-variants. We use this to define sets of irrelevant elements.
 
-\definition The \emph{difference set} of two machine states \(\mach\) and \(\mach'\), written \(\Delta(\mach,\mach')\),
+\definition The \emph{difference set} of two machine states \(\mach\) and \(\mach'\),
+written \(\Delta(\mach,\mach')\),
 is the set of elements \(\component\) such that \(\mach[\component] \not = \mach'[\component]\).
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
@@ -1484,11 +1484,11 @@ with flag \(\mathbf{f}\).
 In our examples, we have presented a vision of stack safety in which
 the interface between caller and callee is in the registers that pass
 arguments and return values. This is frequently not the case in a realistic
-setting. Arguments may be passed on the stack (e.g. because there are too many
-to pass in registers), as an implementation
-of variadic arguments, or because they are reference objects \apt{??} that inherently have
-pass-by-reference semantics. The caller may also take the address of a local object and
-pass that as a pointer to its callee.
+setting. Arguments may be passed on the stack because there are too many
+to pass in registers, as an implementation of variadic arguments, or
+because they are composite types that inherently have
+pass-by-reference semantics. The caller may also pass an object by reference
+in the C++ style, or take its address and pass it as a pointer.
 
 We refine our call operation to make use of the information that we have about
 which memory contain arguments, \(\overline{sa}\). \(\overline{sa}\) is a set of
@@ -1497,31 +1497,22 @@ We first define the helpful set \(\mathit{passed} ~ \overline{sa} ~ \mach\),
 then extend the call operation to keep all objects in \(\mathit{passed}\) marked
 as \(\object\) and seal everything else (\cref{sfig:stkargs}).
 
-Using this mechanism, we can describe an argument being passed on the stack
-by giving its \(\SP\)-relative offset,
-with the operation \(\mathbf{call} ~ \dots ~ (\SP, \mathit{off}, \mathit{sz})\).
-In the case of pass-by-reference semantics, if the compiler designates register
-\(\reg\) as holding the reference, then the operations is
-\(\mathbf{call} ~ \dots ~ (\reg, 0, \mathit{sz})\).\apt{This is unclear to me. 
-  The compiler knows where the cbr parameter lives in the caller's stack
-  frame, so why wouldn't it use a sp-relative spec for that too? Does it have
-  to do with passing a CBR parameter further down to another callee as you allude
-  to in the next para?}
+Using this mechanism, an argument passed on the stack via its \(\SP\)-relative offset
+uses the operation \(\mathbf{call} ~ \dots ~ (\SP, \mathit{off}, \mathit{sz})\).
+C++-style reference passing that places the reference in \(\reg\) uses
+\(\mathbf{call} ~ \dots ~ (\reg, 0, \mathit{sz})\).
+In the second case, the reference can be passed further down the stack, but otherwise
+only the immediate callee gains access.
 
-In both cases, the immediate callee retains access to the passed object, but deeper
-callees will not---unless the object is passed-by-reference further down the stack.
-On the other hand, in the case of a caller explicitly taking the address of an
-object and passing it as a pointer, we have no way obvious way to limit the scope
-of such sharing.
-
-Our primary \apt{again...} machine treats this scenario as the caller allocating a ``public''
-object that can be accessed by anyone until it's deallocated. We extend the
-\(\mathbf{alloc}\) operation with a boolean flag, where {\bf t} indicates
-that the allocation is public, and {\bf f} is private.
+On the other hand, if the address of an object is taken directly and passed it as a
+pointer, we have no way obvious way to limit the scope of such sharing.
+We treat this scenario as the caller allocating a ``public''
+object that recieves no protection. We extend the \(\mathbf{alloc}\) operation
+with a boolean flag, where {\bf t} indicates
+that the allocation is public, and {\bf f} that it is private.
 In the likely event that the space for multiple objects is allocated in a single step,
 that step can make multiple allocation operations, each labeled appropriately.
-Allocating public objects affects the call stack very similarly to private ones,
-but instead of labeling them \(\object\) they become \(\public\), so they are
+Public objects are labeled \(\public\) rather than \(\object\), so they are
 never sealed at a call (\cref{sfig:publicalloc}).
 
 \begin{figure*}
@@ -1583,11 +1574,9 @@ the call stack, and therefore for purposes of our properties, all tailcalls will
 be considered to return simultaneously when the eventual {\bf return} operation
 pops the top of the stack.
 
-Since the caller will not be returned to, it does not need integrity, though
+Since the caller will not be returned to, it does not need integrity, but
 it should still enjoy confidentiality. We set its frame to \(\unsealed\) rather
-than \(\sealed\) to express this. Of course, some objects may be passed as arguments
-in place\apt{??}, easily modeled by including them in \(\overline{sa}\). More sophisticated
-behaviors may require sequences of {\bf dealloc}, {\bf tailcall}, then {\bf alloc}.
+than \(\sealed\) to express this.
 
 \section{Enforcement}
 
