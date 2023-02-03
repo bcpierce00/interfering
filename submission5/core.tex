@@ -373,6 +373,8 @@ call and return sequences. For instance, extant implementations tend to assume
 implicitly that callee-saved registers have their values maintained by whichever compiler
 generated their code. Our properties explicitly state this as a requirement,
 which could be enforced by a micro-policy, a well-behaved compiler, or other enforcement technique.
+Roessler and DeHon have the compiler in their trusted computing base, so our properties
+are stronger than necessary to characterize their micro-policies.
 
 In general, it is impossible to distinguish buggy machine code from an attacker; in
 our examples we will identify one function or another as an attacker, but we do not
@@ -538,12 +540,13 @@ to any notion of observable behavior.
 
 \paragraph*{Variants and Non-interference}
 
-To characterize confidentiality\apt{and sometimes integrity}, we borrow the idea of \emph{variant} states
+To characterize situations in which values should be kept secret or prevented
+from influencing future execution, we borrow the idea of \emph{variant} states
 from the theory of non-interference. Non-interference is a way of expressing
 the flow of information through the system. If we begin with a state \(\mach\)
 and modify it to \(\nach = \mach[\component \mapsto v]\) for arbitrary \(v\),
 then execute both \(\mach\) and \(\nach\), any differences in the outputs they
-produce must be the result of accessing \(\component\).
+produce leaks information about \(\component\).
 
 \section{Properties by Example}
 \label{sec:example}
@@ -1333,7 +1336,8 @@ written \((\mach,\context) \parallel \components\), if for all
 \(\nach\) such that \(\mach \approx_{\components} \nach\),
 \(\hookrightarrow (\mach,\context)  \eqsim \hookrightarrow (\nach,\context)\).
 
-\apt{needs small transition}
+When comparing the behavior of variant states, we need a notion of how their
+differences have influenced them.
 
 \definition The {\em corrupted set} \(\bar{\Diamond}(\mach,\mach',\nach,\nach')\)
 is the set \((\Delta(\mach,\mach') \cup \Delta(\nach,\nach')) \cap \Delta(\mach',\nach')\).
@@ -1504,19 +1508,12 @@ or \(\public\). The remainder of the property is identical to \(\clrc\).
 \label{sec:extensions}
 
 The system we model in \cref{sec:example,sec:formal} is very simple, but our properties
-support an important dimension of generality: adding features.\apt{Just what needs to be changed
-to add these features?}
-We now briefly introduce the features of our primary testing machine.\apt{Make sure
-testing has been introduced properly before now. And why ``primary''?}
-
-The full machine defines additional operations, and extends some of the old ones.
-We add a field \(\overline{sa}\) to the \(\mathbf{call}\) operation: a set of
-triples of a register \(\reg\), a base offset \(\mathit{off}\), and a size \(sz\), denoting
-that the value at the offset \(\mathit{off}\) from \(\reg\) is to be passed as an argument.
-The new \(\mathbf{tailcall}\) operation has the same fields, but deals with tail-call
-optimizations in which the callee will reuse the caller's stack. The \(\mathbf{alloc}\) operation
-gains a boolen flag indicating whether the allocation is to be public, accessible to
-all functions until deallocated. The rules are given in \cref{fig:advops}; the
+are designed to make it easy to add features. To support argument passing on the stack,
+we just new parameters to the existing security-relevant operations, and refine how they
+update the security context. The remainder of the properties do not change at all.
+To add tail-calls, we add and define a new operation, and since it is a kind of call,
+we add it to the definition of call targets again.
+The rules for the expanded machine are given in \cref{fig:advops}; the
 rules in \cref{fig:basicops} can be recaptured by instantiating
 \(\mathbf{call}\) with \(\overline{sa}\) as the empty set, and \(\mathbf{alloc}\)
 with flag \(\mathbf{f}\).
@@ -1545,8 +1542,8 @@ A C++-style call-by-reference argument where the reference is passed in \(\reg\)
 is instead specified by \((\reg, 0, \mathit{sz})\), which allows
 the reference to be passed further down the stack.
 \apt{What if the reference is itself passed on the stack?}
-%In this second case, the reference can be passed further down the stack, but otherwise
-%only the immediate callee gains access. APT: 
+\sna{Ugh. We could make \(\reg\) an arbitrary element, but that seems like it's getting
+  dangerously close to indirection.}
 
 If the address of an object is taken directly and passed as a
 pointer, we simply classify the object as ``public'' and give it no protection against
@@ -1623,9 +1620,8 @@ pops the top of the stack.
 
 Since the caller will not be returned to, it does not need integrity, but
 it should still enjoy confidentiality. We set its frame to \(\unsealed\) rather
-than \(\sealed\) to express this.
-
-\apt{good place to detail the needed changes in interpretation of \cref{tab:props}.}
+than \(\sealed\) to express this. In terms of \cref{tab:props}, we replace
+``call'' with ``call or tailcall'' in \(\clrc\), \(\clec\), and \(\clei\).
 
 \section{Enforcement}
 \label{sec:enforcement}
@@ -1664,16 +1660,13 @@ to guarantee that the full sequence executes from the beginning---no jumping int
 
 \paragraph*{Protecting Registers}
 
-Roessler and DeHon do not protect registers, but we consider registers to be
-an extension of the stack. In particular, \(\clri\) requires callee-saved
+Roessler and DeHon do not protect registers, since the compiler is in the
+trusted computing base, but we support threat models that do not.
+In particular, \(\clri\) requires callee-saved
 registers to be saved and restored properly. We extend \(DI\) and \(LTC\)
 so that callee-saved registers, too, are tagged with the color of the 
 function that is using them. In \(DI\) they are tagged as part of the entry
 sequence, while in \(LTC\) they are tagged when a value is placed in them.
-\apt{Presumably R\&dH don't care about registers because they already have
-  the compiler in the TCB.  We should note (perhaps earlier than here!) that
-  we have a stronger attacker model since we don't require the callee code
-  to come from a trusted  compiler.}
 
 \section{Validation through Random Testing}
 \label{sec:testing}
