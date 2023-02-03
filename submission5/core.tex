@@ -141,9 +141,9 @@ A fixed version of the policy does pass our tests.
 
 Computer programming relies on functions (or subroutines, procedures, methods, etc.)
 as a foundational abstraction. Functions are units of computation that
-can call one another to realize larger computations.
+can call one another to realize larger computations in a modular fashion.
 %
-At a low level, a function activation comprises its own data, as
+At a low level, a function activation manages its own data, such as local variables, as
 well as information about its \emph{caller} function, to which it must return.
 The \emph{(call) stack} is the fundamental data structure charged with realizing
 this abstraction, aided by an ABI that defines how registers are shared between activations.
@@ -151,18 +151,23 @@ From a security perspective, attacks on the stack are really attacks
 on the fundamental functional abstraction itself, and are therefore every bit as
 pervasive.
 
-Indeed, the call stack is a perennial target for low-level attacks \cite{phrack96:smashingthestack}.
-%
-The CWE Top 25 Most Dangerous Software Weaknesses list
-\footnote{\url{https://cwe.mitre.org/top25/archive/2022/2022_cwe_top25.html}}
-is consistently topped by classes of vulnerabilities closely related to the stack
-e.g., \#1 Out-of-bounds Write, \#5 Out-of-bounds Read, or \#7 Use After Free.
-%
-And many other types of attack involve compromising the stack as a step in a larger workfloaw
-\cite{DBLP:conf/raid/VeendCB12,
+Indeed, the call stack is a ancient~\cite{one06phrack} and
+perennial~\cite{mitre-cwe,DBLP:conf/raid/VeendCB12,
   DBLP:conf/sp/SzekeresPWS13,
-  DBLP:conf/sp/HuSACSL16}.\footnote{\url{https://github.com/Microsoft/MSRC-Security-Research/blob/master/presentations/2019_02_BlueHatIL/}}\footnote{\url{https://www.chromium.org/Home/chromium-security/memory-safety/}}.
+  DBLP:conf/sp/HuSACSL16,msrc-bluehat,chromium-security}
+target for low-level attacks, frequently involving control-flow hijacking via corrupting
+the return address, and memory corruption more generally.
 
+%
+%The most recent release of the authoritative CWE Top 25
+%Most Dangerous Software Weaknesses~\cite{
+%list\footnote{\url{https://cwe.mitre.org/top25/archive/2022/2022_cwe_top25.html}}
+%shows that general classes of vulnerabilities closely related to the stack
+%% \rb{(though not exclusively)}
+%consistently rank at and near the top of the list, e.g., \#1 Out-of-bounds Write, \#5 Out-of-bounds Read, and \#7 Use After Free.
+%
+%Moreover, many other types of faults involve some kind of control or data flow
+%using data stored in the stack 
 The variety in attacks on the stack is mirrored by the
 software and hardware protections that aim to prevent them,
 %
@@ -171,51 +176,53 @@ bounds checking~\cite{NagarakatteZMZ09,NagarakatteZMZ10,DeviettiBMZ08},
 split stacks~\cite{Kuznetsov+14},
 shadow stacks~\cite{Dang+15,Shanbhogue+19},
 capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJFP,Georges22:TempsDesCerises},
-and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18}.
+and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18,Gollapudi+23}.
 
+\apt{Add brief case for having formal guarantees.}
 Of these mechanisms, many are fundamentally ill-suited for offering formal guarantees,
 as they aim to impede attackers but cannot provide universal protection. Shadow stacks,
 for instance, aim to ``restrict the flexibility available in creating gadget chains''
 \cite{Shanbhogue+19}, not to categorically
 rule out attacks. Other mechanisms such as Softbound\cite{NagarakatteZMZ09} and Code-pointer
-integrity\cite{Kuznetsov+14}
-are stronger, but most do not give formal guarantees.
-Indeed, the Cerise work of Skorstengaard et al. \cite{SkorstengaardSTKJFP} and
+integrity\cite{Kuznetsov+14} are stronger, but most do not give formal guarantees.
+Indeed, the secure calling conventions of Skorstengaard et al. \cite{SkorstengaardSTKJFP} and
 Georges et al. \cite{Georges22:TempsDesCerises} is so far the sole line of work
 to offer stack safety formalizations.
 
+Among the mechanisms that should be amenable to making strong formal guarantees,
 Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} present an array of tag-based
-micro-policies for stack safety, at least some of which should be amenable to making strong
-formal guarantees. Their most realistic micro-policy, ``Lazy Tagging and Clearing'' (\(LTC\)),
-which makes an interesting trade-off for performance: it allows function activations to write
+micro-policies~\cite{pump_oakland2015} for stack safety.
+Their most realistic micro-policy, ``Lazy Tagging and Clearing'' (\(LTC\)),
+makes an interesting trade-off for performance: it allows function activations to write
 into one another's stack frames, but ensures that the owner of the corrupted memory cannot access
 it afterward. Because the memory does get corrupted, \(LTC\) would not fulfill an
 adaptation Georges et al.'s property to the tagged setting.
 
-We believe that, nevertheless, \(LTC\) enforces stack safety.
-It does not always protect individual addresses on the stack, but it aims
-to prevent one function activation from interfering with another's behavior---to protect
-the functional abstraction. We argue that a formal characterization of \(LTC\)'s protections
-should fall under the umbrella of stack safety.
+Neverthess, we believe that there is a useful sense in which \(LTC\) does (attempt to) enforce stack safety. 
+It does not always protect individual addresses on the stack, but it tries to 
+prevent one function activation from interfering with another's behavior---protecting 
+the functional abstraction, which we argue is the real essence of stack safety.
 
-In this work, we propose such a characterization, built from first principles
-in the hopes that it will be broadly applicable, and demonstrate
-that it can distinguish between correct and flawed versions of Roessler and DeHon's
-micro-policies. We use the formal tools of language-based
+In this work, we propose a formal characterization of stack safety based on the idea
+of protecting each function activation from other activations.
+We use the formal tools of language-based
 security~\cite{sabelfeld2003language}, decomposing stack safety into a family of
 properties describing
 the {\em integrity} and {\em confidentiality} of the caller’s local state
 and the callee's behavior during the callee's execution, plus the control-flow protection
-of {\em well-bracketed control flow}~\cite{SkorstengaardSTKJFP} (\(\wbcf\)).
+of {\em well-bracketed control flow} (\(\wbcf\))~\cite{SkorstengaardSTKJFP}.
+While our properties are motivated by a desire to specify \(LTC\), 
+they are built from first principles in the hopes that they will be broadly applicable
+to a range of enforcement mechanisms.
 
 The structure of our properties enables them to be easily expanded to characterize systems with
 sophisticated features such as callee-save registers, argument-passing on the stack,
 and tailcall-elimination. We likewise extend \(LTC\) to protect these features, and
-test the extended micro-policy. We find that, apart from the extensions, \(LTC\)
+test the extended micro-policy against our property. We find that, apart from the extensions, \(LTC\)
 is flawed in a way that undermines integrity and confidentiality, and we correct
 this flaw.
 
-\paragraph{Towards Formal Properties for Stack Safety}
+\paragraph*{Towards Formal Properties for Stack Safety}
 
 Security mechanisms can be brittle, successfully eliminating one attack while leaving room for
 other, similar attacks. To avoid this, we seek formal properties of safe behavior that can be proven
@@ -247,13 +254,13 @@ questions as whether a caller's frame should be readable or writable to its call
 leaving those concerns to be determined by a high-level language built atop the stack.
 These are high-level security questions.
 
-For instance, the current state-of-the-art stack-safety specification from Georges et al.
+For instance, the stack-safety specification from Georges et al.
 \cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
-control flow, and therefore defines {\em Well-bracketed Control Flow} (WBCF) under the assumption that
+control flow, and therefore defines {\em Well-bracketed Control Flow} (\(\wbcf\)) under the assumption that
 a callee should always return to its caller. But, in the presence of tail-call elimination, a
-return from a callee to a distant ancestor is perfectly reasonable. Related, their predecessor
+return from a callee to a distant ancestor is perfectly reasonable. Similarly, the preceding work by
 Skorstengaard et al. \cite{SkorstengaardSTKJFP} made no mention of confidentiality, even though
-their enforcement mechanism did protect the confidentiality of the caller (not the callee.)
+their enforcement mechanism did protect the confidentiality of the caller (though not the callee).
 
 These two cases represent two dimensions in which a stack safety definition requires
 flexibility: what constitutes safe behavior differs between systems that support different
@@ -287,8 +294,8 @@ address, and shadow stacks with protection (e.g. Return Address Defender \cite{C
 to enforce it completely. Others combine this protection with some degree of memory protection,
 chiefly focusing on integrity. Interestingly, Skorstengaard et al. \cite{SkorstengaardSTKJFP}
 describe their ``local state encapsulation'' in terms of integrity, but it is equivalent
-to the combination of \(\clri\) and \(\clrc\). Their state-of-the-art successor,
-Georges et al. \cite{Georges22:TempsDesCerises}, cite an early preprint of our work
+to the combination of \(\clri\) and \(\clrc\). The follow-up work by 
+Georges et al. \cite{Georges22:TempsDesCerises} cites an early preprint of our work
 as inspiration for extending their formal discussion to include confidentiality.
 When checking if a preliminary version of these properties applied to
 the Cerise calling convention, they noted that the Skostengaard et al. calling convention
@@ -363,13 +370,11 @@ calling convention or implements a source language construct.
 In particular, while we are agnostic as to the source
 language, we certainly aim to support C, and so any source function might contain undefined
 behavior resulting in its compilation to arbitrary machine code. A given enforcement
-mechanism may place additional constraints, particularly on the behavior of
+mechanism or target architecture might place additional constraints, particularly on the behavior of
 call and return sequences. For instance, extant implementations tend to assume
-implicitly that callee-saved registers are treated appropriately by whichever compiler
-generated their code. Our properties explicitly require them to be treated as belonging
-to the caller, which could be enforced by a micro-policy or by a well-behaved compiler.
-%
-\rb{This last bit about callee-saved registers belonging to the caller is subtle, I think it risks the reader missing the point.}
+implicitly that callee-saved registers have their values maintained by whichever compiler
+generated their code. Our properties explicitly state this as a requirement,
+which could be enforced by a micro-policy, a well-behaved compiler, or other enforcement technique.
 
 In general, it is impossible to distinguish buggy machine code from an attacker; in
 our examples we will identify one function or another as an attacker, but we do not
@@ -378,9 +383,8 @@ even buggy code.
 
 This is a strong threat model, but it does omit some important aspects of
 security enforcement: in particular, hardware and timing attacks are out of scope, and
-we do not address concurrency.
+we do not address concurrency---that is a high-priority future work.
 %
-\rb{Anything about concurrency in future work, though?}
 
 \section{Key Ideas}
 \label{sec:ideas}
@@ -605,7 +609,7 @@ lower addresses. We assume that {\tt main} begins at address 0 and its callee {\
     \includegraphics[width=\columnwidth]{stacklayout.png}
   \end{subfigure}
 
-\caption{Example: {\tt main}\apt{Needs machine-set diagram.}}
+\caption{Example: C and assembly code for {\tt main}, and layout of its stack frame; addresses increase to the right and the stadk grows to the left.\apt{Needs machine-set diagram.}}
 \label{fig:main}
 \end{figure}
 
@@ -632,9 +636,9 @@ Attacks of this kind do not violate {\tt main}'s confidentiality, but
 rather its {\it integrity}.
 In Figure \ref{subfig:WBCF}, the attacker arranges to return to the
 wrong instruction, thereby bypassing the check and publishing {\tt secret} regardless,
-violating the program's {\it well-bracketed control flow} (WBCF.)
+violating the program's {\it well-bracketed control flow} (\(\wbcf\).)
 %
-In Figure \ref{subfig:WBCF2}, a different attack violates WBCF, this time
+In Figure \ref{subfig:WBCF2}, a different attack violates \(\wbcf\), this time
 by returning to the correct program counter but with the wrong stack pointer.
 \footnote{We pad the last two variants with {\tt nop}s just so that all the
 snippets have the same length, which simplifies some later explanations.}
@@ -791,8 +795,7 @@ effect of marking those bytes \(\object\).
     \cline{1-3}
     \multicolumn{2}{l}{} \\
   \end{tabular}
-  \caption{Execution of example up through the return from {\tt f}. In right-hand diagram, addresses increase to the right and
-  boxes represent 4-byte words.}
+  \caption{Execution of example up through the return from {\tt f}. In stack diagram, addresses increase to the right, stack grows to the left, and boxes represent 4-byte words.}
 \label{fig:exec1}
 \end{figure*}
 %
@@ -854,7 +857,7 @@ So we define a predicate on states that should hold just after the return:
 We can identify the point just after the return (if a return occurs)
 as the first state in which the pending call stack is smaller than it was
 just after the call.
-WBCF requires that if \(\mach\) is the state at that point, then \(\ret ~ \mach\) holds.
+\(\wbcf\) requires that if \(\mach\) is the state at that point, then \(\ret ~ \mach\) holds.
 %For nested calls, where the pending stack is initially larger, the same principle
 %applies: \(\ret ~ \mach\) must hold the next time the pending stack is the same size or smaller.
 
@@ -864,7 +867,7 @@ WBCF requires that if \(\mach\) is the state at that point, then \(\ret ~ \mach\
 
 \paragraph*{Stack Integrity}
 
-Like WBCF, stack integrity defines a condition at the call that must hold upon
+Like \(\wbcf\), stack integrity defines a condition at the call that must hold upon
 return. This time the condition applies to all of the memory in the function's
 frame. In Figure \ref{fig:exec1} we see the lifecycle of an allocated frame:
 upon allocation, the view labels it \(\object\), and when a call is made, it instead
@@ -913,7 +916,7 @@ In our example setting, the observation trace consists of the sequence
 of values written to {\tt out}.
 The example in Figure \ref{subfig:integrity} modifies the value of {\tt sensitive},
 which is \(\sealed\). Figure \ref{fig:variant} shows the state just after the call at step 5,
-assuming that {\tt sec} is 5. Similar to WBCF, we define
+assuming that {\tt sec} is 5. Similar to \(\wbcf\), we define
 \(\intProp\) as a predicate on states that holds if
 all relevant sealed addresses in \(\mach\) are the same as after step 5.
 We require that \(\intProp\) hold on the state following the matching return,
