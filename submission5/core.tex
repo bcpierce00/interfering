@@ -552,7 +552,7 @@ produce must be the result of accessing \(\component\).
 In this section we introduce our security property definitions by means
 of small code examples, using a simplified set of security-relevent operations for
 calls, returns, and private allocations.
-Figure \ref{fig:main} gives C code and corresponding compiled 32-bit RISC-V code
+\Cref{fig:main} gives C code and possible corresponding compiled 32-bit RISC-V code
 for a function {\tt main}, which
 takes an argument {\tt secret} and initializes a local variable {\tt sensitive} to contain
 potentially sensitive data.
@@ -640,28 +640,28 @@ We now consider how {\tt f} might misbehave and violate desirable
 stack safety properties associated with {\tt main}. To put the violations in a
 security framework, suppose that {\tt f} is actually an attacker seeking
 to leak {\tt secret}. It might do so in a number of ways, shown as snippets of
-assembly code in Figure \ref{fig:f}.
+assembly code in \cref{fig:f}.
 %
 Leakage is most obviously viewed as a violation of {\tt main}'s {\it confidentiality}.
-In Figure \ref{subfig:direct}, {\tt f} takes an offset from the stack
+In \cref{subfig:direct}, {\tt f} takes an offset from the stack
 pointer, accesses {\tt secret}, and directly outputs it. But more
 subtly, even if somehow prevented from outputting {\tt secret} directly, {\tt f}
 can instead return that value so that {\tt main} stores it to {\tt out},
-as in Figure \ref{subfig:indirect}.
+as in \cref{subfig:indirect}.
 %
 Beyond simply reading {\tt secret}, the attacker might overwrite {\tt sensitive}
 with 42, guaranteeing that {\tt main} publishes its own secret unintentionally
-(Figure \ref{subfig:integrity}).
+(\cref{subfig:integrity}).
 Attacks of this kind do not violate {\tt main}'s confidentiality, but
 rather its {\it integrity}.
-In Figure \ref{subfig:WBCF}, the attacker arranges to return to the
+In \cref{subfig:WBCF}, the attacker arranges to return to the
 wrong instruction, thereby bypassing the check and publishing {\tt secret} regardless,
 violating the program's {\it well-bracketed control flow} (\(\wbcf\).)
 %
-In Figure \ref{subfig:WBCF2}, a different attack violates \(\wbcf\), this time
+In \cref{subfig:WBCF2}, a different attack violates \(\wbcf\), this time
 by returning to the correct program counter but with the wrong stack pointer.%
 \footnote{We pad the last two variants with {\tt nop}s just so that all the
-snippets have the same length, which simplifies some later explanations.}
+snippets have the same length, which keeps the step numbering uniform in~\cref{fig:exec1}.}
 
 \begin{figure}
   \begin{subfigure}[b]{\columnwidth}
@@ -725,13 +725,13 @@ snippets have the same length, which simplifies some later explanations.}
 \end{figure}
 
 The security semantics for this program is based
-on the security-relevant events noted in the right columns of Figures~\ref{fig:main}
-and~\ref{fig:f}, namely execution of instructions that allocate or deallocate space,
+on the security-relevant events noted in the right columns of \cref{fig:main,fig:f},
+namely execution of instructions that allocate or deallocate space,
 make a call, or make a return.
 
 Our security semantics attach a security context to the machine state,
 which consists of a view \(V\) and a stack \(\sigma\) of pending activations' views.
-Figure \ref{fig:exec1} shows how the security context evolves over the first few
+\Cref{fig:exec1} shows how the security context evolves over the first few
 steps of the program.  (The formal details of the security semantics are described in
 \cref{sec:machine}, and the context evolution rules are formalized in \cref{fig:basicops}.)
 Execution begins at the start of {\tt main}, where the program counter (\(\PCname\)) is zero,
@@ -831,7 +831,7 @@ At step 9, {\tt f} returns, and the topmost inactive view, that of {\tt main}, i
 
 We now show how this security semantics can be used to define notions of confidentiality,
 integrity, and correct control flow in such a way that many classes of
-bad behavior, including the attacks in Figure~\ref{fig:f}, are
+bad behavior, including the attacks in \cref{fig:f}, are
 detected as security violations.
 
 \paragraph*{Well-bracketed Control Flow}
@@ -841,10 +841,10 @@ To begin with, what if {\tt f} returns to an unexpected place (i.e. \(\PCname \n
 call steps and their corresponding return steps: just after the return, the program
 counter should be at the next instruction following the call,
 and the stack pointer should be the same as it was before the call.
-Both of these are essential. In Figure \ref{subfig:WBCF}, the attacker adds
+Both of these are essential. In \cref{subfig:WBCF}, the attacker adds
 16 to the return address and then returns, thus bypassing the {\tt if}-test in the code and outputting
 {\tt secret}.
-In Figure \ref{subfig:WBCF2}, the attacker returns with \(\SP' = 998\) instead of the
+In \cref{subfig:WBCF2}, the attacker returns with \(\SP' = 998\) instead of the
 correct \(\SP = 980\). In this scenario, given the layout of {\tt main}'s frame,
 \begin{center}
 \begin{tabular}{| l | l | l | l | l |}
@@ -882,7 +882,7 @@ just after the call.
 
 Like \(\wbcf\), stack integrity defines a condition at the call that must hold upon
 return. This time the condition applies to all of the memory in the function's
-frame. In Figure \ref{fig:exec1} we see the lifecycle of an allocated frame:
+frame. In \cref{fig:exec1} we see the lifecycle of an allocated frame:
 upon allocation, the view labels it \(\object\), and when a call is made, it instead
 becomes \(\sealed\). Intuitively, the integrity of {\tt main}
 is preserved if, when control returns to it, any \(\sealed\) elements
@@ -954,8 +954,8 @@ to its original value at the return point.
 
 In our example setting, the observation trace consists of the sequence
 of values written to {\tt out}.
-The example in Figure \ref{subfig:integrity} modifies the value of {\tt sensitive},
-which is \(\sealed\). Figure \ref{fig:variant} shows the state just after the call at step 5,
+The example in \cref{subfig:integrity} modifies the value of {\tt sensitive},
+which is \(\sealed\). \Cref{fig:variant} shows the state just after the call at step 5,
 assuming that {\tt sec} is 5. Similar to \(\wbcf\), we define
 \(\intProp\) as a predicate on states that holds if
 all relevant sealed addresses in \(\mach\) are the same as after step 5.
@@ -978,8 +978,8 @@ that the callee produces during the call and the changes that the callee makes t
 affect the caller after the callee returns.
 
 Consider the state \(\mach\) after step 5, whose context is \((V_2,\sigma)\), with the attacker from
-Figure \ref{subfig:direct}. We take a variant state over the set of elements that are
-\(\sealed\) in \(V_2\) (see Figure \ref{fig:variant2}.)
+\cref{subfig:direct}. We take a variant state over the set of elements that are
+\(\sealed\) in \(V_2\) (see \cref{fig:variant2}.)
             [TODO: fix figure to avoid varying the entire stack.]
 If we take a trace of execution from each state until it returns,
 the traces may differ, in this case outputting 5 (the original value of {\tt secret}) and
@@ -1025,9 +1025,9 @@ the traces may differ, in this case outputting 5 (the original value of {\tt sec
   \label{fig:variant2}
 \end{figure}
 
-But, in Figure \ref{subfig:indirect}, we also saw an attacker that exfiltrated the secret
+But, in \cref{subfig:indirect}, we also saw an attacker that exfiltrated the secret
 by reading it and then returning it, in a context where the caller would output the returned
-value. Figure \ref{fig:variant3} shows the behavior of the same variants under this attacker,
+value. \Cref{fig:variant3} shows the behavior of the same variants under this attacker,
 but in this case, there is no output during the call. Instead the value of {\tt secret} is
 extracted and placed in {\tt a0}, the return value register. We wish to identify this as
 a confidentiality violation, again by considering variants of the \(\sealed\)
@@ -1205,7 +1205,7 @@ principals), ranged over by \(\sigma\).
 %
 The initial context is \(\context_0 = (V_0, \emplist)\).
 
-\cref{sec:example} describes informally how the security context evolves as the system performs
+\Cref{sec:example} describes informally how the security context evolves as the system performs
 security-relevant operations. Formally, we combine each machine state with a context
 to create a {\it combined state} \(s = (\mach,\context)\) and lift the transition
 to \(\stepstounder{}\) on combined states. 
@@ -1735,7 +1735,7 @@ property (row {\em STORE\_NO\_CHECK}).
 \subsection{Results}
 
 The mean-time-to-failure (MTTF) and average number of tests for various bugs can be found in
-Table~\ref{tab:bug-table}, along with the average number of tests
+\cref{tab:bug-table}, along with the average number of tests
 it took to find the failure. Experiments were run in a desktop
 machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
 
