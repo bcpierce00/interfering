@@ -1,6 +1,6 @@
 From StackSafety Require Import MachineModule PolicyModule CtxModule TestingModules
-     DefaultLayout Lazy
-     PrintRISCVTagSimple GenRISCVTagSimple.
+     DefaultLayoutEager Eager
+     PrintRISCVTagSimpleEager GenRISCVTagSimpleEager.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -62,9 +62,9 @@ Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
 
 (* NOTE Not concentrating on eager properties at the moment, focusing changes on
    lazy properties (not including lockstep integrity). *)
-Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
-  Import RISCVLazyOrig.
-  Import TagPolicyLazyOrig.
+Module TestPropsRISCVSimpleEager : TestProps RISCVEagerOrig RISCVDef.
+  Import RISCVEagerOrig.
+  Import TagPolicyEagerOrig.
   Import RISCVDef.
   Import PM.
   
@@ -115,7 +115,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     let ops := get_ops (fst m) cm in
     let '(m', _ (* always empty! *), obs) := cstep m in
     let m'_fix :=
-      (fst m', fold_left (GenRISCVLazyOrig.PM.op (fst m)) ops (snd m')) in
+      (fst m', fold_left (GenRISCVEagerOrig.PM.op (fst m)) ops (snd m')) in
     (m'_fix, ops, obs).
 
   (* END HACK *)
@@ -213,7 +213,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
           (* If we could step, verify that the new state satisfies all
              active tests, and accumulate witnesses to violations *)
           let '(conds', witnesses) := check_conds conds (m', ctx') in
-          n'' <- (GenRISCVLazyOrig.genVariantByList witnesses n');;
+          n'' <- (GenRISCVEagerOrig.genVariantByList witnesses n');;
           (* Check the code map at the current PC (this should never fail) *)
           get ops <- (CodeMap_fromImpl cm) (word.unsigned (getPc (fst m))), "Bad-PC";
           (* Recurse on the new state, where if the instruction
@@ -261,7 +261,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     step_tester cm i fuel m ctx m [] cond_laziestStackIntegrity.
 
   Definition prop_laziestIntegrity :=
-    forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
+    forAll GenRISCVEagerOrig.genMach (fun '(m,cm) =>
                       (prop_laziestStackIntegrity' defFuel defLayoutInfo m cm initCtx)).
 
   (* From above, only operating on MPCState *)
@@ -319,7 +319,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     let '(ms, cs) := m in
     let secret := List.filter (fun k => confidentialityComponent cs k) (getElements ms) in
     ("Generating variant for: " ++ show secret ++ nl) !
-    (ns <- GenRISCVLazyOrig.genVariantByList secret ms;;
+    (ns <- GenRISCVEagerOrig.genVariantByList secret ms;;
     let n := (ns, cs) in
     let test := (fun m' n' => cond_confidentiality m m' n n') in
     ret (fuel, n, (depthOf cs, test))).
@@ -365,7 +365,9 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
           (* Take a step in the primary and the shadow states *)
           let '(m', _ops, obs) := cstep m cm in
           if weq (projw (fst m') PC) (projw (fst m) PC)
-          then collect "Failstop" true
+          then
+               (PrintRISCVEagerOrig.printMachine (fst m) cm (snd m)) !
+               collect "Failstop" true
           else
           let '(n', _, obs') := step n cm in
           let d := depthOf (snd m) in
@@ -386,7 +388,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                (* Collect witnesses *)
                let witnesses := seq.flatten (map fst results) in
                (* Update the shadow state *)
-               n'' <- GenRISCVLazyOrig.genVariantByList witnesses n';;
+               n'' <- GenRISCVEagerOrig.genVariantByList witnesses n';;
                ("New shadow variants: " ++ show (map (fun k => (k, proj n'' k)) witnesses) ++ nl) !
                (aux fuel' m' n'' stk'' tr')
           else aux fuel' m' n' stk tr'
@@ -417,7 +419,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
      non-instructions *)
 
   Definition cex05 : G (MachineState * CodeMap_Impl) :=
-    GenRISCVLazyOrig.ex_gen
+    GenRISCVEagerOrig.ex_gen
       [(   0, Addi 2 2 12,  [Tinstr; Th2],   Some [(Alloc 0 12)] );
        (   4, Sw 2 9 (-4),  [Tinstr],        Some [] );
        (   8, Jal 1 264,    [Tinstr; Tcall], Some [(Call 4%nat [] [])] );
@@ -486,7 +488,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
      expected, given that irrelevant registers will be mutated and different
      runs will result in different traces. *)
   Definition cex06 : G (MachineState * CodeMap_Impl) :=
-    GenRISCVLazyOrig.ex_gen
+    GenRISCVEagerOrig.ex_gen
       [(   0, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
        (   4, Jal 1 128,      [Tinstr; Tcall], Some [(Call 2%nat [10 (* added *)] [])] );
        (   8, Jal 1 68,       [Tinstr; Tcall], Some [(Call 1%nat [] [])] );
@@ -527,10 +529,10 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
        ( 10, 40, [] )].
 
   Definition prop_lazyConfidentiality :=
-    forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
+    forAll GenRISCVEagerOrig.genMach (fun '(m,cm) =>
                       (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
 
-End TestPropsRISCVSimple.
+End TestPropsRISCVSimpleEager.
 
 Extract Constant defNumTests => "10000".
 
@@ -538,7 +540,7 @@ Extract Constant defNumTests => "10000".
 (* Time QuickCheck TestPropsRISCVSimple.prop_laziestIntegrity. *)
 
 (* Print Assumptions TestPropsRISCVSimple.prop_lazyConfidentiality. *)
-Time QuickCheck TestPropsRISCVSimple.prop_lazyConfidentiality.
+Time QuickCheck TestPropsRISCVSimpleEager.prop_lazyConfidentiality.
 
 (* Import TestRISCVEager. *)
 (* Import TestRISCVEagerNLC. *)
