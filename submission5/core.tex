@@ -178,8 +178,13 @@ shadow stacks~\cite{Dang+15,Shanbhogue+19},
 capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJFP,Georges22:TempsDesCerises},
 and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18,Gollapudi+23}.
 
-\apt{Add brief case for having formal guarantees.}
-Of these mechanisms, many are fundamentally ill-suited for offering formal guarantees,
+Security mechanisms can be brittle, successfully eliminating one attack while leaving room for
+other, similar attacks. To avoid this, we seek formal properties of safe behavior that can be proven
+or tested. Such properties become the specification against which enforcement can be validated;
+even enforcement mechanisms that do not fulfill a property benefit from the ability to articulate
+\emph{why} they fail.
+
+Of the mechanisms above, many are fundamentally ill-suited for offering formal guarantees,
 as they aim to impede attackers but cannot provide universal protection. Shadow stacks,
 for instance, aim to ``restrict the flexibility available in creating gadget chains''
 \cite{Shanbhogue+19}, not to categorically
@@ -223,12 +228,6 @@ is flawed in a way that undermines integrity and confidentiality, and we correct
 this flaw.
 
 \paragraph*{Towards Formal Properties for Stack Safety}
-
-Security mechanisms can be brittle, successfully eliminating one attack while leaving room for
-other, similar attacks. To avoid this, we seek formal properties of safe behavior that can be proven
-or tested. Such properties become the specification against which enforcement can be validated;
-even enforcement mechanisms that do not fulfill a property benefit from the ability to articulate
-\emph{why} they fail.
 
 Security properties should be motivated by security requirements
 and flexible enough to support various sets of security requirements depending on the
@@ -386,25 +385,27 @@ security enforcement: in particular, hardware and timing attacks are out of scop
 we do not address concurrency---that is a high-priority future work.
 %
 
-\section{Key Ideas}
-\label{sec:ideas}
+\paragraph{Organization}
 
-\apt{Not a good place for this.}
-The paper is structured as follows. In \cref{sec:example}, we will walk through a function
+In the next section, we will give a brief overview of the structure of properties.
+Then in \cref{sec:example}, we will walk through a function
 call in a simple example machine and discuss how each of our properties applies to it,
 informally. In the process we discuss some motivation for the properties, from a security
-perspective. We consider a simple attacker, and discuss the harm that it can do to
-its caller. This perspective is essential to understanding how lazy enforcement can
-be safe: even if an attacker can overwrite some memory, if it cannot accomplish
-subvert the observable behavior of the caller, the system is safe.
+perspective.
 
 In \cref{sec:machine} we formalize the machine model, 
 its {\em security semantics}, and the stack safety properties built on these. 
-\Cref{sec:testing} describes the testing framework, and
+\Cref{sec:enforcement} describes the micro-policies that we test,
+\cref{sec:test} the testing framework itself, and
 \cref{sec:relwork,sec:future} discuss related and future work.
-The remainder of this section introduces ideas that will be important throughout.
 
-\paragraph*{Building a Property}
+%We consider a simple attacker, and discuss the harm that it can do to
+%its caller. This perspective is essential to understanding how lazy enforcement can
+%be safe: even if an attacker can overwrite some memory, if it cannot accomplish
+%subvert the observable behavior of the caller, the system is safe.
+
+\section{Building a Property}
+\label{sec:ideas}
 
 Our properties follow a three-part structure that we term a {\em security semantics}.
 First we define the {\em security-relevant operations} that we support, and an extra
@@ -574,6 +575,10 @@ lower addresses. We assume that {\tt main} begins at address 0 and its callee {\
 \newcommand{\sealbox}[1][10px]{\tikz \filldraw[fill=red] (0,0) rectangle (#1,#1);}
 
 \newcommand{\textbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (30px,30px) node[pos=.5]{#1};}
+\newcommand{\numbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (20px,20px) node[pos=.5]{#1};}
+\newcommand{\leftbox}[1][]{\tikz \filldraw[fill=blue!20] (0,0) rectangle (20px,20px) node[pos=.5]{#1};}
+\newcommand{\rightbox}[1][]{\tikz \filldraw[fill=orange!20] (0,0) rectangle (20px,20px) node[pos=.5]{#1};}
+
 
 \begin{figure}
   \begin{subfigure}{\columnwidth}
@@ -915,8 +920,34 @@ every relevant element that is \(\sealed\) under the callee's view is restored
 to its original value at the return point.
 
 \begin{figure}
-  \includegraphics[width=\columnwidth]{variants.png}
-  \caption{Integrity Violation\apt{Needs a machine-drawn version, as do the rest. Use colors consistently. No tags!}}
+  \centering
+  \[
+  \stackrel{\texttt{res}}{\numbox[0]}
+  \stackrel{\texttt{sens}}{\numbox[0]}
+  \stackrel{\texttt{sec}}{\numbox[5]}
+  \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}\]
+  %
+  \[\big\Downarrow\]
+  %
+  \[
+  \stackrel{\texttt{res}}{\numbox[0]}
+  \stackrel{\texttt{sens}}{\numbox[\bf 42]}
+  \stackrel{\texttt{sec}}{\numbox[5]}
+  \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}\]
+  %
+  \[\overbrace{
+    \stackrel{\texttt{res}}{\numbox[0]}
+    \stackrel{\texttt{sens}}{\numbox[\bf 42]}
+    \stackrel{\texttt{sec}}{\numbox[5]}
+    \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}
+    \hspace{1cm}
+    \stackrel{\texttt{res}}{\numbox[0]}
+    \stackrel{\texttt{sens}}{\numbox[\bf 0]}
+    \stackrel{\texttt{sec}}{\numbox[5]}
+    \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}}\]
+  \[\large\hookrightarrow 5 \hspace{1cm} \large\hookrightarrow 1\]
+  
+  \caption{Integrity Violation}
   \label{fig:variant}
 \end{figure}
 
@@ -955,7 +986,40 @@ the traces may differ, in this case outputting 5 (the original value of {\tt sec
 {\it internal confidentiality} (formalized in \cref{tab:props}, line 3a).
 
 \begin{figure}
-  \includegraphics[width=\columnwidth]{variants2.png}
+    \centering
+    \[
+    \stackrel{\texttt{res}}{\numbox[0]}
+    \stackrel{\texttt{sens}}{\numbox[0]}
+    \stackrel{\texttt{sec}}{\numbox[5]}
+    \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}\]
+    %
+    \[\overbrace{
+    \stackrel{\texttt{res}}{\leftbox[0]}
+    \stackrel{\texttt{sens}}{\leftbox[0]}
+    \stackrel{\texttt{sec}}{\leftbox[5]}
+    \stackrel{\texttt{ra}}{\leftbox[0]\leftbox[0]}
+    \hspace{1cm}
+    %
+    \stackrel{\texttt{res}}{\rightbox[2]}
+    \stackrel{\texttt{sens}}{\rightbox[3]}
+    \stackrel{\texttt{sec}}{\rightbox[4]}
+    \stackrel{\texttt{ra}}{\rightbox[5]\rightbox[6]}}
+    \]
+    \[\large\Downarrow \hspace{1cm} \large\hookrightarrow 5 \hspace{0.5cm} \not \approx \hspace{0.5cm}
+    \large\hookrightarrow 4 \hspace{1cm} \large\Downarrow\]
+    \[
+    \stackrel{\texttt{res}}{\leftbox[\textbf{0}]}
+    \stackrel{\texttt{sens}}{\leftbox[0]}
+    \stackrel{\texttt{sec}}{\leftbox[5]}
+    \stackrel{\texttt{ra}}{\leftbox[0]\leftbox[0]}
+    \hspace{1cm}
+    %
+    \stackrel{\texttt{res}}{\rightbox[\textbf{2}]}
+    \stackrel{\texttt{sens}}{\rightbox[3]}
+    \stackrel{\texttt{sec}}{\rightbox[4]}
+    \stackrel{\texttt{ra}}{\rightbox[5]\rightbox[6]}
+    \]
+
   \caption{Internal Confidentiality Violation}
   \label{fig:variant2}
 \end{figure}
@@ -971,7 +1035,41 @@ elements in \(V_2\), but capturing the required property is subtle.
 To illustrate the issues, note that {\tt f} has also stores a 0 below the stack pointer.
 %
 \begin{figure}
-  \includegraphics[width=\columnwidth]{variants3.png}
+    \centering
+    \[
+    \stackrel{\texttt{res}}{\numbox[0]}
+    \stackrel{\texttt{sens}}{\numbox[0]}
+    \stackrel{\texttt{sec}}{\numbox[5]}
+    \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}\]
+    %
+    \[\overbrace{
+    \stackrel{\texttt{res}}{\leftbox[0]}
+    \stackrel{\texttt{sens}}{\leftbox[0]}
+    \stackrel{\texttt{sec}}{\leftbox[5]}
+    \stackrel{\texttt{ra}}{\leftbox[0]\leftbox[0]}
+    \hspace{1cm}
+    %
+    \stackrel{\texttt{res}}{\rightbox[2]}
+    \stackrel{\texttt{sens}}{\rightbox[3]}
+    \stackrel{\texttt{sec}}{\rightbox[4]}
+    \stackrel{\texttt{ra}}{\rightbox[5]\rightbox[6]}}
+    \]
+    \[\large\Downarrow \hspace{1cm} \mathtt{a0} \leftbox[0] \hspace{1cm}
+    \rightbox[7] \mathtt{a0} \hspace{1cm} \large\Downarrow\]
+    \[
+    \stackrel{\texttt{res}}{\leftbox[0]}
+    \stackrel{\texttt{sens}}{\leftbox[0]}
+    \stackrel{\texttt{sec}}{\leftbox[5]}
+    \stackrel{\texttt{ra}}{\leftbox[0]\leftbox[0]}
+    \hspace{1cm}
+    %
+    \stackrel{\texttt{res}}{\rightbox[2]}
+    \stackrel{\texttt{sens}}{\rightbox[3]}
+    \stackrel{\texttt{sec}}{\rightbox[4]}
+    \stackrel{\texttt{ra}}{\rightbox[5]\rightbox[6]}
+    \]
+    \[\mathtt{a0} \leftbox[0] \hspace{1cm}
+    \mathtt{a0} \rightbox[0]\]
   \caption{Return-time Confidentiality Violation}
   \label{fig:variant3}
 \end{figure}
