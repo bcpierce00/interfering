@@ -42,7 +42,7 @@ Definition trace := false.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
 
-Module TagPolicyLazyOrig <: TagPolicy RISCV.
+Module TagPolicyEagerOrig <: TagPolicy RISCV.
   Import RISCV.
   Module PM := MachineModule.Properties RISCV.
   Import PM.
@@ -319,12 +319,18 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     match tinstr with
     | [Tinstr] =>
       match tpc, trs, tmem with
-      | [Tpc memdepth], [], []
-      | [Tpc memdepth], [], [Tstack _ _] =>
+      | [Tpc memdepth], [], [] =>
           Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth Knormal] |>)
-      | _, [Tref refdepth refid], []
-      | _, [Tref refdepth refid], [Tstack _ _] =>
-          Some (p <| memtags := map.put (memtags p) addr [Tstack refdepth (Krefarg refid)] |>)         
+      | [Tpc memdepth], [], [Tstack stkdepth _] =>
+          if Nat.eqb memdepth stkdepth
+          then Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth Knormal] |>)
+          else ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
+      | _, [Tref refdepth refid], [] =>
+          Some (p <| memtags := map.put (memtags p) addr [Tstack refdepth (Krefarg refid)] |>)
+      | _, [Tref refdepth refid], [Tstack stkdepth _] =>
+          if Nat.eqb refdepth stkdepth
+          then Some (p <| memtags := map.put (memtags p) addr [Tstack refdepth (Krefarg refid)] |>)
+          else ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
       | _, _, _ => ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
       end
     | [Tinstr; Tvar id] =>
@@ -397,9 +403,9 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
   (* TODO: More interesting well-formedness condition *)
   Definition WFInitMPState (mp:MPState) := True.
 
-End TagPolicyLazyOrig.
+End TagPolicyEagerOrig.
 
-Module RISCVLazyOrig := RISCVTagged TagPolicyLazyOrig.
+Module RISCVEagerOrig := RISCVTagged TagPolicyEagerOrig.
 
 (*Module TagPolicyLazyNoCheck (M : RISCV) <: Policy M.
   Import M.

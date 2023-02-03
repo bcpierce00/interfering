@@ -1,6 +1,6 @@
 Require Coq.Strings.String. Open Scope string_scope.
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     RISCVMachine DefaultLayout Lazy.
+     RISCVMachine DefaultLayoutEager Eager.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -159,9 +159,9 @@ Require Import Coq.Lists.List. Import ListNotations.
 
 End PrintRISCVLazyFixed.*)
 
-Module PrintRISCVLazyOrig : Printing RISCVLazyOrig RISCVDef.
-  Import RISCVLazyOrig.
-  Import TagPolicyLazyOrig.
+Module PrintRISCVEagerOrig : Printing RISCVEagerOrig RISCVDef.
+  Import RISCVEagerOrig.
+  Import TagPolicyEagerOrig.
   Import RISCVDef.
   Import PM.
 
@@ -368,7 +368,7 @@ Module PrintRISCVLazyOrig : Printing RISCVLazyOrig RISCVDef.
   Instance ShowM : Show (MachineState * CodeMap_Impl):=
     {| show := fun '(m,cm) => printMachine m cm initCtx |}.
 
-End PrintRISCVLazyOrig.
+End PrintRISCVEagerOrig.
 
 (*Module PrintRISCVLazyNoCheck : Printing RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.
   Module MPC := TestMPC RISCVObs TPLazyNoCheck DLObs TSSRiscvDefault.

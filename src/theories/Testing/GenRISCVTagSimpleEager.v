@@ -1,5 +1,5 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     RISCVMachine Lazy DefaultLayout PrintRISCVTagSimple.
+     RISCVMachine Eager DefaultLayoutEager PrintRISCVTagSimpleEager.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -28,14 +28,14 @@ Require Import ExtLib.Structures.Monad. Import MonadNotation. Open Scope monad_s
 Definition trace := false.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
-
-Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
-  Import RISCVLazyOrig.
-  Import TagPolicyLazyOrig.
+Locate View.
+Module GenRISCVEagerOrig <: Gen RISCVEagerOrig RISCVDef.
+  Import RISCVEagerOrig.
+  Import TagPolicyEagerOrig.
   Import RISCVDef.
   Module PM := PM.
   Import PM.
-  Import PrintRISCVLazyOrig.
+  Import PrintRISCVEagerOrig.
 
   Definition maxFuel := 100%nat.
   Definition funMaxFuel := 10%nat.
@@ -1262,4 +1262,4 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
        (  9, 28, [] );
        ( 10, 12, [] )].
 
-End GenRISCVLazyOrig.
+End GenRISCVEagerOrig.
