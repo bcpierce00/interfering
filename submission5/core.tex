@@ -1147,10 +1147,10 @@ callee integrity is not typically discussed.
 
 We now give a formal description of our machine model, security semantics,
 and properties. Our definitions abstract over: (1) the details of  the target machine
-architecture and ABI, (2) the set of observable events, and (3) a notion of value compatibility.
-They can be extended to a more sophisticated machine model by expanding the set of
-security-relevant events and defining 
-
+architecture and ABI, (2) the set of security-relevant operations and their effects on
+the security context, (3) the set of observable events, and (4) a notion of value compatibility.
+%They can be extended to a more sophisticated machine model by expanding the set of
+%security-relevant events and defining 
 \apt{Any more? Give a more listlike presentation?
   Need to clarify exactly what the parameters are, both in the initial
   presentation and in the various extensions, including the appendix.}
@@ -1188,7 +1188,7 @@ The machine has a step function \(\mach \xrightarrow{\bar{\psi},\obs} \mach'\).
 Except for the annotations over the arrow, this function just encodes the usual
 ISA description of the machine's instruction set. The annotations serve to connect
 the machine's operation to our security setting: 
-\(\bar{\psi}\) is a list of security-relevant operations drawn from an assumed set \(\Psi\),
+\(\bar{\psi}\) is a list of security-relevant operations drawn from an assumed given set \(\Psi\),
 and \(\obs\) is an (potentially silent) observable event; these are described further below.
 
 \subsection{Security semantics}
@@ -1217,9 +1217,8 @@ The initial context is \(\context_0 = (V_0, \emplist)\).
 security-relevant operations. Formally, we combine each machine state with a context
 to create a {\it combined state} \(s = (\mach,\context)\) and lift the transition
 to \(\stepstounder{}\) on combined states. 
-At each step, the context updates based on the function
+At each step, the context updates based on an assumed given function
 \(Op : \MACHS \rightarrow \CONTEXTS \rightarrow \psi \rightarrow \CONTEXTS\).
-(Note that \(Op\) takes as its first argument the state {\it before} the step.)
 Since a single step might correspond to multiple operations, we apply
 \(Op\) as many times as needed, using \(\mathit{foldl}\).
 
@@ -1232,6 +1231,7 @@ rules for each operation. We have already seen the intuition behind the rules fo
 \(\mathbf{alloc}\), \(\mathbf{call}\), and \(\mathbf{ret}\).
 For the machine described in the example, the \(Op\) rules would be those
 found in \cref{fig:basicops}.
+Note that \(Op\) takes as its first argument the state {\it before} the step.
 
 \begin{figure}
     \[\mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach \triangleq
@@ -1262,8 +1262,8 @@ found in \cref{fig:basicops}.
 \subsection{Events and Traces}
 \label{sec:events}
 
-We abstract over the events that can be observed in the system, defining them
-only as a set \(\OBSS\) that contains at least the element \(\tau\), the silent
+We abstract over the events that can be observed in the system, assuming just 
+oa given set \(\OBSS\) that contains at least the element \(\tau\), the silent
 event. Other events might represent certain function calls (i.e., system calls)
 or writes to special addresses representing memory-mapped regions.
 A {\em trace} is a nonempty, finite or infinite sequence
@@ -1336,9 +1336,9 @@ written \((\mach,\context) \parallel \components\), if for all
 \(\nach\) such that \(\mach \approx_{\components} \nach\),
 \(\hookrightarrow (\mach,\context)  \eqsim \hookrightarrow (\nach,\context)\).
 
+
 When comparing the behavior of variant states, we need a notion of how their
 differences have influenced them.
-
 \definition The {\em corrupted set} \(\bar{\Diamond}(\mach,\mach',\nach,\nach')\)
 is the set \((\Delta(\mach,\mach') \cup \Delta(\nach,\nach')) \cap \Delta(\mach',\nach')\).
 
@@ -1390,59 +1390,6 @@ respectively. Once again, \(\Uparrow\) is coinductive.
                   {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
 \subsection{Properties}
-
-Finally, the core property definitions are given in \cref{tab:props},
-arranged to show their commonalities and distinctions. Each definition gives a criterion
-quantified over states \(s\) that immediately follow call steps.
-If an execution includes a transition \(s' \stepstounder{\overline{\psi}} s\)
-where \(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then \(s\) is the target
-of a call.
-%Likewise, if \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then
-%\(s\) is the target of a tailcall.
-As a shorthand, we write that each property is defined
-by a criterion that must hold ``for all call targets \(s\),'' or, in the case of \(\wbcf\),
-``for all call steps \(s \stepstounder{} s'\).''
-
-\paragraph*{1.~\(\wbcf\)}
-Given a call step \((\mach,(V,\sigma)) \stepstounder{} (\mach',(V',\sigma'))\),
-we define the predicate \(\ret\) to hold on states \(\mach''\)
-whose stack pointer matches that of \(\mach\)
-and whose program counter is at the next instruction. A system enjoys \(\wbcf\) if,
-for every call transition, \(\ret\) holds just after the callee returns (i.e.,
-the call stack shrinks). 
-
-\paragraph*{2.~\(\clri\)}
-When the call target is \((\mach,(V,\sigma))\), we define the predicate \(\intProp\) to hold
-on states \(\mach'\) if any elements that are both sealed in \(V\) and in the difference
-set between \(\mach\) and \(\mach'\) are irrelevant. A system enjoys \(\clri\) if, for every
-call, \(\intProp\) holds just after the corresponding return.
-
-\paragraph*{3.~\(\clrc\)}
-When the call target is \((\mach,(V,\sigma))\), we begin by taking an arbitrary \(\nach\)
-that is a \(\components\)-variant of \(\mach\), where \(\components\) is the set of sealed elements
-in \(V\). We require that two clauses hold. On line 3a, the behavior of a trace from
-\((\mach,(V,\sigma))\) up to its return must match that of \((\nach,(V,\sigma))\).
-On line 3b, we define a relation \(\confProp\) that relates states \(\mach'\) and \(\nach'\)
-if their corrupted set (relative to \(\mach\) and \(\nach\)) is irrelevant, and require
-that it hold just after the returns from the callees that start at \((\mach,(V,\sigma))\) and \((\nach,(V,\sigma))\).
-A system enjoys \(\clrc\) if both clauses hold for every call.
-
-\paragraph*{4.~\(\clec\)}
-We consider the callee's private behavior to be any changes that it makes to the state
-outside of legitimate channels---elements marked \(\object\) or \(\public\). The remainder
-should be kept secret, which is to say, irrelevant to future execution. Similar to \(\clri\), given a call target
-\((\mach,(V,\sigma))\), we define a predicate \(\cconfProp\) to hold
-on states \(\mach'\) if the difference set between \(\mach\) and \(\mach'\), excluding 
-\(\object\) or \(\public\) locations, is irrelevant.
-A system enjoys \(\clec\) if, for every call, \(\cconfProp\) holds just after the corresponding return. 
-
-\paragraph*{5.~\(\clei\)}
-Callee integrity means that the caller does not influence it outside of legitimate
-channels. The caller's influence can be seen internally, or in corrupted data on return,
-just like the caller's secrets would be under \(\clrc\). So, for a call target
-\((\mach,(V,\sigma))\), we take an arbitrary \(\nach\) that is a \(\components\)-variant
-of \(\mach\), where \(\components\) is the set all elements that are not \(\object\)
-or \(\public\). The remainder of the property is identical to \(\clrc\).
 
 \begin{table*}[h]
   \setlength{\tabcolsep}{1pt}
@@ -1506,6 +1453,60 @@ or \(\public\). The remainder of the property is identical to \(\clrc\).
   \caption{Properties}
   \label{tab:props}
 \end{table*}
+
+Finally, the core property definitions are given in \cref{tab:props},
+arranged to show their commonalities and distinctions. Each definition gives a criterion
+quantified over states \(s\) that immediately follow call steps.
+If an execution includes a transition \(s' \stepstounder{\overline{\psi}} s\)
+where \(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then \(s\) is the target
+of a call.
+%Likewise, if \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then
+%\(s\) is the target of a tailcall.
+As a shorthand, we write that each property is defined
+by a criterion that must hold ``for all call targets \(s\),'' or, in the case of \(\wbcf\),
+``for all call steps \(s \stepstounder{} s'\).''
+
+\paragraph*{1.~\(\wbcf\)}
+Given a call step \((\mach,(V,\sigma)) \stepstounder{} (\mach',(V',\sigma'))\),
+we define the predicate \(\ret\) to hold on states \(\mach''\)
+whose stack pointer matches that of \(\mach\)
+and whose program counter is at the next instruction. A system enjoys \(\wbcf\) if,
+for every call transition, \(\ret\) holds just after the callee returns (i.e.,
+the call stack shrinks). 
+
+\paragraph*{2.~\(\clri\)}
+When the call target is \((\mach,(V,\sigma))\), we define the predicate \(\intProp\) to hold
+on states \(\mach'\) if any elements that are both sealed in \(V\) and in the difference
+set between \(\mach\) and \(\mach'\) are irrelevant. A system enjoys \(\clri\) if, for every
+call, \(\intProp\) holds just after the corresponding return.
+
+\paragraph*{3.~\(\clrc\)}
+When the call target is \((\mach,(V,\sigma))\), we begin by taking an arbitrary \(\nach\)
+that is a \(\components\)-variant of \(\mach\), where \(\components\) is the set of sealed elements
+in \(V\). We require that two clauses hold. On line 3a, the behavior of a trace from
+\((\mach,(V,\sigma))\) up to its return must match that of \((\nach,(V,\sigma))\).
+On line 3b, we define a relation \(\confProp\) that relates states \(\mach'\) and \(\nach'\)
+if their corrupted set (relative to \(\mach\) and \(\nach\)) is irrelevant, and require
+that it hold just after the returns from the callees that start at \((\mach,(V,\sigma))\) and \((\nach,(V,\sigma))\).
+A system enjoys \(\clrc\) if both clauses hold for every call.
+
+\paragraph*{4.~\(\clec\)}
+We consider the callee's private behavior to be any changes that it makes to the state
+outside of legitimate channels---elements marked \(\object\) or \(\public\). The remainder
+should be kept secret, which is to say, irrelevant to future execution. Similar to \(\clri\), given a call target
+\((\mach,(V,\sigma))\), we define a predicate \(\cconfProp\) to hold
+on states \(\mach'\) if the difference set between \(\mach\) and \(\mach'\), excluding 
+\(\object\) or \(\public\) locations, is irrelevant.
+A system enjoys \(\clec\) if, for every call, \(\cconfProp\) holds just after the corresponding return. 
+
+\paragraph*{5.~\(\clei\)}
+Callee integrity means that the caller does not influence it outside of legitimate
+channels. The caller's influence can be seen internally, or in corrupted data on return,
+just like the caller's secrets would be under \(\clrc\). So, for a call target
+\((\mach,(V,\sigma))\), we take an arbitrary \(\nach\) that is a \(\components\)-variant
+of \(\mach\), where \(\components\) is the set all elements that are not \(\object\)
+or \(\public\). The remainder of the property is identical to \(\clrc\).
+
 
 \section{Expanding the Machine}
 \label{sec:extensions}
