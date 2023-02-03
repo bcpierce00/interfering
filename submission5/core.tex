@@ -1389,54 +1389,57 @@ respectively. Once again, \(\Uparrow\) is coinductive.
                   {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2',\context_2')\)}
                   {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
-Finally, we can define our core properties. They can be found in \cref{tab:props},
+\subsection{Properties}
+
+Finally, the core property definitions are given in \cref{tab:props},
 arranged to show their commonalities and distinctions. Each definition gives a criterion
 quantified over states \(s\) that immediately follow call steps.
-If an execution can reach a state \(s'\) such that \(s' \stepstounder{\overline{\psi}} s\)
+If an execution includes a transition \(s' \stepstounder{\overline{\psi}} s\)
 where \(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then \(s\) is the target
 of a call.
 %Likewise, if \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then
 %\(s\) is the target of a tailcall.
 As a shorthand, we write that each property is defined
-by a criterion that must hold ``for all call targets \(s\).'' In the case of \(\wbcf\),
-we also need to know about the callee, so we refer to the ``call step \(s \stepstounder{} s'\).
+by a criterion that must hold ``for all call targets \(s\),'' or, in the case of \(\wbcf\),
+``for all call steps \(s \stepstounder{} s'\).''
 
-\paragraph*{\(\wbcf\)}
+\paragraph*{1.~\(\wbcf\)}
 Given a call step \((\mach,(V,\sigma)) \stepstounder{} (\mach',(V',\sigma'))\),
 we define the predicate \(\ret\) to hold on states \(\mach''\)
 whose stack pointer matches that of \(\mach\)
-and whose program counter is at the next instruction. We enjoy \(\wbcf\) if
-\(\ret\) holds on return from \(\mach'\).
+and whose program counter is at the next instruction. A system enjoys \(\wbcf\) if,
+for every call transition, \(\ret\) holds just after the callee returns (i.e.,
+the call stack shrinks). 
 
-\paragraph*{\(\clri\)}
-When our call target is \((\mach,(V,\sigma))\), we define the predicate \(\intProp\) to hold
+\paragraph*{2.~\(\clri\)}
+When the call target is \((\mach,(V,\sigma))\), we define the predicate \(\intProp\) to hold
 on states \(\mach'\) if any elements that are both sealed in \(V\) and in the difference
-set between \(\mach\) and \(\mach'\) are irrelevant. We enjoy \(\clri\) if \(\intProp\)
-holds on return from \(\mach\).
+set between \(\mach\) and \(\mach'\) are irrelevant. A system enjoys \(\clri\) if, for every
+call, \(\intProp\) holds just after the corresponding return.
 
-\paragraph*{\(\clrc\)}
-When our call target \((\mach,(V,\sigma))\), we begin by taking an arbitrary \(\nach\)
+\paragraph*{3.~\(\clrc\)}
+When the call target is \((\mach,(V,\sigma))\), we begin by taking an arbitrary \(\nach\)
 that is a \(\components\)-variant of \(\mach\), where \(\components\) is the set of sealed elements
-in \(V\). We require that two clauses hold. On line a, the behavior of a trace from
+in \(V\). We require that two clauses hold. On line 3a, the behavior of a trace from
 \((\mach,(V,\sigma))\) up to its return must match that of \((\nach,(V,\sigma))\).
-On line b, we define a relation \(\confProp\) that relates states \(\mach'\) and \(\nach'\)
+On line 3b, we define a relation \(\confProp\) that relates states \(\mach'\) and \(\nach'\)
 if their corrupted set (relative to \(\mach\) and \(\nach\)) is irrelevant, and require
-that it hold on the returns from \((\mach,(V,\sigma))\) and \((\nach,(V,\sigma))\).
-We enjoy \(\clrc\) if both clauses hold.
+that it hold just after the returns from the callees that start at \((\mach,(V,\sigma))\) and \((\nach,(V,\sigma))\).
+A system enjoys \(\clrc\) if both clauses hold for every call.
 
-\paragraph*{\(\clec\)}
+\paragraph*{4.~\(\clec\)}
 We consider the callee's private behavior to be any changes that it makes to the state
 outside of legitimate channels---elements marked \(\object\) or \(\public\). The remainder
-should be kept secret, which is to say, irrelevant. Similar to \(\clri\), given a call target
+should be kept secret, which is to say, irrelevant to future execution. Similar to \(\clri\), given a call target
 \((\mach,(V,\sigma))\), we define a predicate \(\cconfProp\) to hold
-on states \(\mach'\) if the difference set between \(\mach\) and \(\mach'\), that is
-not \(\object\) or \(\public\), is irrelevant. If \(\cconfProp\) holds on return,
-we enjoy \(\clec\).
+on states \(\mach'\) if the difference set between \(\mach\) and \(\mach'\), excluding 
+\(\object\) or \(\public\) locations, is irrelevant.
+A system enjoys \(\clec\) if, for every call, \(\cconfProp\) holds just after the corresponding return. 
 
-\paragraph*{\(\clei\)}
+\paragraph*{5.~\(\clei\)}
 Callee integrity means that the caller does not influence it outside of legitimate
 channels. The caller's influence can be seen internally, or in corrupted data on return,
-just like the caller's secrets would under \(\clrc\). So, for a call target
+just like the caller's secrets would be under \(\clrc\). So, for a call target
 \((\mach,(V,\sigma))\), we take an arbitrary \(\nach\) that is a \(\components\)-variant
 of \(\mach\), where \(\components\) is the set all elements that are not \(\object\)
 or \(\public\). The remainder of the property is identical to \(\clrc\).
@@ -1512,7 +1515,7 @@ are designed to make it easy to add features. To support argument passing on the
 we just new parameters to the existing security-relevant operations, and refine how they
 update the security context. The remainder of the properties do not change at all.
 To add tail-calls, we add and define a new operation, and since it is a kind of call,
-we add it to the definition of call targets again.
+we add it to the definition of call targets.
 The rules for the expanded machine are given in \cref{fig:advops}; the
 rules in \cref{fig:basicops} can be recaptured by instantiating
 \(\mathbf{call}\) with \(\overline{sa}\) as the empty set, and \(\mathbf{alloc}\)
