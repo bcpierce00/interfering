@@ -1,0 +1,251 @@
+CSF2022 Paper #75 Reviews and Comments
+===========================================================================
+Paper #75 Formalizing Stack Safety as a Security Property
+
+
+Review #75A
+===========================================================================
+
+Overall merit
+-------------
+2. Weak reject
+
+Reviewer expertise
+------------------
+3. Knowledgeable
+
+Paper summary
+-------------
+In previous work, stack safety has often been tackled in an example-driven way: stack safety mechanisms are motivated by illustrating how their protections render concrete examples secure.
+This paper aims to provide a formal, architecture-independent definition of stack safety, using notions of non-interference borrowed from information flow theory.
+Concretely, stack safety is seen as the combination of an integrity property (the caller's private data is never altered by its callees), a confidentiality property (callee behavior is invariant under changes of the caller's secrets) and optionally well-bracketed control flow (callees return to their direct callers).
+This decomposition leads to a definition of stepwise (i.e. holding at every step of execution) stack integrity, stepwise stack confidentiality and (optional) well-bracketed control flow, together enforcing stepwise stack safety.
+Afterwards, a more general, observational notion of stack safety is defined, which allows non-observable breaches of integrity and confidentiality.
+The approach is evaluated through property-based testing, using QuickChick to evaluate whether Roessler and DeHon's `Depth Isolation` and `Lazy Tagging and Clearing` enforcement policies respectively satisfy stepwise and observational stack safety.
+
+Strengths
+---------
++ Interesting, pragmatic take on stack safety, possibly yielding opportunities for faster prototyping and evaluation of stack safety enforcement mechanisms
+
++ Some illustration of how notions of stack safety might scale to include additional features and calling conventions
+
++ Figures 1-5 did a good job of explaining some of the basic ideas for stepwise stack safety. It would be a good idea to have similar figures for the observational cases.
+
+Weaknesses
+----------
+- Claim of portability and maximal generality, but only a single architecture and 2 closely related enforcement mechanisms were evaluated
+
+- Some parts of the presentation were too high-level to properly assess
+
+- Rather sloppy formalization effort, with a lack of attention to detail
+
+- Comparison to Skorstengaard et al.'s work is imprecise and subjective
+
+Comments for author
+-------------------
+I think this work is interesting and potentially yields opportunities to evaluate stack safety on different architectures with lower effort than existing (especially formal) approaches.
+While I think that the fact that your notion of stack confidentiality involves a version of non-interference and a notion of stack frame lifetimes (through your definition of `M^*`) is not entirely surprising, your formalization combined with the property-based testing approach provides the tools required for practical evaluation of stack safety, which is a valuable contribution.
+The formalization of and support for the observational variant of stack safety is an interesting addition, although it is currently unclear how many enforcement mechanisms require this relaxed approach.
+My main issue with the paper is that it did not do a very good job at convincing me of the general applicability and ease of application of the approach.
+
+The general definitions are only instantiated to a single architecture (a Coq formalization of a RISC-V architecture with a micro-policy coprocessor), and 2 closely related tag-based enforcement mechanisms on said architecture.
+Section VI was hardly a "Case Study": it did not provide the reader with any idea of the effort required to instantiate your definitions (e.g. `seal?`, `isRet?`) to a concrete architecture, and lacked an informal argument or proof sketch for why stack safety held in the RISC-V machine with Depth Isolation.
+Instead, the section was limited to high-level background on Roessler and DeHon's work without any relation to yours.
+Without such instantiation, the parametric nature of your definitions mostly obfuscates your presentation, rather than illustrating the generality of your approach.
+For the observational definitions, no attempt to instantiate them was made (e.g. the `Obs` type would be interesting to see instantiated).
+Your notions of observational integrity and confidentiality seem conveniently well-suited to the Lazy Tagging and Clearing policy, but no proof is provided that other mechanisms require them.
+
+The previous paragraph ties in with a more general issue the paper has: the presentation of some parts is so high-level, that it is hard to evaluate your work.
+The following could be explained better :
+* The evaluation using QuickChick is arguably one of the most interesting parts of the paper, since the possibility of rapid prototyping is what currently sets your approach apart from more formal approaches.
+However, very little context is provided on how the tests work (e.g. what does "extend the technique by tracking control flow information" mean? what features do the tests support? do they support all of your extensions from section VIII?), on the extent to which the testing effort would easily carry over to other machine architectures and enforcement mechanisms, on how much effort was required to set up the tests (e.g. LOC / amount of manual labor), on how generation by execution works in this case, and on whether there any parameters that can be tinkered with.
+* The additional features you support (callee-saved registers, parameters passed on the stack, coroutines) felt rushed.
+The explanations were hard to follow, since they contained a mix of abstract ideas and some technical details.
+The coroutines section lacked some context; I only gradually realized you were now solely considering inter-stack (as opposed to intra-stack) safety, considering each stack as a monolithic unit.
+
+The fact that the formalization was sloppy at times, and that the notation and types were sometimes ad-hoc and inconsistent, exacerbated the problem with the paper's presentation.
+Definitions 11 and 13, arguably 2 of the most fundamental contributions of the paper, both contained basic notational errors, requiring extra mental effort to interpret them correctly.
+I listed some of the errors in the Minor Comments below.
+
+Lastly, you spent a lot of space comparing to the StkTokens work of Skorstengaard et al.
+While I think the length of the comparison is warranted, I did not think the way you presented it did right by the StkTokens work:
+* In argument `i)`, you state that you ensure *every* caller is protected from its callees, whereas StkTokens does not, since it has a notion of unreasonable components.
+First of all, I think this comparison is strange, since you are comparing the *enforcement mechanism* described in StkTokens with your general *property* of stack safety in your paper.
+By highlighting the difference between both, you are essentially claiming that StkTokens could not be modeled inside your framework.
+Furthermore, this concrete statement is not true, since you could (or at least should be able to) restrict the set of possible initial states in your approach to only allow reasonable components.
+As a side note, your definitions also allow not checking stack safety between callers and callees within the same protection domain, by simply not annotating the `call` between caller and callee, just like how StkTokens can choose not to perform checks for calls between mutually trusting components.
+* Additionally, StkTokens (as well as the other papers about capability-based stack safety) has one (optional) type of protection that can as far as I can tell not be checked in your framework: a callee can protect confidentiality of its secrets from a caller by clearing its own stack frame before returning.
+In other words, you model protection of the caller from the callee, but not vice versa.
+This confused me in the introduction: informally defining stack safety as "stack safety protects a caller from its callee" is only part of the story, in my view.
+This incompleteness illustrates why your statement that your properties are "at least as intuitive", because they do not make use of an "ad-hoc abstract machine" is an unfounded (as well as subjective) claim: no part of your evaluation guarantees that you have pinpointed the right version of stack safety, making the abstract machine model and your properties equally ad-hoc.
+(Admittedly, you do get *some* test-based confirmation through the examples in your test section, for the specific architecture and enforcement mechanisms you tested. )
+* As far as comprehensiveness goes, the overlay semantics *technique* of StkTokens would likely be amenable to an implementation of coroutines as well, so you are again comparing to the concrete *enforcement mechanism* currently implemented by StkTokens.
+However, adapting the technique of overlay semantics to your observational notions of stack safety does indeed seem less obviously feasible.
+On the other hand, overlay semantics support termination-sensitive stepwise stack safety, which you do not.
+* I personally think that once you start trying to prove stack safety for a specific architecture using your properties, the effort will be comparable to deriving a new stack-safe overlay semantics for an architecture, and proving full abstraction, making the main benefit of your approach property-based testing.
+This is pure speculation on my part, but an interesting question for future work.
+
+In conclusion, I think you should rewrite the Related Work section to present a more objective comparison.
+Your discussion of the five criteria for candidate stack properties does not contribute much to the discussion, and should either be made more objective or removed.
+
+Minor Comments
+----------
+p.2 (repeated) callee-save*s* -> callee-saved seems to be the more common spelling
+
+p.2 you discuss domains and reference Fig. 1, but this figure does not demonstrate domain labels
+
+Fig.1: alignment of Node contents on the right is not centered. Same for the stack pointer arrow (this gets especially confusing in Fig. 3). Some more spacing in the rightmost subfigure, and an explanation of which boxes represent which memory address would be helpful (this becomes clear while reading, but is not immediately clear upon first inspection of the figure). The `offset(%register)` syntax in the assembly code might be worth explaining as well.
+
+Fig.1 instruction 11: unless I missed something, the move should subtract 3 from sp, not 4? (It needs to pass over the local variable and the return address, as shown on the right part of the figure)
+
+"At instruction 11, the callee's variable, *z*" -> y ?
+
+Fig.4: add a reference stating that this is essentially the `awkard example` by Pitts and Stark (1998)
+
+" Our examples consider machines ... when the PC is at `a_PC + 4` " -> Did your previous examples not rely on `a_PC + 1`, since the machine was word-addressed?
+
+`failstop` is used before definition
+
+"at the appropriate instruction of a blessed sequence" -> This sounds like all instructions are located at the same address. Do you mean that they start there?
+
+limitations: do you support non-determinism? I would assume so to support e.g. I/O, but I wasn't entirely sure and the phrase "an initial state with *the* trace of states produced by repeated application of ... " seemed to suggest otherwise.
+
+Why do you denote a predicate on states using a function symbol `f`? Additionally, `f` is introduced as a subset of all MCStates, but then later applied to states (e.g. `f mc`) like a regular predicate would.
+
+I thought it was a bit confusing that `mc \hookrightarrow M | f` can (given deterministic semantics and fixed `mc`, `f`) only ever be satisfied by a single M, whereas this is not the case for `mc \hookrightarrow M <f>`. This distinction should be clarified a bit more clearly in the text.
+
+The rules for Call, ReturnFound and ReturnRec should use `->_C` rather than `\barbedrightarrow_C`, since they do not mention the resulting machine state.
+
+`seal? m[k]` : strange notation for `(m,k) \in seal?`, since `seal?` is simply a pair type
+
+Definition 1: `protected(dm,_)` use of underscore is ad-hoc and inconsistent with later definitions, e.g. `secret(dm,rts)` in Definition 8
+
+"Tags in the PIPE system" -> PIPE is never explained
+
+"STACK *n* for each stack location ... at activation depth d" -> should this `n` have been `d`?
+
+Definition 11: m' \approx_K' n => remove the '?
+
+Definition 13: sloppy notation
+* brk(M) -> what does this mean?
+* `ctx` missing next to `n \hookrightarrow ...` ?
+* K' is never used, and neither is n''
+Additionally, you never explain why the second bullet point in this definition is required here, but not required in Definition 9.
+
+`instk(stk,sd)` -> neither symbol is explained
+
+"Our context now consists of ... " -> please move the type definition of CTX up, so it accompanies this text better
+
+YIELD rule: `yts stk'` has type `tar` (by the way, it is not clear what type `tar` represents; I think you meant the powerset type `2^M` ? ), so this should say `m' \in yts stk'`
+
+the *Cheri* system -> CHERI (multiple instances)
+
+Related work: you should consider moving the paragraph about Roessler and DeHon's work up in the paper, since you discuss their results in depth in Setion VI already.
+
+TABLE 1: lists averages, without listing the number of runs
+
+The second case of "mutation testing" is just marketing terminology to say that you found bugs in your own implementation. I would just say that instead.
+
+I think the "call rule" you mention in your Future Work is very similar to the (somewhat intimidating) `scall works` lemma that Skortsengaard et al. proved in the journal version of [11].
+This lemma allows abstracting away a lot of the gory details of the calling convention (which are encapsulated by the `scall` macro), allowing one to exclusively reason about the specific user-written code.
+
+
+
+Review #75B
+===========================================================================
+
+Overall merit
+-------------
+2. Weak reject
+
+Reviewer expertise
+------------------
+3. Knowledgeable
+
+Paper summary
+-------------
+This paper presents a Coq formalization of stack safety as a security property 
+in terms of confidentiality and integrity. The authors additionally present
+extensions which handle a few different calling conventions.  The authors
+validate their definitions with respect to previously proposed micro-policies
+using randomized property-based testing driven by their formal definitions.
+
+Strengths
+---------
+* important topic -- stack protection mechanisms need more rigorous definitions of security guarantees
+* good motivation and examples
+* clear prose
+* thorough case study
+
+Weaknesses
+----------
+* excludes several common scenarios: address-taken vars, tail call optimization, concurrency
+* weak validation through randomized testing of a single enforcement mechanism
+
+Comments for author
+-------------------
+
+There is a lot of promising work in this paper, but I found a couple of elements of the approach unsatisfying.  First, I feel that the features excluded from the authors' definition of stack safety cause it to fall short of the goal of providing a formal model that can be useful for characterizing the attacks a mechanism can prevent and the benign behaviors it might disallow.  
+
+The example of address-taken variables is a good example -- the discussion provided on why these are excluded from the model could serve as an argument for why formal definitions of stack and heap security are **not** orthogonal, and must be integrated in order to specify security comprehensively.  Given that a callee cannot in general distinguish stack pointers from heap pointers, it seems hard for an analyst to characterize the security of a library that might be secure in one case, but not in the other --- especially if the intention is that it be secure for both cases.
+
+The strict sharing assumptions also made me wonder whether common compiler optimizations might cause violations.  Tail-call optimizations are clearly not supported, are there others that violate these assumptions in more subtle ways?  What about full (or partial) inlining?
+
+Most of the validation of the model comes from randomized testing on the Depth Isolation enforcement mechanism.  While this seems like a good choice, it's not clear that this is sufficient as the _only_ choice -- are there not other mechanisms that would be worth evaluating?  Even for the imperfect mechanisms mentioned in the intro, would analyzing the ways in which stack canaries/shadow stacks, etc. fail to meet the definition bring any insights?  At minimum, the authors should argue for why the current evaluation is sufficiently comprehensive.
+
+
+
+Review #75C
+===========================================================================
+
+Overall merit
+-------------
+2. Weak reject
+
+Reviewer expertise
+------------------
+3. Knowledgeable
+
+Paper summary
+-------------
+The paper presents formalization of the stack safety property as a security property based on confidentiality and integrity of the caller's stack against an attacker callee. The paper proposes two properties: a stepwise property that maintains the invariants across all steps of execution and an extensional, observational property that characterizes a violation as a visible change in the system behavior. The paper tests the proposed properties on the stack safety micro-policies of Roessler and DeHon.
+
+Strengths
+---------
+- Interesting idea of characterizing stack safety as language-based security policies
+
+Weaknesses
+----------
+- The formalization and writing are a bit confusing
+- The utility of such a model is not clear
+
+Comments for author
+-------------------
+The idea of characterizing stack safety as language-based security properties of confidentiality and integrity is interesting. However, I have following questions/concerns with the paper:
+
+- Why are the properties formalized in the paper the right properties for stack safety and why should defense mechanisms aim for these? For example, one may say that as long as the return address on the stack is not corrupted, examples presented in the paper that write-to or read-from the caller's stack frame are OK. And so, the definitions in the paper are too restrictive in considering all the callees as the attackers in the threat model. At the other end, why not go for full memory safety and then we don't need an additional definition of stack safety. For the latter point, given that low-level safe programming languages like Rust are gaining momentum even in the industry, is the problem of defining stack safety still relevant?
+
+Please note that I am not making a claim one way or the other, but some discussions on why these are the right properties, and their relevance is warranted. Currently the paper presents the definition as given with no such discussions.
+
+- The paper should clearly identify the utility of the model. Simply testing some schemes is not enough of an evaluation. How easy is it to characterize the existing stack safety schemes (stack canaries, address space randomization, shadow stacks, executable bits, etc.) under the definition? As the paper mentions, formal proofs for these are hard, and I agree, but still if the paper bucketed these existing schemes according to the proposed definitions, it would be much more interesting.
+
+- One of the main features of such definitions is their formal simplicity. I feel like there is a lot of scope in the paper for that. I don't have any concrete suggestions as such, but right now, the definitions read more complicated than they ought to be.
+
+
+Some minor comments:
+
+- There are several typos in the paper that hinder the readability quite a bit. I will make note of some below, but the paper could use a couple of editorial passes.
+
+- Page 2, second column "At instruction 11, the callee's variable z" --> callee's variable y?
+
+- I found the usage of "changes" in the next paragraph (Page 2, second column, the definition of stepwise confidentiality) confusing. Later, reading the definition, I understand it as callee's stack addresses mapped to the same value, but it was not clear to me on Page 2 that's what it meant.
+
+- Page 3, second column, "Thus x is still sealed and f's attempt" --> main's attempt?
+
+- Section 6, 3rd paragraph, "Tag in the PIPE system" --> PIPE?
+
+-- In the next paragraph, "Stack n for depth d" --> should it be Stack d?
+
+-- Section 7, in the definition of obsfor, one of the rules says obsOf
+
+-- The observations, as far as I could see, are kept abstract and there is no discussion of what are they instantiated with. Please clarify in the paper.
