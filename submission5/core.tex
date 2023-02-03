@@ -151,7 +151,7 @@ From a security perspective, attacks on the stack are really attacks
 on the fundamental functional abstraction itself, and are therefore every bit as
 pervasive.
 
-Indeed, the call stack is an ancient~\cite{one06phrack} and
+Indeed, the call stack is an ancient~\cite{phrack96:smashingthestack} and
 perennial~\cite{mitre-cwe,DBLP:conf/raid/VeendCB12,
   DBLP:conf/sp/SzekeresPWS13,
   DBLP:conf/sp/HuSACSL16,msrc-bluehat,chromium-security}
@@ -393,10 +393,10 @@ call in a simple example machine and discuss how each of our properties applies 
 informally. In the process we discuss some motivation for the properties, from a security
 perspective.
 
-In \cref{sec:machine} we formalize the machine model, 
+In \cref{sec:formal} we formalize the machine model, 
 its {\em security semantics}, and the stack safety properties built on these. 
 \Cref{sec:enforcement} describes the micro-policies that we test,
-\cref{sec:test} the testing framework itself, and
+\cref{sec:testing} the testing framework itself, and
 \cref{sec:relwork,sec:future} discuss related and future work.
 
 %We consider a simple attacker, and discuss the harm that it can do to
@@ -428,7 +428,7 @@ security relevant operations. But this step is transparent to the properties the
 
 \paragraph*{Security Semantics and Property Structure}
 
-A security extends a machine
+A security semantics extends a machine
 with additional context about the identity of current and pending
 functions (which act as security principals) and about the registers and memory they require
 to be secure. This added context is purely notional;
@@ -437,7 +437,7 @@ evolves dynamically through the execution of security-relevant operations,
 which include events like calls, returns, and frame manipulations.
 Our security properties are phrased in terms of this context, often as predicates
 on future states, e.g. of the form ``when control returns to the current function...'',
-or relations on traces of future execution (hyper-properties).
+or as relations on traces of future execution (hyper-properties).
 
 The security-relevant operations typically correspond to underling machine instructions,
 but the correspondence may not be obvious just by inspecting the machine code.
@@ -454,15 +454,15 @@ machine transition \(\mach \xrightarrow{\bar{\psi}, \obs} \mach'\), where \(\obs
 an event (see below) and \(\bar{\psi}\) is a list of security-relevant operations.
 %We then lift this into a transition between pairs of machine states and contexts,
 %\((\mach,\context) \stepstounder{\overline{\psi},\obs} (\mach', \context')\).
-
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
-\cref{tab:psi}. Those that we explore in detail in \cref{sec:example}
+\cref{tab:psi}. Those that we explore in detail in \cref{sec:example,sec:formal}
 are shown in white: calls, returns, and the allocation and deallocation of local memory.
-In \cref{sec:machine}), we cover additional operations that add parameters to the examples,
+In \cref{sec:extensions}, we cover additional operations and and parameters 
 to support various forms of memory sharing \ifexceptions , exceptions, \fi
-and tail-call elimination. These are shown in light gray.
+and tail-call elimination; these are shown in light gray. These are also
+the operations we test in \cref{sec:testing}.
 We give a proof-of-concept formalization of a more sophisticated, heap-like sharing model
-based on pointer provenance in \cref{app:ptr}, represented by the dark grey
+based on pointer provenance in \cref{app:ptr}, represented by the dark gray
 operations, but we do not test this.
 
 \newcommand{\example}{\rowcolor{black!0}}
@@ -492,7 +492,7 @@ operations, but we do not test this.
     \hline
   \end{tabular}
 \end{center}
-  \caption{Security-relevant Operations and their Parameters}
+\caption{Security-relevant operations and their parameters.}
   \label{tab:psi}
 \end{table}
 
@@ -539,7 +539,7 @@ to any notion of observable behavior.
 
 \paragraph*{Variants and Non-interference}
 
-To characterize confidentiality, we borrow the idea of \emph{variant} states
+To characterize confidentiality\apt{and sometimes integrity}, we borrow the idea of \emph{variant} states
 from the theory of non-interference. Non-interference is a way of expressing
 the flow of information through the system. If we begin with a state \(\mach\)
 and modify it to \(\nach = \mach[\component \mapsto v]\) for arbitrary \(v\),
@@ -550,7 +550,7 @@ produce must be the result of accessing \(\component\).
 \label{sec:example}
 
 In this section we introduce our security property definitions by means
-of small code examples, using a simplified set of security-relevent operations for
+of small code examples, using a simplified set of security-relevant operations for
 calls, returns, and private allocations.
 \Cref{fig:main} gives C code and possible corresponding compiled 32-bit RISC-V code
 for a function {\tt main}, which
@@ -733,7 +733,7 @@ Our security semantics attach a security context to the machine state,
 which consists of a view \(V\) and a stack \(\sigma\) of pending activations' views.
 \Cref{fig:exec1} shows how the security context evolves over the first few
 steps of the program.  (The formal details of the security semantics are described in
-\cref{sec:machine}, and the context evolution rules are formalized in \cref{fig:basicops}.)
+\cref{sec:formal}, and the context evolution rules are formalized in \cref{fig:basicops}.)
 Execution begins at the start of {\tt main}, where the program counter (\(\PCname\)) is zero,
 and with the stack pointer (\(\SP\)) at address 1000.
 State transitions are numbered and labeled with a list of security operations, written
@@ -851,7 +851,7 @@ correct \(\SP = 980\). In this scenario, given the layout of {\tt main}'s frame,
   \multicolumn{1}{r}{\(\SP \downarrow\)} &
   \multicolumn{2}{r}{\(\SP' \downarrow\)} \\
   \hline
-  {\tt res} & {\tt sens} & {\tt sec} & \({\mathtt ra_1}\) & \({\mathtt ra_2}\) \\
+  {\tt res} & {\tt sens} & {\tt sec} & \(\mbox{\tt ra}_1\) & \(\mbox{\tt ra}_2\) \\
   \hline
 \end{tabular}
 \end{center}
@@ -1135,7 +1135,7 @@ behavior of the callee. This is the same principle as \(\clrc\), extended from \
 elements to all non-\(\object\) ones. \apt{Still not obvious why we're calling this an integrity property.}
 
 \section{Formalization}
-\label{sec:machine}
+\label{sec:formal}
 
 We now give a formal description of our machine model, security semantics,
 and properties. Our definitions abstract over: (1) the details of  the target machine
@@ -1463,6 +1463,7 @@ is irrelevant.
 \end{table*}
 
 \section{Expanding the Machine}
+\label{sec:extensions}
 
 The system we've modeled so far has been very simple, but our properties
 support an important dimension of generality: adding features.\apt{Just what needs to be changed
@@ -1584,6 +1585,7 @@ it should still enjoy confidentiality. We set its frame to \(\unsealed\) rather
 than \(\sealed\) to express this.
 
 \section{Enforcement}
+\label{sec:enforcement}
 
 We implement and test two micro-policies from Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}:
 {\em Depth Isolation} (\(DI\)) and {\em Lazy Tagging and Clearing} (\(LTC\)).
@@ -1656,7 +1658,7 @@ To use QuickChick, we developed random test-case generators that produce
 (1) an initial RISC-V machine state, including the program to be executed;
 (2)
   an initial policy state, tagging instructions and the stack regions appropriately
-  for the micro-policy (see \cref{subsec:policies})
+  for the micro-policy (see \cref{sec:enforcement})
 (3)
   a map from instructions to lists of their operations in the security semantics.
 
@@ -1772,6 +1774,7 @@ Our properties have allowed us to identify an enforcement mechanism as
 not really stack safe, and to validate a possible fix.
 
 \section{Related Work}
+\label{sec:relwork}
 
 \section{Future Work}
 \label{sec:future}
