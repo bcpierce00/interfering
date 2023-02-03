@@ -389,17 +389,17 @@ we do not address concurrency---that is a high-priority future work.
 \section{Key Ideas}
 \label{sec:ideas}
 
+\apt{Not a good place for this.}
 The paper is structured as follows. In \cref{sec:example}, we will walk through a function
 call in a simple example machine and discuss how each of our properties applies to it,
 informally. In the process we discuss some motivation for the properties, from a security
 perspective. We consider a simple attacker, and discuss the harm that it can do to
 its caller. This perspective is essential to understanding how lazy enforcement can
 be safe: even if an attacker can overwrite some memory, if it cannot accomplish
-its bigger-picture goals, the system is safe.
+subvert the observable behavior of the caller, the system is safe.
 
-Then in \cref{sec:machine} we will introduce the machine model that we test, and give
-its {\em security semantics}, described in brief below. We formalize the definitions of
-stack safety that derive from the security semantics in \cref{sec:props}.
+In \cref{sec:machine} we formalize the machine model, 
+its {\em security semantics}, and the stack safety properties built on these. 
 \Cref{sec:testing} describes the testing framework, and
 \cref{sec:relwork,sec:future} discuss related and future work.
 The remainder of this section introduces ideas that will be important throughout.
@@ -422,6 +422,9 @@ Separately, in order to apply a property to a specific machine, we do need to co
 implementation details, by determining how the machine's execution translates into
 security relevant operations. But this step is transparent to the properties themselves.
 
+\apt{Something about how the machine can incorporate enforcement, with examples
+(tags, capabilities, SW only). }
+
 \paragraph*{Security Semantics and Property Structure}
 
 A security extends a machine
@@ -442,19 +445,19 @@ calls and returns are conventionally performed by {\tt jal} (``jump-and-link'')
 and {\tt jalr} (``jump-and-link-register'') instructions, respectively, but these
 instructions might also be used for other things. An instantiation of an operation
 might require some external mechanism for distinguishing which instructions are
-security-relevant; the most obvious technique is to add optional labels to instructions,
-but the theory does not depend on this choice.
+security-relevant. The most obvious technique, which we use in our examples, is to add labels to
+selected instructions, but the theory does not depend on this choice.
 
 Whatever the mechanism for labeling transitions, we get a base
 machine transition \(\mach \xrightarrow{\bar{\psi}, \obs} \mach'\), where \(\obs\) is
 an event (see below) and \(\bar{\psi}\) is a list of security-relevant operations.
-We then lift this into a transition between pairs of machine states and contexts,
-\((\mach,\context) \stepstounder{\overline{\psi},\obs} (\mach', \context')\).
+%We then lift this into a transition between pairs of machine states and contexts,
+%\((\mach,\context) \stepstounder{\overline{\psi},\obs} (\mach', \context')\).
 
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
 \cref{tab:psi}. Those that we explore in detail in \cref{sec:example}
 are shown in white: calls, returns, and the allocation and deallocation of local memory.
-In \cref{sec:machine}), we cover additional operations that add parameters to the examples',
+In \cref{sec:machine}), we cover additional operations that add parameters to the examples,
 to support various forms of memory sharing \ifexceptions , exceptions, \fi
 and tail-call elimination. These are shown in light gray.
 We give a proof-of-concept formalization of a more sophisticated, heap-like sharing model
@@ -466,26 +469,28 @@ operations, but we do not test this.
 \newcommand{\theory}{\rowcolor{black!25}}
 
 \begin{table}
+\begin{center}
   \begin{tabular}{| l | l |}
     \hline
     \(\psi \in \Psi\) & Parameters \\
     \hline
-    \example \(\mathbf{call}\) & Target address, argument registers \\
-    \testing & Stack argument offset \& size \\
+    \example \(\mathbf{call}\) & target address, argument registers \\
+    \testing & stack arguments (base, offset \& size) \\
     \example \(\mathbf{return}\) & \\
-    \example \(\mathbf{alloc}\) & Offset \& size \\
-    \testing & Public flag \\
-    \example \(\mathbf{dealloc}\) & Offset \& size \\
-    \testing \(\mathbf{tailcall}\) & As \(\mathbf{call}\) \\
+    \example \(\mathbf{alloc}\) & offset \& size \\
+    \testing & public flag \\
+    \example \(\mathbf{dealloc}\) & offset \& size \\
+    \testing \(\mathbf{tailcall}\) & (same as for \(\mathbf{call}\)) \\
     \hline
     \multicolumn{2}{|c|}{{\it Pointer provenance operations}} \\
     \hline
-    \theory \(\mathbf{promote}\) & Register, offset \& size \\
-    \theory \(\mathbf{propagate}\) & Source register/address \\
-    \theory & Destination register/address \\
-    \theory \(\mathbf{clear}\) & Target register/address \\
+    \theory \(\mathbf{promote}\) & register, offset \& size \\
+    \theory \(\mathbf{propagate}\) & source register/address \\
+    \theory & destination register/address \\
+    \theory \(\mathbf{clear}\) & target register/address \\
     \hline
   \end{tabular}
+\end{center}
   \caption{Security-relevant Operations and their Parameters}
   \label{tab:psi}
 \end{table}
@@ -515,7 +520,7 @@ and confidentiality purposes they are considered accessible at all times.
 
 For a newly active function, every element that is available for use but uninitialized
 is seen as \(\unsealed\). From the perspective of the caller, the callee has no obligations
-regarding its use of \(\unsealed\) elements, but the callee itself 
+regarding its use of \(\unsealed\) elements, but the callee itself \apt{???}
 
 Arguments are seen as \(\object\), meaning that their contents may be safely used.
 When the active function allocates memory, that memory will also be \(\object\).
