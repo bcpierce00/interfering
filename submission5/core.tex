@@ -151,7 +151,7 @@ From a security perspective, attacks on the stack are really attacks
 on the fundamental functional abstraction itself, and are therefore every bit as
 pervasive.
 
-Indeed, the call stack is a ancient~\cite{one06phrack} and
+Indeed, the call stack is an ancient~\cite{one06phrack} and
 perennial~\cite{mitre-cwe,DBLP:conf/raid/VeendCB12,
   DBLP:conf/sp/SzekeresPWS13,
   DBLP:conf/sp/HuSACSL16,msrc-bluehat,chromium-security}
@@ -1530,14 +1530,19 @@ However, while there are no fundamental barriers to producing such a proof,
 it would be considerable work to carry out for a full ISA like RISC-V and
 complex enforcement mechanisms like Roessler and DeHon's micro-policies.
 We therefore choose to systematically \emph{test} their micro-policies.
+\leo{moved the following here, I think it makes more sense here.}
+Our primary testing targets are the eager {\em Depth Isolation}
+and the {\em Lazy Per-Activation Tagging and Clearing} micro-policies.
+
 
 We use a Coq specification of the RISC-V architecture~\cite{Bourgeat2021AMF},
 and extend it with a runtime monitor implementing a stack safety
 micro-policy. We choose the Coq proof assistant as the setting for our implementation
 to ensure that our coinductive trace definitions are well-formed, to reason about
-them, and to leverage the power of the QuickChick property-based testing framework~\cite{Pierce:SF4}.
+them\leo{where do we mention reasoning about them?}, and to leverage the power of the QuickChick property-based testing framework~\cite{Pierce:SF4}.
 
-To use QuickChick, we build random test-case generators that produce
+\subsection{Test Generation}
+To use QuickChick, we developed random test-case generators that produce
 (1) an initial RISC-V machine state, including the program to be executed;
 (2)
   an initial policy state, tagging instructions and the stack regions appropriately
@@ -1545,25 +1550,28 @@ To use QuickChick, we build random test-case generators that produce
 (3)
   a map from instructions to lists of their operations in the security semantics.
 
-To write such generators we build on the work of
-Hri\c{t}cu et al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
-introduced {\em generation by execution} to produce progams that lead
-machines towards interesting behaviors. We extend the technique with a degree
-of statefulness, to nudge the generator toward executions that will carry
-on without early failstops and thus have a better chance of reaching a
-state that presents opportunities for an attack.
+To write such generators we build on the work of Hri\c{t}cu et
+al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
+introduced {\em generation by execution}, a technique that produces
+programs that lead to longer executions---and hopefully towards more
+interesting behaviors as a result. We extend their technique with an additional
+degree of statefulness: when complex calling conventions need to be
+observed to avoid early failstops, extra care must be taken to ensure
+that any such calls are well behaved. For example, immediately
+following a call we need to initialize any stack-allocated variables
+with an increased probability. However, at the same time, we need to
+allow for the possibility of {\em not} performing such an initialization
+to allow for potential attack vectors to manifest.
 
-We need to extend typical testing schemes further to handle the nested
-nature of confidentiality: rather than just generating two
-initial machines that are variants of one another and letting them
-execute to test for noninterference, we generate a new variant
-{\em every time a call is made} and check confidentiality for the
-subtrace produced from that variant state until its corresponding
-return. As a result, a ``single'' confidentiality test compactly
-checks multiple nested calls.
+Moreover, we need to further extend typical hyperproperty testing
+schemes to handle the nested nature of confidentiality: rather than
+just generating two initial machines that are variants of one another
+and letting them execute to test for noninterference, we generate a
+new variant {\em every time a call is made} and check confidentiality
+for the subtrace produced from that variant state until its
+corresponding return. As a result, a ``single'' confidentiality test
+compactly checks multiple nested calls.
 
-Our primary testing targets are the eager {\em Depth Isolation}
-and the {\em Lazy Per-Activation Tagging and Clearing} micro-policies.
 
 \subsection{Mutation Testing}
 
