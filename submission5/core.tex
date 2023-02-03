@@ -1122,17 +1122,23 @@ Where the caller's confidentiality and integrity are concerned with protecting s
 identifiable state---the caller's stack frame---their callee equivalents are concerned
 with enforcing the expected interface between caller and callee. Communication between
 the principals should occur only through the state elements that are designated for the
-purpose: those which we label \(\public\) and (in the presence of memory sharing) \(\object\).\apt{Are these backwards?}
+purpose: those labeled \(\public\) and \(\object\).
 
-Applying this intuition using our framework, \emph{callee confidentiality} (\(\clec\)) turns out to resemble
-\(\clri\), extended to every element that is not marked \(\object\) at call-time. The callee's
-internal behavior is represented by those elements that change over the course of its
-execution, and which are not part of the interface with the caller. At return, those
-elements should become irrelevant to the subsequent behavior of the caller.
+Applying this intuition using our framework, \emph{callee confidentiality} (\(\clec\))
+turns out to resemble \(\clri\), extended to every element that is not marked \(\object\)
+or \(\public\) at call-time. The callee's internal behavior is represented by those
+elements that change over the course of its execution, and which are not part of the
+interface with the caller. At return, those elements should become irrelevant to the
+subsequent behavior of the caller.
 
-Similarly, in \emph{callee integrity} (\(\clei\)), only elements marked \(\object\) at the call should influence the
-behavior of the callee. This is the same principle as \(\clrc\), extended from \(\sealed\)
-elements to all non-\(\object\) ones. \apt{Still not obvious why we're calling this an integrity property.}
+Similarly, in \emph{callee integrity} (\(\clei\)), only elements marked \(\object\)
+or \(\public\) at the call should influence the behavior of the callee. It may seem
+odd to call this integrity, as the callee does not have a private state. But
+an erroneous callee that performs a read-before-write within its stack
+frame, or which uses a non-argument register without initializing it, is vulnerable
+to its caller seeding those elements with values that will change its behavior.
+The fact that well-behaved callees have integrity by definition is probably why
+callee integrity is not typically discussed.
 
 \section{Formalization}
 \label{sec:machine}
@@ -1380,26 +1386,55 @@ respectively. Once again, \(\Uparrow\) is coinductive.
 
 Finally, we can define our core properties. They can be found in \cref{tab:props},
 arranged to show their commonalities and distinctions. Each definition gives a criterion
-quantified over states \(s\) that immediately follow call (or tail-call) steps.\apt{No, we don't
-  want to mention tail-calls here. But we do need to explain how the interpretation of the
-  property needs to change when we add tail-calls later.}
+quantified over states \(s\) that immediately follow call steps.
 If an execution can reach a state \(s'\) such that \(s' \stepstounder{\overline{\psi}} s\)
 where \(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then \(s\) is the target
 of a call.
 %Likewise, if \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then
 %\(s\) is the target of a tailcall.
 As a shorthand, we write that each property is defined
-by a criterion that must hold ``for all call targets \(s\).''
+by a criterion that must hold ``for all call targets \(s\).'' In the case of \(\wbcf\),
+we also need to know about the callee, so we refer to the ``call step \(s \stepstounder{} s'\).
 
-\(\wbcf\), \(\clri\), and \(\clec\) are each straightforward: they define predicates that must
-hold on return from the call. \(\clrc\) and \(\clei\) both compare the execution of the
-call state with that of a variant state, and are concerned with both their internal and
-their return-time behavior. So, for some \(\nach\) that is an appropriate variant,
-all states must fulfill an ``internal'' clause that their traces are similar,
-and a ``return-time'' clause, that any potentially corrupted memory at their returns
-is irrelevant.
-\apt{This paragraph needs major expansion, to paraphrase the definitions informally,
-  and TO SAY MUCH MORE ABOUT THE CALLEE PROPERTIES, which are not intuitive at all (to me)!}
+\paragraph*{\(\wbcf\)}
+Given a call step \((\mach,(V,\sigma)) \stepstounder{} (\mach',(V',\sigma'))\),
+we define the predicate \(\ret\) to hold on states \(\mach''\)
+whose stack pointer matches that of \(\mach\)
+and whose program counter is at the next instruction. We enjoy \(\wbcf\) if
+\(\ret\) holds on return from \(\mach'\).
+
+\paragraph*{\(\clri\)}
+When our call target is \((\mach,(V,\sigma))\), we define the predicate \(\intProp\) to hold
+on states \(\mach'\) if any elements that are both sealed in \(V\) and in the difference
+set between \(\mach\) and \(\mach'\) are irrelevant. We enjoy \(\clri\) if \(\intProp\)
+holds on return from \(\mach\).
+
+\paragraph*{\(\clrc\)}
+When our call target \((\mach,(V,\sigma))\), we begin by taking an arbitrary \(\nach\)
+that is a \(\components\)-variant of \(\mach\), where \(\components\) is the set of sealed elements
+in \(V\). We require that two clauses hold. On line a, the behavior of a trace from
+\((\mach,(V,\sigma))\) up to its return must match that of \((\nach,(V,\sigma))\).
+On line b, we define a relation \(\confProp\) that relates states \(\mach'\) and \(\nach'\)
+if their corrupted set (relative to \(\mach\) and \(\nach\)) is irrelevant, and require
+that it hold on the returns from \((\mach,(V,\sigma))\) and \((\nach,(V,\sigma))\).
+We enjoy \(\clrc\) if both clauses hold.
+
+\paragraph*{\(\clec\)}
+We consider the callee's private behavior to be any changes that it makes to the state
+outside of legitimate channels---elements marked \(\object\) or \(\public\). The remainder
+should be kept secret, which is to say, irrelevant. Similar to \(\clri\), given a call target
+\((\mach,(V,\sigma))\), we define a predicate \(\cconfProp\) to hold
+on states \(\mach'\) if the difference set between \(\mach\) and \(\mach'\), that is
+not \(\object\) or \(\public\), is irrelevant. If \(\cconfProp\) holds on return,
+we enjoy \(\clec\).
+
+\paragraph*{\(\clei\)}
+Callee integrity means that the caller does not influence it outside of legitimate
+channels. The caller's influence can be seen internally, or in corrupted data on return,
+just like the caller's secrets would under \(\clrc\). So, for a call target
+\((\mach,(V,\sigma))\), we take an arbitrary \(\nach\) that is a \(\components\)-variant
+of \(\mach\), where \(\components\) is the set all elements that are not \(\object\)
+or \(\public\). The remainder of the property is identical to \(\clrc\).
 
 \begin{table*}[h]
   \setlength{\tabcolsep}{1pt}
@@ -1407,11 +1442,14 @@ is irrelevant.
   \begin{tabular}{l r l l l}
     \rowcolor{black!20}
     1
-    & \(\wbcf \triangleq\) & \((|\sigma| \uparrow \ret) ~ ????\)
-    & \(\textnormal{ where } \ret ~ \mach' \triangleq \)
-    \(\mach'[\SP] = \mach[\SP] \land \mach'[\PCname] = \mach[\PCname]+4\)
+    & \(\wbcf \triangleq\) & \((|\sigma'| \uparrow \ret) ~ (\mach', (V',\sigma'))\)
+    & \(\textnormal{ where } \ret ~ \mach'' \triangleq \)
+    \(\mach''[\SP] = \mach[\SP]\)
 %    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is called}\) \\
-    & \(\textnormal{ for all call targets } (\mach,(V,\sigma))\) \\
+    & \(\textnormal{ for all calls } (\mach,(V,\sigma)) \stepstounder{} (\mach',(V',\sigma'))\) \\
+    %
+    \rowcolor{black!20}
+    & & & \(\textnormal{ and } \mach''[\PCname] = \mach[\PCname]+4\) & \\
     %
     \rowcolor{black!10}
     2
@@ -1447,7 +1485,7 @@ is irrelevant.
     \rowcolor{black!20}
     5
     & \(\clei \triangleq\) & \(\forall \nach \textnormal{ s.t. } \mach \approx_{\components} \nach,\)
-    & \(\textnormal{ where } \components = \public(V) \cup \object(V)\)
+    & \(\textnormal{ where } \components = \COMPONENTS - (\public(V) \cup \object(V))\)
 %    & \(\textnormal{ when } (\mach,(V,\sigma)) \textnormal{ is (tail)called}\) \\
     & \(\textnormal{ for all call targets } (\mach,(V,\sigma))\) \\
    \rowcolor{black!20}
@@ -1457,8 +1495,7 @@ is irrelevant.
     & \(\textnormal{ where } (\mach' ~ \cintProp ~ \nach') \triangleq
     \mach' \parallel \bar{\Diamond}(\mach,\nach,\mach',\nach')\) & \\
   \end{tabular}
-  \caption{Properties\apt{In WBCF, surely we need a state arg? But it needs to be the state \emph{before} the call,
-      doesn't it?}}
+  \caption{Properties}
   \label{tab:props}
 \end{table*}
 
