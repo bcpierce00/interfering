@@ -102,7 +102,7 @@ variety of compiler, run-time, and hardware mechanisms for protecting stack
 memory. But, unlike ``the heap,'' the stack does not correspond to a single
 high-level language concept. Rather, it corresponds to the fundamental
 abstraction of functions, in all of the forms that they can take.
-The protean nature of the functional abstraction makes stack safety
+This protean nature of the functional abstraction makes stack safety
 difficult to specify.
 
 We propose a formal characterization of stack safety based on
@@ -110,7 +110,7 @@ concepts from language-based security. Stack safety is decomposed
 into an integrity property and a confidentiality property for each
 of the caller and the callee, as well as a control-flow property.
 
-Our motivating enforcement mechanism,
+Our motivating enforcement mechanisms,
 the ``lazy'' stack safety micro-policies proposed by
 Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, permit functions
 to write into one another's frames, but taint the result so that the frame's
@@ -121,7 +121,8 @@ terms of the observable behavior of the system.
 The stack interacts with a large number of language features that are often excluded
 from discussion of stack safety. Our properties support a system with
 both caller- and callee-saved registers, arguments passed on the stack,
-tail-call elimination, \ifexceptions exceptions \fi. They are modular by
+\ifexceptions tail-call elimination, and exceptions.
+\else and tail-call elimination. \fi They are modular by
 design, in order to be further extensible to other features.
 
 We validate our properties by using them to distinguish correct implementations
@@ -151,13 +152,12 @@ From a security perspective, attacks on the stack are really attacks
 on the fundamental functional abstraction itself, and are therefore every bit as
 pervasive.
 
-Indeed, the call stack is an ancient~\cite{one06phrack} and
+Indeed, the call stack is an ancient~\cite{phrack96:smashingthestack} and
 perennial~\cite{mitre-cwe,DBLP:conf/raid/VeendCB12,
   DBLP:conf/sp/SzekeresPWS13,
   DBLP:conf/sp/HuSACSL16,msrc-bluehat,chromium-security}
 target for low-level attacks, frequently involving control-flow hijacking via corrupting
 the return address, and memory corruption more generally.
-
 %
 %The most recent release of the authoritative CWE Top 25
 %Most Dangerous Software Weaknesses~\cite{
@@ -179,7 +179,7 @@ capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJF
 and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18,Gollapudi+23}.
 
 Security mechanisms can be brittle, successfully eliminating one attack while leaving room for
-other, similar attacks. To avoid this, we seek formal properties of safe behavior that can be proven
+other, similar attacks. To avoid this \leo{game of whack-a-mole}, we seek formal properties of safe behavior that can be proven
 or tested. Such properties become the specification against which enforcement can be validated;
 even enforcement mechanisms that do not fulfill a property benefit from the ability to articulate
 \emph{why} they fail.
@@ -283,7 +283,7 @@ pointers. Our criteria in (3) cover a total of five core requirements:
 \(\wbcf\), caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
 callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)).
 They are related to one another as seen in
-\cref{fig:propertydiagram}: \(\clei\) subsumes \(\clrc\) and \(\clec\) subsumes
+\cref{fig:propertydiagram}:\leo{is this supposed to be \cref{tab:props}?} \(\clei\) subsumes \(\clrc\) and \(\clec\) subsumes
 \(\clri\), but otherwise the properties are orthogonal and can be taken piecemeal
 according to the needs of a system.
 
@@ -293,9 +293,8 @@ address, and shadow stacks with protection (e.g. Return Address Defender \cite{C
 to enforce it completely. Others combine this protection with some degree of memory protection,
 chiefly focusing on integrity. Interestingly, Skorstengaard et al. \cite{SkorstengaardSTKJFP}
 describe their ``local state encapsulation'' in terms of integrity, but it is equivalent
-to the combination of \(\clri\) and \(\clrc\). The follow-up work by 
-Georges et al. \cite{Georges22:TempsDesCerises} cites an early preprint of our work
-as inspiration for extending their formal discussion to include confidentiality.
+to the combination of \(\clri\) and \(\clrc\). In fact, the follow-up work by 
+Georges et al. \cite{Georges22:TempsDesCerises} was inspired by the properties presented in this paper to extend their formal discussion to include confidentiality.
 When checking if a preliminary version of these properties applied to
 the Cerise calling convention, they noted that the Skostengaard et al. calling convention
 did not enforce callee confidentiality, and made sure that their version would
@@ -351,7 +350,7 @@ In sum, we offer the following contributions:
 Our artifact contains Coq formalizations of our properties for illustrative purposes
 as well as their testing implementation. There are no proofs---we use Coq primarily
 for the QuickChick library and to ensure that the formalizations are unambiguous.
-Proofs are future work.
+Formal proofs are left as future work.
 
 \subsection{Threat Model and Limitations}
 
@@ -385,7 +384,7 @@ security enforcement: in particular, hardware and timing attacks are out of scop
 we do not address concurrency---that is a high-priority future work.
 %
 
-\paragraph{Organization}
+\paragraph*{Organization}
 
 In the next section, we will give a brief overview of the structure of properties.
 Then in \cref{sec:example}, we will walk through a function
@@ -393,10 +392,10 @@ call in a simple example machine and discuss how each of our properties applies 
 informally. In the process we discuss some motivation for the properties, from a security
 perspective.
 
-In \cref{sec:machine} we formalize the machine model, 
+In \cref{sec:formal} we formalize the machine model, 
 its {\em security semantics}, and the stack safety properties built on these. 
 \Cref{sec:enforcement} describes the micro-policies that we test,
-\cref{sec:test} the testing framework itself, and
+\cref{sec:testing} the testing framework itself, and
 \cref{sec:relwork,sec:future} discuss related and future work.
 
 %We consider a simple attacker, and discuss the harm that it can do to
@@ -428,7 +427,7 @@ security relevant operations. But this step is transparent to the properties the
 
 \paragraph*{Security Semantics and Property Structure}
 
-A security extends a machine
+A security semantics extends a machine
 with additional context about the identity of current and pending
 functions (which act as security principals) and about the registers and memory they require
 to be secure. This added context is purely notional;
@@ -437,7 +436,7 @@ evolves dynamically through the execution of security-relevant operations,
 which include events like calls, returns, and frame manipulations.
 Our security properties are phrased in terms of this context, often as predicates
 on future states, e.g. of the form ``when control returns to the current function...'',
-or relations on traces of future execution (hyper-properties).
+or as relations on traces of future execution (hyper-properties).
 
 The security-relevant operations typically correspond to underling machine instructions,
 but the correspondence may not be obvious just by inspecting the machine code.
@@ -454,15 +453,15 @@ machine transition \(\mach \xrightarrow{\bar{\psi}, \obs} \mach'\), where \(\obs
 an event (see below) and \(\bar{\psi}\) is a list of security-relevant operations.
 %We then lift this into a transition between pairs of machine states and contexts,
 %\((\mach,\context) \stepstounder{\overline{\psi},\obs} (\mach', \context')\).
-
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
-\cref{tab:psi}. Those that we explore in detail in \cref{sec:example}
+\cref{tab:psi}. Those that we explore in detail in \cref{sec:example,sec:formal}
 are shown in white: calls, returns, and the allocation and deallocation of local memory.
-In \cref{sec:machine}), we cover additional operations that add parameters to the examples,
+In \cref{sec:extensions}, we cover additional operations and and parameters 
 to support various forms of memory sharing \ifexceptions , exceptions, \fi
-and tail-call elimination. These are shown in light gray.
+and tail-call elimination; these are shown in light gray. These are also
+the operations we test in \cref{sec:testing}.
 We give a proof-of-concept formalization of a more sophisticated, heap-like sharing model
-based on pointer provenance in \cref{app:ptr}, represented by the dark grey
+based on pointer provenance in \cref{app:ptr}, represented by the dark gray
 operations, but we do not test this.
 
 \newcommand{\example}{\rowcolor{black!0}}
@@ -492,7 +491,7 @@ operations, but we do not test this.
     \hline
   \end{tabular}
 \end{center}
-  \caption{Security-relevant Operations and their Parameters}
+\caption{Security-relevant operations and their parameters.}
   \label{tab:psi}
 \end{table}
 
@@ -539,7 +538,7 @@ to any notion of observable behavior.
 
 \paragraph*{Variants and Non-interference}
 
-To characterize confidentiality, we borrow the idea of \emph{variant} states
+To characterize confidentiality\apt{and sometimes integrity}, we borrow the idea of \emph{variant} states
 from the theory of non-interference. Non-interference is a way of expressing
 the flow of information through the system. If we begin with a state \(\mach\)
 and modify it to \(\nach = \mach[\component \mapsto v]\) for arbitrary \(v\),
@@ -550,7 +549,7 @@ produce must be the result of accessing \(\component\).
 \label{sec:example}
 
 In this section we introduce our security property definitions by means
-of small code examples, using a simplified set of security-relevent operations for
+of small code examples, using a simplified set of security-relevant operations for
 calls, returns, and private allocations.
 \Cref{fig:main} gives C code and possible corresponding compiled 32-bit RISC-V code
 for a function {\tt main}, which
@@ -569,15 +568,15 @@ return value are both passed in {\tt a0}.
 Memory is byte-addressed and the stack grows towards
 lower addresses. We assume that {\tt main} begins at address 0 and its callee {\tt f} at address 100.
 
-\newcommand{\freebox}[1][10px]{\tikz \filldraw[fill=blue] (0,0) rectangle (#1,#1);}
-\newcommand{\pubbox}[1][10px]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (#1,#1);}
-\newcommand{\objbox}[1][10px]{\tikz \filldraw[fill=yellow] (0,0) rectangle (#1,#1);}
-\newcommand{\sealbox}[1][10px]{\tikz \filldraw[fill=red] (0,0) rectangle (#1,#1);}
+\newcommand{\freebox}[1][10pt]{\tikz \filldraw[fill=blue] (0,0) rectangle (#1,#1);}
+\newcommand{\pubbox}[1][10pt]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (#1,#1);}
+\newcommand{\objbox}[1][10pt]{\tikz \filldraw[fill=yellow] (0,0) rectangle (#1,#1);}
+\newcommand{\sealbox}[1][10pt]{\tikz \filldraw[fill=red] (0,0) rectangle (#1,#1);}
 
-\newcommand{\textbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (30px,30px) node[pos=.5]{#1};}
-\newcommand{\numbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (20px,20px) node[pos=.5]{#1};}
-\newcommand{\leftbox}[1][]{\tikz \filldraw[fill=blue!20] (0,0) rectangle (20px,20px) node[pos=.5]{#1};}
-\newcommand{\rightbox}[1][]{\tikz \filldraw[fill=orange!20] (0,0) rectangle (20px,20px) node[pos=.5]{#1};}
+\newcommand{\textbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (30pt,30pt) node[pos=.5]{#1};}
+\newcommand{\numbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (20pt,20pt) node[pos=.5]{#1};}
+\newcommand{\leftbox}[1][]{\tikz \filldraw[fill=blue!20] (0,0) rectangle (20pt,20pt) node[pos=.5]{#1};}
+\newcommand{\rightbox}[1][]{\tikz \filldraw[fill=orange!20] (0,0) rectangle (20pt,20pt) node[pos=.5]{#1};}
 
 
 \begin{figure}
@@ -625,7 +624,7 @@ lower addresses. We assume that {\tt main} begins at address 0 and its callee {\
   \begin{subfigure}{\columnwidth}
     \center
     \vspace{\abovedisplayskip}
-    \(\textnormal{\large \dots} \pubbox[30px] \!\! \stackrel{\textsc{\normalsize sp}}{\textbox[\tt res]}
+    \(\textnormal{\large \dots} \pubbox[30pt] \!\! \stackrel{\textsc{\normalsize sp}}{\textbox[\tt res]}
     \stackrel{\textsc{\normalsize 4(sp)}}{\textbox[\tt sens]}
     \stackrel{\textsc{\normalsize 8(sp)}}{\textbox[\tt sec]}
     \stackrel{\textsc{\normalsize 12(sp)} \hfill}{\textbox[\(\mathtt{ra_1}\)]\textbox[\(\mathtt{ra_2}\)]}
@@ -733,7 +732,7 @@ Our security semantics attach a security context to the machine state,
 which consists of a view \(V\) and a stack \(\sigma\) of pending activations' views.
 \Cref{fig:exec1} shows how the security context evolves over the first few
 steps of the program.  (The formal details of the security semantics are described in
-\cref{sec:machine}, and the context evolution rules are formalized in \cref{fig:basicops}.)
+\cref{sec:formal}, and the context evolution rules are formalized in \cref{fig:basicops}.)
 Execution begins at the start of {\tt main}, where the program counter (\(\PCname\)) is zero,
 and with the stack pointer (\(\SP\)) at address 1000.
 State transitions are numbered and labeled with a list of security operations, written
@@ -851,7 +850,7 @@ correct \(\SP = 980\). In this scenario, given the layout of {\tt main}'s frame,
   \multicolumn{1}{r}{\(\SP \downarrow\)} &
   \multicolumn{2}{r}{\(\SP' \downarrow\)} \\
   \hline
-  {\tt res} & {\tt sens} & {\tt sec} & \({\mathtt ra_1}\) & \({\mathtt ra_2}\) \\
+  {\tt res} & {\tt sens} & {\tt sec} & \(\mbox{\tt ra}_1\) & \(\mbox{\tt ra}_2\) \\
   \hline
 \end{tabular}
 \end{center}
@@ -1141,7 +1140,7 @@ The fact that well-behaved callees have integrity by definition is probably why
 callee integrity is not typically discussed.
 
 \section{Formalization}
-\label{sec:machine}
+\label{sec:formal}
 
 We now give a formal description of our machine model, security semantics,
 and properties. Our definitions abstract over: (1) the details of  the target machine
@@ -1291,7 +1290,7 @@ Two event traces $\obsT_1$ and $\obsT_2$ are {\em similar},
 written \(\obsT_1 \eqsim \obsT_2\), if the sequence of non-silent events
 is the same. That is, we compare up to deletion of \(\tau\) events.
 Note that this results in an infinite silent trace being similar to
-any trace. So, a trace that silently diverges due to a failstop will
+any trace. So, a trace that silently diverges due to a failstop\apt{?? haven't explained this!}  will
 fulfill this property vacuously.
 
 \begin{minipage}{.4\columnwidth}
@@ -1333,6 +1332,8 @@ written \(\mach \approx_\components \nach\), if \(\mach\sim\nach\) and
 written \((\mach,\context) \parallel \components\), if for all
 \(\nach\) such that \(\mach \approx_{\components} \nach\),
 \(\hookrightarrow (\mach,\context)  \eqsim \hookrightarrow (\nach,\context)\).
+
+\apt{needs small transition}
 
 \definition The {\em corrupted set} \(\bar{\Diamond}(\mach,\mach',\nach,\nach')\)
 is the set \((\Delta(\mach,\mach') \cup \Delta(\nach,\nach')) \cap \Delta(\mach',\nach')\).
@@ -1500,8 +1501,9 @@ or \(\public\). The remainder of the property is identical to \(\clrc\).
 \end{table*}
 
 \section{Expanding the Machine}
+\label{sec:extensions}
 
-The system we've modeled so far has been very simple, but our properties
+The system we model in \cref{sec:example,sec:formal} is very simple, but our properties
 support an important dimension of generality: adding features.\apt{Just what needs to be changed
 to add these features?}
 We now briefly introduce the features of our primary testing machine.\apt{Make sure
@@ -1546,16 +1548,19 @@ the reference to be passed further down the stack.
 %In this second case, the reference can be passed further down the stack, but otherwise
 %only the immediate callee gains access. APT: 
 
-On the other hand, if the address of an object is taken directly and passed it as a
-pointer, we have no way obvious way to limit the scope of such sharing.
-We treat this scenario as the caller allocating a ``public''
-object that receives no protection. We extend the \(\mathbf{alloc}\) operation
+If the address of an object is taken directly and passed as a
+pointer, we simply classify the object as ``public'' and give it no protection against
+access by other functions. We extend the \(\mathbf{alloc}\) operation
 with a boolean flag, where {\bf t} indicates
 that the allocation is public, and {\bf f} that it is private.
 If space for multiple objects is allocated in a single step,
 that step can make multiple allocation operations, each labeled appropriately.
 Public objects are labeled \(\public\) rather than \(\object\), so they are
 never sealed at a call (\cref{sfig:publicalloc}).
+Providing more fine-grained control over sharing is desirable, but
+seems to require a considerably more complex model; \cref{app:ptr} describes one
+approach, based on capabilities.
+
 
 \begin{figure*}
   \begin{subfigure}{0.4\textwidth}
@@ -1620,41 +1625,44 @@ Since the caller will not be returned to, it does not need integrity, but
 it should still enjoy confidentiality. We set its frame to \(\unsealed\) rather
 than \(\sealed\) to express this.
 
-\section{Enforcement}
+\apt{good place to detail the needed changes in interpretation of \cref{tab:props}.}
 
-We implement and test two micro-policies from Roessler and DeHon \cite{}:
+\section{Enforcement}
+\label{sec:enforcement}
+
+We implement and test two micro-policies from Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}:
 {\em Depth Isolation} (\(DI\)) and {\em Lazy Tagging and Clearing} (\(LTC\)).
 They share a common structure: each function activation is assigned a ``color'' \(n\)
 representing its identity. Stack locations belonging to that activation are
-tagged \(\tagStackDepth{n}\), and when it is active, the tag on the
-program counter (PC tag) is \(\tagPCDepth{n}\). The tag \(\tagNoDepth\)
-is for stack locations that are currently unused.
+tagged \(\tagStackDepth{n}\), and while the activation is running, the tag on the
+program counter (PC tag) is \(\tagPCDepth{n}\). Stack locations not part of
+any activation are tagged \(\tagNoDepth\).
 
 In \(DI\), \(n\) always corresponds to the depth of the stack when
-the function is called. A functions must initialize its entire frame on a call
-in order to tag it, and then clear it on a return.
+the function is called. A function must initialize its entire frame upon entry
+in order to tag it, and then clear the frame before returning.
 During normal execution, the micro-policy rules only permit load and
 store operations when the target memory is tagged {\em with the same depth}
-as the current {\PCname} tag, and store operations also when the
-target memory is \(\tagNoDepth\).
+as the current {\PCname} tag, or, for store operations, if the target memory
+is tagged \(\tagNoDepth\).
 
-In \(LTC\), rather than initialize the entire frame,
-a function will initialize each location's tag when it writes to it. It does
+In \(LTC\), rather than initialize the entire frame at entry,
+a function initializes each location's tag when it writes to it. It does
 not check if those writes are legal! If the PC tag is \(\tagPCDepth{n}\),
 then any stack location that recieves a store will be tagged \(\tagStackDepth{n}\).
-On a load, the micro-policy failstops if the value that it would load
-is tagged \(\tagStackDepth{n}\) or \(\tagNoDepth\) and the PC tag doesn't
-match \(n\).
+On a load, the micro-policy failstops if the source memory location 
+is tagged \(\tagNoDepth\) or \(\tagStackDepth{n}\) for some \(n\) that
+doesn't match the PC tag.
 
-\paragraph{Blessed Sequences}
+\paragraph*{Blessed Sequences}
 
 To implement this discipline, {\em blessed instruction sequences} appear at
 the entry and exit of each function, which manipulate tags as just described
 while performing the usual tasks of saving/restoring the return address to/from
-the stack and adjusting the stack pointer. A blessed sequence also guarantees
-that the full sequence executes from the beginning---no jumping into the middle.
+the stack and adjusting the stack pointer. A blessed sequence uses further tags
+to guarantee that the full sequence executes from the beginning---no jumping into the middle.
 
-\paragraph{Protecting Registers}
+\paragraph*{Protecting Registers}
 
 Roessler and DeHon do not protect registers, but we consider registers to be
 an extension of the stack. In particular, \(\clri\) requires callee-saved
@@ -1662,6 +1670,10 @@ registers to be saved and restored properly. We extend \(DI\) and \(LTC\)
 so that callee-saved registers, too, are tagged with the color of the 
 function that is using them. In \(DI\) they are tagged as part of the entry
 sequence, while in \(LTC\) they are tagged when a value is placed in them.
+\apt{Presumably R\&dH don't care about registers because they already have
+  the compiler in the TCB.  We should note (perhaps earlier than here!) that
+  we have a stronger attacker model since we don't require the callee code
+  to come from a trusted  compiler.}
 
 \section{Validation through Random Testing}
 \label{sec:testing}
@@ -1689,7 +1701,7 @@ To use QuickChick, we developed random test-case generators that produce
 (1) an initial RISC-V machine state, including the program to be executed;
 (2)
   an initial policy state, tagging instructions and the stack regions appropriately
-  for the micro-policy (see \cref{subsec:policies})
+  for the micro-policy (see \cref{sec:enforcement})
 (3)
   a map from instructions to lists of their operations in the security semantics.
 
@@ -1805,6 +1817,7 @@ Our properties have allowed us to identify an enforcement mechanism as
 not really stack safe, and to validate a possible fix.
 
 \section{Related Work}
+\label{sec:relwork}
 
 \section{Future Work}
 \label{sec:future}
