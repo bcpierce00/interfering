@@ -112,7 +112,7 @@ integrity property and a confidentiality property for each of the
 caller and the callee, plus a control-flow property---five properties
 in all.
 
-This presentation is motivated by a particular class of enforcement
+This formulation is motivated by a particular class of enforcement
 mechanisms, the ``lazy'' stack safety micro-policies studied by
 Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}, which permit
 functions to write into one another's frames, but which taint the
@@ -137,8 +137,8 @@ We validate our properties by using them to distinguish between
 correct and incorrect implementations of Roessler and DeHon's
 micro-policies using property-based random testing. Our test harness
 successfully identifies several broken variants, including Roessler
-and DeHon's original lazy policy.  A fixed version of their policy
-does pass our tests.
+and DeHon's lazy policy; a repaired version of their policy does pass
+our tests.
 
 \end{abstract}
 
@@ -149,24 +149,28 @@ does pass our tests.
 
 \subsection{The Call Stack and Its Security}
 
-Computer programming relies on functions (or subroutines, procedures, methods, etc.)
-as a foundational abstraction. Functions are units of computation that
-can call one another to realize larger computations in a modular fashion.
+{\em Functions} in high-level languages, and related abstractions such
+as subroutines, procedures, methods, etc., are units of computation
+that call one another to modularly realize larger computations.
 %
-At a low level, a function activation manages its own data, such as local variables, as
-well as information about its \emph{caller} function, to which it must return.
-The \emph{(call) stack} is the fundamental data structure charged with realizing
-this abstraction, aided by an ABI that defines how registers are shared between activations.
-From a security perspective, attacks on the stack are really attacks
-on the fundamental functional abstraction itself, and are therefore every bit as
-pervasive.
+At a low level, each function activation manages its own data---local
+variables, etc.---as well as information about the \emph{caller} to
+which it must return.
+%
+The \emph{call stack} is the fundamental data structure used to
+implement functions, aided by an ABI that defines how registers are shared
+between activations.
 
-Indeed, the call stack is an ancient~\cite{phrack96:smashingthestack} and
+From a security perspective, attacks on the call stack
+are attacks on the function abstraction itself.
+%
+Indeed, the stack is an ancient~\cite{phrack96:smashingthestack} and
 perennial~\cite{mitre-cwe,DBLP:conf/raid/VeendCB12,
   DBLP:conf/sp/SzekeresPWS13,
   DBLP:conf/sp/HuSACSL16,msrc-bluehat,chromium-security}
-target for low-level attacks, frequently involving control-flow hijacking via corrupting
-the return address, and memory corruption more generally.
+target for low-level attacks, sometimes involving control-flow
+hijacking via corrupting the return address, sometimes memory corruption
+more generally.  
 %
 %The most recent release of the authoritative CWE Top 25
 %Most Dangerous Software Weaknesses~\cite{
@@ -177,7 +181,7 @@ the return address, and memory corruption more generally.
 %
 %Moreover, many other types of faults involve some kind of control or data flow
 %using data stored in the stack 
-The variety in attacks on the stack is mirrored by the
+The variety in attacks on the stack is mirrored in the range of
 software and hardware protections that aim to prevent them,
 %
 including stack canaries~\cite{Cowan+98},
@@ -187,51 +191,61 @@ shadow stacks~\cite{Dang+15,Shanbhogue+19},
 capabilities~\cite{Woodruff+14,Chisnall+15,SkorstengaardLocal,SkorstengaardSTKJFP,Georges22:TempsDesCerises},
 and hardware tagging~\cite{DBLP:conf/sp/RoesslerD18,Gollapudi+23}.
 
-Security mechanisms can be brittle, successfully eliminating one attack while leaving room for
-other, similar attacks. To avoid this \leo{game of whack-a-mole}, we seek formal properties of safe behavior that can be proven
-or tested. Such properties become the specification against which enforcement can be validated;
-even enforcement mechanisms that do not fulfill a property benefit from the ability to articulate
-\emph{why} they fail.
+Enforcement mechanisms can be brittle, successfully eliminating one
+attack while leaving room for others. To avoid an endless game of
+whack-a-mole, we seek formal properties of safe behavior that can be
+proven or at least rigorously tested. Such properties can be used as
+the specification against which enforcement can be validated; even
+enforcement mechanisms that do not fulfill a property benefit from the
+ability to articulate why and when they may fail.
 
-Of the mechanisms above, many are fundamentally ill-suited for offering formal guarantees,
-as they aim to impede attackers but cannot provide universal protection. Shadow stacks,
-for instance, aim to ``restrict the flexibility available in creating gadget chains''
-\cite{Shanbhogue+19}, not to categorically
-rule out attacks. Other mechanisms such as Softbound\cite{NagarakatteZMZ09} and Code-pointer
-integrity\cite{Kuznetsov+14} are stronger, but most do not give formal guarantees.
-Indeed, the secure calling conventions of Skorstengaard et al. \cite{SkorstengaardSTKJFP} and
-Georges et al. \cite{Georges22:TempsDesCerises} is so far the sole line of work
-to offer stack safety formalizations.
+Of the mechanisms listed above, many are fundamentally ill suited for
+offering formal guarantees: may impede attackers, but do not provide
+universal protection. Shadow stacks, for instance, aim to ``restrict
+the flexibility available in creating gadget chains''
+\cite{Shanbhogue+19}, not to categorically rule out attacks. Other
+mechanisms, such as Softbound\cite{NagarakatteZMZ09} and Code-pointer
+integrity\cite{Kuznetsov+14}, do aim for stronger guarantees, but even
+these do not make formal promises.  Indeed, to our knowledge, the sole
+line of work making a formal claim to protect stack safety is the
+secure calling conventions of Skorstengaard et
+al.~\cite{SkorstengaardSTKJFP} and Georges et
+al.~\cite{Georges22:TempsDesCerises}.
 
-Among the mechanisms that should be amenable to making strong formal guarantees,
-Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} present an array of tag-based
-micro-policies~\cite{pump_oakland2015} for stack safety.
-Their most realistic micro-policy, ``Lazy Tagging and Clearing'' (\(LTC\)),
-makes an interesting trade-off for performance: it allows function activations to write
-into one another's stack frames, but ensures that the owner of the corrupted memory cannot access
-it afterward. Because the memory does get corrupted, \(LTC\) would not fulfill an
-adaptation of Georges et al.'s property to the tagged setting.
+Fortunately, other mechanisms besides these should be
+amenable to strong 
+formal guarantees.  In particular, 
+Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} have presented an
+array of tag-based micro-policies~\cite{pump_oakland2015} for stack
+safety that give strong guarantees.
+Their most realistic micro-policy, called Lazy Tagging and Clearing (\(LTC\)),
+makes an interesting performance trade-off: it allows function
+activations to improperly write into one another's stack frames, but ensures that the owner of the corrupted memory cannot access
+it afterward.
 
-Neverthess, we believe that there is a useful sense in which \(LTC\) does (attempt to) enforce stack safety. 
-While it does not always protect individual addresses on the stack, it tries to 
-prevent one function activation from interfering with another's behavior---protecting 
-the functional abstraction, which we argue is the real essence of stack safety.
+Because memory does get corrupted, \(LTC\) would not fulfill an
+adaptation of Georges et al.'s property to the tagged setting.  But
+there is a useful sense in which \(LTC\) does enforce stack safety.
+While it does not necessarily protect individual addresses on the
+stack, it does prevent one function activation from interfering with
+another's observable behavior.
 
-In this work, we propose a formal characterization of stack safety based on the idea
+We propose a formal characterization of stack safety based on the intuition
 of protecting each function activation from other activations.
 We use the formal tools of language-based
 security~\cite{sabelfeld2003language}, decomposing stack safety into a family of
 properties describing
 the {\em integrity} and {\em confidentiality} of the caller’s local state
 and the callee's behavior during the callee's execution, plus the control-flow protection
-of {\em well-bracketed control flow} (\(\wbcf\))~\cite{SkorstengaardSTKJFP}.
-While our properties are motivated by a desire to specify \(LTC\), 
-they are built from first principles in the hopes that they will be broadly applicable
-to a range of enforcement mechanisms.
+of {\em well-bracketed control flow} (\(\wbcf\)) articulated by
+Skorstengaard et al.~\cite{SkorstengaardSTKJFP}.
+While our properties are motivated by the desire to specify \(LTC\) precisely, 
+they are stated somewhat abstractly in hopes that they may be applicable
+to other enforcement mechanisms.
 
-The structure of our properties enables them to be easily expanded to characterize systems with
-sophisticated features such as callee-save registers, argument-passing on the stack,
-and tailcall-elimination. We likewise extend \(LTC\) to protect these features, and
+The structure of our properties enables them to be easily extended\bcp{??} to characterize systems with
+features such as callee-save registers, argument-passing on the stack,
+and tail-call elimination. We likewise extend \(LTC\) to protect these features, and
 test the extended micro-policy against our property. We find that, apart from the extensions, \(LTC\)
 is flawed in a way that undermines integrity and confidentiality, and we correct
 this flaw.
@@ -289,7 +303,7 @@ requirements.
 
 We show that we can extend our system to new features by first introducing a simple
 example model, and then moving to a more realistic model with multiple new features:
-callee-save registers, argument passing on the stack, and tailcall elimination, simply
+callee-save registers, argument passing on the stack, and tail-call elimination, simply
 by refining a few definitions in (1). This becomes the model that we validate.
 In \cref{app:ptr}, we extend the model further with arbitrary sharing of memory-safe
 pointers. Our criteria in (3) cover a total of five core requirements:
@@ -495,7 +509,7 @@ operations, but we do not test this.
     \example \(\mathbf{alloc}\) & offset \& size \\
     \testing & public flag \\
     \example \(\mathbf{dealloc}\) & offset \& size \\
-    \testing \(\mathbf{tailcall}\) & (same as for \(\mathbf{call}\)) \\
+    \testing \(\mathbf{tail call}\) & (same as for \(\mathbf{call}\)) \\
     \hline
     \multicolumn{2}{|c|}{{\it Pointer provenance operations}} \\
     \hline
@@ -1473,11 +1487,11 @@ quantified over states \(s\) that immediately follow call steps.
 If an execution includes a transition \(s' \stepstounder{\overline{\psi}} s\)
 where \(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then \(s\) is the target
 of a call.
-%Likewise, if \(\mathbf{tailcall} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then
-%\(s\) is the target of a tailcall.
+%Likewise, if \(\mathbf{tail call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then
+%\(s\) is the target of a tail call.
 As a shorthand, we write that each property is defined
 by a criterion that must hold ``for all call targets \(s\),'' or, in the case of \(\wbcf\),
-``for all call steps \(s \stepstounder{} s'\).'' 
+``for all call steps \(s \stepstounder{} s'\).''
 
 \paragraph*{1.~\(\wbcf\)}
 Given a call step \((\mach,(V,\sigma)) \stepstounder{} (\mach',(V',\sigma'))\),
@@ -1485,7 +1499,7 @@ we define the predicate \(\ret\) to hold on states \(\mach''\)
 whose stack pointer matches that of \(\mach\)
 and whose program counter is at the next instruction. A system enjoys \(\wbcf\) if,
 for every call transition, \(\ret\) holds just after the callee returns (i.e.,
-the call stack shrinks). 
+the call stack shrinks).
 
 \paragraph*{2.~\(\clri\)}
 When the call target is \((\mach,(V,\sigma))\), we define the predicate \(\intProp\) to hold
@@ -1508,9 +1522,9 @@ We consider the callee's private behavior to be any changes that it makes to the
 outside of legitimate channels---elements marked \(\object\) or \(\public\). The remainder
 should be kept secret, which is to say, irrelevant to future execution. Similar to \(\clri\), given a call target
 \((\mach,(V,\sigma))\), we define a predicate \(\cconfProp\) to hold
-on states \(\mach'\) if the difference set between \(\mach\) and \(\mach'\), excluding 
+on states \(\mach'\) if the difference set between \(\mach\) and \(\mach'\), excluding
 \(\object\) or \(\public\) locations, is irrelevant.
-A system enjoys \(\clec\) if, for every call, \(\cconfProp\) holds just after the corresponding return. 
+A system enjoys \(\clec\) if, for every call, \(\cconfProp\) holds just after the corresponding return.
 
 \paragraph*{5.~\(\clei\)}
 Callee integrity means that the caller does not influence it outside of legitimate
@@ -1550,7 +1564,7 @@ which memory contain arguments, \(\overline{sa}\). \(\overline{sa}\) is a set of
 triples of a register, an offset from the value of that register, and a size.
 We first define the helpful set \(\mathit{passed} ~ \overline{sa} ~ \mach\),
 then extend the call operation to keep all objects in \(\mathit{passed}\) marked
-as \(\object\) and seal everything else (\cref{sfig:stkargs}).  
+as \(\object\) and seal everything else (\cref{sfig:stkargs}).
 
 Using this mechanism, an call-by-value argument passed on the stack at an \(\SP\)-relative offset
 is specified by the triple \((\SP, \mathit{off}, \mathit{sz})\).
@@ -1613,7 +1627,7 @@ approach, based on capabilities.
     \judgmentbr{\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
                  \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
                {\(V'' = V'\llbracket \addr \mapsto \unsealed | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \rrbracket\)}
-               {\(Op ~ \mach ~ (\mathbf{tailcall} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
+               {\(Op ~ \mach ~ (\mathbf{tail call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
                  ~ (V,\sigma) = (V',\sigma)\)}
     %
     \judgment{\(\sigma = (V,\addr_{ret},\addr_{sp})::\sigma'\)}
@@ -1622,23 +1636,24 @@ approach, based on capabilities.
     \caption{Calls with Argument Passing on the Stack}
     \label{sfig:stkargs}
   \end{subfigure}
-  \caption{Operations supporting tailcalls and argument passing on stack.}
+  \caption{Operations supporting tail calls and argument passing on stack.}
   \label{fig:advops}
 \end{figure*}
 
 \subsection{Tail Calls}
 
-The operation rule for a tailcall is similar to that for a normal call.
+The operation rule for a tail call is similar to that for a normal call.
 We do not push the caller's view onto the stack,
-but replace it outright. This means that a tailcall does not increase the size of
-the call stack, and therefore for purposes of our properties, all tailcalls will
+but replace it outright. This means that a tail call does not increase the size of
+the call stack, and therefore for purposes of our properties, all tail
+calls will
 be considered to return simultaneously when the eventual {\bf return} operation
 pops the top of the stack.
 
 Since the caller will not be returned to, it does not need integrity, but
 it should still enjoy confidentiality. We set its frame to \(\unsealed\) rather
 than \(\sealed\) to express this. In terms of \cref{tab:props}, we replace
-``call'' with ``call or tailcall'' in \(\clrc\), \(\clec\), and \(\clei\).
+``call'' with ``call or tail call'' in \(\clrc\), \(\clec\), and \(\clei\).
 
 \section{Enforcement}
 \label{sec:enforcement}
