@@ -1585,39 +1585,39 @@ than \(\sealed\) to express this.
 
 \section{Enforcement}
 
-We implement and test two micro-policies from Roessler and DeHon \cite{}:
+We implement and test two micro-policies from Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}:
 {\em Depth Isolation} (\(DI\)) and {\em Lazy Tagging and Clearing} (\(LTC\)).
 They share a common structure: each function activation is assigned a ``color'' \(n\)
 representing its identity. Stack locations belonging to that activation are
-tagged \(\tagStackDepth{n}\), and when it is active, the tag on the
-program counter (PC tag) is \(\tagPCDepth{n}\). The tag \(\tagNoDepth\)
-is for stack locations that are currently unused.
+tagged \(\tagStackDepth{n}\), and while the activation is running, the tag on the
+program counter (PC tag) is \(\tagPCDepth{n}\). Stack locations not part of
+any activation are tagged \(\tagNoDepth\).
 
 In \(DI\), \(n\) always corresponds to the depth of the stack when
-the function is called. A functions must initialize its entire frame on a call
-in order to tag it, and then clear it on a return.
+the function is called. A function must initialize its entire frame upon entry
+in order to tag it, and then clear the frame before returning.
 During normal execution, the micro-policy rules only permit load and
 store operations when the target memory is tagged {\em with the same depth}
-as the current {\PCname} tag, and store operations also when the
-target memory is \(\tagNoDepth\).
+as the current {\PCname} tag, or, for store operations, if the target memory
+is tagged \(\tagNoDepth\).
 
-In \(LTC\), rather than initialize the entire frame,
-a function will initialize each location's tag when it writes to it. It does
+In \(LTC\), rather than initialize the entire frame at entry,
+a function initializes each location's tag when it writes to it. It does
 not check if those writes are legal! If the PC tag is \(\tagPCDepth{n}\),
 then any stack location that recieves a store will be tagged \(\tagStackDepth{n}\).
-On a load, the micro-policy failstops if the value that it would load
-is tagged \(\tagStackDepth{n}\) or \(\tagNoDepth\) and the PC tag doesn't
-match \(n\).
+On a load, the micro-policy failstops if the source memory location 
+is tagged \(\tagNoDepth\) or \(\tagStackDepth{n}\) for some \(n\) that
+doesn't match the PC tag.
 
-\paragraph{Blessed Sequences}
+\paragraph*{Blessed Sequences}
 
 To implement this discipline, {\em blessed instruction sequences} appear at
 the entry and exit of each function, which manipulate tags as just described
 while performing the usual tasks of saving/restoring the return address to/from
-the stack and adjusting the stack pointer. A blessed sequence also guarantees
-that the full sequence executes from the beginning---no jumping into the middle.
+the stack and adjusting the stack pointer. A blessed sequence uses further tags
+to guarantee that the full sequence executes from the beginning---no jumping into the middle.
 
-\paragraph{Protecting Registers}
+\paragraph*{Protecting Registers}
 
 Roessler and DeHon do not protect registers, but we consider registers to be
 an extension of the stack. In particular, \(\clri\) requires callee-saved
@@ -1625,6 +1625,10 @@ registers to be saved and restored properly. We extend \(DI\) and \(LTC\)
 so that callee-saved registers, too, are tagged with the color of the 
 function that is using them. In \(DI\) they are tagged as part of the entry
 sequence, while in \(LTC\) they are tagged when a value is placed in them.
+\apt{Presumably R\&dH don't care about registers because they already have
+  the compiler in the TCB.  We should not (perhaps earlier than here!) that
+  we have a stronger attacker model since we don't require the callee code
+  to come from a trusted  compiler.}
 
 \section{Validation through Random Testing}
 \label{sec:testing}
