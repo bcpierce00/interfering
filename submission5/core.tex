@@ -1122,17 +1122,17 @@ Where the caller's confidentiality and integrity are concerned with protecting s
 identifiable state---the caller's stack frame---their callee equivalents are concerned
 with enforcing the expected interface between caller and callee. Communication between
 the principals should occur only through the state elements that are designated for the
-purpose: those which we label \(\public\) and (in the presence of memory sharing) \(\object\).
+purpose: those which we label \(\public\) and (in the presence of memory sharing) \(\object\).\apt{Are these backwards?}
 
-Applying this intuition using our framework, \(\clec\) turns out to resemble
+Applying this intuition using our framework, \emph{callee confidentiality} (\(\clec\)) turns out to resemble
 \(\clri\), extended to every element that is not marked \(\object\) at call-time. The callee's
 internal behavior is represented by those elements that change over the course of its
 execution, and which are not part of the interface with the caller. At return, those
-elements should become irrelevant.
+elements should become irrelevant to the subsequent behavior of the caller.
 
-Similarly, in \(\clei\), only elements marked \(\object\) at the call should influence the
+Similarly, in \emph{callee integrity} (\(\clei\)), only elements marked \(\object\) at the call should influence the
 behavior of the callee. This is the same principle as \(\clrc\), extended from \(\sealed\)
-elements to all non-\(\object\) ones.
+elements to all non-\(\object\) ones. \apt{Still not obvious why we're calling this an integrity property.}
 
 \section{Formalization}
 \label{sec:machine}
@@ -1380,7 +1380,9 @@ respectively. Once again, \(\Uparrow\) is coinductive.
 
 Finally, we can define our core properties. They can be found in \cref{tab:props},
 arranged to show their commonalities and distinctions. Each definition gives a criterion
-quantified over states \(s\) that immediately follow call (or tail-call) steps.
+quantified over states \(s\) that immediately follow call (or tail-call) steps.\apt{No, we don't
+  want to mention tail-calls here. But we do need to explain how the interpretation of the
+  property needs to change when we add tail-calls later.}
 If an execution can reach a state \(s'\) such that \(s' \stepstounder{\overline{\psi}} s\)
 where \(\mathbf{call} ~ \addr ~ \overline{\reg} \in \bar{\psi}\), then \(s\) is the target
 of a call.
@@ -1495,22 +1497,25 @@ which memory contain arguments, \(\overline{sa}\). \(\overline{sa}\) is a set of
 triples of a register, an offset from the value of that register, and a size.
 We first define the helpful set \(\mathit{passed} ~ \overline{sa} ~ \mach\),
 then extend the call operation to keep all objects in \(\mathit{passed}\) marked
-as \(\object\) and seal everything else (\cref{sfig:stkargs}).
+as \(\object\) and seal everything else (\cref{sfig:stkargs}).  
 
-Using this mechanism, an argument passed on the stack via its \(\SP\)-relative offset
-uses the operation \(\mathbf{call} ~ \dots ~ (\SP, \mathit{off}, \mathit{sz})\).
-C++-style reference passing that places the reference in \(\reg\) uses
-\(\mathbf{call} ~ \dots ~ (\reg, 0, \mathit{sz})\).
-In the second case, the reference can be passed further down the stack, but otherwise
-only the immediate callee gains access.
+Using this mechanism, an call-by-value argument passed on the stack at an \(\SP\)-relative offset
+is specified by the triple \((\SP, \mathit{off}, \mathit{sz})\).
+In this case, only the immediate callee gains access to the argument location.
+A C++-style call-by-reference argument where the reference is passed in \(\reg\)
+is instead specified by \((\reg, 0, \mathit{sz})\), which allows
+the reference to be passed further down the stack.
+\apt{What if the reference is itself passed on the stack?}
+%In this second case, the reference can be passed further down the stack, but otherwise
+%only the immediate callee gains access. APT: 
 
 On the other hand, if the address of an object is taken directly and passed it as a
 pointer, we have no way obvious way to limit the scope of such sharing.
 We treat this scenario as the caller allocating a ``public''
-object that recieves no protection. We extend the \(\mathbf{alloc}\) operation
+object that receives no protection. We extend the \(\mathbf{alloc}\) operation
 with a boolean flag, where {\bf t} indicates
 that the allocation is public, and {\bf f} that it is private.
-In the likely event that the space for multiple objects is allocated in a single step,
+If space for multiple objects is allocated in a single step,
 that step can make multiple allocation operations, each labeled appropriately.
 Public objects are labeled \(\public\) rather than \(\object\), so they are
 never sealed at a call (\cref{sfig:publicalloc}).
