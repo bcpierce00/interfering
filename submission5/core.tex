@@ -146,23 +146,22 @@ can call one another to realize larger computations.
 At a low level, a function activation comprises its own data, as
 well as information about its \emph{caller} function, to which it must return.
 The \emph{(call) stack} is the fundamental data structure charged with realizing
-this abstraction. From a security perspective, attacks on the stack are really attacks
+this abstraction, aided by an ABI that defines how registers are shared between activations.
+From a security perspective, attacks on the stack are really attacks
 on the fundamental functional abstraction itself, and are therefore every bit as
 pervasive.
 
-Indeed, the call stack is a perennial target for low-level attacks.
+Indeed, the call stack is a perennial target for low-level attacks \cite{phrack96:smashingthestack}.
 %
-The most recent release of the authoritative CWE Top 25
-Most Dangerous Software Weaknesses
-list\footnote{\url{https://cwe.mitre.org/top25/archive/2022/2022_cwe_top25.html}}
-shows general classes of vulnerabilities closely related to the stack
-%% \rb{(though not exclusively)}
-consistently at and near the top, e.g., \#1 (CWE-787, Out-of-bounds Write), \#5 (CWE-125, Out-of-bounds Read) or \#7 (CWE-416, Use After Free).
+The CWE Top 25 Most Dangerous Software Weaknesses list
+\footnote{\url{https://cwe.mitre.org/top25/archive/2022/2022_cwe_top25.html}}
+is consistently topped by classes of vulnerabilities closely related to the stack
+e.g., \#1 Out-of-bounds Write, \#5 Out-of-bounds Read, or \#7 Use After Free.
 %
-Moreover, many other types of faults involve some kind of control or data flow
-using data stored in the stack \cite{DBLP:conf/raid/VeendCB12,
+And many other types of attack involve compromising the stack as a step in a larger workfloaw
+\cite{DBLP:conf/raid/VeendCB12,
   DBLP:conf/sp/SzekeresPWS13,
-  DBLP:conf/sp/HuSACSL16}.\footnote{\url{https://github.com/Microsoft/MSRC-Security-Research/blob/master/presentations/2019_02_BlueHatIL/}}\footnote{\url{https://www.chromium.org/Home/chromium-security/memory-safety/}}
+  DBLP:conf/sp/HuSACSL16}.\footnote{\url{https://github.com/Microsoft/MSRC-Security-Research/blob/master/presentations/2019_02_BlueHatIL/}}\footnote{\url{https://www.chromium.org/Home/chromium-security/memory-safety/}}.
 
 The variety in attacks on the stack is mirrored by the
 software and hardware protections that aim to prevent them,
@@ -178,19 +177,20 @@ Of these mechanisms, many are fundamentally ill-suited for offering formal guara
 as they aim to impede attackers but cannot provide universal protection. Shadow stacks,
 for instance, aim to ``restrict the flexibility available in creating gadget chains''
 \cite{Shanbhogue+19}, not to categorically
-rule out attacks. Other mechanisms are stronger, but formal
-guarantees are rarely discussed.
+rule out attacks. Other mechanisms such as Softbound\cite{NagarakatteZMZ09} and Code-pointer
+integrity\cite{Kuznetsov+14}
+are stronger, but most do not give formal guarantees.
 Indeed, the Cerise work of Skorstengaard et al. \cite{SkorstengaardSTKJFP} and
 Georges et al. \cite{Georges22:TempsDesCerises} is so far the sole line of work
-to offer (various)\bcp{Maybe we can omit that word here and spell it
-  out in the related work.} stack safety formalizations.
+to offer stack safety formalizations.
 
-Meanwhile, Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} present an array of tag-based
-micro-policies for stack safety, at least some of which should be amenable to making
-formal guarantees. Among these is their ``Lazy Tagging and Clearing'' \(LTC\) micropolicy,
-which is is peculiar in that function activations may write into one another's stack frames,
-as long as the data cannot be accessed afterward. As a result, \(LTC\) definitely would not
-fulfill a tag-based adaptation Georges et al.'s state-of-the-art property.
+Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} present an array of tag-based
+micro-policies for stack safety, at least some of which should be amenable to making strong
+formal guarantees. Their most realistic micro-policy, ``Lazy Tagging and Clearing'' (\(LTC\)),
+which makes an interesting trade-off for performance: it allows function activations to write
+into one another's stack frames, but ensures that the owner of the corrupted memory cannot access
+it afterward. Because the memory does get corrupted, \(LTC\) would not fulfill an
+adaptation Georges et al.'s property to the tagged setting.
 
 We believe that, nevertheless, \(LTC\) enforces stack safety.
 It does not always protect individual addresses on the stack, but it aims
@@ -208,14 +208,14 @@ the {\em integrity} and {\em confidentiality} of the caller’s local state
 and the callee's behavior during the callee's execution, plus the control-flow protection
 of {\em well-bracketed control flow}~\cite{SkorstengaardSTKJFP} (\(\wbcf\)).
 
-The structure of our properties enables them to be easily extended to systems with
+The structure of our properties enables them to be easily expanded to characterize systems with
 sophisticated features such as callee-save registers, argument-passing on the stack,
 and tailcall-elimination. We likewise extend \(LTC\) to protect these features, and
 test the extended micro-policy. We find that, apart from the extensions, \(LTC\)
 is flawed in a way that undermines integrity and confidentiality, and we correct
 this flaw.
 
-\paragraph{Towards a Formal Property for Stack Safety}
+\paragraph{Towards Formal Properties for Stack Safety}
 
 Security mechanisms can be brittle, successfully eliminating one attack while leaving room for
 other, similar attacks. To avoid this, we seek formal properties of safe behavior that can be proven
@@ -223,7 +223,7 @@ or tested. Such properties become the specification against which enforcement ca
 even enforcement mechanisms that do not fulfill a property benefit from the ability to articulate
 \emph{why} they fail.
 
-We take the view that security properties should be motivated by security requirements,
+Security properties should be motivated by security requirements
 and flexible enough to support various sets of security requirements depending on the
 goals of the system that they validate.
 Following this reasoning, our vision of stack safety is as a collection of properties
@@ -272,7 +272,7 @@ We show that we can extend our system to new features by first introducing a sim
 example model, and then moving to a more realistic model with multiple new features:
 callee-save registers, argument passing on the stack, and tailcall elimination, simply
 by refining a few definitions in (1). This becomes the model that we validate.
-In \cref{???}, we extend the model further with arbitrary sharing of memory-safe
+In \cref{app:ptr}, we extend the model further with arbitrary sharing of memory-safe
 pointers. Our criteria in (3) cover a total of five core requirements:
 \(\wbcf\), caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
 callee integrity (\(\clei\)), and callee confidentiality (\(\clec\)).
@@ -313,10 +313,14 @@ distinguishing correct enforcement from incorrect. We use
 QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
 tool for Coq, to generate random programs and check that the
 stack safety {\em micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}
-correctly detect the ones that attempt to violate one of our properties. Furthermore, we
-check that the testing framework is able to generate counterexamples
-that violate our properties but are \emph{not} halted by incorrect
-variants of the enforcement mechanisms---including the original \(LTC\)!
+correctly detect the ones that attempt to violate one of our properties.
+
+%Furthermore, we
+%check that the testing framework is able to generate counterexamples
+%that violate our properties but are \emph{not} halted by incorrect
+%variants of the enforcement mechanisms---including the original \(LTC\)!
+% SNA: we talk about this in the testing section, and it's a "best practice" for
+% PBT, but not really a contribution in and of itself
 
 \subsection{Contributions}
 
@@ -339,10 +343,9 @@ In sum, we offer the following contributions:
 \end{itemize}
 
 Our artifact contains Coq formalizations of our properties for illustrative purposes
-as well as their testing implementation. There are no proofs---we use primarily Coq for the
-QuickChick library and to ensure that the formalizations are unambiguous.
-%
-\rb{Mention proofs in future work?}
+as well as their testing implementation. There are no proofs---we use Coq primarily
+for the QuickChick library and to ensure that the formalizations are unambiguous.
+Proofs are future work.
 
 \subsection{Threat Model and Limitations}
 
@@ -385,7 +388,7 @@ we do not address concurrency.
 The paper is structured as follows. In \cref{sec:example}, we will walk through a function
 call in a simple example machine and discuss how each of our properties applies to it,
 informally. In the process we discuss some motivation for the properties, from a security
-perspective: we consider a simple attacker, and discuss the harm that it can do to
+perspective. We consider a simple attacker, and discuss the harm that it can do to
 its caller. This perspective is essential to understanding how lazy enforcement can
 be safe: even if an attacker can overwrite some memory, if it cannot accomplish
 its bigger-picture goals, the system is safe.
@@ -397,14 +400,32 @@ stack safety that derive from the security semantics in \cref{sec:props}.
 \cref{sec:relwork,sec:future} discuss related and future work.
 The remainder of this section introduces ideas that will be important throughout.
 
+\paragraph*{Building a Property}
+
+Our properties follow a three-part structure that we term a {\em security semantics}.
+First we define the {\em security-relevant operations} that we support, and an extra
+piece of state called a {\em security context}, which updates alongside each step
+of execution. The security context gives each function activation a {\em view},
+mapping each element to a {\em security class}.
+
+Then, we define our high-level security requirements---integrity, confidentiality,
+and well-bracketed control flow---in terms of the security classes of state
+elements. These take the form of predicates on states and contexts that use variants,
+assertions about future return states, and comparison of event traces to capture the
+desired behavior without reference to implementation details.
+
+Separately, in order to apply a property to a specific machine, we do need to consider
+implementation details, by determining how the machine's execution translates into
+security relevant operations. But this step is transparent to the properties themselves.
+
 \paragraph*{Security Semantics and Property Structure}
 
-A {\it security semantics} extends a machine
+A security extends a machine
 with additional context about the identity of current and pending
 functions (which act as security principals) and about the registers and memory they require
 to be secure. This added context is purely notional;
 it does not affect the real machine. The security context
-evolves dynamically through the execution of {\it security-relevant operations},
+evolves dynamically through the execution of security-relevant operations,
 which include events like calls, returns, and frame manipulations.
 Our security properties are phrased in terms of this context, often as predicates
 on future states, e.g. of the form ``when control returns to the current function...'',
@@ -515,33 +536,12 @@ and modify it to \(\nach = \mach[\component \mapsto v]\) for arbitrary \(v\),
 then execute both \(\mach\) and \(\nach\), any differences in the outputs they
 produce must be the result of accessing \(\component\).
 
-\paragraph*{Putting It Together}
-
-Putting these ideas together, we get the basic structure of a property in our model.
-First we define the security-relevant operations that we support, a security context,
-and the function according to which the security context updates with each step.
-The security context gives each function activation a view, mapping each element to a
-security class.
-
-Then, we define our security requirements in terms of the security classes of state
-elements. These take the form of predicates on states and contexts that use variants,
-assertions about future return states, and comparison of event traces to capture the
-desired behavior without reference to implementation details.
-
-Separately, in order to apply a property to a specific machine, we do need to consider
-implementation details, by determining how the machine's execution translates into
-security relevant operations. But this step is transparent to the properties themselves.
-
 \section{Properties by Example}
 \label{sec:example}
 
 In this section we introduce our security property definitions by means
 of small code examples, using a simplified set of security-relevent operations for
 or calls, returns, and private allocations.
-% In this system a value is a pair of a
-%word (the ``payload'') and a tag drawn from some set \(\mathcal{T}\).
-%\(\mathcal{V} ::= \mathcal{W} \times \mathcal{T}\),
-%for some type  of tags to be elaborated later, with \(|(w,t)| = w\).
 Figure \ref{fig:main} gives C code and corresponding compiled 32-bit RISC-V code
 for a function {\tt main}, which
 takes an argument {\tt secret} and initializes a local variable {\tt sensitive} to contain
@@ -1736,6 +1736,8 @@ to be similar to all of our properties except for \(\clei\).
 Several common features did not make it into this work: most importantly concurrency and
 exceptions. We plan to extend the model to include them, and then test them. We would also
 like to test the model given in \cref{app:ptr} for arbitrary memory-safe pointer sharing.
+
+\subsection{Proofs}
 
 \bibliographystyle{IEEEtran}
 \bibliography{bcp.bib,local.bib}
