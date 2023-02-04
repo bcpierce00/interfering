@@ -232,6 +232,14 @@ definition of stack safety is needed to fit this situation.
 We propose here a formal characterization of stack safety, based on
 the intuition of protecting function activations from each other.
 \bcp{Aren't other formal definitions based on the same intuition?}
+\sna{Two differences we're trying to get across. First, protecting
+  functions vs. protecting stack frames: we bring registers into
+  the story because it isn't just about the stack as a data structure.
+  Second: describing security in terms of functions' high-level
+  security goals (f is trying to extract a secret) rather than
+  describing operationally what they can and can't do (as the CHERI
+  folks do.)
+}
 We use the tools of language-based
 security~\cite{sabelfeld2003language}, decomposing stack safety into a family of
 properties describing
@@ -265,6 +273,9 @@ the extended properties.
   two things---talk about earlier work and how we compare, and talk
   about why we believe a flexible approach is good.  The whole
   discussion is a bit wooly and confusing.}
+
+\sna{Should probably move the discussion of the CHERI work to related work,
+  and focus on justifying our approach.}
 
 % Security properties should be motivated by security requirements
 % and flexible enough to support various sets of security requirements depending on the
@@ -382,7 +393,10 @@ of properties: confidentiality and integrity for callee and caller,
 plus well-bracketed control-flow. Different subsets of these
 properties characterize the security guarantees offered by mechanisms
 that support only some aspects of stack safety\bcp{where do we show
-  this?}.  The properties they are parameterized over a notion of
+  this?}. \sna{Nowhere clearly enough. We need to make it clear in section 6
+  that Nick and Andre are included there---only aiming at caller-side,
+  not callee-side. The discussion of CHERI work should touch on this as well.}
+The properties they are parameterized over a notion of
 external observation, allowing them to characterize lazy enforcement
 mechanisms.
 \item We instantiate\bcp{extend??} these definitions in a realistic
@@ -430,11 +444,7 @@ labels placed on code by a compiler, we must trust that the compiler
 placed those labels correctly. For instance, if a compiled function
 call is not marked as such, then the caller's data might not be
 protected from the callee.  Conversely, marking too many operations as
-calls might mean that the property becomes too strong to be
-enforced.\bcp{I don't understand that---wouldn't it mean that
-  enforcing the property causes almost all programs to be rejected?
-  (I.e., isn't it a case of false negatives rather than false
-  positives?)}
+calls will simply cause otherwise safe programs to be rejected.
 
 \bcp{Still working here:}
 
@@ -677,18 +687,8 @@ return value are both passed in {\tt a0}.
 Memory is byte-addressed and the stack grows towards
 lower addresses. We assume that {\tt main} begins at address 0 and its callee {\tt f} at address 100.
 
-\newcommand{\freebox}[1][10pt]{\tikz \filldraw[fill=blue] (0,0) rectangle (#1,#1);}
-\newcommand{\pubbox}[1][10pt]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (#1,#1);}
-\newcommand{\objbox}[1][10pt]{\tikz \filldraw[fill=yellow] (0,0) rectangle (#1,#1);}
-\newcommand{\sealbox}[1][10pt]{\tikz \filldraw[fill=red] (0,0) rectangle (#1,#1);}
-
-\newcommand{\textbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (30pt,30pt) node[pos=.5]{#1};}
-\newcommand{\numbox}[1][]{\tikz \filldraw[fill=lightgray] (0,0) rectangle (20pt,20pt) node[pos=.5]{#1};}
-\newcommand{\leftbox}[1][]{\tikz \filldraw[fill=blue!20] (0,0) rectangle (20pt,20pt) node[pos=.5]{#1};}
-\newcommand{\rightbox}[1][]{\tikz \filldraw[fill=orange!20] (0,0) rectangle (20pt,20pt) node[pos=.5]{#1};}
-
-
 \begin{figure}
+  \newcommand{\figonebox}[1][]{\genbox{30px}{lightgray}{#1}}
   \begin{subfigure}{\columnwidth}
     {\tt
       volatile int out;
@@ -733,11 +733,11 @@ lower addresses. We assume that {\tt main} begins at address 0 and its callee {\
   \begin{subfigure}{\columnwidth}
     \center
     \vspace{\abovedisplayskip}
-    \(\textnormal{\large \dots} \pubbox[30pt] \!\! \stackrel{\textsc{\normalsize sp}}{\textbox[\tt res]}
-    \stackrel{\textsc{\normalsize 4(sp)}}{\textbox[\tt sens]}
-    \stackrel{\textsc{\normalsize 8(sp)}}{\textbox[\tt sec]}
-    \stackrel{\textsc{\normalsize 12(sp)} \hfill}{\textbox[\(\mathtt{ra_1}\)]\textbox[\(\mathtt{ra_2}\)]}
-    \textnormal{\large \dots}\)
+    \(\xleftarrow{\figonebox[\dots] \stackrel{\textsc{\normalsize sp}}{\figonebox[\tt res]}
+    \stackrel{\textsc{\normalsize 4(sp)}}{\figonebox[\tt sens]}
+    \stackrel{\textsc{\normalsize 8(sp)}}{\figonebox[\tt sec]}
+    \stackrel{\textsc{\normalsize 12(sp)} \hfill}{\figonebox[\(\mathtt{ra_1}\)]\figonebox[\(\mathtt{ra_2}\)]}
+    }\)
   \end{subfigure}
 
   \caption{Example: C and assembly code for {\tt main}, and layout of its stack frame; addresses increase to the right and the stack grows to the left.}
@@ -1028,34 +1028,38 @@ We define \emph{caller integrity} (\(\clri\))  as the property that
 every relevant element that is \(\sealed\) under the callee's view is restored
 to its original value at the return point.
 
+\newcommand{\figfourbox}[1][]{\genbox{20px}{red}{#1}}
+
 \begin{figure}
   \centering
   \[
-  \stackrel{\texttt{res}}{\numbox[0]}
-  \stackrel{\texttt{sens}}{\numbox[0]}
-  \stackrel{\texttt{sec}}{\numbox[5]}
-  \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}\]
+  \stackrel{\texttt{res}}{\figfourbox[0]}
+  \stackrel{\texttt{sens}}{\figfourbox[0]}
+  \stackrel{\texttt{sec}}{\figfourbox[5]}
+  \stackrel{\texttt{ra}}{\figfourbox[0]\figfourbox[0]}\]
   %
   \[\big\Downarrow\]
   %
   \[
-  \stackrel{\texttt{res}}{\numbox[0]}
-  \stackrel{\texttt{sens}}{\numbox[\bf 42]}
-  \stackrel{\texttt{sec}}{\numbox[5]}
-  \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}\]
+  \stackrel{\texttt{res}}{\figfourbox[0]}
+  \stackrel{\texttt{sens}}{\genbox{20px}{red!50}{\bf 42}}
+  \stackrel{\texttt{sec}}{\figfourbox[5]}
+  \stackrel{\texttt{ra}}{\figfourbox[0]\figfourbox[0]}\]
   %
   \[\overbrace{
-    \stackrel{\texttt{res}}{\numbox[0]}
-    \stackrel{\texttt{sens}}{\numbox[\bf 42]}
-    \stackrel{\texttt{sec}}{\numbox[5]}
-    \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}
+    \stackrel{\texttt{res}}{\figfourbox[0]}
+    \stackrel{\texttt{sens}}{\genbox{20px}{\leftvariant}{\bf 42}}
+    \stackrel{\texttt{sec}}{\figfourbox[5]}
+    \stackrel{\texttt{ra}}{\figfourbox[0]\figfourbox[0]}
     \hspace{1cm}
-    \stackrel{\texttt{res}}{\numbox[0]}
-    \stackrel{\texttt{sens}}{\numbox[\bf 0]}
-    \stackrel{\texttt{sec}}{\numbox[5]}
-    \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}}\]
-  \[\large\hookrightarrow 5 \hspace{1cm} \large\hookrightarrow 1\]
-
+    \stackrel{\texttt{res}}{\figfourbox[0]}
+    \stackrel{\texttt{sens}}{\genbox{20px}{\rightvariant}{\bf 0}}
+    \stackrel{\texttt{sec}}{\figfourbox[5]}
+    \stackrel{\texttt{ra}}{\figfourbox[0]\figfourbox[0]}}\]
+  \[\stackrel{\(\hookrightarrow \mathtt{out}}{\genbox{20px}{white}{5}} \hspace{0.5cm}
+  \raisebox{\height}{\not\approx}
+  \hspace{0.5cm}
+  \stackrel{\(\hookrightarrow \mathtt{out}}{\genbox{20px}{white}{1}}\]
   \caption{Integrity Violation}
   \label{fig:variant}
 \end{figure}
@@ -1094,13 +1098,16 @@ the traces may differ, in this case outputting 5 (the original value of {\tt sec
 4 (its value in the variant) respectively. This is a violation of
 {\it internal confidentiality} (formalized in \cref{tab:props}, line 3a).
 
+\newcommand{\leftbox}[1][]{\genbox{20px}{\leftvariant}{#1}}
+\newcommand{\rightbox}[1][]{\genbox{20px}{\rightvariant}{#1}}
+
 \begin{figure}
     \centering
     \[
-    \stackrel{\texttt{res}}{\numbox[0]}
-    \stackrel{\texttt{sens}}{\numbox[0]}
-    \stackrel{\texttt{sec}}{\numbox[5]}
-    \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}\]
+    \stackrel{\texttt{res}}{\figfourbox[0]}
+    \stackrel{\texttt{sens}}{\figfourbox[0]}
+    \stackrel{\texttt{sec}}{\figfourbox[5]}
+    \stackrel{\texttt{ra}}{\figfourbox[0]\figfourbox[0]}\]
     %
     \[\overbrace{
     \stackrel{\texttt{res}}{\leftbox[0]}
@@ -1114,16 +1121,20 @@ the traces may differ, in this case outputting 5 (the original value of {\tt sec
     \stackrel{\texttt{sec}}{\rightbox[4]}
     \stackrel{\texttt{ra}}{\rightbox[5]\rightbox[6]}}
     \]
-    \[\large\Downarrow \hspace{1cm} \large\hookrightarrow 5 \hspace{0.5cm} \not \approx \hspace{0.5cm}
-    \large\hookrightarrow 4 \hspace{1cm} \large\Downarrow\]
+    \[\raisebox{.5\height}{\Bigg\Downarrow} \hspace{1cm}
+    \stackrel{\(\hookrightarrow \mathtt{out}}{\genbox{20px}{white}{5}} \hspace{0.5cm}
+    \raisebox{\height}{\not\approx}
+    \hspace{0.5cm}
+    \stackrel{\(\hookrightarrow \mathtt{out}}{\genbox{20px}{white}{4}} \hspace{1cm}
+    \raisebox{.5\height}{\Bigg\Downarrow}\]
     \[
-    \stackrel{\texttt{res}}{\leftbox[\textbf{0}]}
+    \stackrel{\texttt{res}}{\leftbox[0]}
     \stackrel{\texttt{sens}}{\leftbox[0]}
     \stackrel{\texttt{sec}}{\leftbox[5]}
     \stackrel{\texttt{ra}}{\leftbox[0]\leftbox[0]}
     \hspace{1cm}
     %
-    \stackrel{\texttt{res}}{\rightbox[\textbf{2}]}
+    \stackrel{\texttt{res}}{\rightbox[2]}
     \stackrel{\texttt{sens}}{\rightbox[3]}
     \stackrel{\texttt{sec}}{\rightbox[4]}
     \stackrel{\texttt{ra}}{\rightbox[5]\rightbox[6]}
@@ -1146,10 +1157,10 @@ To illustrate the issues, note that {\tt f} has also stored a 0 below the stack 
 \begin{figure}
     \centering
     \[
-    \stackrel{\texttt{res}}{\numbox[0]}
-    \stackrel{\texttt{sens}}{\numbox[0]}
-    \stackrel{\texttt{sec}}{\numbox[5]}
-    \stackrel{\texttt{ra}}{\numbox[0]\numbox[0]}\]
+    \stackrel{\texttt{res}}{\figfourbox[0]}
+    \stackrel{\texttt{sens}}{\figfourbox[0]}
+    \stackrel{\texttt{sec}}{\figfourbox[5]}
+    \stackrel{\texttt{ra}}{\figfourbox[0]\figfourbox[0]}\]
     %
     \[\overbrace{
     \stackrel{\texttt{res}}{\leftbox[0]}
