@@ -25,7 +25,7 @@ Import ListNotations.
 
 Require Import ExtLib.Structures.Monad. Import MonadNotation. Open Scope monad_scope.
 
-Definition trace := false.
+Definition trace := true.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
 
@@ -612,10 +612,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     match n with
     | O => ret []
     | S n' =>
-        extra <- choose (O,n');;
-        rest <- genLocals (n' - extra);;
+        rest <- genLocals n';;
         public <- elems [Lpublic;Lsecret];;
-        ret ((Pos.of_succ_nat n',public)%nat::rest)
+        ret ((1%positive,public)::rest)
     end.
 
   Fixpoint localsByName (locs : list (positive * localKind)) : list (nat * Z * localKind) :=
@@ -861,7 +860,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
            We are likely to choose the return register as a destination
            and to make a return. *)
         callee <- elems_ fprof functions;;
-        cseq <- callHead (callee.(entry) - pcVal) f i m callee true;;
+        cseq <- callHead (callee.(entry) + 8 - pcVal) f i m callee true;;
         freq [(3, ret (returnSeq f fprof, s));
               (1, ret (cseq, s))]
     | dumb_attacker, Some fprof =>
