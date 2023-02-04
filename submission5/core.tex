@@ -212,43 +212,46 @@ secure calling conventions of Skorstengaard et
 al.~\cite{SkorstengaardSTKJFP} and Georges et
 al.~\cite{Georges22:TempsDesCerises}.
 
-Fortunately, other mechanisms besides these should be
-amenable to strong 
-formal guarantees.  In particular, 
-Roessler and DeHon \cite{DBLP:conf/sp/RoesslerD18} have presented an
-array of tag-based micro-policies~\cite{pump_oakland2015} for stack
-safety that give strong guarantees.
-Their most realistic micro-policy, called Lazy Tagging and Clearing (\(LTC\)),
-makes an interesting performance trade-off: it allows function
-activations to improperly write into one another's stack frames, but ensures that the owner of the corrupted memory cannot access
-it afterward.
+Other mechanisms besides these should also be amenable to strong
+formal guarantees.  In particular, Roessler and DeHon
+\cite{DBLP:conf/sp/RoesslerD18} have presented an array of tag-based
+micro-policies~\cite{pump_oakland2015} for stack safety that offer
+strong guarantees.  Their most realistic micro-policy, called Lazy
+Tagging and Clearing (\(LTC\)), makes an interesting performance
+trade-off: it allows function activations to improperly write into one
+another's stack frames, but ensures that the owner of the corrupted
+memory cannot access it afterward.
 
-Because memory does get corrupted, \(LTC\) would not fulfill an
-adaptation of Georges et al.'s property to the tagged setting.  But
-there is a useful sense in which \(LTC\) does enforce stack safety.
-While it does not necessarily protect individual addresses on the
-stack, it does prevent one function activation from interfering with
-another's observable behavior.
+Under this policy, one function activation {\em can} corrupt another's
+memory---just not in ways that do not affect observable behavior.
+Therefore, \(LTC\) would not fulfill Georges et al.'s property
+(appropriately adapted to the tagged setting).  But \(LTC\) does
+arguably enforce stack safety.  A looser, more observational
+definition of stack safety is needed to fit this situation.
 
-We propose a formal characterization of stack safety based on the intuition
-of protecting each function activation from other activations.
-We use the formal tools of language-based
+We propose here a formal characterization of stack safety, based on
+the intuition of protecting function activations from each other.
+\bcp{Aren't other formal definitions based on the same intuition?}
+We use the tools of language-based
 security~\cite{sabelfeld2003language}, decomposing stack safety into a family of
 properties describing
 the {\em integrity} and {\em confidentiality} of the caller’s local state
-and the callee's behavior during the callee's execution, plus the control-flow protection
-of {\em well-bracketed control flow} (\(\wbcf\)) articulated by
+and the callee's behavior during the callee's execution, plus the
+{\em well-bracketed control flow} (\(\wbcf\)) property articulated by
 Skorstengaard et al.~\cite{SkorstengaardSTKJFP}.
 While our properties are motivated by the desire to specify \(LTC\) precisely, 
-they are stated somewhat abstractly in hopes that they may be applicable
+they are stated abstractly in hopes that they may also apply
 to other enforcement mechanisms.
 
-The structure of our properties enables them to be easily extended\bcp{??} to characterize systems with
-features such as callee-save registers, argument-passing on the stack,
-and tail-call elimination. We likewise extend \(LTC\) to protect these features, and
-test the extended micro-policy against our property. We find that, apart from the extensions, \(LTC\)
-is flawed in a way that undermines integrity and confidentiality, and we correct
-this flaw.
+We find, via property-based random testing, that \(LTC\) is flawed in
+a way that undermines both integrity and confidentiality; after
+correcting this flaw, the repaired \(LTC\) satisfies all our
+properties.  Moreover, we show that our properties can be extended to
+describe calling conventions with features such as callee-save
+registers, argument-passing on the stack, and tail-call
+elimination. We modify \(LTC\) to protect these features and apply
+random testing to validate this extended protection mechanism against
+the extended properties.
 
 \subsection {Towards Formal Properties for Stack Safety}
 
@@ -359,19 +362,28 @@ correctly detect the ones that attempt to violate one of our properties.
 In sum, we offer the following contributions:
 
 \begin{itemize}
-\item A novel characterization of stack safety as a collection of properties:
-  confidentiality and integrity for callee and caller, and well-bracketed
-  control-flow. These can characterize the security requirements of systems
-  that support only some portion of stack safety, and are
-  parameterized over a notion of external observation, so that they can characterize
-  lazy enforcement.
-\item An instantiation of these definitions in a realistic
-  setting with features such as argument passing
-  on the stack, callee-saves registers, and tail-call elimination.
-  Our model is modular enough that handling these features is straightforward.
-\item The validation, via property-based randomize testing, of tag-based
-  stack-safety policies. We find that \emph{Lazy Tagging and Clearing}
-  falls short of stack safety, and propose a fix.
+\item We give a novel characterization of stack safety as a collection
+of properties: confidentiality and integrity for callee and caller,
+plus well-bracketed control-flow. Different subsets of these
+properties characterize the security guarantees offered by mechanisms
+that support only some aspects of stack safety\bcp{where do we show
+  this?}.  The properties they are parameterized over a notion of
+external observation, allowing them to characterize lazy enforcement
+mechanisms.
+\item We instantiate\bcp{extend??} these definitions in a realistic
+setting with features such as\bcp{``such as''? are there others?}
+argument passing on the stack, callee-saves registers, and tail-call
+elimination.\bcp{How about: We extend these core definitions to
+  describe a realistic setting with argument passing on the stack,
+  callee-saves registers, and tail-call elimination.}  Our model is
+modular enough that handling these features is straightforward.
+\bcp{Throughout, the way we talk about the ``core model'' and its
+  intantiation / extension / enrichment with realistic features feels
+  quite weasily.}
+\item We validate tag-based stack-safety enforcement via
+property-based randomize testing. We find that \emph{Lazy Tagging and
+  Clearing} falls short of ensuring stack safety, propose a fix, and
+validate it.
 \end{itemize}
 
 Our artifact contains Coq formalizations of our properties for illustrative purposes
