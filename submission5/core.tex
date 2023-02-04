@@ -255,9 +255,15 @@ the extended properties.
 
 \subsection {Towards Formal Properties for Stack Safety}
 
-% \apt{Too much real estate to sell the generality, flexibility, etc. of our approach.
-%   Again, we are not providing evidence that these attributes are true, although we can
-%   and should conjecture claim them in passing.}
+\apt{Too much real estate to sell the generality, flexibility, etc. of our approach.
+  Again, we are not providing evidence that these attributes are true, although we can
+  and should conjecture claim them in passing.}
+
+\bcp{Agreed.  I think in particular the first paragraph can just go.
+  But this is not enough.  Also, the section is trying to do at least
+  two things---talk about earlier work and how we compare, and talk
+  about why we believe a flexible approach is good.  The whole
+  discussion is a bit wooly and confusing.}
 
 Security properties should be motivated by security requirements
 and flexible enough to support various sets of security requirements depending on the
@@ -380,11 +386,22 @@ modular enough that handling these features is straightforward.
 \bcp{Throughout, the way we talk about the ``core model'' and its
   intantiation / extension / enrichment with realistic features feels
   quite weasily.}
-\item We validate a tag-based stack-safety enforcement mechanism,
-\emph{Lazy Tagging and Clearing}, via property-based random testing,
-find that it falls short of ensuring stack safety, and propose and
-validate a fix.
+\item We validate a tag-based enforcement mechanism, \emph{Lazy
+  Tagging and Clearing}, via property-based random testing, find that
+it falls short, and propose and validate a fix.
 \end{itemize}
+
+In the next section, we give a brief overview of the structure of
+properties.  In \cref{sec:example}, we walk through a function call in
+a simple example machine and discuss how each of our properties
+applies to it, informally. In the process we motivate the properties
+from a security perspective.
+%
+In \cref{sec:formal} we formalize the machine model,
+its {\em security semantics}, and the stack safety properties built on these.
+In \Cref{sec:enforcement} we describe the micro-policies that we test,
+in \cref{sec:testing} the testing framework itself, and in
+\cref{sec:relwork,sec:future} related and future work.
 
 The accompanying artifact contains formal definitions (in Coq) of our
 properties, plus our testing framework.  It does not include proofs:
@@ -394,51 +411,47 @@ as future work.
 
 \subsection{Threat Model and Limitations}
 
-When our properties are used to evaluate a system, the threat model will depend on the
-details of that system. However, there are some constraints that our design puts on
-any system. We must trust that the method of distinguishing security-relevant operations is accurate; if it
-involves labels placed on code by a compiler, that means trusting that the compiler placed
-those labels correctly. If operations occur that are not recognized, those operations
-might not be guaranteed to protect their principals---for instance, an unlabeled call
-might not protect the caller's data from the callee. On the flip side, applying an incorrect
-label most likely means that the property becomes too strong to be enforced.
+When our properties are used to evaluate a system, the threat model
+will depend on the details of that system. However, there are some
+constraints that our design puts on any system. In particular, we must
+trust that the method of distinguishing security-relevant operations
+is accurate.  For example, if the enforcement mnechanism involves
+labels placed on code by a compiler, we must trust that the compiler
+placed those labels correctly. For instance, if a compiled function
+call is not marked as such, then the caller's data might not be
+protected from the callee.  Conversely, marking too many operations as
+calls might mean that the property becomes too strong to be
+enforced.\bcp{I don't understand that---wouldn't it mean that
+  enforcing the property causes almost all programs to be rejected?
+  (I.e., isn't it a case of false negatives rather than false
+  positives?)}
 
-Otherwise, we do not assume that the code adheres to any particular
-calling convention or implements a source language construct.
-In particular, while we are agnostic as to the source
-language, we certainly aim to support C, and so any source function might contain undefined
-behavior resulting in its compilation to arbitrary machine code. A given enforcement
+\bcp{Still working here:}
+
+We do not assume that low-level code adheres to any fixed calling
+convention or implements any particular source-language constructs.
+Indeed, if the source
+language is C, then high-level programs might contain undefined
+behavior, in which case they might be compiled to arbitrary machine
+code. A given enforcement 
 mechanism or target architecture might place additional constraints, particularly on the behavior of
 call and return sequences. For instance, extant implementations tend to assume
 implicitly that callee-saved registers have their values maintained by whichever compiler
 generated their code. Our properties explicitly state this as a requirement,
 which could be enforced by a micro-policy, a well-behaved compiler, or other enforcement technique.
-Roessler and DeHon have the compiler in their trusted computing base, so our properties
+Roessler and DeHon include the compiler in their trusted computing
+base, so our properties 
 are stronger than necessary to characterize their micro-policies.
 
-In general, it is impossible to distinguish buggy machine code from an attacker; in
-our examples we will identify one function or another as an attacker, but we do not
-require any static division between trusted and untrusted code, and we aim to protect
-even buggy code.
+In general, it is impossible to distinguish buggy machine code from an
+attacker.  In our examples we will identify one function or another as
+an attacker, but we do not require any static division between trusted
+and untrusted code, and we aim to protect even buggy code.
 
-This is a strong threat model, but it does omit some important aspects of
-security enforcement: in particular, hardware and timing attacks are out of scope, and
-we do not address concurrency---that is a high-priority future work.
+This is a strong threat model, but it does omit some important aspects
+of stack safety in real systems: in particular, it does not address
+concurrency.  Hardware and timing attacks are also out of scope.
 %
-
-\paragraph*{Organization}
-
-In the next section, we will give a brief overview of the structure of properties.
-Then in \cref{sec:example}, we will walk through a function
-call in a simple example machine and discuss how each of our properties applies to it,
-informally. In the process we discuss some motivation for the properties, from a security
-perspective.
-
-In \cref{sec:formal} we formalize the machine model,
-its {\em security semantics}, and the stack safety properties built on these.
-\Cref{sec:enforcement} describes the micro-policies that we test,
-\cref{sec:testing} the testing framework itself, and
-\cref{sec:relwork,sec:future} discuss related and future work.
 
 %We consider a simple attacker, and discuss the harm that it can do to
 %its caller. This perspective is essential to understanding how lazy enforcement can
