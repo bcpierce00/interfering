@@ -1963,64 +1963,15 @@ simply aims to accelerate its enforcement of memory safety for compiled code.
 \section{Future Work}
 \label{sec:future}
 
-\subsection{Testing The Stack Safety Menagerie}
-
 In \cref{sec:intro}, we discussed several dimensions of flexibility
 that our properties should exhibit: applicability to different system
 features and different security requirements. Another important dimension
-is applicability to multiple enforcement mechanisms.
-In the following, we discuss how different existing mechanisms
-might fit into our model.
+is applicability to multiple enforcement mechanisms. \apt{Could we mention that
+  in intro as well?}  There is much future work in each of these dimensions.
 
-\paragraph{Stack Canaries and Shadow Stacks}
-%
-Canaries are special values inserted by the caller at certain points of the
-stack and checked for corruption on return, for protection against
-some classes of control-flow hijacking (i.e., overwriting the caller's
-return address through a buffer overflow that would also overwrite the canary
-detectably). A shadow stack is a mirror image of the control-relevant parts of the stack,
-maintained by the program to attempt to detect attempts to hijack its control
-flow and ``restrict the flexibility available in creating gadget chains''
-\cite{Shanbhogue+19}.
-%
-Interestingly, these are lazy enforcement mechanisms, in that
-the attack may occur and be detected some time later, as long as
-it is detected before it can become dangerous. That would make our
-formalism a good fit for defining their security, except that
-they are chiefly hardening techniques: they increase the difficulty
-of some control-flow attacks on the stack, but cannot provide absolute
-guarantees on \(\wbcf\) under a normal attacker model.
+% \subsection{Testing The Stack Safety Menagerie}
 
-\paragraph{Split Stacks}
-%
-Code-pointer integrity seeks to prevent control-flow hijacking attacks by
-splitting the program memory, including the stack, into a regular region and a
-safe region; objects that require protection are placed in the latter and
-all accesses to them protected by static or dynamic checks.
-%
-Like shadow stacks, bounds checking is a high-level technique designed to
-protect code written in a high-level language, but it is designed to
-offer protection under a stronger threat model that also considers the presence
-of untrusted code. As with most other software-based methods, it purports to
-protect exclusively the control-relevant parts of the stack, making no claims
-about its data-relevant parts---we would solely be testing \(\wbcf\).
-
-\paragraph{Bounds Checking}
-%
-Under a bounds checking discipline such as SoftBound \cite{NagarakatteZMZ09}, all the pointers
-in a program are extended with some disjoint metadata, and these are combined
-to gate memory accesses. These approaches enforce a form of \emph{memory safety},
-and we would therefore expect them to enforce \(\clri\) and \(\clrc\). They aim
-to enforce \(\wbcf\) by cutting off attacks that involve memory-safety violations,
-but that may not be sufficient.
-
-Bounds checking approaches require substantial compiler cooperation. This is not a
-problem for our properties in general, but it is not very compatible with
-generation-by-execution of low-level code. A better choice would be to generate
-high-level code using a tool like CSmith \cite{DBLP:conf/pldi/YangCER11}, or prove the properties instead.
-
-\paragraph{Capabilities}
-
+\paragraph*{Enforcement with capabilities}
 Capability machines can represent and manipulate
 unforgeable tokens of authority over specific regions of
 memory using a combination of dedicated out-of-band memory and
@@ -2034,23 +1985,75 @@ Previous work has used these principles in simplified models to implement
 \emph{secure calling conventions} for the call
 stack \cite{SkorstengaardLocal,SkorstengaardSTKJFP,Georges22:TempsDesCerises}. Those conventions can be seen as combining the
 protections of bounds-checking with software-based methods of control-flow protection.
+%
+%There are several proposals around the use of CHERI capabilities to enforce stack safety,
+%including mechanisms that use the standard CHERI hardware (which includes local
+%capabilities) \cite{SkorstengaardLocal},
+%and others that propose entirely new types of capabilities, such as linear
+%\cite{SkorstengaardSTK}, uninitialized \cite{Georges+21}, lifetime
+%\cite{Tsampas+19}, and directed \cite{Georges22:TempsDesCerises} capabilities.
+It is a high priority to test this most recent work by Georges et al.~\cite{Georges22:TempsDesCerises}, as it is designed
+to enforce analogues of all of our properties except for \(\clei\).
 
-There are several proposals around the use of CHERI capabilities to enforce stack safety,
-including mechanisms that use the standard CHERI hardware (which includes local
-capabilities) \cite{SkorstengaardLocal},
-and others that propose entirely new types of capabilities, such as linear
-\cite{SkorstengaardSTK}, uninitialized \cite{Georges+21}, lifetime
-\cite{Tsampas+19}, and directed \cite{Georges22:TempsDesCerises} capabilities.
-It is a high priority to test this most recent work by Georges et al., as it is designed
-to be similar to all of our properties except for \(\clei\).
+\paragraph*{Enforcement in software}
+%
+Under a bounds checking discipline such as SoftBound \cite{NagarakatteZMZ09}, all the pointers
+in a program are extended with some disjoint metadata, and these are combined
+to gate memory accesses. These approaches enforce a form of \emph{memory safety},
+and we would therefore expect them to enforce \(\clri\) and \(\clrc\). They aim
+to enforce \(\wbcf\) by cutting off attacks that involve memory-safety violations,
+but that may not be sufficient.
+Bounds checking approaches require substantial compiler cooperation. This is not a
+problem for our properties in general, but it is not very compatible with
+generation-by-execution of low-level code. A better choice might be to generate
+high-level code using a tool like CSmith \cite{DBLP:conf/pldi/YangCER11}, or prove the properties instead.
 
-\subsection{More Features}
+\paragraph*{More Features}
 
-Several common features did not make it into this work: most importantly concurrency and
-exceptions. We plan to extend the model to include them, and then test them. We would also
-like to test the model given in \cref{app:ptr} for arbitrary memory-safe pointer sharing.
+We have preliminary work on extending our model to handle C++-style
+exceptions, which, like tailcalls, obey only a weakened version of \(\wbcf\). 
+We are also exploring extensions to concurrency, starting with a model of
+statically allocated co-routines.  These extensions will also require non-trivial
+testing effort.  We also plan to test
+the model given in \cref{app:ptr} for arbitrary memory-safe pointer sharing.
 
-\subsection{Proofs}
+\paragraph*{Weaker Requirements}
+
+Several popular enforcement mechanisms are not designed to provide
+absolute guarantees of security. For example, stack canaries~\cite{Cowan+98}
+and shadow stacks~\cite{Dang+15,Shanbhogue+19}
+are chiefly hardening techniques: they increase the difficulty
+of some control-flow attacks on the stack, but cannot provide absolute
+guarantees on \(\wbcf\) under a normal attacker model.
+%
+Interestingly, these are lazy enforcement mechanisms, in that
+the attack may occur and be detected some time later, as long as
+it is detected before it can become dangerous. That would make our
+observation-based formalism a good fit for defining their security,
+if we could find a formal characterization of what they do acheive
+(perhaps in terms of a base machine with restricted addressing power).
+
+%% \paragraph{Split Stacks}
+%% %
+%% Code-pointer integrity seeks to prevent control-flow hijacking attacks by
+%% splitting the program memory, including the stack, into a regular region and a
+%% safe region; objects that require protection are placed in the latter and
+%% all accesses to them protected by static or dynamic checks.
+%% %
+%% Like shadow stacks, bounds checking is a high-level technique designed to
+%% protect code written in a high-level language, but it is designed to
+%% offer protection under a stronger threat model that also considers the presence
+%% of untrusted code. As with most other software-based methods, it purports to
+%% protect exclusively the control-relevant parts of the stack, making no claims
+%% about its data-relevant parts---we would solely be testing \(\wbcf\).
+
+\paragraph*{Proofs}
+
+The present work relies on randomized testing to validate properties versus
+enforcement mechanisms, but full formal proofs are certainly possible in principle,
+and we would like to investigate whether they are feasible in practice.
+Having formalizing our definitions in Coq gives us a head start in this effort.
+
 
 \bibliographystyle{IEEEtran}
 \bibliography{bcp.bib,local.bib}
