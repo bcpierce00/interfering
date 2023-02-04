@@ -158,7 +158,8 @@ variables, etc.---as well as information about the \emph{caller} to
 which it must return.
 %
 The \emph{call stack} is the fundamental data structure used to
-implement functions, aided by an ABI that defines how registers are shared
+implement functions, aided by an ABI\bcp{will all CSF readers know
+  what an ABI is?} that defines how registers are shared
 between activations.
 
 From a security perspective, attacks on the call stack
@@ -482,49 +483,57 @@ concurrency.  Hardware and timing attacks are also out of scope.
 
 Stack safety properties need to describe the behavior of machine code. but they naturally
 talk about function activations and stack contents---abstractions that
-are (typically) not visible at machine level. To bridge this gap,
+are typically not visible at machine level. To bridge this gap,
 our properties are defined in terms of a {\em security semantics} layered on top of
-the standard execution semantics of the machine.  This semantics identifies certain
-state transitions of the machine as {\em security-relevant operations}, which update
+the standard execution semantics of the machine.  The security semantics identifies certain
+state transitions of the machine as {\em security-relevant
+  operations}, which update
 a notional {\em security context}.  This context consists of
 an (abstract) stack of function activations, each associated with a {\em view}
 that maps each element of the machine state (memory location or register)
-to a {\em security class} (active, sealed, etc.) which specifies how the activation
+to a {\em security class} (active, sealed, etc.) specifying how the activation
 can access the element.
-The action of the security-relevant operations on the context is defined by a set
-of rules that depend on how the machine code makes use of the stack and registers
+The action of a security-relevant operation on the context is defined by a set
+of rules that describe how the machine code makes use of the stack and registers
 to implement the function abstraction.
 
 We define stack safety properties in
 terms of traces of {\em observable events} rather than internal machine states.
 This is particularly important for
-specifying lazy enforcement, which works because the deferred check catches problems
+specifying lazy enforcement, which catches bad behaviors after they occur but
 before they can affect the trace.
-Events might include certain function calls (i.e., system calls performing I/O)
-or writes to special addresses representing memory-mapped regions, etc.
+Observable events might include specific function calls (e.g., system
+calls that perform I/O), writes to special addresses representing
+memory-mapped regions, etc.
 %The nature of events is a parameter of the framework, and can be specialized
 %to any notion of observable behavior.
 
-Finally, we define our high-level security properties---integrity, confidentiality,
+Finally, we define high-level security properties---integrity, confidentiality,
 and well-bracketed control flow---in terms of the security classes of state
-elements. These take the form of predicates on states and contexts that use variants,
+elements. These take the form of predicates on states and contexts
+that use variants\bcp{undefined},
 assertions about future return states, and comparison of event traces to capture the
 desired behavior without reference to internal implementation details.
-We introduce these properties by example in \cref{sec:example}. In the remainder
+We introduce these properties by example in \cref{sec:example} and
+formally in \cref{sec:formal}. In the remainder
 of this section we describe the underlying framework in more detail.
 
-Our security semantics has similarities to the overlay semantics proposed
-by Skorstengaard et al.~\cite{SkorstengaardSTKJFP}, but it does not restrict
-the behavior of the underlying machine in any way. Rather, it tracks additional context
-about the history of security-relevant operations, which inform the criterion a machine
-must satisfy in order to correctly obey the properties.\apt{Sharpen this comparison?}
+Our security semantics has similarities to the overlay semantics
+proposed by Skorstengaard et al.~\cite{SkorstengaardSTKJFP}, but it
+does not restrict the behavior of the underlying machine in any
+way\bcp{Will people not familiar with Skorstengaard understand
+  that?}. Rather, it tracks additional context about the history of
+security-relevant operations, which informs the criterion a machine
+must satisfy in order to correctly obey the properties.\apt{Sharpen
+  this comparison?}\bcp{+1.  Or maybe, in the interest of time and to
+  keeping this section flowing, move it to related work.}
 
 %The security principals in our account of stack safety are function
 %activations: the context tracks, for the active function and all pending
 %functions, their {\em view} of the security state of the system.
 
 \paragraph*{Machine model}
-We assume a conventional processor ISA (e.g. RISC-V, x86-64, etc.), with registers including a program counter
+We assume a conventional ISA (e.g. RISC-V, x86-64, etc.), with registers including a program counter
 and stack pointer, and a standard ABI.
 We make no particular assumptions about the provenance of the machine code; in particular,
 we do not assume the use of any particular compiler.
@@ -533,38 +542,47 @@ enforcement mechanisms such as hardware tags~\cite{pump_hasp2014,Gollapudi+23} o
 we assume that the behavior of these mechanisms is incorporated into the basic
 step semantics of the machine, but we distinguish the \emph{payload} part of
 each state element---the part relevant to the behavior of the basic machine---from
-any additional enforcement information (such as a tag).
+any additional enforcement information (such as a tag).\bcp{Why?}
 
 \paragraph*{Security Semantics and Property Structure}
 A security semantics extends a machine
-with additional context about the identity of current and pending
+with additional context about the identities of current and pending
 functions (which act as security principals) and about the registers and memory they require
 to be secure. This added context is purely notional;
-it does not affect the real machine. The security context
+it does not affect the behavior of the real machine. The security context
 evolves dynamically through the execution of security-relevant operations,
-which include events like calls, returns, and frame manipulations.
+which include events like calls, returns, and frame manipulation.
 Our security properties are phrased in terms of this context, often as predicates
-on future states, e.g. of the form ``when control returns to the current function...'',
-or as relations on traces of future execution (hyper-properties).
+on future states (``when control returns to the current function...'')
+or as relations on traces of future execution
+(hyper-properties).\bcp{This is the first we've mentioned
+  hyperproperties.  CSF readers may be surprised.}
 
-The security-relevant operations typically correspond to underling machine instructions,
+Security-relevant operations typically correspond to
+\proposeadd{single?} underlying machine instructions,
 but the correspondence may not be obvious just by inspecting the machine code.
-For example, in the tagged RISC-V machine we use in our examples and tests,
-calls and returns are conventionally performed by {\tt jal} (``jump-and-link'')
-and {\tt jalr} (``jump-and-link-register'') instructions, respectively, but these
-instructions might also be used for other things. An instantiation of an operation
+For example, in the tagged RISC-V architecture that we use in our
+examples and tests,
+calls and returns are conventionally performed using the {\tt jal}
+(``jump-and-link'')
+and {\tt jalr} (``jump-and-link-register'') instructions, but these
+instructions might also be used for other things. An instantiation of
+an operation
 might require some external mechanism for distinguishing which instructions are
-security-relevant. The most obvious technique, which we use in our examples, is to add labels to
-selected instructions, but the theory does not depend on this choice.
-Whatever the mechanism for labeling transitions, we end up with an annotated version of the
-machine transition function \(\mach \xrightarrow{\bar{\psi}, \obs} \mach'\), where \(\obs\) is
-an event and \(\bar{\psi}\) is a list of security-relevant operations.
+security-relevant.\bcp{Huh?  What's an instantiation of an operation?} The most obvious technique, which we use in our examples, is to add labels to
+selected instructions, but the theory does not depend on this
+choice.\bcp{What could one do instead?}
 
+Whatever the mechanism for labeling transitions, we end up with an annotated version of the
+machine transition function: we write \(\mach \xrightarrow{\bar{\psi},
+  \obs} \mach'\), where \(\mach\) and \(\mach\) are machine states, \(\obs\) is
+an event, and \(\bar{\psi}\) is a list of security-relevant operations.
+%
 We then lift this into a transition between pairs of machine states and contexts,
 by applying a set of operation-specific rules to transform each state and context to
 a new context, in parallel with the ordinary transition on states.
 The most important rules describe call and return operations.
-A call pushes a new activation view onto the context stack and changes the class of the
+A call pushes a new activation view\bcp{it was just called ``view'' above} onto the context stack and changes the class of the
 caller's data to protect it from the new callee; a return reverses these steps.
 Other operations can serve to signal how parts of the stack frame are being used to store
 or share data, and their corresponding rules alter the classes of different
@@ -573,15 +591,25 @@ state elements accordingly.
 Exactly which operations and rules are needed depends on
 what code features we wish to support.
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
-\cref{tab:psi}. Those that we explore in detail in \cref{sec:example,sec:formal}
+\cref{tab:psi}.\bcp{I was confused by the table because I looked at
+  the figure before I read that sentence!} Those that we explore in detail in \cref{sec:example,sec:formal}
 are shown in white: calls, returns, and the allocation and deallocation of local memory.
 In \cref{sec:extensions}, we cover additional operations and and parameters
 to support various forms of memory sharing \ifexceptions , exceptions, \fi
 and tail-call elimination; these are shown in light gray. These are also
 the operations we test in \cref{sec:testing}.
 We give a proof-of-concept formalization of a more sophisticated, heap-like sharing model
-based on pointer provenance in \cref{app:ptr}, represented by the dark gray
+based on pointer provenance in \cref{app:ptr}\bcp{first
+  mention of this appendix; if it's important, mention it in the
+  outline in section I.  Otherwise drop it.}, represented by the dark gray
 operations, but we do not test this.
+
+\bcp{As a reader, I'm feeling a bit overwhelmed at this point.
+  Everything feels fluid and flexible---''It could be like this, but
+  it could also be another way if you want...''  I know we're past the
+  point of doing more than tweaking the way we talk about things, but
+  if there are any tweaks that reduce the sense of flexibility, let's
+  do them!}
 
 \newcommand{\example}{\rowcolor{black!0}}
 \newcommand{\testing}{\rowcolor{black!10}}
@@ -591,7 +619,7 @@ operations, but we do not test this.
 \begin{center}
   \begin{tabular}{| l | l |}
     \hline
-    \(\psi \in \Psi\) & Parameters \\
+    \(\psi \in \Psi\)\bcp{huh?} & Parameters \\
     \hline
     \example \(\mathbf{call}\) & target address, argument registers \\
     \testing & stack arguments (base, offset \& size) \\
