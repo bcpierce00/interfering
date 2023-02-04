@@ -1785,30 +1785,7 @@ The mean-time-to-failure (MTTF) and average number of tests for various bugs can
 it took to find the failure. Experiments were run in a desktop
 machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
 
-Naturally, testing also revealed a number of errors in our
-implementation of the enforcement mechanism (originally written in C++
-and targeting ARM machine code;
-then re-implemented in Coq targeting RISC-V).  These errors range
-from trivial typos to ones that require a %n intriguingly
-complex setup
-to provoke.  The most interesting bug (included in the table as row
-{\em HEADER\_NO\_INIT}) was that, on our first try, the blessed call
-sequence %/policy combination\apt{??}
-did not initialize all locations for the
-newly allocated stack frame correctly, but left some of them as
-$\tagNoDepth$. This allowed for a potential integrity violation, but
-only if a rather complicated sequence of events occured.
-The smallest counterexample requires calling a function {\tt f},
-which fails to initialize some of its frame,
-but writes into an uninitialized location $l$ later, treating \(l\) as outside
-the stack. Then {\tt f} calls a further function {\tt g} (which should have
-the effect of sealing $l$ for integrity purposes). {\tt g} attempts to write to $l$,
-which is allowed because the enforcement mechanism still has
-$l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s data.
-%\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
-%  and the write from {\tt f} was already a violation.}
-
-As for \(LTC\), the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
+For \(LTC\), the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
 fails in testing, in cases where data is leaked between sequential calls.
 To round out our mutation testing we also check {\em LOAD\_NO\_CHECK\_LT},
 equivalent to its counterpart in depth isolation,
@@ -1845,8 +1822,7 @@ To our knowledge, the only other line of work that aims to rigorously characteri
 security of the stack is the StkTokens-Cerise family of CHERI-enforced secure calling
 conventions \cite{SkorstengaardLocal, SkorstengaardSTKJFP, Georges22:TempsDesCerises}.
 %
-These works define secure calling conventions for capability machines and
-overlay semantics that internalize those conventions and their related stack
+These works define stack safety as overlay semantics and related stack
 safety properties, phrased in terms of logical relations instead of trace
 properties.
 %
