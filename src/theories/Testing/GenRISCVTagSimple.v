@@ -885,7 +885,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                        let imm := (minImm + imm')%Z in
                        rs <- (genTargetReg m);;
                        let instr := Sw sp rs imm in
-                       ret [(instr, [Tinstr], f, noops)])
+                       ret [(instr, [Tinstr], f, noops)]);
                      (1, genPtrWrite m fprof false);
                      (1, genPtrRead m fprof false)];;
         ret (seq, s)
