@@ -147,7 +147,7 @@ our tests.
 \section{Introduction}
 \label{sec:intro}
 
-\subsection{The Call Stack and Its Security}
+%\subsection{The Call Stack and Its Security}
 
 {\em Functions} in high-level languages, and related abstractions such
 as procedures, methods, etc., are units of computation
@@ -158,9 +158,8 @@ variables, etc.---as well as information about the \emph{caller} to
 which it must return.
 %
 The \emph{call stack} is the fundamental data structure used to
-implement functions, aided by an ABI\bcp{will all CSF readers know
-  what an ABI is?} that defines how registers are shared
-between activations.
+implement functions, aided by an Application Binary Interface (ABI)
+that defines how registers are shared between activations.
 
 From a security perspective, attacks on the call stack
 are attacks on the function abstraction itself.
@@ -222,7 +221,7 @@ Tagging and Clearing (\(LTC\)), makes an interesting performance
 trade-off: it allows function activations to improperly write into one
 another's stack frames, but ensures that the owner of the corrupted
 memory cannot access it afterward.
-
+%
 Under this policy, one function activation {\em can} corrupt another's
 memory---just not in ways that affect observable behavior.
 Therefore, \(LTC\) would not fulfill Georges et al.'s property
@@ -231,18 +230,20 @@ arguably enforce stack safety.  A looser, more observational
 definition of stack safety is needed to fit this situation.
 
 We propose here a formal characterization of stack safety, based on
-the intuition of protecting function activations from each other.
-\bcp{Aren't other formal definitions based on the same intuition?}%
-\sna{Two differences we're trying to get across. First, protecting
-  functions vs. protecting stack frames: we bring registers into
-  the story because it isn't just about the stack as a data structure.
-  Second: describing security in terms of functions' high-level
-  security goals (f is trying to extract a secret) rather than
-  describing operationally what they can and can't do (as the CHERI
-  folks do.)}%
-\bcp{Both useful!  But neither comes across, at least not very clearly.}%
+the intuition of protecting function activations (both registers and
+stack frames) from each other.
+%\bcp{Aren't other formal definitions based on the same intuition?}%
+%% \sna{Two differences we're trying to get across. First, protecting
+%%   functions vs. protecting stack frames: we bring registers into
+%%   the story because it isn't just about the stack as a data structure.
+%%   Second: describing security in terms of functions' high-level
+%%   security goals (f is trying to extract a secret) rather than
+%%   describing operationally what they can and can't do (as the CHERI
+%%   folks do.)}%
+%% \bcp{Both useful!  But neither comes across, at least not very clearly.}%
 We use the tools of language-based
-security~\cite{sabelfeld2003language}, decomposing stack safety into a family of
+security~\cite{sabelfeld2003language}, treating function activations as
+security principals.  We decompose stack safety into a family of
 properties describing
 the {\em integrity} and {\em confidentiality} of the caller’s local state
 and the callee's behavior during the callee's execution, plus the
@@ -252,17 +253,8 @@ Skorstengaard et al.~\cite{SkorstengaardSTKJFP}.
 they are stated abstractly in hopes of applying
 to other enforcement mechanisms.}
 
-We find, via property-based random testing, that \(LTC\) is flawed in
-a way that undermines both integrity and confidentiality; after
-correcting this flaw, the repaired \(LTC\) satisfies all our
-properties.  Moreover, we show that our properties can be extended to
-describe calling conventions with features such as callee-save
-registers, argument-passing on the stack, and tail-call
-elimination. We modify \(LTC\) to protect these features and apply
-random testing to validate this extended protection mechanism against
-the extended properties.
 
-\subsection {Towards Formal Properties for Stack Safety}
+%\subsection {Towards Formal Properties for Stack Safety}
 
 We are not attempting to present a universal definition of stack safety
 for all systems. While many security properties can be described at
@@ -288,19 +280,29 @@ security requirements? Different answers will beget different properties.
 We identify and define five security requirements that a system might try
 to enforce upon a function call: well-bracketed control flow, and the
 integrity and confidentiality of each of the caller and the callee.
-These are by no means exhaustive\bcp{That comment belongs in the
-  future work
-  section, not here}. We apply these first to a simple system
+%These are by no means exhaustive\bcp{That comment belongs in the
+%  future work
+%  section, not here}.
+We apply these first to a simple system
 with very few features, then to a more realistic one supporting
-tailcall-elimination, argument passing on the stack, and callee-saves
+tail-call elimination, argument passing on the stack, and callee-save
 registers.
 
 We show that our properties are useful for distinguishing correct enforcement
 from incorrect using QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based
-testing tool for Coq. We generate random programs, using the features of our
-more realistic system, and check that the stack safety {\em micro-policies}
-of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}
-correctly detect the ones that attempt to violate one of our properties.
+random testing tool for Coq.
+We find that \(LTC\) is flawed in
+a way that undermines both integrity and confidentiality; after
+correcting this flaw, the repaired \(LTC\) satisfies all our
+properties.  Moreover, we modify \(LTC\) to protect the features of
+our more realistic system, and apply
+random testing to validate this extended protection mechanism against
+the extended properties.
+
+%We generate random programs, using the features of our
+%more realistic system, and check that the stack safety {\em micro-policies}
+%of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}
+%correctly detect the ones that attempt to violate one of our properties.
 
 %Furthermore, we
 %check that the testing framework is able to generate counterexamples
@@ -309,7 +311,7 @@ correctly detect the ones that attempt to violate one of our properties.
 % SNA: we talk about this in the testing section, and it's a "best practice" for
 % PBT, but not really a contribution in and of itself
 
-\subsection{Contributions}
+%\subsection{Contributions}
 
 In sum, we offer the following contributions:
 
@@ -325,12 +327,14 @@ that support only some aspects of stack safety\bcp{where do we show
 The properties they are parameterized over a notion of
 external observation, allowing them to characterize lazy enforcement
 mechanisms.
-\item We instantiate\bcp{extend??} these definitions in a realistic
-setting with features such as\bcp{``such as''? are there others?}
-argument passing on the stack, callee-saves registers, and tail-call
-elimination.\bcp{How about: We extend these core definitions to
+\item
+  %We instantiate\bcp{extend??} these definitions in a realistic
+%setting with features such as\bcp{``such as''? are there others?}
+%argument passing on the stack, callee-saves registers, and tail-call
+  %elimination.\bcp{How about:
+ We extend these core definitions to
   describe a realistic setting with argument passing on the stack,
-  callee-saves registers, and tail-call elimination.}  Our model is
+  callee-saves registers, and tail-call elimination.  Our model is
 modular enough that handling these features is straightforward.
 \bcp{Throughout, the way we talk about the ``core model'' and its
   intantiation / extension / enrichment with realistic features feels
@@ -340,8 +344,8 @@ modular enough that handling these features is straightforward.
 it falls short, and propose and validate a fix.
 \end{itemize}
 
-In the next section, we give a brief overview of the structure of
-properties.  In \cref{sec:example}, we walk through a function call in
+In the next section, we give a brief overview of our framework and
+assumptions. In \cref{sec:example}, we walk through a function call in
 a simple example machine and discuss how each of our properties
 applies to it, informally. In the process we motivate the properties
 from a security perspective.
@@ -358,46 +362,6 @@ we use Coq primarily for the QuickChick testing library and for
 ensuring that our definitions are unambiguous.  Formal proofs are left
 as future work.
 
-\subsection{Threat Model and Limitations}
-\apt{This could probably go better at end of next section.}
-
-When our properties are used to evaluate a system, the threat model
-will depend on the details of that system. However, there are some
-constraints that our design puts on any system. In particular, we must
-trust that the method of distinguishing security-relevant operations
-is accurate.  For example, if the enforcement mnechanism involves
-labels placed on code by a compiler, we must trust that the compiler
-placed those labels correctly. For instance, if a compiled function
-call is not marked as such, then the caller's data might not be
-protected from the callee.  Conversely, marking too many operations as
-calls will simply cause otherwise safe programs to be rejected.
-
-\bcp{Still working here:}
-
-We do not assume that low-level code adheres to any fixed calling
-convention or implements any particular source-language constructs.
-Indeed, if the source
-language is C, then high-level programs might contain undefined
-behavior, in which case they might be compiled to arbitrary machine
-code. A given enforcement
-mechanism or target architecture might place additional constraints, particularly on the behavior of
-call and return sequences. For instance, extant implementations tend to assume
-implicitly that callee-saved registers have their values maintained by whichever compiler
-generated their code. Our properties explicitly state this as a requirement,
-which could be enforced by a micro-policy, a well-behaved compiler, or other enforcement technique.
-Roessler and DeHon include the compiler in their trusted computing
-base, so our properties
-are stronger than necessary to characterize their micro-policies.
-
-In general, it is impossible to distinguish buggy machine code from an
-attacker.  In our examples we will identify one function or another as
-an attacker, but we do not require any static division between trusted
-and untrusted code, and we aim to protect even buggy code.
-
-This is a strong threat model, but it does omit some important aspects
-of stack safety in real systems: in particular, it does not address
-concurrency.  Hardware and timing attacks are also out of scope.
-%
 
 %We consider a simple attacker, and discuss the harm that it can do to
 %its caller. This perspective is essential to understanding how lazy enforcement can
@@ -434,10 +398,24 @@ memory-mapped regions, etc.
 %The nature of events is a parameter of the framework, and can be specialized
 %to any notion of observable behavior.
 
+%% \paragraph*{Variants and Non-interference}
+
+To characterize situations in which values should be kept secret or prevented
+from influencing future execution, we borrow the idea of \emph{variant} states
+from the theory of non-interference.  For example, to show that certain locations
+are kept secret, it suffices to vary their contents them and check that the observable
+output does not change.
+
+%Non-interference is a way of expressing
+%the flow of information through the system. If we begin with a state \(\mach\)
+%and modify it to \(\nach = \mach[\component \mapsto v]\) for arbitrary \(v\),
+%then execute both \(\mach\) and \(\nach\), any differences in the outputs they
+%produce leaks information about \(\component\).
+
 Finally, we define high-level security properties---integrity, confidentiality,
 and well-bracketed control flow---in terms of the security classes of state
 elements. These take the form of predicates on states and contexts
-that use variants\bcp{undefined},
+that use variants,
 assertions about future return states, and comparison of event traces to capture the
 desired behavior without reference to internal implementation details.
 We introduce these properties by example in \cref{sec:example} and
@@ -450,21 +428,20 @@ of this section we describe the underlying framework in more detail.
 
 \paragraph*{Machine model}
 We assume a conventional ISA (e.g. RISC-V, x86-64, etc.), with registers including a program counter
-and stack pointer, and a standard ABI.
-\sna{Not in our formalism (hardcoded +4 in the definition of WBCF notwithstanding.)
-  This assumption is made in our example and testing.}
+and stack pointer. 
+%, and a standard ABI.
+%\sna{Not in our formalism (hardcoded +4 in the definition of WBCF notwithstanding.)
+%  This assumption is made in our example and testing.}
 We make no particular assumptions about the provenance of the machine code; in particular,
 we do not assume the use of any particular compiler.
 The machine may possibly be enhanced with security
 enforcement mechanisms such as hardware tags~\cite{pump_hasp2014,Gollapudi+23} or capabilities~\cite{Woodruff+14}. If so,
 we assume that the behavior of these mechanisms is incorporated into the basic
-step semantics of the machine, but we distinguish the \emph{payload} part of
-each state element---the part relevant to the behavior of the basic machine---from
-any additional enforcement information (such as a tag).\bcp{Why?}
-\sna{I think that the payload concept is too nitty-gritty for this section.
-  The chief use of the payload is that it allows every value to be interpreted
-  as an address. In the tag world, it happens to coincide with a natural instance
-  of our variant-compatibility relation.}
+step semantics of the machine, but we keep the enforcement state unchanged when constructing variant states.
+%% \sna{I think that the payload concept is too nitty-gritty for this section.
+%%   The chief use of the payload is that it allows every value to be interpreted
+%%   as an address. In the tag world, it happens to coincide with a natural instance
+%%   of our variant-compatibility relation.}
 
 \paragraph*{Security Semantics and Property Structure}
 A security semantics extends a machine
@@ -484,24 +461,26 @@ or as relations on traces of future execution
 \bcp{The latter!}
 
 Security-relevant operations typically correspond to
-\proposeadd{single?} underlying machine instructions,
+single underlying machine instructions,
 but the correspondence may not be obvious just by inspecting the machine code.
 For example, in the tagged RISC-V architecture that we use in our
 examples and tests,
 calls and returns are conventionally performed using the {\tt jal}
 (``jump-and-link'')
 and {\tt jalr} (``jump-and-link-register'') instructions, but these
-instructions might also be used for other things. An instantiation of
-an operation
-might require some external mechanism for distinguishing which instructions are
-security-relevant.\bcp{Huh?  What's an instantiation of an operation?} The most obvious technique,
-which we use in our examples, is to add labels to selected instructions, but the theory does not
-depend on this choice. One could instead recognize some operations dynamically. For instance,
-if we make a call to untrusted (and unlabeled) code, we might decide to recognize
-any jump back to trusted code as a return, to which \(\wbcf\) needs to apply.
+instructions might also be used for other things. Thus we identify
+security-relevant operations by labeling selected instructions. 
+%% An instantiation of
+%% an operation
+%% might require some external mechanism for distinguishing which instructions are
+%% security-relevant.\bcp{Huh?  What's an instantiation of an operation?} The most obvious technique,
+%% which we use in our examples, is to add labels to selected instructions, but the theory does not
+%% depend on this choice. One could instead recognize some operations dynamically. For instance,
+%% if we make a call to untrusted (and unlabeled) code, we might decide to recognize
+%% any jump back to trusted code as a return, to which \(\wbcf\) needs to apply.
 
-Whatever the mechanism for labeling transitions, we end up with an annotated version of the
-machine transition function: we write \(\mach \xrightarrow{\bar{\psi},
+We end up with an annotated version of the
+machine transition function written \(\mach \xrightarrow{\bar{\psi},
   \obs} \mach'\), where \(\mach\) and \(\mach\) are machine states, \(\obs\) is
 an event, and \(\bar{\psi}\) is a list of security-relevant operations.
 %
@@ -509,11 +488,13 @@ We then lift this into a transition between pairs of machine states and contexts
 by applying a set of operation-specific rules to transform each state and context to
 a new context, in parallel with the ordinary transition on states.
 The most important rules describe call and return operations.
-A call pushes a new activation view\bcp{it was just called ``view'' above} onto the context stack and changes the class of the
+A call pushes a new view onto the context stack and changes the class of the
 caller's data to protect it from the new callee; a return reverses these steps.
 Other operations can serve to signal how parts of the stack frame are being used to store
 or share data, and their corresponding rules alter the classes of different
 state elements accordingly.
+
+\apt{Still working from here down}
 
 Exactly which operations and rules are needed depends on
 what code features we wish to support.
@@ -600,32 +581,59 @@ Then, on a call, \(\object\) elements that are not being used to communicate wit
 the new callee will become \(\sealed\)---reserved for an inactive principal,
 and expected to be unchanged when it becomes active again.
 
-%% \paragraph*{Variants and Non-interference}
-
-%% To characterize situations in which values should be kept secret or prevented
-%% from influencing future execution, we borrow the idea of \emph{variant} states
-%% from the theory of non-interference. Non-interference is a way of expressing
-%% the flow of information through the system. If we begin with a state \(\mach\)
-%% and modify it to \(\nach = \mach[\component \mapsto v]\) for arbitrary \(v\),
-%% then execute both \(\mach\) and \(\nach\), any differences in the outputs they
-%% produce leaks information about \(\component\).
 
 \paragraph*{Instantiating the Framework}
-
-\proposecut{Our property framework has many parameters to support broad applicability.}
 Conceptually, the following steps are needed to instantiate the framework to a specific machine
-and code style: (i) define the base machine semantics; (ii) distinguish payload
-from enforcement parts (if any) of the machine state; (iii) identify the set of
-security-relevant operations and rules required by the code style; (iv) determine
-how to label (or otherwise associate) machine instruction with security-relevant
-operations as appropriate; (v) specify the form of observable events.
+and code style: (i) define the base machine semantics, including any hardware
+security enforcement features; (ii) identify the set of
+security-relevant operations and rules required by the code style; (iii) determine
+how to label machine instruction with security-relevant
+operations as appropriate; (iv) specify the form of observable events.
 
 \bcp{cut this?}In \cref{sec:example} we give such an instantiation, and
   use it to illustrate our security properties.  But we stress that
   the property definitions themselves are independent of the
   instantiation.
 
-\apt{Suggest moving threat model to here.}\bcp{Fine.}
+\paragraph*{Threat Model and Limitations}
+
+When our properties are used to evaluate a system, the threat model
+will depend on the details of that system. However, there are some
+constraints that our design puts on any system. In particular, we must
+trust that the method of distinguishing security-relevant operations
+is accurate.  For example, if the enforcement mnechanism involves
+labels placed on code by a compiler, we must trust that the compiler
+placed those labels correctly. For instance, if a compiled function
+call is not marked as such, then the caller's data might not be
+protected from the callee.  Conversely, marking too many operations as
+calls will simply cause otherwise safe programs to be rejected.
+
+\bcp{Still working here:}
+
+We do not assume that low-level code adheres to any fixed calling
+convention or implements any particular source-language constructs.
+Indeed, if the source
+language is C, then high-level programs might contain undefined
+behavior, in which case they might be compiled to arbitrary machine
+code. A given enforcement
+mechanism or target architecture might place additional constraints, particularly on the behavior of
+call and return sequences. For instance, extant implementations tend to assume
+implicitly that callee-saved registers have their values maintained by whichever compiler
+generated their code. Our properties explicitly state this as a requirement,
+which could be enforced by a micro-policy, a well-behaved compiler, or other enforcement technique.
+Roessler and DeHon include the compiler in their trusted computing
+base, so our properties
+are stronger than necessary to characterize their micro-policies.
+
+In general, it is impossible to distinguish buggy machine code from an
+attacker.  In our examples we will identify one function or another as
+an attacker, but we do not require any static division between trusted
+and untrusted code, and we aim to protect even buggy code.
+
+This is a strong threat model, but it does omit some important aspects
+of stack safety in real systems: in particular, it does not address
+concurrency.  Hardware and timing attacks are also out of scope.
+%
 
 \section{Properties by Example}
 \label{sec:example}
@@ -980,12 +988,11 @@ a pair of states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if
 their values an only disagree on elements in \(\components\).
 We say that the elements of \(\components\) are \emph{irrelevant}
 in \(\mach\) if they can be replaced by arbitrary other values without changing the
-observable behavior of the machine. All other elements are \emph{relevant}.
-
-(This story is slightly over-simplified. If an enforcement mechanism maintains
+observable behavior of the machine. All other elements are \emph{relevant}.\footnote{
+This story is slightly over-simplified. If an enforcement mechanism maintains
 additional state associated with elements, such as tags, we don't want that
-state to vary; only the payloads should. Formal definitions of variants and
-relevance that incorporate this wrinkle are given in \cref{sec:props}.)
+state to vary. Formal definitions of variants and
+relevance that incorporate this wrinkle are given in \cref{sec:props}.}
 
 We define \emph{caller integrity} (\(\clri\))  as the property that
 every relevant element that is \(\sealed\) under the callee's view is restored
@@ -1252,18 +1259,20 @@ A {\em machine state} \(\mach \in \MACHS\) is a map from state elements to a set
 Each value \(v\) contains a \emph{payload} word, written \(|v|\).
 We write \(\mach[\component]\) to denote the value of \(\mach\) at
 \(\component\)  and \(\mach[v]\) as shorthand for \(\mach[|v|]\).
-The details of value structure depend on the specific machine being modelled;
-intuitively, the payload represents the part of the value that is relevant to
-the behavior of the basic machine, while the rest of the value may contain
-information relevant to a hardware enforcement mechanism (such as a tag).
+The details of value structure depend on the specific machine being modelled.
+Intuitively, the payload represents the part of the value that is relevant to
+the behavior of the basic machine, and it is the part that should be changed
+when constructing variants (see below); the rest of the value may contain
+information relevant to a hardware enforcement mechanism (such as a tag), which
+should not be varied.
 We assume a given \emph{compatibility} equivalence relation \(\sim\) on values,
 and lift it element-wise to states.
-In the tagged setting, values are compatible if their tags are identical.
-\apt{This is still not very convincing!
-  empting to say that only the payloads can affect the step function, but that is
-  too strong, right? (OK for tags, but not, e.g. capabilities?}
-\sna{Yeah, I don't think we can say something universal about when values should be
-  considered compatible.}
+In a tag-based enforcement scheme, values are compatible if their tags are identical.
+%% \apt{This is still not very convincing!
+%%   empting to say that only the payloads can affect the step function, but that is
+%%   too strong, right? (OK for tags, but not, e.g. capabilities?}
+%% \sna{Yeah, I don't think we can say something universal about when values should be
+%%   considered compatible.}
 
 The machine has a step function \(\mach \xrightarrow{\bar{\psi},\obs} \mach'\).
 Except for the annotations over the arrow, this function just encodes the usual
