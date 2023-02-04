@@ -334,9 +334,9 @@ according to the needs of a system.
 
 In particular, many enforcement techniques focus purely on
 well-bracketed control flow. For instance, stack canaries aim to prevent certain attacks on the return
-address, and shadow stacks with protection (e.g. Return Address Defender \cite{Chiueh2001RAD})
+address, and shadow stacks with protection (e.g. Return Address Defender~\cite{Chiueh2001RAD})
 to enforce it completely. Others combine this protection with some degree of memory protection,
-chiefly focusing on integrity. Interestingly, Skorstengaard et al. \cite{SkorstengaardSTKJFP}
+chiefly focusing on integrity. Interestingly, Skorstengaard et al.~\cite{SkorstengaardSTKJFP}
 describe their ``local state encapsulation'' in terms of integrity, but it is equivalent
 to the combination of \(\clri\) and \(\clrc\). In fact, the follow-up work by
 Georges et al. \cite{Georges22:TempsDesCerises} was inspired by the properties presented in this paper to extend their formal discussion to include confidentiality.
@@ -419,6 +419,7 @@ ensuring that our definitions are unambiguous.  Formal proofs are left
 as future work.
 
 \subsection{Threat Model and Limitations}
+\apt{This could probably go better at end of next section.}
 
 When our properties are used to evaluate a system, the threat model
 will depend on the details of that system. However, there are some
@@ -467,30 +468,65 @@ concurrency.  Hardware and timing attacks are also out of scope.
 %be safe: even if an attacker can overwrite some memory, if it cannot accomplish
 %subvert the observable behavior of the caller, the system is safe.
 
-\section{Building a Property}
+\section{Framework and Assumptions}
 \label{sec:ideas}
 
-Our properties follow a three-part structure that we term a {\em security semantics}.
-First we define the {\em security-relevant operations} that we support, and an extra
-piece of state called a {\em security context}, which updates alongside each step
-of execution. The security context gives each function activation a {\em view},
-mapping each element to a {\em security class}.
+Stack safety properties need to describe the behavior of machine code. but they naturally 
+talk about function activations and stack contents---abstractions that
+are (typically) not visible at machine level. To bridge this gap, 
+our properties are defined in terms of a {\em security semantics} layered on top of
+the standard execution semantics of the machine.  This semantics identifies certain
+state transitions of the machine as {\em security-relevant operations}, which update
+a notional {\em security context}.  This context consists of
+an (abstract) stack of function activations, each associated with a {\em view} 
+that maps each element of the machine state (memory location or register)
+to a {\em security class} (active, sealed, etc.) which specifies how the activation
+can access the element.
+The action of the security-relevant operations on the context is defined by a set
+of rules that depend on how the machine code makes use of the stack and registers
+to implement the function abstraction.
 
-Then, we define our high-level security requirements---integrity, confidentiality,
+We define stack safety properties in
+terms of traces of {\em observable events} rather than internal machine states. 
+This is particularly important for
+specifying lazy enforcement, which works because the deferred check catches problems 
+before they can affect the trace.
+Events might include certain function calls (i.e., system calls performing I/O)
+or writes to special addresses representing memory-mapped regions, etc.
+%The nature of events is a parameter of the framework, and can be specialized
+%to any notion of observable behavior.
+
+Finally, we define our high-level security properties---integrity, confidentiality,
 and well-bracketed control flow---in terms of the security classes of state
 elements. These take the form of predicates on states and contexts that use variants,
 assertions about future return states, and comparison of event traces to capture the
-desired behavior without reference to implementation details.
+desired behavior without reference to internal implementation details.
+We introduce these properties by example in \cref{sec:example}. In the remainder
+of this section we describe the underlying framework in more detail.
 
-Separately, in order to apply a property to a specific machine, we do need to consider
-implementation details, by determining how the machine's execution translates into
-security relevant operations. But this step is transparent to the properties themselves.
+Our security semantics has similarities to the overlay semantics proposed
+by Skorstengaard et al.~\cite{SkorstengaardSTKJFP}, but it does not restrict
+the behavior of the underlying machine in any way. Rather, it tracks additional context
+about the history of security-relevant operations, which inform the criterion a machine
+must satisfy in order to correctly obey the properties.\apt{Sharpen this comparison?}
 
-\apt{Something about how the machine can incorporate enforcement, with examples
-(tags, capabilities, SW only). }
+%The security principals in our account of stack safety are function
+%activations: the context tracks, for the active function and all pending
+%functions, their {\em view} of the security state of the system.
+
+\paragraph*{Machine model}
+We assume a conventional processor ISA (e.g. RISC-V, x86-64, etc.), with registers including a program counter
+and stack pointer, and a standard ABI.
+We make no particular assumptions about the provenance of the machine code; in particular,
+we do not assume the use of any particular compiler.
+The machine may possibly be enhanced with security
+enforcement mechanisms such as hardware tags~\cite{pump_hasp2014,Gollapudi+23} or capabilities~\cite{Woodruff+14}. If so,
+we assume that the behavior of these mechanisms is incorporated into the basic
+step semantics of the machine, but we distinguish the \emph{payload} part of
+each state element---the part relevant to the behavior of the basic machine---from
+any additional enforcement information (such as a tag). 
 
 \paragraph*{Security Semantics and Property Structure}
-
 A security semantics extends a machine
 with additional context about the identity of current and pending
 functions (which act as security principals) and about the registers and memory they require
@@ -511,12 +547,22 @@ instructions might also be used for other things. An instantiation of an operati
 might require some external mechanism for distinguishing which instructions are
 security-relevant. The most obvious technique, which we use in our examples, is to add labels to
 selected instructions, but the theory does not depend on this choice.
+Whatever the mechanism for labeling transitions, we end up with an annotated version of the 
+machine transition function \(\mach \xrightarrow{\bar{\psi}, \obs} \mach'\), where \(\obs\) is
+an event and \(\bar{\psi}\) is a list of security-relevant operations.
 
-Whatever the mechanism for labeling transitions, we get a base
-machine transition \(\mach \xrightarrow{\bar{\psi}, \obs} \mach'\), where \(\obs\) is
-an event (see below) and \(\bar{\psi}\) is a list of security-relevant operations.
-%We then lift this into a transition between pairs of machine states and contexts,
-%\((\mach,\context) \stepstounder{\overline{\psi},\obs} (\mach', \context')\).
+We then lift this into a transition between pairs of machine states and contexts,
+by applying a set of operation-specific rules to transform each state and context to
+a new context, in parallel with the ordinary transition on states.
+The most important rules describe call and return operations.
+A call pushes a new activation view onto the context stack and changes the class of the
+caller's data to protect it from the new callee; a return reverses these steps.
+Other operations can serve to signal how parts of the stack frame are being used to store
+or share data, and their corresponding rules alter the classes of different
+state elements accordingly.
+
+Exactly which operations and rules are needed depends on
+what code features we wish to support. 
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
 \cref{tab:psi}. Those that we explore in detail in \cref{sec:example,sec:formal}
 are shown in white: calls, returns, and the allocation and deallocation of local memory.
@@ -559,17 +605,7 @@ operations, but we do not test this.
   \label{tab:psi}
 \end{table}
 
-Our security semantics has similarities to the overlay semantics that have been proposed
-to characterize stack safety in the past~\cite{SkorstengaardSTK}, but it does not restrict
-the behavior of the underlying machine in any way. Rather, it tracks additional context
-about the history of security-relevant operations, which inform the criterion a machine
-must satisfy in order to correctly obey the properties.
-
-The security principals in our account of stack safety are function
-activations: the context tracks, for the active function and all pending
-functions, their {\em view} of the security state of the system.
-
-\paragraph*{Views}
+\paragraph*{Views and security classes}
 
 The security context consists of a stack of views: functions that map
 each state element to a {\it security class}. The security classes are
@@ -592,23 +628,31 @@ Then, on a call, \(\object\) elements that are not being used to communicate wit
 the new callee will become \(\sealed\)---reserved for an inactive principal,
 and expected to be unchanged when it becomes active again.
 
-\paragraph*{Events}
+%% \paragraph*{Variants and Non-interference}
 
-It is common to specify the behavior of a system, including security properties, in
-terms of traces of observable {\em events} rather than details of the machine state.
-Lazy enforcement works because the deferred check catches errors before they appear
-in the trace. The nature of events is a parameter of the machine, and can be specialized
-to any notion of observable behavior.
+%% To characterize situations in which values should be kept secret or prevented
+%% from influencing future execution, we borrow the idea of \emph{variant} states
+%% from the theory of non-interference. Non-interference is a way of expressing
+%% the flow of information through the system. If we begin with a state \(\mach\)
+%% and modify it to \(\nach = \mach[\component \mapsto v]\) for arbitrary \(v\),
+%% then execute both \(\mach\) and \(\nach\), any differences in the outputs they
+%% produce leaks information about \(\component\).
 
-\paragraph*{Variants and Non-interference}
+\paragraph*{Instantiating the Framework}
 
-To characterize situations in which values should be kept secret or prevented
-from influencing future execution, we borrow the idea of \emph{variant} states
-from the theory of non-interference. Non-interference is a way of expressing
-the flow of information through the system. If we begin with a state \(\mach\)
-and modify it to \(\nach = \mach[\component \mapsto v]\) for arbitrary \(v\),
-then execute both \(\mach\) and \(\nach\), any differences in the outputs they
-produce leaks information about \(\component\).
+The property framework has many parameters to support broad applicability.
+Conceptually, the following steps are needed to instantiate the framework to a specific machine
+and code style: (i) define the base machine semantics; (ii) distinguish payload
+from enforcement parts (if any) of the machine state; (iii) identify the set of
+security-relevant operations and rules required by the code style; (iv) determine
+how to label (or otherwise associate) machine instruction with security-relevant
+operations as appropriate; (v) specify the form of observable events.
+
+In \cref{sec:example} we give such an instantiation, and use it to explain the
+security properties.  But we stress that the property definitions themselves
+are \emph{independent} of the parameter instantiation. 
+
+\apt{Suggest moving threat model to here.}
 
 \section{Properties by Example}
 \label{sec:example}
