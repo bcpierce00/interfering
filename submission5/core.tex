@@ -316,23 +316,15 @@ In sum, we offer the following contributions:
 
 \begin{itemize}
 \item We give a novel characterization of stack safety as a collection
-of properties: confidentiality and integrity for callee and caller,
-plus well-bracketed control-flow. Different subsets of these
-properties characterize the security guarantees offered by mechanisms
-that support only some aspects of stack safety\bcp{where do we show
-  this?}. \sna{Nowhere clearly enough. We need to make it clear in section 6
-  that Nick and Andre are included there---only aiming at caller-side,
-  not callee-side. The discussion of CHERI work should touch on this as well.}
-The properties they are parameterized over a notion of
-external observation, allowing them to characterize lazy enforcement
-mechanisms.
+  of properties: confidentiality and integrity for callee and caller,
+  plus well-bracketed control-flow.
+  The properties are parameterized over a notion of
+  external observation, allowing them to characterize lazy enforcement
+  mechanisms.
 \item We extend these core definitions to
   describe a realistic setting with argument passing on the stack,
   callee-saves registers, and tail-call elimination. Our model is
   modular enough that handling these features is straightforward.
-\bcp{Throughout, the way we talk about the ``core model'' and its
-  intantiation / extension / enrichment with realistic features feels
-  quite weasily.}
 \item We validate a tag-based enforcement mechanism, \emph{Lazy
   Tagging and Clearing}, via property-based random testing, find that
 it falls short, and propose and validate a fix.
@@ -392,22 +384,12 @@ before they can affect the trace.
 Observable events might include specific function calls (e.g., system
 calls that perform I/O), writes to special addresses representing
 memory-mapped regions, etc.
-%The nature of events is a parameter of the framework, and can be specialized
-%to any notion of observable behavior.
-
-%% \paragraph*{Variants and Non-interference}
 
 To characterize situations in which values should be kept secret or prevented
 from influencing future execution, we borrow the idea of \emph{variant} states
 from the theory of non-interference.  For example, to show that certain locations
-are kept secret, it suffices to vary their contents them and check that the observable
+are kept secret, it suffices to vary their contents and check that the observable
 output does not change.
-
-%Non-interference is a way of expressing
-%the flow of information through the system. If we begin with a state \(\mach\)
-%and modify it to \(\nach = \mach[\component \mapsto v]\) for arbitrary \(v\),
-%then execute both \(\mach\) and \(\nach\), any differences in the outputs they
-%produce leaks information about \(\component\).
 
 Finally, we define high-level security properties---integrity, confidentiality,
 and well-bracketed control flow---in terms of the security classes of state
@@ -418,10 +400,6 @@ desired behavior without reference to internal implementation details.
 We introduce these properties by example in \cref{sec:example} and
 formally in \cref{sec:formal}. In the remainder
 of this section we describe the underlying framework in more detail.
-
-%The security principals in our account of stack safety are function
-%activations: the context tracks, for the active function and all pending
-%functions, their {\em view} of the security state of the system.
 
 \paragraph*{Machine model}
 We assume a conventional ISA (e.g. RISC-V, x86-64, etc.), with registers including a program counter
@@ -447,26 +425,23 @@ functions (which act as security principals) and about the registers and memory 
 to be secure. This added context is purely notional;
 it does not affect the behavior of the real machine. The security context
 evolves dynamically through the execution of security-relevant operations,
-which include events like calls, returns, and frame manipulation.
+which include calls, returns, and frame manipulation.
 Our security properties are phrased in terms of this context, often as predicates
 on future states (``when control returns to the current function...'')
 or as relations on traces of future execution
-(hyper-properties).\bcp{This is the first we've mentioned
-  hyperproperties.  CSF readers may be surprised.}
-\sna{Surprised that we have hyperproperties,
-  or that we made it this far without mentioning them?}
-\bcp{The latter!}
+(hyper-properties).
 
-Security-relevant operations typically correspond to
-single underlying machine instructions,
-but the correspondence may not be obvious just by inspecting the machine code.
-For example, in the tagged RISC-V architecture that we use in our
-examples and tests,
+Security-relevant operations abstract over the implementation details of the
+actions they take. In this paper, each operation corresponds to a
+single underlying machine instruction. One instruction may perform multiple
+operations. We assume that a compiler or other trusted source has provided
+labels to disambiguate instructions that have multiple purposes. For instance,
+in the tagged RISC-V architecture
+that we use in our examples and tests,
 calls and returns are conventionally performed using the {\tt jal}
 (``jump-and-link'')
 and {\tt jalr} (``jump-and-link-register'') instructions, but these
-instructions might also be used for other things. Thus we identify
-security-relevant operations by labeling selected instructions. 
+instructions might also be used for other things.
 
 We end up with an annotated version of the
 machine transition function written \(\mach \xrightarrow{\bar{\psi},
@@ -491,27 +466,6 @@ memory is introduced in the example in \cref{sec:example}
 and formalized in \cref{sec:formal}. An extended set covering simple memory sharing and
 tail-call elimination are described in \cref{sec:extensions} and tested in \cref{sec:testing}.
 The remaining operations are needed for the capability-based model in \cref{app:ptr}. 
-%\bcp{I was confused by the table because I looked at
-% the figure before I read that sentence!}
-%Those that we explore in detail in \cref{sec:example,sec:formal}
-%are shown in white: calls, returns, and the allocation and deallocation of local memory.
-%In \cref{sec:extensions}, we cover additional operations and and parameters
-%to support various forms of memory sharing \ifexceptions , exceptions, \fi
-%and tail-call elimination; these are shown in light gray. These are also
-%the operations we test in \cref{sec:testing}.
-
-\bcp{As a reader, I'm feeling a bit overwhelmed at this point.
-  Everything feels fluid and flexible---''It could be like this, but
-  it could also be another way if you want...''  I know we're past the
-  point of doing more than tweaking the way we talk about things, but
-  if there are any tweaks that reduce the sense of flexibility, let's
-  do them!}
-
-\sna{Agreed. The point of the operations was originally that we shouldn't
-  have to think about all of these things when presenting the formalism,
-  not that we should open with all the different ways we can think about them.}
-
-\apt{Hopefully better now.}
 
 \newcommand{\example}{\rowcolor{black!0}}
 \newcommand{\testing}{\rowcolor{black!10}}
@@ -961,7 +915,6 @@ values after the call,'' this would be stricter than necessary. Suppose that
 a callee overwrites some data of its caller, but the caller never accesses that data
 (or only does so after re-initializing it.) This would be harmless, with the callee
 essentially using the caller's memory as scratch space, but the caller never seeing any change.
-\rb{(Indeed, this even applies to callee-saved registers, if it is worth mentioning)}
 
 For a set of elements \(\components\),
 a pair of states \(\mach\) and \(\nach\) are {\em \(\components\)-variants} if
@@ -1202,15 +1155,9 @@ callee integrity is not typically discussed.
 \label{sec:formal}
 
 We now give a formal description of our machine model, security semantics,
-and properties. Our definitions abstract over: (1) the details of  the target machine
-architecture and ABI, (2) the set of security-relevant operations and their effects on
-the security context, (3) the set of observable events, and (4) a notion of value compatibility.
-%They can be extended to a more sophisticated machine model by expanding the set of
-%security-relevant events and defining
-\apt{Any more? Give a more listlike presentation?
-  Need to clarify exactly what the parameters are, both in the initial
-  presentation and in the various extensions, including the appendix.}
-\sna{Need to come back to this.}
+and properties. Our definitions abstract over: (i) the details of  the target machine
+architecture and ABI, (ii) the set of security-relevant operations and their effects on
+the security context, (iii) the set of observable events, and (iv) a notion of value compatibility.
 
 \subsection{Machine}
 The building blocks of a machine are {\em words} and {\em registers}.
@@ -1604,9 +1551,6 @@ A C++-style call-by-reference argument % where the reference is
 passed in \(\reg\)
 is instead specified by \((\reg, 0, \mathit{sz})\), which allows
 the reference to be passed further down the stack.
-\apt{What if the reference is itself passed on the stack?}
-\sna{Ugh. We could make \(\reg\) an arbitrary element, but that seems like it's getting
-  dangerously close to indirection.}
 
 If the address of an object is taken directly and passed as a
 pointer, we simply classify the object as ``public'' and give it no protection against
@@ -1892,11 +1836,10 @@ Many enforcement techniques focus purely on \(\wbcf\);
 others combine this with some degree of memory protection,
 chiefly focusing on integrity.
 %
-%The micro-policies of
-Roessler and
-DeHon \cite{DBLP:conf/sp/RoesslerD18} are the most flexible in supporting a
-range of safeguards including lazy enforcement, and suitable to formulate
-and validate strong security guarantees.
+Roessler and DeHon's {\it Depth Isolation} and {\it Lazy Tagging and Clearing}
+\cite{DBLP:conf/sp/RoesslerD18} both offer protections corresponding to
+\(\wbcf\), \(\clri\), and \(\clrc\), though they do not give a formal description
+of this. They are generally not concerned with protecting callees.
 
 To our knowledge, the only other line of work that aims to rigorously characterize the
 security of the stack is the Cerise family of program logics
@@ -1924,12 +1867,7 @@ choice to explicitly state properties in security terms: specifying security
 is hard, and when the spec takes the form of a ``correct by
 construction'' machine, it is easy to neglect a non-obvious security
 requirement.
-
-\sna{See commented out tex for content that could be massaged to fit in here,
-  depending on whether we're interested in delving deeper.}\bcp{If
-  there's space, some of this could be resuscitated.}
-\apt{It would be very good to do this, because reviewers will want a careful comparison with this work,
-  but I don't feel quite confident enough to do it (especially after my unfortunate attempt last time)!}
+%
 %For instance, the stack-safety specification from Georges et al.
 %\cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
 %control flow, and therefore defines {\em Well-bracketed Control Flow} (\(\wbcf\)) under the assumption that
@@ -2063,9 +2001,6 @@ if we could find a formal characterization of what they do acheive
 \subsection{Provenance, Capabilities, and Protecting Objects}
 \label{app:ptr}
 
-\apt{Sbould admit up front that this extension requires a fundamental change in the
-  security context.}
-
 What if we want to express a finer-grained notion of safety, in which
 stack objects are protected unless the function that owns them intentionally
 passes a pointer to them? This can be thought of as a {\it capability}-based
@@ -2074,6 +2009,7 @@ a region of memory, typically corresponding to valid pointers to that region.
 So, in order to express such a property, we need our machine to carry some notion
 of {\it pointer provenance}---a distinction between a pointer that is intended to
 point to a given object, and non-pointer integers as well as pointers to other objects.
+This constitutes a substantial addition to the security context.
 
 One such provenance model is Memarian et al.'s PVI \cite{provenance}, in which pointers are
 annotated with the identity of the object they first pointed to. This annotation is
@@ -2129,7 +2065,7 @@ the previously defined \(\mathit{passed}\).
                {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) =
                  (V'',V::\sigma,\rho)\)}
 
-Int the resulting property, once an object is sealed (because its
+In the resulting property, once an object is sealed (because its
 capability has not been passed to a callee), subsequent nested calls can never unseal it.
 On the other hand, an object that is passed via a pointer may be passed on indefinitely.
 
