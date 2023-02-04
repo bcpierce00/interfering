@@ -264,33 +264,8 @@ the extended properties.
 
 \subsection {Towards Formal Properties for Stack Safety}
 
-\apt{Too much real estate to sell the generality, flexibility, etc. of our approach.
-  Again, we are not providing evidence that these attributes are true, although we can
-  and should conjecture claim them in passing.}
-
-\bcp{Agreed.  I think in particular the first paragraph can just go
-  (I've deleted it).
-  But this is not enough.  Also, the section is trying to do at least
-  two things---talk about earlier work and how we compare, and talk
-  about why we believe a flexible approach is good.  The whole
-  discussion is a bit wooly and confusing.}
-
-\sna{Should probably move the discussion of the CHERI work to related work,
-  and focus on justifying our approach.}
-\bcp{+1}
-
-% Security properties should be motivated by security requirements
-% and flexible enough to support various sets of security requirements depending on the
-% goals of the system that they validate.
-% Following this reasoning, our vision of stack safety is as a collection of properties
-% describing the security needs of a system with regard to its functional abstractions.
-% While the stack still plays a key role, our stack safety is about functions. The most
-% dramatic consequence of this is that we treat registers as part of a function activation's
-% state, and hold them to the same protection requirements as stack memory.
-
-Flexibility is important for talking rigorously about stack safety.
-%
-The reason is that, while many security properties can be described at
+We are not attempting to present a universal definition of stack safety
+for all systems. While many security properties can be described at
 the level of a high-level programming language and translated to a
 target machine by a secure compiler, stack safety cannot be defined in
 this way, since ``the stack'' is completely transparent in the
@@ -304,76 +279,25 @@ But neither is it satisfying as an entirely low-level property;
 indeed, at the lowest level, the specification of a ``well-behaved
 stack'' is almost vacuous. The ISA is not concerned with such
 questions as whether a caller's frame should be readable or writable
-to its callee: those are the purview of high-level languages built
+to its callee. Those are the purview of high-level languages built
 atop the hardware stack.
 
-\bcp{There's a broken transition here: the paragraph below is not an
-  instance of the paragraph above.  Indeed, I don't see how they
-  connect at all.}
+Therefore, any low-level treatment of stack safety must begin by asking:
+which high-level features does our system support, and what are their
+security requirements? Different answers will beget different properties.
+We identify and define five security requirements that a system might try
+to enforce upon a function call: well-bracketed control flow, and the
+integrity and confidentiality of each of the caller and the callee.
+These are by no means exhaustive. We apply these first to a simple system
+with very few features, then to a more realistic one supporting
+tailcall-elimination, argument passing on the stack, and callee-saves
+registers.
 
-For instance, the stack-safety specification from Georges et al.
-\cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
-control flow, and therefore defines {\em Well-bracketed Control Flow} (\(\wbcf\)) under the assumption that
-a callee should always return to its caller. But, in the presence of tail-call elimination, a
-return from a callee to a distant ancestor is perfectly reasonable. Similarly, the preceding work by
-Skorstengaard et al. \cite{SkorstengaardSTKJFP} made no mention of confidentiality, even though
-their enforcement mechanism did protect the confidentiality of the caller (though not the callee).
-
-These two cases represent two dimensions in which a stack safety definition requires
-flexibility: what constitutes safe behavior differs between systems that support different
-features, and different contexts have different top-level security requirements.
-
-We are not attempting to present a universal definition of stack safety for all systems,
-but we do construct our definition with these dimensions of flexibility in mind.
-Our model is decomposed into:
-(1) a lightweight model of the system and its security-relevant features, from which we
-derive the integrity, confidentiality, and control-flow requirements of each call and
-return, (2) the application of that model to a particular target system, and (3)
-the formal criteria for the integrity, confidentiality, and control flow
-requirements.
-
-We show that we can extend our system to new features by first introducing a simple
-example model, and then moving to a more realistic model with multiple new features:
-callee-save registers, argument passing on the stack, and tail-call elimination, simply
-by refining a few definitions in (1). This becomes the model that we validate.
-In \cref{app:ptr}, we extend the model further with arbitrary sharing of memory-safe
-pointers. Our criteria in (3) cover a total of five core requirements:
-\(\wbcf\), caller integrity (\(\clri\)), caller confidentiality (\(\clrc\)),
-\(\clei\) subsumes \(\clrc\) and \(\clec\) subsumes
-\(\clri\), but otherwise the properties are orthogonal and can be taken piecemeal
-according to the needs of a system.
-
-In particular, many enforcement techniques focus purely on
-well-bracketed control flow. For instance, stack canaries aim to prevent certain attacks on the return
-address, and shadow stacks with protection (e.g. Return Address Defender~\cite{Chiueh2001RAD})
-to enforce it completely. Others combine this protection with some degree of memory protection,
-chiefly focusing on integrity. Interestingly, Skorstengaard et al.~\cite{SkorstengaardSTKJFP}
-describe their ``local state encapsulation'' in terms of integrity, but it is equivalent
-to the combination of \(\clri\) and \(\clrc\). In fact, the follow-up work by
-Georges et al. \cite{Georges22:TempsDesCerises} was inspired by the properties presented in this paper to extend their formal discussion to include confidentiality.
-When checking if a preliminary version of these properties applied to
-the Cerise calling convention, they noted that the Skostengaard et al. calling convention
-did not enforce callee confidentiality, and made sure that their version would
-\cite{Georges22:personalcommunication}, in addition to building it into their formalism.
-This demonstrates the benefit of our choice to explicitly state properties in security
-terms: specifying security mechanisms is hard, and when the specification takes the
-form of a ``correct by construction'' machine, it is easy to neglect a non-obvious
-security requirement.
-
-%These are defined
-%formally in \cref{sec:props}. . We further define two
-%important combinations of properties: full stack safety \(\textnormal{\sc FSS}\),
-%and caller safety \(\textnormal{\sc ClrS}\). Of these, most existing concepts of
-%stack safety correspond to either \(\wbcf\) or \(\textnormal{\sc ClrS}\), which are
-%concerned with the basic guarantees that the caller recieves during the call, while
-%\(\textnormal{\sc FSS}\) is a natural extension that enforces a higher-level concept
-%of a correct interface between caller and callee. \sna{Blah. Needs work.}
-
-Flexibility aside, we show that our properties are useful for their purpose:
-distinguishing correct enforcement from incorrect. We use
-QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based testing
-tool for Coq, to generate random programs and check that the
-stack safety {\em micro-policies} of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}
+We show that our properties are useful for distinguishing correct enforcement
+from incorrect using QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based
+testing tool for Coq. We generate random programs, using the features of our
+more realistic system, and check that the stack safety {\em micro-policies}
+of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}
 correctly detect the ones that attempt to violate one of our properties.
 
 %Furthermore, we
@@ -518,16 +442,6 @@ We introduce these properties by example in \cref{sec:example} and
 formally in \cref{sec:formal}. In the remainder
 of this section we describe the underlying framework in more detail.
 
-Our security semantics has similarities to the overlay semantics
-proposed by Skorstengaard et al.~\cite{SkorstengaardSTKJFP}, but it
-does not restrict the behavior of the underlying machine in any
-way\bcp{Will people not familiar with Skorstengaard understand
-  that?}. Rather, it tracks additional context about the history of
-security-relevant operations, which informs the criterion a machine
-must satisfy in order to correctly obey the properties.\apt{Sharpen
-  this comparison?}\bcp{+1.  Or maybe, in the interest of time and to
-  keeping this section flowing, move it to related work.}
-
 %The security principals in our account of stack safety are function
 %activations: the context tracks, for the active function and all pending
 %functions, their {\em view} of the security state of the system.
@@ -535,6 +449,8 @@ must satisfy in order to correctly obey the properties.\apt{Sharpen
 \paragraph*{Machine model}
 We assume a conventional ISA (e.g. RISC-V, x86-64, etc.), with registers including a program counter
 and stack pointer, and a standard ABI.
+\sna{Not in our formalism (hardcoded +4 in the definition of WBCF notwithstanding.)
+  This assumption is made in our example and testing.}
 We make no particular assumptions about the provenance of the machine code; in particular,
 we do not assume the use of any particular compiler.
 The machine may possibly be enhanced with security
@@ -543,6 +459,10 @@ we assume that the behavior of these mechanisms is incorporated into the basic
 step semantics of the machine, but we distinguish the \emph{payload} part of
 each state element---the part relevant to the behavior of the basic machine---from
 any additional enforcement information (such as a tag).\bcp{Why?}
+\sna{I think that the payload concept is too nitty-gritty for this section.
+  The chief use of the payload is that it allows every value to be interpreted
+  as an address. In the tag world, it happens to coincide with a natural instance
+  of our variant-compatibility relation.}
 
 \paragraph*{Security Semantics and Property Structure}
 A security semantics extends a machine
@@ -557,6 +477,8 @@ on future states (``when control returns to the current function...'')
 or as relations on traces of future execution
 (hyper-properties).\bcp{This is the first we've mentioned
   hyperproperties.  CSF readers may be surprised.}
+\sna{Surprised that we have hyperproperties,
+  or that we made it this far without mentioning them?}
 
 Security-relevant operations typically correspond to
 \proposeadd{single?} underlying machine instructions,
@@ -569,9 +491,11 @@ and {\tt jalr} (``jump-and-link-register'') instructions, but these
 instructions might also be used for other things. An instantiation of
 an operation
 might require some external mechanism for distinguishing which instructions are
-security-relevant.\bcp{Huh?  What's an instantiation of an operation?} The most obvious technique, which we use in our examples, is to add labels to
-selected instructions, but the theory does not depend on this
-choice.\bcp{What could one do instead?}
+security-relevant.\bcp{Huh?  What's an instantiation of an operation?} The most obvious technique,
+which we use in our examples, is to add labels to selected instructions, but the theory does not
+depend on this choice. One could instead recognize some operations dynamically. For instance,
+if we make a call to untrusted (and unlabeled) code, we might decide to recognize
+any jump back to trusted code as a return, to which \(\wbcf\) needs to apply.
 
 Whatever the mechanism for labeling transitions, we end up with an annotated version of the
 machine transition function: we write \(\mach \xrightarrow{\bar{\psi},
@@ -1988,6 +1912,44 @@ Cerise define experimental types of hardware capabilities in order to obtain
 efficient calling conventions. Their latest paper
 \cite{Georges22:TempsDesCerises} uses our work to extend their notion of stack
 safety to include caller confidentiality (\(\clrc\)).
+
+\sna{See commented out tex for content that could be massaged to fit in here,
+  depending on whether we're interested in delving deeper.}
+%For instance, the stack-safety specification from Georges et al.
+%\cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
+%control flow, and therefore defines {\em Well-bracketed Control Flow} (\(\wbcf\)) under the assumption that
+%a callee should always return to its caller. But, in the presence of tail-call elimination, a
+%return from a callee to a distant ancestor is perfectly reasonable. Similarly, the preceding work by
+%Skorstengaard et al. \cite{SkorstengaardSTKJFP} made no mention of confidentiality, even though
+%their enforcement mechanism did protect the confidentiality of the caller (though not the callee).
+
+%In particular, many enforcement techniques focus purely on
+%well-bracketed control flow. For instance, stack canaries aim to prevent certain attacks on the return
+%address, and shadow stacks with protection (e.g. Return Address Defender~\cite{Chiueh2001RAD})
+%to enforce it completely. Others combine this protection with some degree of memory protection,
+%chiefly focusing on integrity. Interestingly, Skorstengaard et al.~\cite{SkorstengaardSTKJFP}
+%describe their ``local state encapsulation'' in terms of integrity, but it is equivalent
+%to the combination of \(\clri\) and \(\clrc\). In fact, the follow-up work by
+%Georges et al. \cite{Georges22:TempsDesCerises} was inspired by the properties presented in this paper to extend their formal discussion to include confidentiality.
+%When checking if a preliminary version of these properties applied to
+%the Cerise calling convention, they noted that the Skostengaard et al. calling convention
+%did not enforce callee confidentiality, and made sure that their version would
+%\cite{Georges22:personalcommunication}, in addition to building it into their formalism.
+%This demonstrates the benefit of our choice to explicitly state properties in security
+%terms: specifying security mechanisms is hard, and when the specification takes the
+%form of a ``correct by construction'' machine, it is easy to neglect a non-obvious
+%security requirement.
+
+
+%Our security semantics has similarities to the overlay semantics
+%proposed by Skorstengaard et al.~\cite{SkorstengaardSTKJFP}, but it
+%does not restrict the behavior of the underlying machine in any
+%way\bcp{Will people not familiar with Skorstengaard understand
+%  that?}. Rather, it tracks additional context about the history of
+%security-relevant operations, which informs the criterion a machine
+%must satisfy in order to correctly obey the properties.\apt{Sharpen
+%  this comparison?}\bcp{+1.  Or maybe, in the interest of time and to
+%  keeping this section flowing, move it to related work.}
 
 HardBound \cite{DeviettiBMZ08} is another hardware extension related to
 capabilities, which closely follows SoftBound \cite{NagarakatteZMZ09} and
