@@ -57,6 +57,8 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition noCalleeRegs : nat := 3%nat.
   Definition maxCalleeReg : Register := minCalleeReg + Z.of_nat noCalleeRegs - 1.
 
+  Definition noops : list Operation := [].
+  
   Record TagInfo :=
     { regTag  : TagSet
     ; codeTag : TagSet
@@ -406,6 +408,30 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         ret ([((Addi 0 0 0)%Z, [Tinstr], fp.(id), [])])
     end.
 
+  Definition genPtrWrite (m : MachineState) (fp : FunctionProfile) (safe : bool) :
+    G (list (InstructionI * TagSet * FunID * list Operation)) := 
+    rd <- genTargetReg m;;
+    rs <- genSourceReg m;;
+    match safe, projt (snd m) (Reg rs) with
+    | _,[Tvar _]  | true, _ =>
+        let instr := Lw rd rs 0 in
+        ret ([(instr, [Tinstr], fp.(id), [])])
+    | _, _ =>
+        ret ([((Addi 0 0 0)%Z, [Tinstr], fp.(id), [])])
+    end.
+  
+  Definition genPtrRead (m : MachineState) (fp : FunctionProfile) (safe : bool) :
+    G (list (InstructionI * TagSet * FunID * list Operation)) := 
+    rd <- genTargetReg m;;
+    rs <- genSourceReg m;;
+    match safe, projt (snd m) (Reg rs) with
+    | _, [Tvar _] | true, _ =>
+        let instr := Lw rd rs 0 in
+        ret ([(instr, [Tinstr], fp.(id), [])])
+    | _, _ =>
+        ret ([((Addi 0 0 0)%Z, [Tinstr], fp.(id), [])])
+    end.
+  
   (* ROB: similar to genArgWrite, create a genArgRead that reads from rel/ref args if available.
      It won't have a second function profile. *)
   
@@ -582,7 +608,28 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
       - (rule this out statically for now?)
     - attention: uninitialized/garbage locals?
    *)
+  Fixpoint genLocals (n:nat) : G (list (positive * localKind)) :=
+    match n with
+    | O => ret []
+    | S n' =>
+        extra <- choose (O,n');;
+        rest <- genLocals (n' - extra);;
+        public <- elems [Lpublic;Lsecret];;
+        ret ((Pos.of_succ_nat n',public)%nat::rest)
+    end.
 
+  Fixpoint localsByName (locs : list (positive * localKind)) : list (nat * Z * localKind) :=
+    match locs with
+    | [] => []
+    | (sz,k)::locs' =>
+        let ofl := localsByName locs' in
+        let next := match ofl with
+                    | [] => 0
+                    | (_,off,_)::_ => off
+                    end in
+        (length ofl, next - (4*(Zpos sz)), k)::ofl
+    end.
+  
   (* TODO: Fill in the different kinds of arguments, etc.!*)
   Definition genFun (id:FunID) (addr:Addr) : G FunctionProfile :=
     reg_args <- choose (0,3)%nat;; (* Maxing out on 3 argument registers currently *)
@@ -591,7 +638,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     let ref_args := List.repeat (argReg, 1) ref_args_count in
     (* local_count <- choose (0,3)%nat;; *)
     let local_count := MAX_LOCAL_WORDS in
-    let locals := List.repeat (1%positive,Lsecret) local_count in
+    locals <- genLocals local_count;;
     let spilled_regs := MAX_CALLEE_SAVE_REGS%nat in (* later: choose (and tweak generation!) *)
     ret (mkfunprofile id addr (Some (addr + 8)) (count_list reg_args) rel_args ref_args locals spilled_regs).
   
@@ -634,10 +681,10 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         ret (m''', fp::fps, cm')
     end.
 
-  (* NOTE No argument clearing at the moment *)
   Definition callHead
-    offset f (i : LayoutInfo) (m : MachineState) (callee:FunctionProfile) :
-    G (list (InstructionI * TagSet * FunID * list Operation)) :=
+             offset f (i : LayoutInfo) (m : MachineState) (callee:FunctionProfile)
+             (tail : bool)
+    : G (list (InstructionI * TagSet * FunID * list Operation)) :=
     (* pass relative arguments (generated constants) *)
     (* quick and dirty, related to MAX_REL_ARGS, programmatically later *)
     rt <- (genTargetReg m);;
@@ -663,57 +710,17 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
       if (List.length callee.(reference_args) =? 1)%nat
       then [(sp, -8, 4)] (* or (argReg _ _) *)
       else [] in
+    let ops := if tail then [(Tailcall callee.(id) callee.(register_args) (call_args ++ refs_args))]
+               else [(Call callee.(id) callee.(register_args) (call_args ++ refs_args))] in
     ret
       (args ++ refs ++
          [(
              Jal ra (offset - (4*(Z.of_nat (length args))) - (4*(Z.of_nat (length refs)))),
              [Tinstr; Tcall],
              f,
-             [(Call callee.(id) callee.(register_args) (call_args ++ refs_args))]
+             ops
          )]
       ).
-
-  (* TODO refactoring with callHead *)
-  Definition tailcallHead
-    offset f
-    (i : LayoutInfo) (m : MachineState)
-    (callee:FunctionProfile) :
-    G (list (InstructionI * TagSet * FunID * list Operation)) :=
-    (* pass relative arguments (generated constants) *)
-    (* quick and dirty, related to MAX_REL_ARGS, programmatically later *)
-    bindGen (genTargetReg m) (fun rt =>
-    bindGen (genImm (dataHi i)) (fun imm1 =>
-    bindGen (genImm (dataHi i)) (fun imm2 =>
-    let args :=
-      if (callee.(relative_args) =? 1)%nat
-      then [(Addi rt 0 imm1, [Tinstr],          f, [(*noops*)]);
-            (Sw sp rt (-4),  [Tinstr; Tsetarg], f, [(*noops*)])]
-      else [] in
-    let call_args :=
-      if (callee.(relative_args) =? 1)%nat
-      then [(sp, -4, 4)]
-      else [] in
-    let refs :=
-      if (List.length callee.(reference_args) =? 1)%nat
-      then let hd := nth_default (0, 0) callee.(reference_args) 0 in
-           [(Addi rt 0 imm2,       [Tinstr],          f, [(*noops*)]);
-            (Sw sp rt (-8),        [Tinstr; Tsetarg], f, [(*noops*)]);
-            (Addi argReg sp (-8),  [Tinstr],          f, [(*noops*)])]
-      else [] in
-    let refs_args :=
-      if (List.length callee.(reference_args) =? 1)%nat
-      then [(sp, -8, 4)] (* or (argReg _ _) *)
-      else [] in
-    ret
-      (args ++ refs ++
-         [(
-             Jal r0 (offset + 8), (* discard RA, skip H1/H2 *)
-             [Tinstr; Ttailcall],
-             f,
-             [(Tailcall callee.(id) callee.(register_args) (call_args ++ refs_args))]
-         )]
-      )
-    ))).
   
   Definition returnSeq (f : FunID) (fp : FunctionProfile) :=
     let sz := frameSizeBytes fp in
@@ -728,6 +735,30 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
     ; (Jalr ra ra 0     , [Tinstr; Tr3], f, [Return])
     ].
 
+  Definition takeAddrSeqOfOpt (fp : FunctionProfile) (rd:Register) (a : (nat * Z))
+    : list (InstructionI * TagSet * FunID * list Operation) :=
+    match a with
+    | (x,off) => [(Addi rd sp off, [Tinstr; Tvar x], fp.(id), [(*noops*)])]
+    end.
+
+  Definition findAddrToTake (fp : FunctionProfile) :=
+    elems_ None
+           (map (fun '(x,off,_) => Some (x,off))
+                (filter (fun '(_,k) =>
+                           match k with
+                           | Lpublic => true
+                           | Lsecret => false end)
+                        (localsByName fp.(locals)))).
+  
+  Definition genTakeAddrSeq (m:MachineState) (fp : FunctionProfile)
+    : G (option (list (InstructionI * TagSet * FunID * list Operation))) :=
+    opt_target <- findAddrToTake fp;;
+    match opt_target with
+    | None => ret None
+    | Some a => rd <- genTargetReg m;;
+                ret (Some (takeAddrSeqOfOpt fp rd a))
+    end.
+    
   (* The current function's expected behavior. We use the strat like a probabilistic
      state-machine: each step we have some chance of transitioning to a different
      strat, weighted by special events such as entering a function for the first
@@ -758,7 +789,10 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
 
   Close Scope Z.
   Open Scope nat.
-
+(*      '(odds,aseq) <- genTakeAddrSeq m fprof;;
+                   freq [(2, callHead (callee.(entry) - pcVal) f i m callee false);
+                         (odds, aseq)]
+              *)
   Definition strat_options (s : strat) (i : LayoutInfo) (t : TagInfo) (m : MachineState)
              (dataP codeP : TagSet -> bool) (cm : CodeMap_Impl)
              (f:FunID) (functions : list FunctionProfile) :
@@ -788,9 +822,11 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         (* We are in the bulk of execution. We will make reads and
            writes, primarily in the stack frame, as well as outside
            of the stack entirely. *)
-        seq <- freq [(1, genLocalWrite m fprof false false None);
-                     (1, genLocalRead m fprof);
-                     (1, res <- genArith i t m cm f;;
+        seq <- freq [(5, genLocalWrite m fprof false false None);
+                     (5, genLocalRead m fprof);
+                     (1, genPtrWrite m fprof true);
+                     (1, genPtrRead m fprof true);
+                     (5, res <- genArith i t m cm f;;
                          ret [res])];;
         ret (seq,s)
     (* ROB: likewise, adding genArgRead in here. *)
@@ -798,12 +834,16 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         (* We are preparing to call f. We will tend to choose f's
            arguments as destinations for operations. At some point,
            we will make the call. *)
-        match find (fun fp => Nat.eqb f' fp.(id)) functions with
-        | Some callee =>
-            seq <- callHead (callee.(entry) - pcVal) f i m callee;;
-            ret (seq, call f')
-        | _ => exception "Couldn't find any functions"
-        end
+        cseq <- match find (fun fp => Nat.eqb f' fp.(id)) functions with
+               | Some callee => callHead (callee.(entry) - pcVal) f i m callee false
+               | _ => exception "Couldn't find any functions"
+                end;;
+        opt_aseq <- genTakeAddrSeq m fprof;;
+        seq <- match opt_aseq with
+               | None => ret cseq
+               | Some aseq => freq [(2,ret cseq);(1, ret aseq)]
+               end;;
+        ret (seq,call f')
     (* ROB: once you've written genArgWrite, give call _ the possibility of using that.
        This can take the place of your hard-coded argument initialization in the callHeads. *)
     | returned f', Some fprof =>
@@ -820,7 +860,10 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         (* We have been executing for a long time, and want to return.
            We are likely to choose the return register as a destination
            and to make a return. *)
-        ret (returnSeq f fprof, s)
+        callee <- elems_ fprof functions;;
+        cseq <- callHead (callee.(entry) - pcVal) f i m callee true;;
+        freq [(3, ret (returnSeq f fprof, s));
+              (1, ret (cseq, s))]
     | dumb_attacker, Some fprof =>
         (* After failing to find an attack for long enough, the smart
            attacker becomes a dumb attacker, which will just start trying
@@ -842,7 +885,9 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                        let imm := (minImm + imm')%Z in
                        rs <- (genTargetReg m);;
                        let instr := Sw sp rs imm in
-                       ret [(instr, [Tinstr], f, noops)])];;
+                       ret [(instr, [Tinstr], f, noops)])
+                     (1, genPtrWrite m fprof false);
+                     (1, genPtrRead m fprof false)];;
         ret (seq, s)
     | _, _ => exception "Not yet implemented"
     end.
