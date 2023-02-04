@@ -247,11 +247,9 @@ the {\em integrity} and {\em confidentiality} of the caller’s local state
 and the callee's behavior during the callee's execution, plus the
 {\em well-bracketed control flow} (\(\wbcf\)) property articulated by
 Skorstengaard et al.~\cite{SkorstengaardSTKJFP}.
-\proposecut{While our properties are motivated by the desire to specify \(LTC\) precisely,
+While our properties are motivated by the desire to specify \(LTC\) precisely,
 they are stated abstractly in hopes of applying
-to other enforcement mechanisms.}\apt{I think we should try to keep something
-  along these lines in the intro, if not this particular sentence.}
-
+to other enforcement mechanisms.
 
 %\subsection {Towards Formal Properties for Stack Safety}
 
@@ -413,6 +411,8 @@ The machine may possibly be enhanced with % security
 enforcement mechanisms such as hardware tags~\cite{pump_hasp2014,Gollapudi+23} or capabilities~\cite{Woodruff+14}. If so,
 we assume that the behavior of these mechanisms is incorporated into the basic
 step semantics of the machine, but we keep the enforcement state unchanged when constructing variant states.
+Failstop behavior by enforcement mechanisms is modeled as stepping to the same state
+(and thus silently diverging.)
 %% \sna{I think that the payload concept is too nitty-gritty for this section.
 %%   The chief use of the payload is that it allows every value to be interpreted
 %%   as an address. In the tag world, it happens to coincide with a natural instance
@@ -645,7 +645,7 @@ lower addresses. We assume that {\tt main} begins at address 0 and its callee {\
     }\)
   \end{subfigure}
 
-  \caption{Example: C and assembly code for {\tt main}, and layout of its stack frame; addresses increase to the right and the stack grows to the left.}
+  \caption{Example: C and assembly code for {\tt main}, and layout of its stack frame; the stack grows to the left.}
   \label{fig:main}
 \end{figure}
 
@@ -1297,7 +1297,7 @@ Two event traces $\obsT_1$ and $\obsT_2$ are {\em similar},
 written \(\obsT_1 \eqsim \obsT_2\), if the sequence of non-silent events
 is the same. That is, we compare up to deletion of \(\tau\) events.
 Note that this results in an infinite silent trace being similar to
-any trace. So, a trace that silently diverges due to a failstop\apt{?? haven't explained this!}  will
+any trace. So, a trace that silently diverges due to a failstop will
 fulfill this property vacuously.
 
 \begin{minipage}{.4\columnwidth}
@@ -1842,20 +1842,17 @@ Roessler and DeHon's {\it Depth Isolation} and {\it Lazy Tagging and Clearing}
 of this. They are generally not concerned with protecting callees.
 
 To our knowledge, the only other line of work that aims to rigorously characterize the
-security of the stack is the Cerise family of program logics
-\cite{SkorstengaardLocal, SkorstengaardSTKJFP, Georges22:TempsDesCerises}.
-Most of those define experimental types of hardware capabilities to achieve
-efficient implementations.
+security of the stack is the StkTokens-Cerise family of CHERI-enforced secure calling
+conventions \cite{SkorstengaardLocal, SkorstengaardSTKJFP, Georges22:TempsDesCerises}.
 %
 These works define secure calling conventions for capability machines and
 overlay semantics that internalize those conventions and their related stack
 safety properties, phrased in terms of logical relations instead of trace
 properties.
 %
-Originally, they describe ``local state
-encapsulation''~\cite{SkorstengaardSTKJFP} in terms of integrity (but it is
-equivalent to % the combination of
-\(\clri\) {\em and} \(\clrc\)). Their latest
+Originally, they describe ``local state encapsulation''~\cite{SkorstengaardSTKJFP}
+in terms of integrity only (but it has confidentiality, equivalent
+to \(\clri\) {\em and} \(\clrc\)). Their latest
 paper \cite{Georges22:TempsDesCerises} was inspired by the properties presented
 in this paper to extend their formalism to include confidentiality. When
 checking if our properties applied to their old calling convention, they noted that
@@ -1863,10 +1860,24 @@ it did not enforce \(\clec\), and made sure that their new version
 would in addition to building it into their formalism
 \cite{Georges22:personalcommunication}. This demonstrates the benefit of our
 choice to explicitly state properties in security terms: specifying security
-% mechanisms
 is hard, and when the spec takes the form of a ``correct by
 construction'' machine, it is easy to neglect a non-obvious security
 requirement.
+
+In terms of direct feature comparison with Georges et al. (being the most
+recent work in the line), with the addition of confidentiality to their formalism, we
+are roughly at parity in terms of the expressiveness of our properties.
+We have additionally proposed callee-integrity, but it is probably the least
+practical of our properties. We extend our model to tailcalls, which they do
+not, and to the passing of pointers to stack objects. They discuss stack objects
+and the interaction between stack and heap, but their calling convention does not
+guarantee safety in the presence of pointer passing without additional checks.
+We test a limited degree of pointer passing, which does not guarantee memory
+safety for the passed pointer but which does not undermine the security of its
+frame, and we offer an untested formalism for memory-safe passing of pointers.
+On the other hand, their properties are validated by proof, while ours are
+only tested.
+
 %
 %For instance, the stack-safety specification from Georges et al.
 %\cite{Georges22:TempsDesCerises} supposes a machine with only straightforward call-and-return
@@ -1907,40 +1918,17 @@ requirement.
 \section{Future Work}
 \label{sec:future}
 
-In \cref{sec:intro}, we discussed several dimensions of flexibility
-that our properties should exhibit: applicability to different system
-features and different security requirements. Another 
-is applicability to multiple enforcement mechanisms. 
-
-% \subsection{Testing The Stack Safety Menagerie}
-
-\paragraph*{Enforcement with capabilities}
-Capability machines can represent and manipulate
-unforgeable tokens of authority over specific regions of
-memory using a combination of dedicated out-of-band memory and
-specialized ISA instructions.
-%
-The most prominent contemporary representative of this long line of work is
-CHERI \cite{DBLP:conf/sp/WatsonWNMACDDGL15}, a modern architecture designed to provide efficient fine-grained
+We plan to test our properties against multiple enforcement mechanisms.
+The top priority is capability machines, namely 
+CHERI \cite{DBLP:conf/sp/WatsonWNMACDDGL15}, a modern architecture designed
+to provide efficient fine-grained
 memory protection and compartmentalization.
 %
-Previous work has used these principles in simplified models to implement
-\emph{secure calling conventions} for the call
-stack \cite{SkorstengaardLocal,SkorstengaardSTKJFP,Georges22:TempsDesCerises}. Those conventions can be seen as combining the
-protections of bounds-checking with software-based methods of control-flow protection.
-%
-%There are several proposals around the use of CHERI capabilities to enforce stack safety,
-%including mechanisms that use the standard CHERI hardware (which includes local
-%capabilities) \cite{SkorstengaardLocal},
-%and others that propose entirely new types of capabilities, such as linear
-%\cite{SkorstengaardSTK}, uninitialized \cite{Georges+21}, lifetime
-%\cite{Tsampas+19}, and directed \cite{Georges22:TempsDesCerises} capabilities.
 We want to test the most recent work by Georges et
 al.~\cite{Georges22:TempsDesCerises}, which is designed
 to enforce analogues of all of our properties except for \(\clei\).
 
-\paragraph*{Enforcement in software}
-%
+It would also be interesting to test a software approach.
 Under a bounds checking discipline~%such as SoftBound
 \cite{NagarakatteZMZ09}, all the pointers
 in a program are extended with some disjoint metadata %, and these are combined
@@ -1953,17 +1941,6 @@ Bounds checking approaches require substantial compiler cooperation. This is not
 problem for our properties in general, but it is not very compatible with
 generation-by-execution of low-level code. A better choice might be to generate
 high-level code using a tool like CSmith \cite{DBLP:conf/pldi/YangCER11}, or prove the properties instead.
-
-\paragraph*{More Features}
-
-We have preliminary work on extending our model to handle C++-style
-exceptions, which, like tailcalls, obey only a weakened version of \(\wbcf\).
-We are also exploring extensions to concurrency, starting with a model of
-statically allocated co-routines.  These extensions will also require non-trivial
-testing effort.  We also plan to test
-the model in \cref{app:ptr} for arbitrary memory-safe pointer sharing.
-
-\paragraph*{Weaker Requirements}
 
 Several popular enforcement mechanisms are not designed to provide
 absolute guarantees of security. For example, stack canaries~\cite{Cowan+98}
@@ -1979,19 +1956,12 @@ observation-based formalism a good fit for defining their security,
 if we could find a formal characterization of what they do acheive
 (perhaps in terms of a base machine with restricted addressing power).
 
-%% \paragraph{Split Stacks}
-%% %
-%% Code-pointer integrity seeks to prevent control-flow hijacking attacks by
-%% splitting the program memory, including the stack, into a regular region and a
-%% safe region; objects that require protection are placed in the latter and
-%% all accesses to them protected by static or dynamic checks.
-%% %
-%% Like shadow stacks, bounds checking is a high-level technique designed to
-%% protect code written in a high-level language, but it is designed to
-%% offer protection under a stronger threat model that also considers the presence
-%% of untrusted code. As with most other software-based methods, it purports to
-%% protect exclusively the control-relevant parts of the stack, making no claims
-%% about its data-relevant parts---we would solely be testing \(\wbcf\).
+We have preliminary work on extending our model to handle C++-style
+exceptions, which, like tailcalls, obey only a weakened version of \(\wbcf\).
+We are also exploring extensions to concurrency, starting with a model of
+statically allocated co-routines.  These extensions will also require non-trivial
+testing effort.  We also plan to test
+the model in \cref{app:ptr} for arbitrary memory-safe pointer sharing.
 
 \bibliographystyle{IEEEtran}
 \bibliography{bcp.bib,local.bib}
