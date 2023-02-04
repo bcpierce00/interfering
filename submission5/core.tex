@@ -355,6 +355,8 @@ its {\em security semantics}, and the stack safety properties built on these.
 In \Cref{sec:enforcement} we describe the micro-policies that we test,
 in \cref{sec:testing} the testing framework itself, and in
 \cref{sec:relwork,sec:future} related and future work.
+\Cref{app:ptr} gives an (untested) proof-of-concept formalization of a more sophisticated,
+heap-like sharing model based on pointer provenance.
 
 The accompanying artifact contains formal definitions (in Coq) of our
 properties, plus our testing framework.  It does not include proofs:
@@ -494,23 +496,22 @@ Other operations can serve to signal how parts of the stack frame are being used
 or share data, and their corresponding rules alter the classes of different
 state elements accordingly.
 
-\apt{Still working from here down}
-
 Exactly which operations and rules are needed depends on
 what code features we wish to support.
 The set of security-relevant operations (\(\Psi\)) covered in this paper is given in
-\cref{tab:psi}.\bcp{I was confused by the table because I looked at
-  the figure before I read that sentence!} Those that we explore in detail in \cref{sec:example,sec:formal}
-are shown in white: calls, returns, and the allocation and deallocation of local memory.
-In \cref{sec:extensions}, we cover additional operations and and parameters
-to support various forms of memory sharing \ifexceptions , exceptions, \fi
-and tail-call elimination; these are shown in light gray. These are also
-the operations we test in \cref{sec:testing}.
-We give a proof-of-concept formalization of a more sophisticated, heap-like sharing model
-based on pointer provenance in \cref{app:ptr}\bcp{first
-  mention of this appendix; if it's important, mention it in the
-  outline in section I.  Otherwise drop it.}, represented by the dark gray
-operations, but we do not test this.
+\cref{tab:psi}. A core set of operations covering calls, returns, and local
+memory is introduced in the example in \cref{sec:example}
+and formalized in \cref{sec:formal}. An extended set covering simple memory sharing and
+tail-call elimination are described in \cref{sec:extensions} and tested in \cref{sec:testing}.
+The remaining operations are needed for the capability-based model in \cref{app:ptr}. 
+%\bcp{I was confused by the table because I looked at
+% the figure before I read that sentence!}
+%Those that we explore in detail in \cref{sec:example,sec:formal}
+%are shown in white: calls, returns, and the allocation and deallocation of local memory.
+%In \cref{sec:extensions}, we cover additional operations and and parameters
+%to support various forms of memory sharing \ifexceptions , exceptions, \fi
+%and tail-call elimination; these are shown in light gray. These are also
+%the operations we test in \cref{sec:testing}.
 
 \bcp{As a reader, I'm feeling a bit overwhelmed at this point.
   Everything feels fluid and flexible---''It could be like this, but
@@ -523,34 +524,37 @@ operations, but we do not test this.
   have to think about all of these things when presenting the formalism,
   not that we should open with all the different ways we can think about them.}
 
+\apt{Hopefully better now.}
+
 \newcommand{\example}{\rowcolor{black!0}}
 \newcommand{\testing}{\rowcolor{black!10}}
 \newcommand{\theory}{\rowcolor{black!25}}
 
 \begin{table}
 \begin{center}
-  \begin{tabular}{| l | l |}
+  \begin{tabular}{| l | l | l |}
     \hline
-    \(\psi \in \Psi\)\bcp{huh?} & Parameters \\
+    Operation \(\psi \in \Psi\) & Parameters & Sections\\
     \hline
-    \example \(\mathbf{call}\) & target address, argument registers \\
-    \testing & stack arguments (base, offset \& size) \\
-    \example \(\mathbf{return}\) & \\
-    \example \(\mathbf{alloc}\) & offset \& size \\
-    \testing & public flag \\
-    \example \(\mathbf{dealloc}\) & offset \& size \\
-    \testing \(\mathbf{tail call}\) & (same as for \(\mathbf{call}\)) \\
-    \hline
-    \multicolumn{2}{|c|}{{\it Pointer provenance operations}} \\
-    \hline
-    \theory \(\mathbf{promote}\) & register, offset \& size \\
-    \theory \(\mathbf{propagate}\) & source register/address \\
-    \theory & destination register/address \\
-    \theory \(\mathbf{clear}\) & target register/address \\
+    \example \(\mathbf{call}\) & target address, argument registers & \ref{sec:example},\ref{sec:formal}\\
+    \testing & stack arguments (base, offset \& size) & \ref{sec:extensions},\ref{sec:testing} \\
+    \example \(\mathbf{return}\) & & \ref{sec:example},\ref{sec:formal}\\
+    \example \(\mathbf{alloc}\) & offset \& size & \ref{sec:example},\ref{sec:formal}\\
+    \testing & public flag & \ref{sec:extensions},\ref{sec:testing} \\
+    \example \(\mathbf{dealloc}\) & offset \& size &  \ref{sec:example},\ref{sec:formal}\\
+    \testing \(\mathbf{tail call}\) & (same as for \(\mathbf{call}\)) & \ref{sec:extensions},\ref{sec:testing} \\
+%    \hline
+%    \multicolumn{2}{|c|}{{\it Pointer provenance operations}} \\
+%    \hline
+    \theory \(\mathbf{promote}\) & register, offset \& size & \ref{app:ptr} \\
+    \theory \(\mathbf{propagate}\) & source register/address & \ref{app:ptr} \\
+    \theory & destination register/address & \ref{app:ptr} \\
+    \theory \(\mathbf{clear}\) & target register/address & \ref{app:ptr} \\
     \hline
   \end{tabular}
 \end{center}
-\caption{Security-relevant operations and their parameters.}
+\caption{Security-relevant operations and their parameters, with the Sections in which
+  they are first used in the paper.}
   \label{tab:psi}
 \end{table}
 
@@ -561,10 +565,9 @@ each state element to a {\it security class}:
 \(\public\), \(\unsealed\), \(\object\), or \(\sealed\).
 
 State elements that are outside of the stack---general-purpose memory used for
-globals and the heap, as well as the code region and globally-relevant
-registers\bcp{what is a globally-relevant
-register?}---are always labeled \(\public\). We place security requirements on some
-\(\public\) elements for purposes of our \(\wbcf\) property, and a
+globals and the heap, as well as the code region and globally shared
+registers---are always labeled \(\public\). We place security requirements on some
+\(\public\) elements for purposes of the \(\wbcf\) property, and a
 given enforcement mechanism
 might restrict their access (e.g., by rendering code immutable), but for integrity
 and confidentiality purposes they are considered accessible at all times.
@@ -575,12 +578,10 @@ is seen as \(\unsealed\). From the perspective of the caller, the callee has no 
 regarding its use of free elements.
 
 Arguments are marked \(\object\), meaning that their contents may be safely used.
-When the active function\bcp{are functions active, or are their
-  arguments active?} allocates memory, that memory will also be \(\object\).
+When a function allocates memory for its own stack frame, that memory will also be \(\object\).
 Then, on a call, \(\object\) elements that are not being used to communicate with
 the new callee will become \(\sealed\)---reserved for an inactive principal,
 and expected to be unchanged when it becomes active again.
-
 
 \paragraph*{Instantiating the Framework}
 Conceptually, the following steps are needed to instantiate the framework to a specific machine
@@ -600,12 +601,10 @@ operations as appropriate; (iv) specify the form of observable events.
 When our properties are used to evaluate a system, the threat model
 will depend on the details of that system. However, there are some
 constraints that our design puts on any system. In particular, we must
-trust that the method of distinguishing security-relevant operations
-is accurate.  For example, if the enforcement mnechanism involves
-labels placed on code by a compiler, we must trust that the compiler
-placed those labels correctly. For instance, if a compiled function
+trust that the security-relevant operations have been correctly labeled.
+If a compiled function
 call is not marked as such, then the caller's data might not be
-protected from the callee.  Conversely, marking too many operations as
+protected from the callee; conversely, marking too many operations as
 calls will simply cause otherwise safe programs to be rejected.
 
 \bcp{Still working here:}
