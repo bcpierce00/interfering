@@ -1,0 +1,284 @@
+CSF2023 Paper #185 Reviews and Comments
+===========================================================================
+Paper #185 Formalizing Stack Safety as a Security Property
+
+
+Review #185A
+===========================================================================
+
+Overall merit
+-------------
+5. Accept
+
+Reviewer expertise
+------------------
+3. Knowledgeable
+
+Paper summary
+-------------
+The call stack is one of the most important data structures maintained at run time during the
+execution of compiled languages. Roughly speaking, it tracks function calls and returns, possibly
+helps in argument passing, and provides function invocations with function-local state.
+Software exploitation often targets the call stack, and hence a plethora of call-stack hardening
+mechanisms have been proposed.
+The objective of this paper is to formally characterize what such mechanisms should try to achieve.
+The paper identifies five security properties that could be part of the security objective when one
+is trying to secure the stack: confidentiality and integrity of respectively caller and calllee data
+(together 4 properties) and well-bracketed control flow.
+The paper explains these properties informally, provides a formalization, and provides some
+evidence of usefulness of this formalization by showing that one specific enforcement mechanism 
+fails to achieve its objective using property-based random testing.
+
+Strengths
+---------
++ very well written paper, with a good intuitive informal explanation of what is being formalized
+
++ the formalization helped catch a bug from another paper
+
+Weaknesses
+----------
+- it is unclear to this reviewer how broadly useful this formalization is (see detailed comments below)
+
+- (related to the above point:) the evaluation is a bit narrow, validating only a single enforcement
+mechanism for a single policy (and not even a widely used one)
+
+- the paper is a bit limited in the language features it can handle (e.g. no concurrency or 
+C++ style exceptions)
+
+Comments for author
+-------------------
+The paper provides a clean and intuitive formalization of what, at least at first sight, seems to be
+an important and useful security problem: stack safety, or protecting the call stack.
+
+What was a bit disappointing is that, even if stack security is extremely important in practice (as
+the authors also say themselves in the paper), in the end the number of applications of this
+particular formalization seems to be low. The authors pitch it as specifically targeting the
+specification of the lazy micro-policies of Roessler and DeHon (and indeed, the paper provides
+evidence that for this very specific case the formalization of the paper is useful), but I was initially 
+expecting a much broader relevance.
+After having read the paper, the only other systems for which the strict security properties
+studied in this paper seem applicable are very advanced instances of capability systems that
+provide special capability types that are useful to harden the stack.
+This seems (at least in part) to be the case because a lot of the stack hardening mechanisms 
+that are used in practice are heuristic in nature; they just raise the bar for attackers, but are
+not completely water-tight, hence (in the authors' words) fundamentally ill suited for offering
+fundamental guarantees.
+This apparently limited usefulness is an important downside of the paper. I would encourage
+the authors to spend more effort to think about potential use cases for the formalization.
+Perhaps one potentially interesting lead could be Web Assembly (WASM), where the WASM
+virtual machine provides a safe stack, but where compilers for many languages can not rely
+on just that WASM stack, but allocate parts of stack frames on the heap. (See for instance
+the paper "Everything Old is New Again: Binary Security of WebAssembly", Daniel Lehmann 
+and Johannes Kinder and Michael Pradel, Usenix Security 2020, for a detailed discussion of
+the security consequences of these compilation practices). Could the insights from your
+paper help in hardening such compilers? (Just an idea, I have not thought this through
+deeply, certainly not concrete enough to impose it as a revision requirement)
+
+Despite this apparent limitation in applicability, the paper is a well-executed foundational
+study, and the insights that the paper provides appear to have been useful already to 
+Georges et al. for their capability security work, so, while I am a bit on the fence, I think
+the paper could be accepted at CSF.
+
+
+
+Review #185B
+===========================================================================
+
+Overall merit
+-------------
+5. Accept
+
+Reviewer expertise
+------------------
+2. Some familiarity
+
+Paper summary
+-------------
+
+The paper attempts to give a formal meaning to "stack safety".  The
+terminology is frequently used in security research and practice but
+usually with no formal definition of what it actually means.  The
+paper's main idea is to take ideas from information flow research,
+namely, non-interference (both as confidentiality and integrity), and
+a property called well-bracketed control flow (WBCF) to capture the
+concept.
+
+Roughly, the paper's idea is to allow malicious (or buggy) assembly
+code to access portions of the stack that it should not be able to
+access (according to the source-code-level convention of what stack
+portion a function can access), as long as that access does not lead
+to leak of secret information (confidentiality) or access does not
+modify memory that would lead to such a leak (integrity, well the
+paper calls it so, but the property being checked still seems like
+confidentiality even in this case because the end result is still the
+leak of secret information).  The paper further categorizes whether
+confidentiality/integrity should be satisfied from the function caller
+or callee perspective, resulting in four properties called caller
+integrity, caller confidentiality, callee integrity, and callee
+confidentiality.  WBCF is a property which says that function
+call-return relation is as stipulated in the source code, i.e., return
+always returns to the last call site.  WBCF was apparently introduced
+in prior works on stack safety formalization, namely, in [19].  The
+paper gives rigorous formalizations of these properties in terms of an
+annotated semantics of RISC-V like ISA that the paper calls the
+"security semantics".
+
+Strengths
+---------
+- The high-level idea of using non-interference to formalize stack safety is interesting.
+
+- Rigorous formal definitions of various properties characterizing
+  stack safety, such as caller/callee integrity/confidentiality and
+  WBCF which are often only informally defined in prior works on stack
+  safety.
+
+Weaknesses
+----------
+- Some (probably minor) issues mentioned below.
+
+- While the paper provides formal definitions of various properties
+  characterizing stack safety, as the paper itself admits, the paper
+  provides no means to formally verify or enforce those properties.
+  It only shows that they can be tested.  There is much prior work on
+  formal verification and enforcement of non-interference properties,
+  and I would have liked to see the paper make use of them to formally
+  verify/enforce its definition of stack safety.
+
+- I cannot be sure that the paper's definition of stack safety really
+  covers all of what people expect "stack safety" to mean.  On the
+  other hand, perhaps this limitation is unavoidable due to the nature
+  of the work, i.e., there exists no prior comprehensive definition of
+  "stack safety" to compare with.
+
+Comments for author
+-------------------
+
+- p.1: "“the stack” is completely transparent in the definitions of
+  most source languages" - Did you mean "opaque" rather than
+  "transparent", since I think you wanted to say here that the notion
+  of stack is absent in the source language?  Regardless, I kind of
+  disagree with this comment.  While it is true that the notion of
+  stack is not explicitly present at the source-level (in fact, one
+  can always implement functions/procedures/etc. purely in heap
+  without stacks by doing CPS transformation as in the SMLNJ
+  compiler), in ordinary (i.e., non CPS transforming) compilers, one
+  expects, at least roughly, how the call stack is used by
+  functions/procedures/etc.  Indeed, the paragraph following this
+  paragraph in the paper also implies that there is some source-level
+  expectation of stack usage.
+
+- p.4: "Our security semantics attach" -> "Our security semantics attaches".
+
+- p.6: Should s0 in Figure 3 be sp?
+
+- p.6: What is a1 in Figure 3?  I presume that it is a register (since
+  it looks like a0), but it does not seem to be used in the example
+  program .
+
+- p.6: Figure 3 does not seem to show registers ra, a4, a5, which are used in the considered example.
+
+- p.6: "require that Int hold" -> "require that Int holds".
+
+- p.7: "The disagreement between the return states must therefore
+  depend on a secret (in fact, the variable secret)." - I do not see
+  how this conclusion can be drawn from the arguments leading up to
+  this sentence.  Firstly, from the information given in the previous
+  sentences, all you could infer is that "the return state depends on
+  the values of sealed elements before the execution of the function"
+  (*), and it is not possible to identify the variable secret as the
+  cause of the disagreement.  Secondly, the fact (*) does not require
+  the fact that a0 was changed.  E.g., (*) would be also be true for
+  identity function that returns the given state as is.
+
+- p.7: What is a "state element" used in the definition of a machine state.
+
+- p.8: \psi in the definition of Op should be \Psi.
+
+- p.8: "just oa given set" -> "just a given set".
+
+- p.8: In the second rule defining the relation \hookrightarrow, the
+  left most premise is syntactically incorrect (e should be on top of
+  the \Longrightarrow).
+
+- p.9: In Definition 2, \sim is used but it is not defined.
+
+- p.9: In Definition 3, insert space before and after
+  \hookrightarrow(m,c) and \hookrightarrow(n,c), respectively.
+
+
+
+Review #185C
+===========================================================================
+
+Overall merit
+-------------
+4. Accept with shepherding
+
+Reviewer expertise
+------------------
+3. Knowledgeable
+
+Paper summary
+-------------
+
+This paper presents a formalization of the key security properties of
+the stack, which include caller and callee secrecy and integrity, and
+control flow integrity (i.e., well-bracketed call/rets). It then tests
+prior work for violation of the above mentioned properties and found
+subtle flaws.
+
+Strengths
+---------
++ This paper provides a nice formalization of security properties of the stack that is a superset of prior work.
+
++ This paper demonstrates the usefulness of the formalism by identifying flaws in existing enforcement mechanisms.
+
+Weaknesses
+----------
+- The treatment of "return-time confidentiality" seems ad hoc.
+
+- The description of test generation needs more details.
+
+- The application of the formalism needs more clarification.
+
+Comments for author
+-------------------
+
+This paper has a nice and explicit formalization of the
+confidentiality and integrity properties of the caller and callee in
+terms of the stack. The use of security context helps keep track of
+what the current program can or cannot do. It is also nice to see that
+the formalism is shown to be useful in checking current security
+mechanisms.
+
+This paper can be improved in the following ways. 
+
+The formalization of return-time confidentiality seems to be related
+to robust declassification. It would be nice if this paper can check
+and make a connection. The current formalism seems ad hoc.
+
+How the tests are generated for property violation detection need more
+detailed description. The following methodology may not always work,
+because sometimes varying contents of the secrets are not guaranteed
+to induce differences in observation. The quote from the paper is
+here: "For example, to show that certain locations are kept secret, it
+suffices to vary their contents and check that the observable output
+does not change" For problems reported by tests, what are the false
+positives and false negatives?
+
+Another comment about testing is that in practice, it is unclear how
+to decide what the relevant locations to be tested are. Is there a
+sound and automated way to do so, or manual effort is always needed.
+
+This paper demonstrates that one application domain of the formalism
+is testing specific security mechanisms. However, it is not clear what
+the general application domains of the formalism are. For example,
+would it be useful in analyzing/verifying the correctness of compiler
+implementation?
+
+It would be nice if this paper can comment on whether the identified
+flaws were acknowledged by the authors.
+
+Section II is too abstract. On the other hand, later sections are
+easier to follow because of the examples. Some re-organization and
+rewriting of Section II can increase the readability of the paper.
