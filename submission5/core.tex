@@ -1640,8 +1640,10 @@ than \(\sealed\) to express this. In terms of \cref{tab:props}, we replace
 \section{Enforcement}
 \label{sec:enforcement}
 
-We implement and test two micro-policies from Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}:
+We implement and test two micro-policies inspired by
+Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}:
 {\em Depth Isolation} (\(DI\)) and {\em Lazy Tagging and Clearing} (\(LTC\)).
+Their connections to Roessler and DeHon's work is discussed below.
 They share a common structure: each function activation is assigned a ``color'' \(n\)
 representing its identity. Stack locations belonging to that activation are
 tagged \(\tagStackDepth{n}\), and while the activation is running, the tag on the
@@ -1664,31 +1666,54 @@ On a load, the micro-policy failstops if the source memory location
 is tagged \(\tagNoDepth\) or \(\tagStackDepth{n}\) for some \(n\) that
 doesn't match the PC tag.
 
-\paragraph*{Lazy Applicability}
-
-Roessler and DeHon describe {\em Lazy Tagging and Clearing} as aiming to enforce
-a fundamentally different property than {\em Depth Isolation}. They consider \(DI\)
-a form of memory safety, while they claim that {\em dataflow integrity} enforces a
-form of {\em dataflow integrity}. Because our properties are phrased in
-terms of dataflow, they represent a plausible definition  against which \(LTC\) can be tested.
-
-\sna{Discuss the distinction that they make between memory safety and
-  dataflow integrity; we have framed stack safety as a dataflow integrity
-  problem. They did not give a formal specification, and their implementation
-  does not enforce ours. Spell out the violation. Priority 1.}
-
-\paragraph*{Blessed Sequences}
-
 To implement this discipline, {\em blessed instruction sequences} appear at
 the entry and exit of each function, which manipulate tags as just described
 while performing the usual tasks of saving/restoring the return address to/from
 the stack and adjusting the stack pointer. A blessed sequence uses further tags
 to guarantee that the full sequence executes from the beginning---no jumping into the middle.
 
+\paragraph*{Applicability to R\&D}
+
+In Roessler and DeHon, Lazy Tagging and Lazy Clearing are both optimizations that
+can be applied to their Depth Isolation policy. Our version of \(LTC\)
+corresponds to Depth Isolation with both optimizations applied. How closely
+do our properties correspond to the specifications of their policies?
+
+Roessler and DeHon differentiate between memory safety policies (without lazy optimization)
+and {\em data-flow integrity} policies (with lazy opimization.) Our properties
+are phrased in terms of data flow, which corresponds to the optimized policies,
+and which we argue is also sufficient to test non-optimized Depth Isolation.
+Explicit formal properties are out of their scope, but they do list the
+behaviors that they expect their data-flow integrity policies to prevent.
+Data-flow integrity policies should prevent reads from sealed objects
+(our caller confidentiality), should catch writes to sealed objects
+if they are later read (our caller integrity), and should prevent reads
+from deallocated objects (our callee confidentiality.)
+They also note that Lazy Clearing prevents uninitialized reads,
+which corresponds to our callee integrity.
+
+They note a flaw in Data-flow Integrity: because function activations
+are identified by depth, a dangling pointer into a stack frame might be usable
+when a new frame is allocated at the same depth. Our testing does not discover
+this flaw, because we do not test address-taken objects, but it discovers a
+related flaw under Lazy Tagging and Clearing that does not require
+an object's address to be taken. If an activation reads a location
+that was previously written by an activation at the same depth, it will
+violate callee confidentiality. If that location was in a caller's frame,
+it also violates caller integrity and confidentiality.
+
+Roessler and DeHon propose addressing the dangling-pointer issue by
+tracking both the depth of the current activation and the identity
+of the active function. This would not eliminate all instances, but it
+would require the confidentiality-violating activation to be of the same
+function that wrote the data in the first place, which is a significantly higher bar.
+We propose instead tracking every activation uniquely, which in our tests eliminates
+the issue entirely.
+
 \paragraph*{Protecting Registers}
 
-Roessler and DeHon do not protect registers, since the compiler is in the
-trusted computing base, but we support threat models that do not.
+Roessler and DeHon do not need to protect registers, since the compiler is in their
+trusted computing base, but we target threat models that do not.
 In particular, \(\clri\) requires callee-saved
 registers to be saved and restored properly. We extend \(DI\) and \(LTC\)
 so that callee-saved registers, too, are tagged with the color of the
