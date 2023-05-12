@@ -416,7 +416,7 @@ enforcement mechanisms such as hardware tags~\cite{pump_hasp2014,Gollapudi+23} o
 we assume that the behavior of these mechanisms is incorporated into the basic
 step semantics of the machine, but we keep the enforcement state unchanged when constructing variant states.
 Failstop behavior by enforcement mechanisms is modeled as stepping to the same state
-(and thus silently diverging.)
+(and thus silently diverging).
 %% \sna{I think that the payload concept is too nitty-gritty for this section.
 %%   The chief use of the payload is that it allows every value to be interpreted
 %%   as an address. In the tag world, it happens to coincide with a natural instance
@@ -673,7 +673,7 @@ Attacks of this kind do not violate {\tt main}'s confidentiality, but
 rather its {\it integrity}.
 In \cref{subfig:WBCF}, the attacker arranges to return to the
 wrong instruction, thereby bypassing the check and publishing {\tt secret} regardless,
-violating the program's {\it well-bracketed control flow} (\(\wbcf\).)
+violating the program's {\it well-bracketed control flow} (\(\wbcf\)).
 %
 In \cref{subfig:WBCF2}, a different attack violates \(\wbcf\), this time
 by returning to the correct program counter but with the wrong stack pointer.%
@@ -917,7 +917,7 @@ restored to their prior value.
 While it would be simple to define integrity as ``all sealed elements retain their
 values after the call,'' this would be stricter than necessary. Suppose that
 a callee overwrites some data of its caller, but the caller never accesses that data
-(or only does so after re-initializing it.) This would be harmless, with the callee
+(or only does so after re-initializing it). This would be harmless, with the callee
 essentially using the caller's memory as scratch space, but the caller never seeing any change.
 
 For a set of elements \(\components\),
@@ -998,7 +998,7 @@ affect the caller after the callee returns.
 
 Consider the state \(\mach\) after step 5, whose context is \((V_2,\sigma)\), with the attacker from
 \cref{subfig:direct}. We take a variant state over the set of elements that are
-\(\sealed\) in \(V_2\) (see \cref{fig:variant2}.)
+\(\sealed\) in \(V_2\) (see \cref{fig:variant2}).
 If we take a trace of execution from each state until it returns,
 the traces may differ, in this case outputting 5 (the original value of {\tt secret}) and
 4 (its value in the variant) respectively. This is a violation of
@@ -1643,7 +1643,7 @@ than \(\sealed\) to express this. In terms of \cref{tab:props}, we replace
 We implement and test two micro-policies inspired by
 Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}:
 {\em Depth Isolation} (\(DI\)) and {\em Lazy Tagging and Clearing} (\(LTC\)).
-Their connections to Roessler and DeHon's work is discussed below.
+Their precise connection to Roessler and DeHon's work is discussed below.
 They share a common structure: each function activation is assigned a ``color'' \(n\)
 representing its identity. Stack locations belonging to that activation are
 tagged \(\tagStackDepth{n}\), and while the activation is running, the tag on the
@@ -1672,47 +1672,47 @@ while performing the usual tasks of saving/restoring the return address to/from
 the stack and adjusting the stack pointer. A blessed sequence uses further tags
 to guarantee that the full sequence executes from the beginning---no jumping into the middle.
 
-\paragraph*{Applicability to R\&D}
+\paragraph*{Applicability to Roessler \& DeHon~\cite{DBLP:conf/sp/RoesslerD18}:}
 
-In Roessler and DeHon, Lazy Tagging and Lazy Clearing are both optimizations that
+For Roessler and DeHon (henceforward \emph{R\&D}), Lazy Tagging and Lazy Clearing are both optimizations that
 can be applied to their Depth Isolation policy. Our version of \(LTC\)
 corresponds to Depth Isolation with both optimizations applied. How closely
 do our properties correspond to the specifications of their policies?
 
-Roessler and DeHon differentiate between memory safety policies (without lazy optimization)
-and {\em data-flow integrity} policies (with lazy opimization.) Our properties
-are phrased in terms of data flow, which corresponds to the optimized policies,
-and which we argue is also sufficient to test non-optimized Depth Isolation.
-Explicit formal properties are out of their scope, but they do list the
-behaviors that they expect their data-flow integrity policies to prevent.
-Data-flow integrity policies should prevent reads from sealed objects
-(\(\clrc\)), should catch writes to sealed objects
-if they are later read (\(\clri\)), and should prevent reads
-from deallocated objects (\(\clec\).)
+R\&D differentiate between memory safety policies (without lazy optimization)
+and {\em data-flow integrity} policies (with lazy optimization). Our properties
+are phrased in terms of data flow, and we apply them to both optimized and non-optimized
+Depth Isolation.
+R\&D do not attempt to define explicit formal properties, but they do list the
+behaviors that they expect their data-flow integrity policies to prevent, namely:
+reads from sealed objects
+(our \(\clrc\)), writes to sealed objects
+if they are later read (our \(\clri\)), and reads
+from deallocated objects (our \(\clec\)).
 They also note that Lazy Clearing prevents uninitialized reads,
-which corresponds roughly to \(\clei\).
+which corresponds roughly to our \(\clei\).
 
-They note a flaw in Data-flow Integrity: because function activations
+R\&D note a flaw in Depth Isolation: because function activations
 are identified by depth, a dangling pointer into a stack frame might be usable
 when a new frame is allocated at the same depth. Our testing does not discover
 this flaw, because we do not test address-taken objects, but it discovers a
 related flaw under Lazy Tagging and Clearing that does not require
 an object's address to be taken. If an activation reads a location
-that was previously written by an activation at the same depth, it will
+that was previously written by an earlier activation at the same depth, it will
 violate callee confidentiality. If that location was in a caller's frame,
 it also violates caller integrity and confidentiality.
 
-Roessler and DeHon propose addressing the dangling-pointer issue by
-tracking both the depth of the current activation and the identity
-of the active function. This would not eliminate all instances, but it
+R\&D propose addressing the dangling-pointer issue by
+tracking both the depth of the current activation and the static identity
+of the active function. This would not eliminate all instances of this issue, but it
 would require the confidentiality-violating activation to be of the same
 function that wrote the data in the first place, which is a significantly higher bar.
-We propose instead tracking every activation uniquely, which in our tests eliminates
-the issue entirely.
+We propose instead tracking every activation uniquely, which should eliminate the
+issue entirely, as it does in our tests.
 
 \paragraph*{Protecting Registers}
 
-Roessler and DeHon do not need to protect registers, since the compiler is in their
+R\&D do not need to protect registers, since they include the compiler in their
 trusted computing base, but we target threat models that do not.
 In particular, \(\clri\) requires callee-saved
 registers to be saved and restored properly. We extend \(DI\) and \(LTC\)
@@ -2017,7 +2017,7 @@ integer-only operations.
 We can model this as a trio of additional security-relevant operations: one which
 declares a register to contain a valid pointer, one which transmits the provenance
 of a pointer from one element to another, and one which clears the provenance
-(for instance, when a pointer is modified in place in a way that makes it invalid.)
+(for instance, when a pointer is modified in place in a way that makes it invalid).
 
 In addition to the normal call stack, our security context will carry a map \(\rho\) from
 elements to memory regions, represented as a base and a bound \(\context = (V, \sigma, \rho)\).
