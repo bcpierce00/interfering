@@ -258,7 +258,9 @@ for all systems. While many security properties can be described at
 the level of a high-level programming language and translated to a
 target machine by a secure compiler, stack safety cannot be defined in
 this way, since ``the stack'' is not explicitly present in the
-definitions of most source languages.\footnote{Contrast Azevedo de
+definitions of most source languages. It is implied by the semantics
+of features such as calls and return, but is not itself a feature.
+\footnote{Contrast Azevedo de
   Amorim et al.'s work on heap safety
   \cite{DBLP:conf/post/AmorimHP18}: the concept of the heap figures
   directly in high-level language semantics and its security is
@@ -269,11 +271,7 @@ indeed, at the lowest level, the specification of a ``well-behaved
 stack'' is almost vacuous. The ISA is not concerned with such
 questions as whether a caller's frame should be readable or writable
 to its callee. Those are the purview of high-level languages built
-atop the hardware stack.
-
-\sna{Clarify that we do not mean that the notion of a stack is absent, but
-  rather that it is precisely the expectations referenced by reviewer 2 that
-  we are trying to codify. Priority 2.}
+atop the hardware stack\
 
 Therefore, any low-level treatment of stack safety must begin by asking:
 which high-level features does our system support, and what are their
@@ -1055,9 +1053,7 @@ But, in \cref{subfig:indirect}, we also saw an attacker that exfiltrated the sec
 by reading it and then returning it, in a context where the caller would output the returned
 value. \Cref{fig:variant3} shows the behavior of the same variants under this attacker,
 but in this case, there is no output during the call. Instead the value of {\tt secret} is
-extracted and placed in {\tt a0}, the return value register. We wish to identify this as
-a confidentiality violation, again by considering variants of the \(\sealed\)
-elements in \(V_2\), but capturing the required property is subtle.
+extracted and placed in {\tt a0}, the return value register.
 %
 \begin{figure}
     \centering
@@ -1099,14 +1095,16 @@ elements in \(V_2\), but capturing the required property is subtle.
   \label{fig:variant3}
 \end{figure}
 %
-The return states do not agree on the value of {\tt a0}, but then, the disagree on
-all of the other states, too. The difference is that {\tt a0} has changed during the call
-(in both the original and the variant, although only one of these would be necessary).
-The disagreement between the return states must therefore depend on a secret.
-Unless {\tt a0} happens to be irrelevant to the caller, this is a violation of what
-we term {\it return-time confidentiality} (formalized in \cref{tab:props}, line 3b).
-\sna{Clarify, per reviewer 2. Priority 2. Also consider connections to robust
-declassification. Priority 4.}
+In this case, {\tt a0} has changed during the call, {\em and}
+the return states do not agree on its value. We can therefore deduce that
+it carries some information derived from the original varied elements. By
+contrast, the sealed stack frame has not changed during the call, so the
+fact that it varies between the return states represents that the initial
+states disagreed, not a leak.
+Unless {\tt a0} happens to be irrelevant to the caller, this example
+is a violation of what we term {\it return-time confidentiality}
+(formalized in \cref{tab:props}, line 3b).
+\sna{Consider connections to robust declassification. Priority 4.}
 
 Structurally, return-time confidentiality resembles integrity, but now dealing with
 variants. We begin with a state immediately following
@@ -1988,6 +1986,14 @@ We are also exploring extensions to concurrency, starting with a model of
 statically allocated co-routines.  These extensions will also require non-trivial
 testing effort.  We also plan to test
 the model in \cref{app:ptr} for arbitrary memory-safe pointer sharing.
+
+\subsubsection*{Acknowledgements}
+
+We thank the reviewers for their comments, CHR Chhak and Allison Naaktgeboren for
+feedback during the writing process, and Aina Georges for her enthusiastic reception
+of our early work.
+
+This work was supported by the National Science Foundation under Grant No. 2048499, Specifying and Verifying Secure Compilation of C Code to Tagged Hardware.
 
 \bibliographystyle{IEEEtran}
 \bibliography{bcp.bib,local.bib}
