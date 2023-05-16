@@ -1734,7 +1734,7 @@ and the {\em Lazy Per-Activation Tagging and Clearing} micro-policies.
 We use a Coq specification of the RISC-V architecture~\cite{Bourgeat2021AMF},
 and extend it with a runtime monitor implementing a stack safety
 micro-policy. We choose Coq for our implementation
-to ensure that our definitions are well-formed and to leverage the
+to ensure that our definitions are well-formed \rb{, to reason about them,} and to leverage the
 power of the QuickChick
 testing framework~\cite{Pierce:SF4}.
 
@@ -1749,23 +1749,61 @@ To use QuickChick, we developed random test-case generators that produce
 (1) an initial RISC-V machine state, including the program to be executed;
 (2)
   an initial policy state, tagging instructions and the stack regions appropriately
-  for the micro-policy (see \cref{sec:enforcement})
+  for the micro-policy (see \cref{sec:enforcement}); and
 (3)
   a map from instructions to lists of their operations in the security semantics.
+%
+\rb{((say a few more words about 3?))}
+%
+\rb{
+That is, our generators need to produce not only a low-level program
+that exhibits interesting control-flow patterns, but also the policy
+meta-information and code annotations that would normally be produced
+by the compiler.
+}
 
 To write such generators we build on the work of Hri\c{t}cu et
 al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
 introduced {\em generation by execution}, a technique that produces
 programs that lead to longer executions---and hopefully towards more
-interesting behaviors as a result. We extend their technique with an additional
-degree of statefulness: when complex calling conventions need to be
+interesting behaviors as a result.
+%
+\rb{
+Generation by
+execution receives as an input a partially instantiated machine state
+and attempts to generate an instruction (or a sequence of instructions
+such as a blessed sequence) that makes sense locally (e.g., jumps go
+to a potentially valid code location and loads read from a
+potentially valid stack location). Then we step the machine and repeat
+the process until we generate or execute some target number of
+instructions, or reach a point where the machine cannot step
+any more.
+}
+
+We extend their technique with an additional
+degree of statefulness:
+\rb{
+we keep track of the control flow behavior of
+the program being generated. Each time a call or return sequence is
+generated, we ensure that the appropriate policy tags and code
+annotations are set for the entry or return points.
+}
+When complex calling conventions need to be
 observed to avoid early failstops, extra care must be taken to ensure
 that % any such
 calls are well behaved. For example, immediately
 after a call we need to initialize any stack-allocated variables
 with an increased probability. However, at the same time, we need to
-allow for the possibility of {\em not} performing such an initialization
+\rb{allow the generation to sometimes relax those constraints,
+introducing potentially ill-formed flows:}
+% allow for the possibility of,
+for example, {\em not} performing such an initialization
+\rb{or \emph{not} returning to the proper call site, so as}
 to allow for potential attack vectors to manifest.
+\rb{
+This causes our programs
+to failstop when executed in conjunction with the policy monitor,
+but also allows for revealing errors in our setup.}
 
 Moreover, we need to further extend typical hyperproperty testing
 schemes to handle the nested nature of confidentiality: rather than
@@ -1831,6 +1869,31 @@ The mean-time-to-failure (MTTF) and average number of tests for various bugs can
 it took to find the failure. Experiments were run in a desktop
 machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
 
+\rb{
+Naturally, testing also revealed a number of errors in our
+implementation of the enforcement mechanism (the original was written in C++
+and targeted ARM machine code;
+%\bcp{right?}\leo{yeah}
+we re-implemented it in Coq targeting RISC-V).  These errors range
+from trivial typos to ones that require an intriguingly complex setup
+to provoke.  The most interesting bug (included in the table as row
+{\em HEADER\_NO\_INIT}) was that, on our first try, the blessed call
+sequence %/policy combination\apt{??}
+did not initialize all locations for the
+newly allocated stack frame correctly, but left some of them as
+$\tagNoDepth$. This allowed for a potential integrity violation, but
+only if a rather complicated sequence of events occured.
+The smallest counterexample requires calling a function {\tt f},
+which fails to initialize some of its frame during the blessed sequence,
+but writes into an uninitialized location $l$ later, treating \(l\) as outside
+the stack. Then {\tt f} calls a further function {\tt g} (which should have
+the effect of sealing $l$ for integrity purposes). {\tt g} attempts to write to $l$,
+which is allowed because the enforcement mechanism still has
+$l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s data.
+%\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
+%  and the write from {\tt f} was already a violation.}
+}
+
 For \(LTC\), the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
 fails in testing, in cases where data is leaked between sequential calls.
 To round out our mutation testing we also check {\em LOAD\_NO\_CHECK\_LT},
@@ -1842,6 +1905,13 @@ taking longer to catch.
 
 Our properties allow us to identify an enforcement mechanism as
 not really stack safe, and to validate a possible fix.
+\rb{
+((Cache pressure discussion relevant?))
+%% Unfortunately, Lazy Per-activation Tagging and Clearing
+%% puts severe pressure on the tag cache, so it may not be usable in practice.
+%% However, we conjecture that no lazy scheme can be fully stack safe
+%% without using unique per-activation identifiers.
+}
 
 \section{Related Work}
 \label{sec:relwork}
