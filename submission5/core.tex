@@ -1327,6 +1327,7 @@ Two (compatible) states are variants with respect to a set of elements \(\compon
 if they agree on the value of every element not in \(\components\).
 Our notion of non-interference involves comparing the traces of such
 \(\components\)-variants. We use this to define sets of irrelevant elements.
+Recall that \(\sim\) is a policy-specific compatibility relation.
 
 \definition The \emph{difference set} of two machine states \(\mach\) and \(\mach'\),
 written \(\Delta(\mach,\mach')\),
@@ -1334,7 +1335,7 @@ is the set of elements \(\component\) such that \(\mach[\component] \not = \mach
 
 \definition Machine states \(\mach\) and \(\nach\) are {\em \(\components\)-variants},
 written \(\mach \approx_\components \nach\), if \(\mach\sim\nach\) and
-\(\Delta(\mach,\nach) \subseteq \components\). \sna{define \(\sim\). Priority 2.}
+\(\Delta(\mach,\nach) \subseteq \components\).
 %if all \(\component \not \in \components\), \(\mach[\component] = \nach[\component]\)
 %and for all \(\component \in \components\), \(\mach[\component] \sim \nach[\component]\).
 
@@ -1737,73 +1738,52 @@ micro-policy. We choose Coq for our implementation
 to ensure that our definitions are well-formed \rb{, to reason about them,} and to leverage the
 power of the QuickChick
 testing framework~\cite{Pierce:SF4}.
+%
+QuickChick is a randomized property-based testing framework. We use it to generate
+random programs, then execute them and test that they fulfill our criteria.
 
-\sna{Discuss false positives, false negatives, and the degree to which
-  testing can increase our confidence. Priority 2.}
+Such testing is sound---it will not produce false positives---but necessarily
+necessarily incomplete. We might test a flawed policy but fail to find a
+program that exploits the flaw. Additionally, detecting violations of noninterference-style
+properties is dependent on choosing appropriate variant states, so it is possible
+to find a dangerous program but have it pass the test due to variant selection.
+We can increased our confidence in our test coverage by {\em mutation testing},
+in which we intentionally inject flaws into our policies and demonstrate that our testing
+can find them.
 
 \subsection{Test Generation}
-\sna{Restore Leo's old test gen discussion, then ping Leo if it seems that more
-  is needed. Priority 2.}
 
 To use QuickChick, we developed random test-case generators that produce
-(1) an initial RISC-V machine state, including the program to be executed;
-(2)
-  an initial policy state, tagging instructions and the stack regions appropriately
-  for the micro-policy (see \cref{sec:enforcement}); and
-(3)
-  a map from instructions to lists of their operations in the security semantics.
-%
-\rb{((say a few more words about 3?))}
-%
-\rb{
-That is, our generators need to produce not only a low-level program
-that exhibits interesting control-flow patterns, but also the policy
-meta-information and code annotations that would normally be produced
-by the compiler.
-}
+an initial RISC-V machine state tagged appropriately for the micro-policy
+(see \cref{sec:enforcement}), including a code region containing a
+low-level program. They must also produce the meta-information about
+how instructions in that program map to security-relevant operations,
+information that would normally be provided by the compiler.
 
 To write such generators we build on the work of Hri\c{t}cu et
 al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
 introduced {\em generation by execution}, a technique that produces
 programs that lead to longer executions---and hopefully towards more
 interesting behaviors as a result.
-%
-\rb{
-Generation by
-execution receives as an input a partially instantiated machine state
-and attempts to generate an instruction (or a sequence of instructions
-such as a blessed sequence) that makes sense locally (e.g., jumps go
-to a potentially valid code location and loads read from a
-potentially valid stack location). Then we step the machine and repeat
-the process until we generate or execute some target number of
-instructions, or reach a point where the machine cannot step
-any more.
-}
 
-We extend their technique with an additional
-degree of statefulness:
-\rb{
-we keep track of the control flow behavior of
-the program being generated. Each time a call or return sequence is
-generated, we ensure that the appropriate policy tags and code
-annotations are set for the entry or return points.
-}
-When complex calling conventions need to be
-observed to avoid early failstops, extra care must be taken to ensure
-that % any such
-calls are well behaved. For example, immediately
-after a call we need to initialize any stack-allocated variables
-with an increased probability. However, at the same time, we need to
-\rb{allow the generation to sometimes relax those constraints,
-introducing potentially ill-formed flows:}
-% allow for the possibility of,
-for example, {\em not} performing such an initialization
-\rb{or \emph{not} returning to the proper call site, so as}
+Each step of generation by execution takes a partially instantiated
+machine state and attempts to generate an instruction
+that makes sense locally (e.g., jumps go
+to a potentially valid code location and loads read from a
+potentially valid stack location). The generator repeats this process
+for an arbitrary number of steps, or until it reaches a point where
+the machine cannot step any more. Each time it generates a call or return,
+it places the appropriate policy tags on the relevant instruction(s)
+and records the operation.
+
+We extend Hrit\c{t}cu et al.'s technique with additional statefulness
+to avoid early failstops. For example, immediately
+after a call we initialize any stack-allocated variables
+with an increased probability. However, periodically, the generator
+will relax those constraints and generate potentially ill-formed
+code, such {\em not} performing such an initialization, writing outside
+of the current stack frame, or attempting an ill-formed return sequence,
 to allow for potential attack vectors to manifest.
-\rb{
-This causes our programs
-to failstop when executed in conjunction with the policy monitor,
-but also allows for revealing errors in our setup.}
 
 Moreover, we need to further extend typical hyperproperty testing
 schemes to handle the nested nature of confidentiality: rather than
