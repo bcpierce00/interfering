@@ -769,8 +769,8 @@ effect of marking those bytes \(\object\).
     \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox
         \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\pubbox} \!\! \pubbox \pubbox \dots}_\public
-      ~ \stackrel{\mathtt{a0}}{\objbox\objbox} ~ \stackrel{\mathtt{a1}}{\freebox\freebox}
-      ~ \stackrel{\mathtt{s0}}{\sealbox\sealbox}
+      ~ \stackrel{\mathtt{a0}}{\objbox\objbox} ~ \stackrel{\mathtt{a4}}{\freebox\freebox}
+      ~ \stackrel{\mathtt{a5}}{\freebox\freebox}
       \)} \\
     \cline{1-3}
     0 & 1000 & \(V_0, \emplist\)
@@ -781,8 +781,8 @@ effect of marking those bytes \(\object\).
     \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\objbox} \!\! \objbox \objbox \objbox \objbox}_\object
       \! \underbrace{\pubbox \pubbox \pubbox \dots}_\public
-      ~ \stackrel{\mathtt{a0}}{\objbox\objbox} ~ \stackrel{\mathtt{a1}}{\freebox\freebox}
-      ~ \stackrel{\mathtt{s0}}{\sealbox\sealbox}
+      ~ \stackrel{\mathtt{a0}}{\objbox\objbox} ~ \stackrel{\mathtt{a4}}{\freebox\freebox}
+      ~ \stackrel{\mathtt{a5}}{\freebox\freebox}
       \)}
     \\
     \cline{1-3}
@@ -798,8 +798,8 @@ effect of marking those bytes \(\object\).
     \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\sealbox} \!\! \sealbox \sealbox \sealbox \sealbox}_\sealed
       \! \underbrace{\pubbox \pubbox \pubbox \dots}_\public
-      ~ \stackrel{\mathtt{a0}}{\freebox\freebox} ~ \stackrel{\mathtt{a1}}{\freebox\freebox}
-      ~ \stackrel{\mathtt{s0}}{\sealbox\sealbox}
+      ~ \stackrel{\mathtt{a0}}{\freebox\freebox} ~ \stackrel{\mathtt{a4}}{\freebox\freebox}
+      ~ \stackrel{\mathtt{a5}}{\freebox\freebox}
       \)}
     \\
     \cline{1-3}
@@ -813,8 +813,8 @@ effect of marking those bytes \(\object\).
     \multicolumn{3}{l}{} & \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\objbox} \!\! \objbox \objbox \objbox \objbox}_\object
       \! \underbrace{\pubbox \pubbox \pubbox \dots}_\public
-      ~ \stackrel{\mathtt{a0}}{\objbox\objbox} ~ \stackrel{\mathtt{a1}}{\freebox\freebox}
-      ~ \stackrel{\mathtt{s0}}{\sealbox\sealbox}
+      ~ \stackrel{\mathtt{a0}}{\objbox\objbox} ~ \stackrel{\mathtt{a4}}{\freebox\freebox}
+      ~ \stackrel{\mathtt{a5}}{\freebox\freebox}
       \)}
     \\
     \cline{1-3}
@@ -823,7 +823,7 @@ effect of marking those bytes \(\object\).
     \cline{1-3}
     \multicolumn{2}{l}{} \\
   \end{tabular}
-  \caption{Execution of example up through the return from {\tt f}. In stack diagrams, addresses increase to the right, stack grows to the left, and boxes represent 4-byte words. \sna{Reviewer 2 found s0 and a1 confusing, as well as lack of ra a4 and a5. Priority 3.}}
+  \caption{Execution of example up through the return from {\tt f}. In stack diagrams, addresses increase to the right, stack grows to the left, and boxes represent 4-byte words.}
 \label{fig:exec1}
 \end{figure*}
 %
@@ -837,10 +837,10 @@ sharing, some memory would remain active, too.)
 Function {\tt f} does not take any arguments; if it did, any registers containing them would be
 mapped to \(\object\), while any non-argument, caller-saved
 registers are mapped to \(\unsealed\). In the current example, only register {\tt a0} has a change in
-security class. All callee-save registers remain \(\sealed\) for all calls.
-Thus, if we varied the assembly code for the example slightly so that {\tt sensitive} was stored
-in a callee-save register (e.g. {\tt s0}) rather than in memory, its security class would still be \(\sealed\)
-at the entry to {\tt f}.
+security class. All callee-save registers remain \(\sealed\) for all calls, so
+if we varied the assembly code for the example so that {\tt sensitive} was stored
+in a callee-save register (e.g. {\tt s0}) rather than in memory, its security class would still
+be \(\sealed\) at the entry to {\tt f}.
 %
 At step 9, {\tt f} returns, and the topmost inactive view, that of {\tt main}, is restored.
 
@@ -1636,6 +1636,79 @@ than \(\sealed\) to express this. In terms of \cref{tab:props}, we replace
 % RB: could shorten "in terms of"
 ``call'' with ``call or tail call'' in \(\clrc\), \(\clec\), and \(\clei\).
 
+\subsection{Provenance, Capabilities, and Protecting Objects}
+\label{app:ptr}
+
+\sna{Cleanup. Priority 3.}
+
+What if we want to express a finer-grained notion of safety, in which
+stack objects are protected unless the function that owns them intentionally
+passes a pointer to them? This can be thought of as a {\it capability}-based
+notion of security. Capabilities are unforgeable tokens that grant access to
+a region of memory, typically corresponding to valid pointers to that region.
+So, in order to express such a property, we need our machine to carry some notion
+of {\it pointer provenance}---a distinction between a pointer that is intended to
+point to a given object, and non-pointer integers as well as pointers to other objects.
+This constitutes a substantial addition to the security context.
+
+One such provenance model is Memarian et al.'s PVI \cite{provenance}, in which pointers are
+annotated with the identity of the object they first pointed to. This annotation is
+propagated when the pointer is copied and when operations are performed on it---even
+integer-only operations.
+
+We can model this as a trio of additional security-relevant operations: one which
+declares a register to contain a valid pointer, one which transmits the provenance
+of a pointer from one element to another, and one which clears the provenance
+(for instance, when a pointer is modified in place in a way that makes it invalid).
+
+In addition to the normal call stack, our security context will carry a map \(\rho\) from
+elements to memory regions, represented as a base and a bound \(\context = (V, \sigma, \rho)\).
+Existing operations are extended to keep the value of \(\rho\) the same, and the new operations
+work as follows:
+
+\judgmentbr[Promote]
+           {\(\psi = \mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},\mathit{sz})\)}
+           {\(\rho' = \rho[\reg_{dst} \mapsto \mathit{range} ~ \reg_{base} ~ \mathit{off} ~ \mathit{sz}]\)}
+           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+
+\judgmentbr[Propagate]
+           {\(\psi = \mathbf{propagate} ~ \component_{src} ~ \component_{dst}\)}
+           {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
+           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+
+\judgment[Clear]
+         {\(\psi = \mathbf{clear} ~ \component\)}
+         {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho[\component \mapsto \emptyset])\)}
+
+We now have a notion of provenance, and must integrate it into the definition of
+stack safety. We essentially generalize the above notion of passing: we will consider
+a caller to have intentionally passed an object if that object is reachable by
+a capability that has been passed to the callee. This includes capabilities passed
+indirectly, by being stored in an object that is in turn passed. Formally, we call
+this set \(\mathit{capped}\), and define it recursively:
+%
+\[\begin{split}
+& \mathit{capped} ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{\component\} \cup \mathit{capped} ~ \components' ~ \rho \textnormal{ where} \\
+& \components' = \{\component' |\rho[\component] = (\mathit{base},\mathit{bound})
+\land \mathit{base} \leq \component' < \mathit{bound}\} \\
+\end{split}\]
+
+We then tweak the call operation to seal only objects that are in \(\mathit{capped}\), or
+the previously defined \(\mathit{passed}\).
+
+\judgmentbrbrbr[]
+               {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
+               {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
+                 \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
+               {\(\components = \{\addr | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \cup (\mathit{capped} ~ \overline{\reg_{args}} ~ \rho) \}\)}
+               {\(V'' = V'\llbracket \components \mapsto \sealed \rrbracket\)}
+               {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) =
+                 (V'',V::\sigma,\rho)\)}
+
+In the resulting property, once an object is sealed (because its
+capability has not been passed to a callee), subsequent nested calls can never unseal it.
+On the other hand, an object that is passed via a pointer may be passed on indefinitely.
+
 \section{Enforcement}
 \label{sec:enforcement}
 
@@ -1880,18 +1953,16 @@ To round out our mutation testing we also check {\em LOAD\_NO\_CHECK\_LT},
 equivalent to its counterpart in depth isolation,
 and a version where stores succeed but fails to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
 It turns out that {\em PER\_DEPTH\_TAG} is a comparatively subtle bug,
-%taking twice as long to catch as the next longest.
 taking longer to catch.
 
 Our properties allow us to identify an enforcement mechanism as
 not really stack safe, and to validate a possible fix.
-\rb{
-((Cache pressure discussion relevant?))
+
+%% I don't think this discussion is relevant here
 %% Unfortunately, Lazy Per-activation Tagging and Clearing
 %% puts severe pressure on the tag cache, so it may not be usable in practice.
 %% However, we conjecture that no lazy scheme can be fully stack safe
 %% without using unique per-activation identifiers.
-}
 
 \section{Related Work}
 \label{sec:relwork}
@@ -2048,80 +2119,5 @@ and by Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) as part
 
 \bibliographystyle{IEEEtran}
 \bibliography{bcp.bib,local.bib}
-
-\appendix
-
-\subsection{Provenance, Capabilities, and Protecting Objects}
-\label{app:ptr}
-
-\sna{Move to section 5, cleanup. Priority 3.}
-
-What if we want to express a finer-grained notion of safety, in which
-stack objects are protected unless the function that owns them intentionally
-passes a pointer to them? This can be thought of as a {\it capability}-based
-notion of security. Capabilities are unforgeable tokens that grant access to
-a region of memory, typically corresponding to valid pointers to that region.
-So, in order to express such a property, we need our machine to carry some notion
-of {\it pointer provenance}---a distinction between a pointer that is intended to
-point to a given object, and non-pointer integers as well as pointers to other objects.
-This constitutes a substantial addition to the security context.
-
-One such provenance model is Memarian et al.'s PVI \cite{provenance}, in which pointers are
-annotated with the identity of the object they first pointed to. This annotation is
-propagated when the pointer is copied and when operations are performed on it---even
-integer-only operations.
-
-We can model this as a trio of additional security-relevant operations: one which
-declares a register to contain a valid pointer, one which transmits the provenance
-of a pointer from one element to another, and one which clears the provenance
-(for instance, when a pointer is modified in place in a way that makes it invalid).
-
-In addition to the normal call stack, our security context will carry a map \(\rho\) from
-elements to memory regions, represented as a base and a bound \(\context = (V, \sigma, \rho)\).
-Existing operations are extended to keep the value of \(\rho\) the same, and the new operations
-work as follows:
-
-\judgmentbr[Promote]
-           {\(\psi = \mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},\mathit{sz})\)}
-           {\(\rho' = \rho[\reg_{dst} \mapsto \mathit{range} ~ \reg_{base} ~ \mathit{off} ~ \mathit{sz}]\)}
-           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
-
-\judgmentbr[Propagate]
-           {\(\psi = \mathbf{propagate} ~ \component_{src} ~ \component_{dst}\)}
-           {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
-           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
-
-\judgment[Clear]
-         {\(\psi = \mathbf{clear} ~ \component\)}
-         {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho[\component \mapsto \emptyset])\)}
-
-We now have a notion of provenance, and must integrate it into the definition of
-stack safety. We essentially generalize the above notion of passing: we will consider
-a caller to have intentionally passed an object if that object is reachable by
-a capability that has been passed to the callee. This includes capabilities passed
-indirectly, by being stored in an object that is in turn passed. Formally, we call
-this set \(\mathit{capped}\), and define it recursively:
-%
-\[\begin{split}
-& \mathit{capped} ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{\component\} \cup \mathit{capped} ~ \components' ~ \rho \textnormal{ where} \\
-& \components' = \{\component' |\rho[\component] = (\mathit{base},\mathit{bound})
-\land \mathit{base} \leq \component' < \mathit{bound}\} \\
-\end{split}\]
-
-We then tweak the call operation to seal only objects that are in \(\mathit{capped}\), or
-the previously defined \(\mathit{passed}\).
-
-\judgmentbrbrbr[]
-               {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
-               {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
-                 \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
-               {\(\components = \{\addr | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \cup (\mathit{capped} ~ \overline{\reg_{args}} ~ \rho) \}\)}
-               {\(V'' = V'\llbracket \components \mapsto \sealed \rrbracket\)}
-               {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) =
-                 (V'',V::\sigma,\rho)\)}
-
-In the resulting property, once an object is sealed (because its
-capability has not been passed to a callee), subsequent nested calls can never unseal it.
-On the other hand, an object that is passed via a pointer may be passed on indefinitely.
 
 \end{document}
