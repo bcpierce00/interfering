@@ -1856,14 +1856,23 @@ of the current stack frame, or attempting an ill-formed return sequence,
 to allow for potential attack vectors to manifest.
 
 Moreover, we need to further extend typical hyperproperty testing
-schemes to handle the nested nature of confidentiality: rather than
-just generating two variant initial machines
-and letting them execute to test for noninterference, we generate a
-new variant {\em every time a call is made} and check confidentiality
-for the subtrace produced from that variant state until its
-corresponding return. As a result, a ``single'' confidentiality test
-compactly checks multiple nested calls.
-\sna{Justify this. Priority 3.}
+schemes to handle the nested nature of confidentiality. In normal
+noninterference testing, we would generate a pair of initial
+variant states, execute them to completion, and compare the results.
+Instead, for our setup to test the confidentiality of every call,
+it would need to create a variant state at each call point, execute
+that until return, then generate a post-call variant based on any tainted
+values that would execute alongside the ``primary'' execution until
+completion. Tracking a number of variant executions that is linear
+in the total number of calls is rather inefficient! For performance,
+we instead track a single ``post-call taint'' execution. This machine
+executes in parallel with the original. Everytime a function returns
+with elements containing tainted data, those elements are varied in
+the tainted execution. So, at any given time, we need only simulate
+(1) the original execution, (2) the tainted execution, and (3) one
+variant execution for each call on the call stack. This approach
+makes testing longer runs substantially faster, at the cost of making it
+harder to identify which call is the source of a failure.
 
 \subsection{Mutation Testing}
 
@@ -1888,6 +1897,35 @@ needs to ensure that the tag on the memory location is either
 $\tagNoDepth$ or has again the same depth as the current $\PCname$
 tag. Relaxing that constraint causes violations to the integrity
 property (row {\em STORE\_NO\_CHECK}).
+
+In additional intentional mutations, our testing catches errors in our
+own implementation of the enforcement mechanism, including one interesting
+bug where the initial function's frame included space allocated for its
+return address, but this uninitialized (and therefore \(\tagNoDepth\)-tagged)
+space was treated as private data but left unprotected. We added this to
+our set of mutations as {\em HEADER\_NO\_INIT}.
+%(the original was written in C++
+%and targeted ARM machine code;
+%\bcp{right?}\leo{yeah}
+%we re-implemented it in Coq targeting RISC-V).  These errors range
+%from trivial typos to ones that require an intriguingly complex setup
+%to provoke.  The most interesting bug (included in the table as row
+%{\em HEADER\_NO\_INIT}) was that, on our first try, the blessed call
+%sequence %/policy combination\apt{??}
+%did not initialize all locations for the
+%newly allocated stack frame correctly, but left some of them as
+%$\tagNoDepth$. This allowed for a potential integrity violation, but
+%only if a rather complicated sequence of events occured.
+%The smallest counterexample requires calling a function {\tt f},
+%which fails to initialize some of its frame during the blessed sequence,
+%but writes into an uninitialized location $l$ later, treating \(l\) as outside
+%the stack. Then {\tt f} calls a further function {\tt g} (which should have
+%the effect of sealing $l$ for integrity purposes). {\tt g} attempts to write to $l$,
+%which is allowed because the enforcement mechanism still has
+%$l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s data.
+%\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
+%  and the write from {\tt f} was already a violation.}
+%}
 
 \begin{table}[]
 \centering
@@ -1918,31 +1956,6 @@ The mean-time-to-failure (MTTF) and average number of tests for various bugs can
 \cref{tab:bug-table}, along with the average number of tests
 it took to find the failure. Experiments were run in a desktop
 machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
-
-\rb{
-Naturally, testing also revealed a number of errors in our
-implementation of the enforcement mechanism (the original was written in C++
-and targeted ARM machine code;
-%\bcp{right?}\leo{yeah}
-we re-implemented it in Coq targeting RISC-V).  These errors range
-from trivial typos to ones that require an intriguingly complex setup
-to provoke.  The most interesting bug (included in the table as row
-{\em HEADER\_NO\_INIT}) was that, on our first try, the blessed call
-sequence %/policy combination\apt{??}
-did not initialize all locations for the
-newly allocated stack frame correctly, but left some of them as
-$\tagNoDepth$. This allowed for a potential integrity violation, but
-only if a rather complicated sequence of events occured.
-The smallest counterexample requires calling a function {\tt f},
-which fails to initialize some of its frame during the blessed sequence,
-but writes into an uninitialized location $l$ later, treating \(l\) as outside
-the stack. Then {\tt f} calls a further function {\tt g} (which should have
-the effect of sealing $l$ for integrity purposes). {\tt g} attempts to write to $l$,
-which is allowed because the enforcement mechanism still has
-$l$ tagged as $\tagNoDepth$, but violates the integrity property on {\tt f}'s data.
-%\sna{I believe what went wrong was that we were off-by-one in {\tt main}'s initialization,
-%  and the write from {\tt f} was already a violation.}
-}
 
 For \(LTC\), the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
 fails in testing, in cases where data is leaked between sequential calls.
