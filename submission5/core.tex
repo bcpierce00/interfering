@@ -147,7 +147,7 @@ our tests.
 
 %\subsection{The Call Stack and Its Security}
 
-{\em Functions} in high-level languages, and related abstractions such
+Functions in high-level languages, and related abstractions such
 as procedures, methods, etc., are units of computation
 that call one another to modularly realize larger computations.
 %
@@ -198,23 +198,24 @@ enforcement mechanisms that do not fulfill a property benefit from the
 ability to articulate why and when they may fail.
 
 Of the mechanisms listed above, many are fundamentally ill suited for
-offering formal guarantees: may impede attackers, but do not provide
+offering formal guarantees: they may impede attackers, but do not provide
 universal protection. Shadow stacks, for instance, aim to ``restrict
 the flexibility available in creating gadget chains''
 \cite{Shanbhogue+19}, not to categorically rule out attacks. Other
 mechanisms, such as SoftBound~\cite{NagarakatteZMZ09} and code-pointer
-integrity~\cite{Kuznetsov+14}, do aim for stronger guarantees, but even
-these do not make formal promises.  Indeed, to our knowledge, the sole
+integrity~\cite{Kuznetsov+14}, do aim for stronger guarantees, but not
+typically formal ones.  To our knowledge, the sole
 line of work making a formal claim to protect stack safety is the
 secure calling conventions of Skorstengaard et
 al.~\cite{SkorstengaardSTKJFP} and Georges et
 al.~\cite{Georges22:TempsDesCerises}.
 
-Other mechanisms besides these should also be amenable to strong
+Mechanisms besides this line of work should also be amenable to strong
 formal guarantees.  In particular, Roessler and DeHon
 \cite{DBLP:conf/sp/RoesslerD18} have presented an array of tag-based
 micro-policies~\cite{pump_oakland2015} for stack safety that offer
-strong guarantees.  Their most realistic micro-policy, called Lazy
+universal protection, but not yet tied to a particular formal guarantee.
+Their most realistic micro-policy, called Lazy
 Tagging and Clearing (\(LTC\)), makes an interesting performance
 trade-off: it allows function activations to improperly write into one
 another's stack frames, but ensures that the owner of the corrupted
@@ -244,7 +245,7 @@ security~\cite{sabelfeld2003language}, treating function activations as
 security principals.  We decompose stack safety into a family of
 properties describing
 the {\em integrity} and {\em confidentiality} of the caller’s local state
-and the callee's behavior during the callee's execution, plus the
+and the callee's behavior during (and after) the callee's execution, plus the
 {\em well-bracketed control flow} (\(\wbcf\)) property articulated by
 Skorstengaard et al.~\cite{SkorstengaardSTKJFP}.
 While our properties are motivated by the desire to specify \(LTC\) precisely,
@@ -259,19 +260,19 @@ the level of a high-level programming language and translated to a
 target machine by a secure compiler, stack safety cannot be defined in
 this way, since ``the stack'' is not explicitly present in the
 definitions of most source languages. It is implied by the semantics
-of features such as calls and return, but is not itself a feature.
+of features such as calls and returns, but is not itself a feature.
 \footnote{Contrast Azevedo de
   Amorim et al.'s work on heap safety
   \cite{DBLP:conf/post/AmorimHP18}: the concept of the heap figures
   directly in high-level language semantics and its security is
   therefore amenable to a high-level treatment.}
 %
-But neither is it satisfying as an entirely low-level property;
+But neither can stack safety be an entirely satisfying low-level property;
 indeed, at the lowest level, the specification of a ``well-behaved
 stack'' is almost vacuous. The ISA is not concerned with such
 questions as whether a caller's frame should be readable or writable
 to its callee. Those are the purview of high-level languages built
-atop the hardware stack\
+atop the hardware stack.
 
 Therefore, any low-level treatment of stack safety must begin by asking:
 which high-level features does our system support, and what are their
@@ -339,23 +340,17 @@ from a security perspective.
 In \cref{sec:formal} we formalize the machine model,
 its {\em security semantics}, and the stack safety properties built on these.
 \Cref{sec:extensions} describes how to support an extended set of features.
+%\Cref{app:ptr} gives an (untested) proof-of-concept formalization of a more sophisticated,
+%heap-like sharing model based on pointer provenance.
 In \Cref{sec:enforcement} we describe the micro-policies that we test,
 in \cref{sec:testing} the testing framework itself, and in
 \cref{sec:relwork,sec:future} related and future work.
-\Cref{app:ptr} gives an (untested) proof-of-concept formalization of a more sophisticated,
-heap-like sharing model based on pointer provenance.
 
 The accompanying artifact contains formal definitions (in Coq) of our
 properties, plus our testing framework.  It does not include proofs:
-we use Coq primarily for the QuickChick testing library and for
-ensuring that our definitions are unambiguous.  Formal proofs are left
+we use Coq primarily for the QuickChick testing library and to
+ensure that our definitions are unambiguous.  Formal proofs are left
 as future work.
-
-
-%We consider a simple attacker, and discuss the harm that it can do to
-%its caller. This perspective is essential to understanding how lazy enforcement can
-%be safe: even if an attacker can overwrite some memory, if it cannot accomplish
-%subvert the observable behavior of the caller, the system is safe.
 
 \section{Framework and Assumptions}
 \label{sec:ideas}
@@ -365,37 +360,28 @@ talk about function activations and stack contents---abstractions that
 are typically not visible at machine level. To bridge this gap,
 our properties are defined in terms of a {\em security semantics} layered on top of
 the standard execution semantics of the machine.  The security semantics identifies certain
-state transitions of the machine as {\em security-relevant
-  operations}, which update
+state transitions of the machine as {\em security-relevant operations}, which update
 a notional {\em security context}.  This context consists of
 an (abstract) stack of function activations, each associated with a {\em view}
-that maps each element of the machine state (memory location or register)
+that maps each {\em state element} of the machine (memory location or register)
 to a {\em security class} (active, sealed, etc.) specifying how the activation
 can access the element.
 The action of a security-relevant operation on the context is defined by a set
 of rules that describe how the machine code makes use of the stack and registers
 to implement the function abstraction.
 
-We define stack safety properties in
-terms of traces of {\em observable events} rather than internal machine states.
-This is particularly important for
-specifying lazy enforcement, which catches bad behaviors after they occur but
-before they can affect the trace.
-Observable events might include specific function calls (e.g., system
+Given the security classes of the machine's state elements, we define high-level
+security properties---integrity, confidentiality, and well-bracketed control flow---
+as predicates that must hold on each call. These predicates draw on the idea of
+\emph{variant} states from the theory of non-interference, and a notion of
+{\em observable events}, which might include specific function calls (e.g., system
 calls that perform I/O), writes to special addresses representing
-memory-mapped regions, etc.
-
-To characterize situations in which values should be kept secret or prevented
-from influencing future execution, we borrow the idea of \emph{variant} states
-from the theory of non-interference.  For example, to show that certain locations
-are kept secret, it suffices to vary their contents and check that the observable
-output does not change.
-
-Finally, we define high-level security properties---integrity, confidentiality,
-and well-bracketed control flow---in terms of the security classes of {\em state elements}
-(memory addresses and registers). The properties are predicates use variants, assertions
-about future return states, and comparison of event traces to capture
-desired behavior without reference to internal implementation details.
+memory-mapped regions, etc. For example, to show that certain locations are kept
+secret, it suffices to compare the execution of states which vary at those locations
+and check that their traces of observable events are the same. This structure
+allows us to talk about the eventual implact of leaks or memory corruption without
+reference to internal implementation details, and to support lazy enforcement by
+delaying checks until a corrupted value would actually impact visible behavior.
 
 We introduce these properties by example in \cref{sec:example} and
 formally in \cref{sec:formal}. In the remainder
@@ -548,18 +534,14 @@ calls will simply cause otherwise safe programs to be rejected.
 
 We do not assume that low-level code adheres to any fixed calling
 convention or implements any particular source-language constructs.
-Indeed, if the source
-language is C, then high-level programs might contain undefined
-behavior, in which case they might be compiled to arbitrary machine
-code. A given enforcement
-mechanism or target architecture might place additional constraints, particularly on the behavior of
+Indeed, if the source language is C, then high-level programs might
+contain undefined behavior, in which case they might be compiled to
+arbitrary machine code. A given enforcement mechanism or target
+architecture might place additional constraints, particularly on the behavior of
 call and return sequences. For instance, extant implementations tend to assume
 implicitly that callee-saved registers have their values maintained by whichever compiler
 generated their code. Our properties explicitly state this as a requirement,
 which could be enforced by a micro-policy, a well-behaved compiler, or other enforcement technique.
-Roessler and DeHon include the compiler in their trusted computing
-base, so our properties
-are stronger than necessary to characterize their micro-policies.
 
 In general, it is impossible to distinguish buggy machine code from an
 attacker.  In our examples we will identify one function or another as
@@ -927,7 +909,10 @@ observable behavior of the machine. All other elements are \emph{relevant}.\foot
 This story is slightly over-simplified. If an enforcement mechanism maintains
 additional state associated with elements, such as tags, we don't want that
 state to vary. Formal definitions of variants and
-relevance that incorporate this wrinkle are given in \cref{sec:props}.}
+relevance that incorporate this wrinkle are given in \cref{sec:props}.
+\sna{Might need to make this concept a touch more explicit in \cref{sec:props}, or else
+promise a little less here.}
+}
 
 We define \emph{caller integrity} (\(\clri\))  as the property that
 every relevant element that is \(\sealed\) under the callee's view is restored
@@ -1104,7 +1089,7 @@ states disagreed, not a leak.
 Unless {\tt a0} happens to be irrelevant to the caller, this example
 is a violation of what we term {\it return-time confidentiality}
 (formalized in \cref{tab:props}, line 3b).
-\sna{Consider connections to robust declassification. Priority 4.}
+\sna{Consider connections to robust declassification. Low priority.}
 
 Structurally, return-time confidentiality resembles integrity, but now dealing with
 variants. We begin with a state immediately following
@@ -1803,34 +1788,30 @@ Our primary testing targets are the eager {\em Depth Isolation}
 and the {\em Lazy Per-Activation Tagging and Clearing} micro-policies.
 
 We use a Coq specification of the RISC-V architecture~\cite{Bourgeat2021AMF},
-and extend it with a runtime monitor implementing a stack safety
-micro-policy. We choose Coq for our implementation
-to ensure that our definitions are well-formed, and to leverage the
-power of the QuickChick
-testing framework~\cite{Pierce:SF4}.
-%
-QuickChick is a randomized property-based testing framework. We use it to generate
-random programs, then execute them and test that they fulfill our criteria.
+extend it with a runtime monitor implementing a stack safety micro-policy,
+and test it using QuickChick~\cite{Pierce:SF4}, a randomized property-based
+testing framework. QuickChick works by generating
+random programs, executing them, and checking that they fulfill our criteria.
 
 Such testing is sound---it will not produce false positives---but necessarily
 necessarily incomplete. We might test a flawed policy but fail to find a
 program that exploits the flaw. Additionally, detecting violations of noninterference-style
 properties is dependent on choosing appropriate variant states, so it is possible
 to find a dangerous program but have it pass the test due to variant selection.
-We can increased our confidence in our test coverage by {\em mutation testing},
+We increase our confidence in our test coverage by {\em mutation testing},
 in which we intentionally inject flaws into our policies and demonstrate that our testing
 can find them.
 
 \subsection{Test Generation}
 
-To use QuickChick, we developed random test-case generators that produce
+To use QuickChick, we develope random test-case generators that produce
 an initial RISC-V machine state tagged appropriately for the micro-policy
 (see \cref{sec:enforcement}), including a code region containing a
-low-level program. They must also produce the meta-information about
+low-level program. They also produce the meta-information about
 how instructions in that program map to security-relevant operations,
 information that would normally be provided by the compiler.
 
-To write such generators we build on the work of Hri\c{t}cu et
+Our generators build on the work of Hri\c{t}cu et
 al. \cite{TestingNI:ICFP, DBLP:journals/jfp/HritcuLSADHPV16}, which
 introduced {\em generation by execution}, a technique that produces
 programs that lead to longer executions---and hopefully towards more
@@ -1839,39 +1820,44 @@ interesting behaviors as a result.
 Each step of generation by execution takes a partially instantiated
 machine state and attempts to generate an instruction
 that makes sense locally (e.g., jumps go
-to a potentially valid code location and loads read from a
+to a potentially valid code location, loads read from a
 potentially valid stack location). The generator repeats this process
 for an arbitrary number of steps, or until it reaches a point where
 the machine cannot step any more. Each time it generates a call or return,
 it places the appropriate policy tags on the relevant instruction(s)
 and records the operation.
 
-We extend Hrit\c{t}cu et al.'s technique with additional statefulness
-to avoid early failstops. For example, immediately
-after a call we initialize any stack-allocated variables
-with an increased probability. However, periodically, the generator
+We extend Hri\c{t}cu et al.'s technique with additional statefulness
+to avoid early failstops. For example, immediately after a call, we
+increase the probability of initializing any stack-allocated variables.
+However, periodically, the generator
 will relax those constraints and generate potentially ill-formed
-code, such {\em not} performing such an initialization, writing outside
+code, such as failing to initialize variables, writing outside
 of the current stack frame, or attempting an ill-formed return sequence,
 to allow for potential attack vectors to manifest.
 
-Moreover, we need to further extend typical hyperproperty testing
-schemes to handle the nested nature of confidentiality. In normal
-noninterference testing, we would generate a pair of initial
-variant states, execute them to completion, and compare the results.
-Instead, for our setup to test the confidentiality of every call,
+\subsection{Property-based Testing}
+
+Once a test program is generated, QuickChick tests it against a
+property. A typical hyperproperty testing scheme might do so by
+generating a pair of initial variant states, executing them to completion,
+and comparing the results. We extend this procedure to handle the nested
+nature of confidentiality.
+
+For our setup to na\"{i}vely test the confidentiality of every call,
 it would need to create a variant state at each call point, execute
-that until return, then generate a post-call variant based on any tainted
-values that would execute alongside the ``primary'' execution until
-completion. Tracking a number of variant executions that is linear
-in the total number of calls is rather inefficient! For performance,
-we instead track a single ``post-call taint'' execution. This machine
-executes in parallel with the original. Everytime a function returns
-with elements containing tainted data, those elements are varied in
-the tainted execution. So, at any given time, we need only simulate
+it until return, then generate a post-call variant based on any tainted
+values. The post-call variant would execute alongside the ``primary''
+execution until the test is finished. This results in tracking a number
+of variant executions that is linear in the total number of calls!
+
+For performance, we instead maintain a single ``post-call taint''
+execution that executes in parallel with the original. Everytime a function returns
+with elements containing tainted data, the test process sets those elements
+to random values in the tainted execution. So, at any given time, we need only simulate
 (1) the original execution, (2) the tainted execution, and (3) one
 variant execution for each call on the call stack. This approach
-makes testing longer runs substantially faster, at the cost of making it
+makes testing longer executions substantially faster, at the cost of making it
 harder to identify which call is the source of a failure.
 
 \subsection{Mutation Testing}
@@ -2071,7 +2057,7 @@ only tested.
 \section{Future Work}
 \label{sec:future}
 
-\sna{Look into wasm compilation per reviewer 1. Priority 4.}
+\sna{Look into wasm compilation per reviewer 1. Low priority.}
 
 We plan to test our properties against multiple enforcement mechanisms.
 The top priority is capability machines, namely 
