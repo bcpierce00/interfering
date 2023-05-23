@@ -108,8 +108,8 @@ ways to support procedural and functional abstraction mechanisms from
 a wide range of languages.  This protean nature makes it difficult to
 nail down what it means to correctly enforce stack safety.
 
-We propose a formal characterization of stack safety using concepts
-from language-based security. Rather than treating 
+We propose a new formal characterization of stack safety using concepts
+from language-based security. Rather than treating
 stack safety as a monolithic property, we decompose it into an
 integrity property and a confidentiality property for each of the
 caller and the callee, plus a control-flow property: five properties
@@ -211,27 +211,29 @@ study of secure calling conventions by Skorstengaard et
 al.~\cite{SkorstengaardSTKJFP} and Georges et
 al.~\cite{Georges22:TempsDesCerises}.
 
-There are other mechanisms that should also be amenable to strong
+Some of the other mechanisms listed above should also be amenable to strong
 formal guarantees.  In particular, Roessler and DeHon
 \cite{DBLP:conf/sp/RoesslerD18} present an array of tag-based
 micro-policies~\cite{pump_oakland2015} for stack safety that aim to offer
 universal protection.  But the reasoning involved is somewhat subtle.
 Their most realistic micro-policy, called Lazy
-Tagging and Clearing (\(LTC\)), makes an interesting performance
+Tagging and Clearing ({\LTC}\bcp{does it have to be italic?}), makes an interesting performance
 trade-off: it allows function activations to write improperly into one
 another's stack frames, but ensures that the owner of the corrupted
 memory cannot access it afterward.
 %
 Under this policy, one function activation {\em can} corrupt another's
 memory---just not in ways that affect observable behavior.
-Therefore, \(LTC\) would not fulfill Georges et al.'s property
-(adapted to the tagged setting).  But \(LTC\) does
+Therefore, {\LTC} would not fulfill Georges et al.'s property
+(adapted to the tagged setting).  But {\LTC} does
 arguably enforce stack safety.  A looser, more observational
 definition of stack safety is needed to fit this situation.
 
-We propose here a formal characterization of stack safety, based on
-the intuition of protecting function activations (both registers and
-stack frames) from each other.
+We propose here a formal characterization of stack safety based on
+the intuition of protecting function activations
+(both registers and stack frames)\bcp{Can we delete that parenthetical
+remark?  I think it distracts more than it clarifies.}
+from each other and
 %\bcp{Aren't other formal definitions based on the same intuition?}%
 %% \sna{Two differences we're trying to get across. First, protecting
 %%   functions vs. protecting stack frames: we bring registers into
@@ -241,49 +243,56 @@ stack frames) from each other.
 %%   describing operationally what they can and can't do (as the CHERI
 %%   folks do.)}%
 %% \bcp{Both useful!  But neither comes across, at least not very clearly.}%
-We use the tools of language-based
-security~\cite{sabelfeld2003language}, treating function activations as
+using the tools of language-based
+security~\cite{sabelfeld2003language} to treat function activations as
 security principals.  We decompose stack safety into a family of
 properties describing
 the {\em integrity} and {\em confidentiality} of the caller’s local state
-and the callee's behavior during (and after) the callee's execution, plus the
+and the callee's behavior during (and after) the callee's execution,
+together with the
 {\em well-bracketed control flow} (\(\wbcf\)) property articulated by
 Skorstengaard et al.~\cite{SkorstengaardSTKJFP}.
-While our properties are motivated by the desire to specify \(LTC\) precisely,
-they are stated abstractly in the hope that they can also be applied
-to other enforcement mechanisms.
 
-%\subsection {Towards Formal Properties for Stack Safety}
-
-We are not attempting to present a universal definition of stack safety
-for all systems. While many security properties can be described at
+Our properties are stated abstractly in the hope that they can also be
+applied to other enforcement mechanisms besides \LTC.
+%
+However, it does not seem feasible to give
+a universal definition of stack safety
+that applies to all architectures and compilers.
+While many security properties can be described purely at
 the level of a high-level programming language and translated to a
 target machine by a secure compiler, stack safety cannot be defined in
 this way, since ``the stack'' is not explicitly present in the
-definitions of most source languages. It is implied by the semantics
-of features such as calls and returns, but is not itself a feature.\footnote{
+definitions of most source languages but rather is implicit in the semantics
+of features such as calls and returns.\footnote{
 Contrast Azevedo de
   Amorim et al.'s work on heap safety
-  \cite{DBLP:conf/post/AmorimHP18}: the concept of the heap figures
+  \cite{DBLP:conf/post/AmorimHP18}, where the concept of the heap figures
   directly in high-level language semantics and its security is
   therefore amenable to a high-level treatment.}
 %
-But neither can stack safety be an entirely satisfying low-level property;
+But neither can stack safety be described coherently as a purely
+low-level property;
 indeed, at the lowest level, the specification of a ``well-behaved
 stack'' is almost vacuous. The ISA is not concerned with such
 questions as whether a caller's frame should be readable or writable
 to its callee. Those are the purview of high-level languages built
 atop the hardware stack.
 
-Therefore, any low-level treatment of stack safety must begin by asking:
-which high-level features does our system support, and what are their
+Thus, any low-level treatment of stack safety must begin by asking:
+which high-level features are supported in a given
+setting using the stack, and what are their
 security requirements? Different answers will beget different properties.
+\bcp{There's an awkward conceptual transition here: We pose a question
+(``which high-level features are supported in a given
+setting using the stack, and what are their
+security requirements'') but then we don't seem to be going ahead and
+answering it.  I suggest adding a sentence here that answers the
+question directly, then a paragraph break.}
 We identify and define five security requirements that a system might try
 to enforce upon a function call: well-bracketed control flow, and the
 integrity and confidentiality of each of the caller and the callee.
-%These are by no means exhaustive\bcp{That comment belongs in the
-%  future work
-%  section, not here}.
+%
 We apply these first to a simple system
 with very few features, then to a more realistic one supporting
 tail-call elimination, argument passing on the stack, and callee-save
@@ -292,10 +301,10 @@ registers.
 We show that our properties are useful for distinguishing between correct and
 incorrect enforcement using QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based
 random testing tool for Coq.
-We find that \(LTC\) is flawed in
+We find that {\LTC} is flawed in
 a way that undermines both integrity and confidentiality; after
-correcting this flaw, the repaired \(LTC\) satisfies all our
-properties.  Moreover, we modify \(LTC\) to protect the features of
+correcting this flaw, the repaired {\LTC} satisfies all our
+properties.  Moreover, we modify {\LTC} to protect the features of
 our more realistic system, and apply
 random testing to validate this extended protection mechanism against
 the extended properties.
@@ -308,7 +317,7 @@ the extended properties.
 %Furthermore, we
 %check that the testing framework is able to generate counterexamples
 %that violate our properties but are \emph{not} halted by incorrect
-%variants of the enforcement mechanisms---including the original \(LTC\)!
+%variants of the enforcement mechanisms---including the original {\LTC}!
 % SNA: we talk about this in the testing section, and it's a "best practice" for
 % PBT, but not really a contribution in and of itself
 
@@ -393,7 +402,7 @@ of this section we describe the underlying framework in more detail.
 
 \paragraph*{Machine Model}
 We assume a conventional ISA (e.g. RISC-V, x86-64, etc.), with registers including a program counter
-and stack pointer. 
+and stack pointer.
 %, and a standard ABI.
 %\sna{Not in our formalism (hardcoded +4 in the definition of WBCF notwithstanding.)
 %  This assumption is made in our example and testing.}
@@ -457,7 +466,7 @@ The set of security-relevant operations (\(\Psi\)) covered in this paper is give
 memory is introduced in the example in \cref{sec:example}
 and formalized in \cref{sec:formal}. An extended set covering simple memory sharing and
 tail-call elimination is described in \cref{sec:extensions} and tested in \cref{sec:testing}.
-The remaining operations are needed for the capability-based model in \cref{app:ptr}. 
+The remaining operations are needed for the capability-based model in \cref{app:ptr}.
 
 \newcommand{\example}{\rowcolor{black!0}}
 \newcommand{\testing}{\rowcolor{black!10}}
@@ -921,7 +930,7 @@ state to vary. This is touched on in \cref{sec:props}.
 
 We define \emph{caller integrity} (\(\clri\))  as the property that
 every relevant element that is \(\sealed\) under the callee's view is restored
-to its original value at the return point. 
+to its original value at the return point.
 (This property is formalized in \cref{tab:props}, line 2).
 
 \newcommand{\figfourbox}[1][]{\genbox{20pt}{red}{#1}}
@@ -1173,7 +1182,7 @@ Each value \(v\) contains a \emph{payload} word, written \(|v|\).
 We write \(\mach[\component]\) to denote the value of \(\mach\) at
 \(\component\)  and \(\mach[v]\) as shorthand for \(\mach[|v|]\).
 Depending on the specific machine being modeled, values may also contain other
-information relevant to hardware enforcement (such as a tag). 
+information relevant to hardware enforcement (such as a tag).
 %Intuitively, the payload represents the part of the value that is relevant to
 %the behavior of the basic machine, and it is the part that should be changed
 When constructing variants (see~\cref{sec:props}, this additional information should
@@ -1656,7 +1665,7 @@ As such, this capability safety relies on some preexisting notion of pointer
 validity, i.e. {\it pointer provenance}.
 Memarian et al.'s PVI \cite{provenance} (provenance via integer)
 memory model is a good option: it annotates pointers with the identity of the
-object they first pointed to, and propagates the annotation when the 
+object they first pointed to, and propagates the annotation when the
 pointer is copied and when operations are performed on it.
 This constitutes a substantial addition to the security context, which is why
 this enhancement is more speculative than the others, and we have not tested it.
@@ -1708,11 +1717,11 @@ and the call operation work as seen in \cref{fig:capops}.
              {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V',V::\sigma,\rho)\)}
 
   \end{minipage}
-    
+
 \caption{Operations supporting provenance-based protection of passed objects}
 \label{fig:capops}
 \end{figure*}
-         
+
 This essentially generalizes the above notion of passing: we will consider
 a caller to have intentionally passed an object if that object is reachable by
 a capability that has been passed to the callee. Reachability includes capabilities passed
@@ -1729,7 +1738,7 @@ On the other hand, an object that is passed via a pointer may be passed on indef
 
 We implement and test two micro-policies inspired by
 Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}:
-{\em Depth Isolation} (\(DI\)) and {\em Lazy Tagging and Clearing} (\(LTC\)).
+{\em Depth Isolation} (\(DI\)) and {\em Lazy Tagging and Clearing} ({\LTC}).
 Their precise connection to Roessler and DeHon's work is discussed below.
 They share a common structure: each function activation is assigned a ``color'' \(n\)
 representing its identity. Stack locations belonging to that activation are
@@ -1745,7 +1754,7 @@ store operations when the target memory is tagged {\em with the same depth}
 as the current {\PCname} tag, or, for store operations, if the target memory
 is tagged \(\tagNoDepth\).
 
-In \(LTC\), a function neither initializes the frame at entry nor clears it at exist;
+In {\LTC}, a function neither initializes the frame at entry nor clears it at exist;
 instead, it simply sets each location's tag to the PC tag when that location is written. It does
 not check if those writes are legal! If the PC tag is \(\tagPCDepth{n}\),
 then any stack location that recieves a store will be tagged \(\tagStackDepth{n}\).
@@ -1762,7 +1771,7 @@ to guarantee that the full sequence executes from the beginning---no jumping int
 \paragraph*{Applicability to Roessler \& DeHon~\cite{DBLP:conf/sp/RoesslerD18}:}
 
 For Roessler and DeHon (henceforward \emph{R\&D}), Lazy Tagging and Lazy Clearing are both optimizations that
-can be applied to their Depth Isolation policy. Our version of \(LTC\)
+can be applied to their Depth Isolation policy. Our version of {\LTC}
 corresponds to Depth Isolation with both optimizations applied. How closely
 do our properties correspond to the specifications of their policies?
 
@@ -1802,10 +1811,10 @@ issue entirely---and does in our tests.
 R\&D do not need to protect registers, since they include the compiler in their
 trusted computing base, but we target threat models that do not.
 In particular, \(\clri\) requires callee-saved
-registers to be saved and restored properly. We extend \(DI\) and \(LTC\)
+registers to be saved and restored properly. We extend \(DI\) and {\LTC}
 so that callee-saved registers are also tagged with the color of the
 function that is using them. In \(DI\) they are tagged as part of the entry
-sequence, while in \(LTC\) they are tagged when a value is placed in them.
+sequence, while in {\LTC} they are tagged when a value is placed in them.
 
 \section{Validation through Random Testing}
 \label{sec:testing}
@@ -1825,7 +1834,7 @@ and test it using QuickChick~\cite{Pierce:SF4}, a randomized property-based
 testing framework. QuickChick works by generating
 random programs, executing them, and checking that they fulfill our criteria.
 
-Such testing is sound---it will not produce false positives---but 
+Such testing is sound---it will not produce false positives---but
 necessarily incomplete. We might test a flawed policy but fail to generate a
 program that exploits the flaw. Additionally, detecting violations of noninterference-style
 properties is dependent on choosing appropriate variant states, so it is possible
@@ -1963,7 +1972,7 @@ our set of mutations as {\em HEADER\_NO\_INIT}.
   \hline
 \end{tabular}
 \vspace*{1em}
-\caption{MTTF for finding bugs in erroneous \(DI\) (top) and \(LTC\) (bottom) micro-policies}
+\caption{MTTF for finding bugs in erroneous \(DI\) (top) and {\LTC} (bottom) micro-policies}
 \vspace*{-2em}
 \label{tab:bug-table}
 \end{table}
@@ -1975,7 +1984,7 @@ The mean-time-to-failure (MTTF) and average number of tests for various bugs can
 it took to find the failure. Experiments were run in a desktop
 machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
 
-For \(LTC\), the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
+For {\LTC}, the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
 fails in testing, in cases where data is leaked between sequential calls.
 To round out our mutation testing we also check {\em LOAD\_NO\_CHECK\_LT},
 equivalent to its counterpart in depth isolation,
@@ -2087,7 +2096,7 @@ only tested.
 \label{sec:future}
 
 We plan to test our properties against multiple enforcement mechanisms.
-The top priority is capability machines, namely 
+The top priority is capability machines, namely
 CHERI \cite{DBLP:conf/sp/WatsonWNMACDDGL15}, a modern architecture designed
 to provide efficient fine-grained
 memory protection and compartmentalization.
@@ -2139,7 +2148,7 @@ feedback and encouragement.
 
 This work was supported by the National Science Foundation under Grant No. 2048499, Specifying and Verifying Secure Compilation of C Code to Tagged Hardware;
 by Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) as part of the Excellence Strategy of the German Federal and State Governments, EXC 2092 CASA -- 390781972;
-by NSF award \#2145649, CAREER: Fuzzing Formal Specifications, 
+by NSF award \#2145649, CAREER: Fuzzing Formal Specifications,
 by
 NSF award \#1955610, Bringing Python Up To Speed,
 and by %
