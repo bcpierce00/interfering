@@ -288,7 +288,10 @@ security requirements? Different answers will beget different properties.
 setting using the stack, and what are their
 security requirements'') but then we don't seem to be going ahead and
 answering it.  I suggest adding a sentence here that answers the
-question directly, then a paragraph break.}
+question directly, then a paragraph break.} \bcp{Though, actually, the
+next sentence repeats points that have already been made above.  Maybe
+better to just delete it and find a new transition to the sentence
+after.}
 We identify and define five security requirements that a system might try
 to enforce upon a function call: well-bracketed control flow, and the
 integrity and confidentiality of each of the caller and the callee.
@@ -298,14 +301,16 @@ with very few features, then to a more realistic one supporting
 tail-call elimination, argument passing on the stack, and callee-save
 registers.
 
-We show that our properties are useful for distinguishing between correct and
-incorrect enforcement using QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based
+We demonstrate the usefulness of our properties for distinguishing
+between correct and
+incorrect enforcement using
+QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based
 random testing tool for Coq.
-We find that {\LTC} is flawed in
+Indeed, we find that the published version of {\LTC} is flawed in
 a way that undermines both integrity and confidentiality; after
-correcting this flaw, the repaired {\LTC} satisfies all our
-properties.  Moreover, we modify {\LTC} to protect the features of
-our more realistic system, and apply
+correcting this flaw, {\LTC} satisfies all our
+properties.  Further, we modify {\LTC} to protect the features of
+our more realistic system and apply
 random testing to validate this extended protection mechanism against
 the extended properties.
 
@@ -323,44 +328,44 @@ the extended properties.
 
 %\subsection{Contributions}
 
-In sum, we offer the following contributions:
+In summary, we offer the following contributions:
 
 \begin{itemize}
-\item We give a novel characterization of stack safety as a collection
-  of properties: confidentiality and integrity for callee and caller,
-  plus well-bracketed control-flow.
+\item We give a novel characterization of stack safety as a conjunction
+  of security properties---confidentiality and integrity for callee
+  and caller---plus well-bracketed control-flow.
   The properties are parameterized over a notion of
   external observation, allowing them to characterize lazy enforcement
   mechanisms.
 \item We extend these core definitions to
   describe a realistic setting with argument passing on the stack,
-  callee-saves registers, and tail-call elimination. Our model is
-  modular enough that handling these features is straightforward.
-\item We validate a tag-based enforcement mechanism, \emph{Lazy
+  callee-saves registers, and tail-call elimination. The model is
+  modular enough that adding these features is straightforward.
+\item We validate a published enforcement mechanism, \emph{Lazy
   Tagging and Clearing}, via property-based random testing, find that
 it falls short, and propose and validate a fix.
 \end{itemize}
-
-In the next section, we give a brief overview of our framework and
-assumptions. In \cref{sec:example}, we walk through a function call in
-a simple example machine and discuss informally how each of our properties
-applies to it. In the process we motivate the properties
+%
+The following section offers a brief overview of our framework and
+assumptions. \cref{sec:example} walks through a function call in
+a simple example machine, discusses informally how each of our properties
+applies to it, and motivates the properties
 from a security perspective.
 %
-In \cref{sec:formal} we formalize the machine model,
+\cref{sec:formal} formalizes the machine model,
 its {\em security semantics}, and the stack safety properties built on these.
 \Cref{sec:extensions} describes how to support an extended set of features.
 %\Cref{app:ptr} gives an (untested) proof-of-concept formalization of a more sophisticated,
 %heap-like sharing model based on pointer provenance.
-In \Cref{sec:enforcement} we describe the micro-policies that we test,
-in \cref{sec:testing} the testing framework itself, and in
+\Cref{sec:enforcement} describes the micro-policies that we test,
+\cref{sec:testing} the testing framework itself, and
 \cref{sec:relwork,sec:future} related and future work.
 
 The accompanying artifact \apt{what is the state of that? Depending on conference preferences,
   should give a URL or other pointer.} \sna{Git repo is currently private, I think. I didn't see much
   in the way of conference preferences on a quick glance, but I'll look again in the morning.}
 contains formal definitions (in Coq) of our
-properties, plus our testing framework.  It does not include proofs:
+properties, plus our testing framework.  It does not include proofs, since
 we use Coq primarily for the QuickChick testing library and to
 ensure that our definitions are unambiguous.  Formal proofs are left
 as future work.
@@ -380,38 +385,48 @@ that maps each machine {\em state element} (memory location or register)
 to a {\em security class} (active, sealed, etc.) specifying how the activation
 can access the element.
 The action of a security-relevant operation on the context is defined by a set
-of rules that describe how the machine code implements the function abstractoin
-using the stack and registers.
+of rules that characterize how particular machine code sequences are used
+to implement the function abstraction in terms of the stack and registers.\bcp{OK?}
 
-Given the security classes of the machine's state elements, we define high-level
-security properties---integrity, confidentiality, and well-bracketed control flow---as
+Given the security classes of the elements of the machine state, we
+define high-level
+security properties---integrity, confidentiality, and well-bracketed
+control flow---as
 predicates that must hold on each call. These predicates draw on the idea of
-\emph{variant} states from the theory of non-interference, and a notion of
+\emph{variant} states from the theory of non-interference, plus a notion of
 {\em observable events}, which might include specific function calls (e.g., system
 calls that perform I/O), writes to special addresses representing
 memory-mapped regions, etc. For example, to show that certain locations are kept
-secret, it suffices to compare the execution of states which vary at those locations
+secret, it suffices to compare executions starting at machine states which vary at those locations
 and check that their traces of observable events are the same. This structure
-allows us to talk about the eventual implact of leaks or memory corruption without
-reference to internal implementation details, and to support lazy enforcement by
+allows us to talk about the eventual impact of leaks or memory corruption without
+reference to internal implementation details and, in particular, to support lazy enforcement by
 flagging corruption of values only when it can actually impact visible behavior.
 
 We introduce these properties by example in \cref{sec:example} and
 formally in \cref{sec:formal}. In the remainder
-of this section we describe the underlying framework in more detail.
+of this section we introduce the underlying \bcp{semantic?} framework
+in more detail.
 
 \paragraph*{Machine Model}
-We assume a conventional ISA (e.g. RISC-V, x86-64, etc.), with registers including a program counter
+We assume a conventional ISA (e.g., RISC-V, x86-64, etc.), with registers including a program counter
 and stack pointer.
 %, and a standard ABI.
 %\sna{Not in our formalism (hardcoded +4 in the definition of WBCF notwithstanding.)
 %  This assumption is made in our example and testing.}
 We make no particular assumptions about the provenance of the machine code; in particular,
-we do not assume the use of any particular compiler.
-The machine may possibly be enhanced with % security
-enforcement mechanisms such as hardware tags~\cite{pump_hasp2014,Gollapudi+23} or capabilities~\cite{Woodruff+14}. If so,
-we assume that the behavior of these mechanisms is incorporated into the basic
-step semantics of the machine, but we keep the enforcement state unchanged when constructing variant states.
+we do not assume any particular compiler.
+If the machine is enhanced with % security
+enforcement mechanisms such as hardware
+tags~\cite{pump_hasp2014,Gollapudi+23} or
+capabilities~\cite{Woodruff+14}, we 
+assume that the behavior of these mechanisms is incorporated into the basic
+step semantics of the machine, but we keep the enforcement state
+unchanged when constructing variant states\bcp{As a reader, I wonder
+  ``How would they do that?  Seems like they are saying the tag
+  enforcement or whatever is just part of the basic machine step
+  relation and we can't see it, but then going on to place a
+  requirement on it. How would such a requirement be phrased, formally?''}.
 Failstop behavior by enforcement mechanisms is modeled as stepping to the same state
 (and thus silently diverging).
 %% \sna{I think that the payload concept is too nitty-gritty for this section.
@@ -495,8 +510,9 @@ The remaining operations are needed for the capability-based model in \cref{app:
     \hline
   \end{tabular}
 \end{center}
-\caption{Security-relevant operations and their parameters, with the Sections in which
-  they are first used in the paper.}
+\caption{Security-relevant operations and their parameters, with the
+  sections where
+  they are first used.}
   \label{tab:psi}
 \end{table}
 
@@ -837,7 +853,7 @@ mapped to \(\object\), while any non-argument, caller-saved
 registers are mapped to \(\unsealed\). In the current example, only register {\tt a0} has a change in
 security class. All callee-save registers remain \(\sealed\) for all calls, so
 if, in the example, we varied the assembly code for {\tt main} so that {\tt sensitive} were stored
-in a callee-save register (e.g. {\tt s0}) rather than in memory, its security class would still
+in a callee-save register (e.g., {\tt s0}) rather than in memory, its security class would still
 be \(\sealed\) at the entry to {\tt f}.
 %
 At step 9, {\tt f} returns, and the topmost inactive view, that of {\tt main}, is restored.
@@ -849,7 +865,7 @@ detected as security violations.
 
 \paragraph*{Well-bracketed Control Flow}
 
-To begin with, what if {\tt f} returns to an unexpected place (i.e. \(\PCname \neq 20\) or
+To begin with, what if {\tt f} returns to an unexpected place (i.e., \(\PCname \neq 20\) or
 \(\SP \neq 980\))? We consider this to violate \(\wbcf\). \(\wbcf\) is a relationship between
 call steps and their corresponding return steps: just after the return, the program
 counter should be at the next instruction following the call,
@@ -1188,10 +1204,10 @@ information relevant to hardware enforcement (such as a tag).
 When constructing variants (see~\cref{sec:props}, this additional information should
 not be varied. To capture this idea, we assume a given \emph{compatibility} equivalence relation \(\sim\) on values,
 and lift it element-wise to states.  Two values should be compatible if their
-non-payload information (e.g. their tag) is identical.
+non-payload information (e.g., their tag) is identical.
 %% \apt{This is still not very convincing!
 %%   empting to say that only the payloads can affect the step function, but that is
-%%   too strong, right? (OK for tags, but not, e.g. capabilities?}
+%%   too strong, right? (OK for tags, but not, e.g., capabilities?}
 %% \sna{Yeah, I don't think we can say something universal about when values should be
 %%   considered compatible.}
 
@@ -1662,7 +1678,7 @@ passes a pointer to them? This can be thought of as a {\it capability}-based
 notion of security. Capabilities are unforgeable tokens that grant access to
 a region of memory, typically corresponding to valid pointers to that region.
 As such, this capability safety relies on some preexisting notion of pointer
-validity, i.e. {\it pointer provenance}.
+validity, i.e., {\it pointer provenance}.
 Memarian et al.'s PVI \cite{provenance} (provenance via integer)
 memory model is a good option: it annotates pointers with the identity of the
 object they first pointed to, and propagates the annotation when the
@@ -2066,7 +2082,7 @@ only tested.
 
 %In particular, many enforcement techniques focus purely on
 %well-bracketed control flow. For instance, stack canaries aim to prevent certain attacks on the return
-%address, and shadow stacks with protection (e.g. Return Address Defender~\cite{Chiueh2001RAD})
+%address, and shadow stacks with protection (e.g., Return Address Defender~\cite{Chiueh2001RAD})
 %to enforce it completely. Others combine this protection with some degree of memory protection,
 %chiefly focusing on integrity. Interestingly, Skorstengaard et al.~\cite{SkorstengaardSTKJFP}
 %describe their ``local state encapsulation'' in terms of integrity, but it is equivalent
