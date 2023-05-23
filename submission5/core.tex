@@ -419,7 +419,7 @@ we do not assume any particular compiler.
 If the machine is enhanced with % security
 enforcement mechanisms such as hardware
 tags~\cite{pump_hasp2014,Gollapudi+23} or
-capabilities~\cite{Woodruff+14}, we 
+capabilities~\cite{Woodruff+14}, we
 assume that the behavior of these mechanisms is incorporated into the basic
 step semantics of the machine, but we keep the enforcement state
 unchanged when constructing variant states\bcp{As a reader, I wonder
@@ -434,24 +434,29 @@ Failstop behavior by enforcement mechanisms is modeled as stepping to the same s
 %%   as an address. In the tag world, it happens to coincide with a natural instance
 %%   of our variant-compatibility relation.}
 
-\paragraph*{Security Semantics and Property Structure}
-A security semantics extends a machine
+\paragraph*{Security Semantics and Property Structure}\bcp{Delete
+  ``and Property Structure''?}
+A security semantics extends the core machine model
 with additional context about the identities of current and pending
-functions (which act as security principals) and about the registers and memory they require
-to be secure. This added context is purely notional;
-it does not affect the behavior of the real machine. The security context
+functions (which act as security principals) and about their security
+requirements on registers and memory. This added context is purely notional;
+it does not affect the behavior of the core machine. The security context
 evolves dynamically through the execution of security-relevant operations,
 which include calls, returns, and frame manipulation.
 Our security properties are phrased in terms of this context, often as predicates
-on future states (``when control returns to the current function...'')
+on future states (``when control returns to the current function, X
+must hold...'')
 or as relations on traces of future execution
 (hyper-properties).
 
 Security-relevant operations abstract over the implementation details of the
 actions they take. In this paper, each operation corresponds to a
-single underlying machine instruction. One instruction may perform multiple
-operations. We assume that a compiler or other trusted source has provided
-labels to disambiguate instructions that have multiple purposes. For instance,
+single underlying machine instruction\bcp{That sentence is opaque.}.
+Since the same machine instruction may be used by compilers for
+different purposes, we assume that the compiler or another trusted
+source has provided
+labels to identify the security-relevant purpose of each instruction,
+if any. For instance,
 in the tagged RISC-V architecture
 that we use in our examples and tests,
 calls and returns are conventionally performed using the {\tt jal}
@@ -459,18 +464,25 @@ calls and returns are conventionally performed using the {\tt jal}
 and {\tt jalr} (``jump-and-link-register'') instructions, but these
 instructions might also be used for other things.
 
-We end up with an annotated version of the
-machine transition function written \(\mach \xrightarrow{\bar{\psi},
+These considerations lead to an annotated version of the
+machine transition function, written \(\mach \xrightarrow{\bar{\psi},
   \obs} \mach'\), where \(\mach\) and \(\mach\) are machine states, \(\obs\) is
-an (optional) external event, and \(\bar{\psi}\) is a list of security-relevant operations.
+an optional external\bcp{observable?} event, and \(\bar{\psi}\) is a
+list of security-relevant operations\bcp{that bit is not completely
+  clear---e.g., why a list?  because the same
+machine step can do several distinct security-revevant things}.
 %
-We then lift this into a transition between pairs of machine states and contexts,
-by applying a set of operation-specific rules to transform each state and context to
-a new context, in parallel with the ordinary transition on states.
-The most important rules describe call and return operations.
+This is then lifted into a transition between pairs of machine states
+and contexts
+by applying a set of operation-specific rules\bcp{why is it a set of
+  rules rather than a single transition function?} that, given a
+state and associated state, yield a new context corresponding to
+the new state calculated by the ordinary transition relation on states.
+%
+The most important of these rules describe call and return operations.
 A call pushes a new view onto the context stack and changes the class of the
 caller's data to protect it from the new callee; a return reverses these steps.
-Other operations can serve to signal how parts of the stack frame are being used to store
+Other operations signal how parts of the stack frame are being used to store
 or share data, and their corresponding rules alter the classes of different
 state elements accordingly.
 
@@ -481,7 +493,8 @@ The set of security-relevant operations (\(\Psi\)) covered in this paper is give
 memory is introduced in the example in \cref{sec:example}
 and formalized in \cref{sec:formal}. An extended set covering simple memory sharing and
 tail-call elimination is described in \cref{sec:extensions} and tested in \cref{sec:testing}.
-The remaining operations are needed for the capability-based model in \cref{app:ptr}.
+The remaining operations are needed for the capability-based model in
+\cref{app:ptr}.
 
 \newcommand{\example}{\rowcolor{black!0}}
 \newcommand{\testing}{\rowcolor{black!10}}
@@ -512,41 +525,43 @@ The remaining operations are needed for the capability-based model in \cref{app:
 \end{center}
 \caption{Security-relevant operations and their parameters, with the
   sections where
-  they are first used.}
+  they are first used.  \bcp{Say what the gray levels mean.}}
   \label{tab:psi}
 \end{table}
 
 \paragraph*{Views and Security Classes}
 
-The security context consists of a stack of views: functions that map
-each state element to a {\it security class}:
+The security context consists of a stack of \emph{views}, where a view is a
+function mapping
+each state element to a {\it security class}---one of
 \(\public\), \(\unsealed\), \(\object\), or \(\sealed\).
 
 State elements that are outside of the stack---general-purpose memory used for
 globals and the heap, as well as the code region and globally shared
 registers---are always labeled \(\public\). We place security requirements on some
-\(\public\) elements for purposes of the \(\wbcf\) property, and a
+\(\public\) elements for purposes of the well-bracketed control flow \(\wbcf\) property, and a
 given enforcement mechanism
 might restrict their access (e.g., by rendering code immutable), but for integrity
 and confidentiality purposes they are considered accessible at all times.
 
-For a newly active function, every stack location that is available
+When a function is newly activated, every stack location that is available
 for use but not yet initialized
-is seen as \(\unsealed\). From the perspective of the caller, the callee has no obligations
+is \(\unsealed\). From the perspective of the caller, the callee has no obligations
 regarding its use of free elements.
 
-Arguments are marked \(\object\), meaning that their contents may be safely used.
+Arguments are marked \(\object\), meaning that their contents may be
+used safely.
 When a function allocates memory for its own stack frame, that memory will also be \(\object\).
 Then, on a call, \(\object\) elements that are not being used to communicate with
-the new callee will become \(\sealed\)---reserved for an inactive principal,
+the callee will become \(\sealed\)---i.e., reserved for an inactive principal
 and expected to be unchanged when it becomes active again.
 
 \paragraph*{Instantiating the Framework}
 
 Conceptually, the following steps are needed to instantiate the framework to a specific machine
-and code style: (i) define the base machine semantics, including any hardware
+and coding conventions: (i) define the base machine semantics, including any hardware
 security enforcement features; (ii) identify the set of
-security-relevant operations and rules required by the code style; (iii) determine
+security-relevant operations and rules required by the coding conventions; (iii) determine
 how to label machine instructions with security-relevant
 operations as appropriate; (iv) specify the form of observable events.
 
@@ -559,15 +574,18 @@ trust that the security-relevant operations have been correctly labeled.
 If a compiled function
 call is not marked as such, then the caller's data might not be
 protected from the callee; conversely, marking too many operations as
-calls will simply cause otherwise safe programs to be rejected.
+calls may cause otherwise safe programs to be rejected.
 
-We do not assume that low-level code adheres to any fixed calling
-convention or implements any particular source-language constructs.
+We do not assume that low-level code adheres to any fixed\bcp{single?
+(I think we do assume that the calling convention is fixed in any
+particular instance of our framework, no?)} calling
+convention or is being used to implement any particular
+source-language constructs.
 Indeed, if the source language is C, then high-level programs might
 contain undefined behavior, in which case they might be compiled to
 arbitrary machine code. A given enforcement mechanism or target
 architecture might place additional constraints, particularly on
-call and return sequences.
+call and return sequences.\bcp{Not sure that last sentence is helpful.}
 
 
 %tend to assume
@@ -577,8 +595,8 @@ call and return sequences.
 %which could be enforced by a micro-policy, a well-behaved compiler, or other enforcement technique.
 
 In general, it is impossible to distinguish buggy machine code from an
-attacker.  In our examples we will identify one function or another as
-an attacker, but we do not require any static division between trusted
+attacker.  In examples, we often identify one function or another as
+an attacker, but our framework does not require any static division between trusted
 and untrusted code, and we aim to protect even buggy code.
 
 This is a strong threat model, but it does omit some important aspects
@@ -589,29 +607,35 @@ concurrency.  Hardware and timing attacks are also out of scope.
 \section{Properties by Example}
 \label{sec:example}
 
-In this section we introduce our security property definitions by means
-of small code examples, using a simplified set of security-relevant operations for
+In this section, we introduce our security properties by means
+of small code examples, using a simple set of security-relevant operations for
 calls, returns, and private allocations.
+
 \Cref{fig:main} gives C code and possible corresponding compiled 64-bit RISC-V code
 for a function {\tt main}, which
 takes an argument {\tt secret} and initializes a local variable {\tt sensitive} to contain
 potentially sensitive data.
 Then {\tt main} calls another function {\tt f},
-and afterward performs a test on {\tt sensitive} to decide whether
+and afterward it performs a test on {\tt sensitive} to decide whether
 to output {\tt secret}.  Since {\tt sensitive} is initialized to 0,
-the test should fail, and {\tt main} should instead output the return value of {\tt f}.
+the test should always fail, and {\tt main} should instead output the return value of {\tt f}.
 Output is performed by writing to the special global {\tt out},
 and we assume that such writes are the only observable events in the system.
 
 The C code is compiled using the standard RISC-V calling conventions~\cite{RISC-V-CC}.
-In particular, the first function argument and the function
+In particular, the function's first argument and its
 return value are both passed in {\tt a0}.
-Memory is byte-addressed and the stack grows towards
-lower addresses. We assume that {\tt main} begins at address 0 and its callee {\tt f} at address 100.
+Memory is byte addressed, and the stack grows towards
+lower addresses. We assume that {\tt main} begins at address 0 and its
+callee {\tt f} at address 100.  \bcp{What are alloc(-20,20) and
+  dealloc(0,20)? What is $\varepsilon$ in call $\varepsilon$?  Also, readers who don't have the RISCV ISA at their
+fingertips may wonder what all the instructions actually do.  We
+should (if it's true) explicitly say that they don't need to worry
+about the details.}
 
 \begin{figure}
   \newcommand{\figonebox}[1][]{\genbox{30pt}{blue!20}{#1}}
-  \begin{subfigure}{\columnwidth}
+  ~~~~~~\begin{subfigure}{\columnwidth}
     {\tt
       volatile int out;
 
@@ -662,36 +686,37 @@ lower addresses. We assume that {\tt main} begins at address 0 and its callee {\
     }\)
   \end{subfigure}
 
-  \caption{Example: C and assembly code for {\tt main}, and layout of its stack frame; the stack grows to the left.}
+  \caption{Example: C and assembly code for {\tt main} and layout of its stack frame (the stack grows to the left).}
   \label{fig:main}
 \end{figure}
 
-We now consider how {\tt f} might misbehave and violate desirable
-stack safety properties associated with {\tt main}. To put the violations in a
-security framework, suppose that {\tt f} is actually an attacker seeking
+Now, suppose that {\tt f} is actually an attacker seeking
 to leak {\tt secret}. It might do so in a number of ways, shown as snippets of
 assembly code in \cref{fig:f}.
 %
 Leakage is most obviously viewed as a violation of {\tt main}'s {\it confidentiality}.
 In \cref{subfig:direct}, {\tt f} takes an offset from the stack
-pointer, accesses {\tt secret}, and directly outputs it. But more
-subtly, even if somehow prevented from outputting {\tt secret} directly, {\tt f}
-can instead return that value so that {\tt main} stores it to {\tt out},
+pointer, accesses {\tt secret}, and directly outputs it.  More
+subtly, even if it is somehow prevented from outputting {\tt secret}
+directly, {\tt f}
+can instead return its value so that {\tt main} stores it to {\tt out},
 as in \cref{subfig:indirect}.
 %
 Beyond simply reading {\tt secret}, the attacker might overwrite {\tt sensitive}
 with 42, guaranteeing that {\tt main} publishes its own secret unintentionally
-(\cref{subfig:integrity}).
-Attacks of this kind do not violate {\tt main}'s confidentiality, but
+(\cref{subfig:integrity}); this does not violate {\tt main}'s
+confidentiality, but
 rather its {\it integrity}.
 In \cref{subfig:WBCF}, the attacker arranges to return to the
-wrong instruction, thereby bypassing the check and publishing {\tt secret} regardless,
-violating the program's {\it well-bracketed control flow} (\(\wbcf\)).
+wrong instruction, thereby bypassing the check and publishing {\tt
+  secret} regardless; this
+violates the program's {\it well-bracketed control flow} (\(\wbcf\)).
 %
 In \cref{subfig:WBCF2}, a different attack violates \(\wbcf\), this time
-by returning to the correct program counter but with the wrong stack pointer.%
-\footnote{We pad some of the variants with {\tt nop}s just so that all the
-snippets have the same length, which keeps the step numbering uniform in~\cref{fig:exec1}.}
+by returning to the correct program counter but with the wrong stack pointer.
+%
+(We pad some of these variants with {\tt nop}s just so that all the
+snippets have the same length, which keeps the step numbering uniform in~\cref{fig:exec1}.)
 
 \begin{figure}
   \begin{subfigure}[b]{\columnwidth}
@@ -761,22 +786,24 @@ an \(\SP\)-relative offset and size), make a call (with a specified list of argu
 or make a return.
 
 Our security semantics attaches a security context to the machine state,
-which consists of a view \(V\) and a stack \(\sigma\) of pending activations' views.
+consisting of a view \(V\) and a stack \(\sigma\) of pending activations' views.
 \Cref{fig:exec1} shows how the security context evolves over the first few
 steps of the program.  (The formal details of the security semantics are described in
 \cref{sec:formal}, and the context evolution rules are formalized in \cref{fig:basicops}.)
-Execution begins at the start of {\tt main}, where the program counter (\(\PCname\)) is zero,
-and with the stack pointer (\(\SP\)) at address 1000.
+Execution begins at the start of {\tt main}, with the program counter
+(\(\PCname\)) set to zero and the stack pointer (\(\SP\)) at address 1000.
 State transitions are numbered and labeled with a list of security operations, written
-\(\downarrow \overline{\psi}\) between steps. We write \(\emplist\) for empty lists.
+\(\downarrow \overline{\psi}\), between steps. We write \(\emplist\)
+for empty lists.  \bcp{Is it ever anything other than empty or a
+  singleton?}
 
 The initial view \(V_0\) maps all stack addresses below \(\SP\) to \(\unsealed\) and the remainder of
 memory to \(\public\). The sole used argument register, {\tt a0}, is mapped to \(\object\);
 other caller-save registers are mapped to \(\unsealed\) and callee-save registers to \(\sealed\).
 Step 1 allocates a word each for {\tt secret}, {\tt sensitive}, and {\tt res}, as well
-as two words for the return address. This has the
+as two words for the return address; this has the
 effect of marking those bytes \(\object\).
-(We use \(V\llbracket\cdot\rrbracket\) to denote updates to \(V\).)
+We use \(V\llbracket\ldots\rrbracket\) to denote updates to \(V\).
 
 \begin{figure*}
   \begin{tabular}{|r|r||l|r}
@@ -845,31 +872,31 @@ effect of marking those bytes \(\object\).
 %
 At step 5, the current principal's record is pushed onto the inactive list.
 The callee's view is updated from the caller's such that all \(\object\) memory locations
-become \(\sealed\). (For now we assume no sharing of memory between activations; data is
+become \(\sealed\). (For now we assume no sharing of stack memory between activations; data is
 passed only through argument registers, which remain active. In the presence of memory
 sharing, some memory would remain active, too.)
 Function {\tt f} does not take any arguments; if it did, any registers containing them would be
 mapped to \(\object\), while any non-argument, caller-saved
-registers are mapped to \(\unsealed\). In the current example, only register {\tt a0} has a change in
+registers are mapped to \(\unsealed\). In the current example, only register {\tt a0}  changes
 security class. All callee-save registers remain \(\sealed\) for all calls, so
-if, in the example, we varied the assembly code for {\tt main} so that {\tt sensitive} were stored
+if, in the example, we varied the assembly code for {\tt main} so that {\tt sensitive} was stored
 in a callee-save register (e.g., {\tt s0}) rather than in memory, its security class would still
 be \(\sealed\) at the entry to {\tt f}.
 %
-At step 9, {\tt f} returns, and the topmost inactive view, that of {\tt main}, is restored.
+At step 9, {\tt f} returns and the topmost inactive view, that of {\tt main}, is restored.
 
 We now show how this security semantics can be used to define notions of confidentiality,
 integrity, and correct control flow in such a way that many classes of
 bad behavior, including the attacks in \cref{fig:f}, are
 detected as security violations.
 
-\paragraph*{Well-bracketed Control Flow}
+\paragraph*{Well-Bracketed Control Flow}
 
-To begin with, what if {\tt f} returns to an unexpected place (i.e., \(\PCname \neq 20\) or
-\(\SP \neq 980\))? We consider this to violate \(\wbcf\). \(\wbcf\) is a relationship between
+To begin with, if {\tt f} returns to an unexpected place (i.e., \(\PCname \neq 20\) or
+\(\SP \neq 980\)), we say that it has violated \(\wbcf\). \(\wbcf\) is a relationship between
 call steps and their corresponding return steps: just after the return, the program
-counter should be at the next instruction following the call,
-and the stack pointer should be the same as it was before the call.
+counter should be at the next instruction below the call,
+and the stack pointer should have the same value that it had before the call.
 Both of these are essential for security. In \cref{subfig:WBCF}, the attacker adds
 16 to the return address and then returns; this bypasses the {\tt if}-test in the code and outputs
 {\tt secret}.
@@ -888,7 +915,7 @@ correct \(\SP = 980\). In this scenario, given the layout of {\tt main}'s frame,
 \vspace{\abovedisplayskip}
 
 \noindent
-{\tt main}'s attempt to read {\tt sensitive} will instead
+{\tt main}'s attempt to read {\tt sensitive} will\bcp{may?} instead
 read part of the return address, and its attempt to output
 {\tt res} will instead output {\tt secret}.
 
@@ -899,8 +926,8 @@ So we define a predicate on states that should hold just after the return:
 We can identify the point just after the return (if a return occurs)
 as the first state in which the pending call stack is smaller than it was
 just after the call.
-\(\wbcf\) requires that if \(\mach\) is the state at that point, then \(\ret ~ \mach\) holds.
-(This property is formalized in \cref{tab:props}, line 1).
+\(\wbcf\) requires that, if \(\mach\) is the state at that point, then \(\ret ~ \mach\) holds.
+This property is formalized in \cref{tab:props}, line 1.
 %For nested calls, where the pending stack is initially larger, the same principle
 %applies: \(\ret ~ \mach\) must hold the next time the pending stack is the same size or smaller.
 
