@@ -347,7 +347,9 @@ in \cref{sec:testing} the testing framework itself, and in
 \cref{sec:relwork,sec:future} related and future work.
 
 The accompanying artifact \apt{what is the state of that? Depending on conference preferences,
-should give a URL or other pointer.} contains formal definitions (in Coq) of our
+  should give a URL or other pointer.} \sna{Git repo is currently private, I think. I didn't see much
+  in the way of conference preferences on a quick glance, but I'll look again in the morning.}
+contains formal definitions (in Coq) of our
 properties, plus our testing framework.  It does not include proofs:
 we use Coq primarily for the QuickChick testing library and to
 ensure that our definitions are unambiguous.  Formal proofs are left
@@ -538,12 +540,15 @@ convention or implements any particular source-language constructs.
 Indeed, if the source language is C, then high-level programs might
 contain undefined behavior, in which case they might be compiled to
 arbitrary machine code. A given enforcement mechanism or target
-architecture might place additional constraints, particularly on the behavior of
-call and return sequences. For instance, extant implementations tend to assume
-implicitly that callee-saved registers have their values maintained by whichever compiler
-generated their code. \apt{I do not understand the last sentence. Implementations of what?}
-Our properties explicitly state this as a requirement,
-which could be enforced by a micro-policy, a well-behaved compiler, or other enforcement technique.
+architecture might place additional constraints, particularly on
+call and return sequences.
+
+
+%tend to assume
+%implicitly that callee-saved registers have their values maintained by whichever compiler
+%generated their code. \apt{I do not understand the last sentence. Implementations of what?}
+%Our properties explicitly state this as a requirement,
+%which could be enforced by a micro-policy, a well-behaved compiler, or other enforcement technique.
 
 In general, it is impossible to distinguish buggy machine code from an
 attacker.  In our examples we will identify one function or another as
@@ -579,7 +584,7 @@ Memory is byte-addressed and the stack grows towards
 lower addresses. We assume that {\tt main} begins at address 0 and its callee {\tt f} at address 100.
 
 \begin{figure}
-  \newcommand{\figonebox}[1][]{\genbox{30pt}{lightgray}{#1}}
+  \newcommand{\figonebox}[1][]{\genbox{30pt}{blue!20}{#1}}
   \begin{subfigure}{\columnwidth}
     {\tt
       volatile int out;
@@ -631,7 +636,7 @@ lower addresses. We assume that {\tt main} begins at address 0 and its callee {\
     }\)
   \end{subfigure}
 
-  \caption{Example: C and assembly code for {\tt main}, and layout of its stack frame; the stack grows to the left.\apt{In this and later figures, can we lighten the blue backgrounds?}}
+  \caption{Example: C and assembly code for {\tt main}, and layout of its stack frame; the stack grows to the left.}
   \label{fig:main}
 \end{figure}
 
@@ -813,9 +818,6 @@ effect of marking those bytes \(\object\).
 \end{figure*}
 %
 At step 5, the current principal's record is pushed onto the inactive list.
-% APT: I think this is dead:
-%Its return target is the return address of the call,
-%and the stack pointer target is the stack pointer at the moment of call.
 The callee's view is updated from the caller's such that all \(\object\) memory locations
 become \(\sealed\). (For now we assume no sharing of memory between activations; data is
 passed only through argument registers, which remain active. In the presence of memory
@@ -913,10 +915,7 @@ in \(\mach\) if they can be replaced by arbitrary other values without changing 
 observable behavior of the machine. All other elements are \emph{relevant}.\footnote{
 This story is slightly over-simplified. If an enforcement mechanism maintains
 additional state associated with elements, such as tags, we don't want that
-state to vary. Formal definitions of variants and
-relevance that incorporate this wrinkle are given in \cref{sec:props}.
-\sna{Might need to make this concept a touch more explicit in \cref{sec:props}, or else
-promise a little less here.}
+state to vary. This is touched on in \cref{sec:props}.
 }
 
 We define \emph{caller integrity} (\(\clri\))  as the property that
@@ -956,26 +955,25 @@ to its original value at the return point.
   %\raisebox{\height}{\not\approx}
   \hspace{0.5cm}
   \stackrel{\hookrightarrow \mathtt{out}}{\genbox{20pt}{white}{1}}\]
-  \caption{Integrity Violation\apt{Unclear how these states are related. Extend caption?  And what do the colors means?}}
+  \caption{Integrity Violation: {\tt sensitive} changed, and if varied, changes future outputs}
   \label{fig:variant}
 \end{figure}
 
 In our example setting, the observation trace consists of the sequence
-of values written to {\tt out}.
-The example in \cref{subfig:integrity} modifies the value of {\tt sensitive},
-which is \(\sealed\). \Cref{fig:variant} shows the state just after the call at step 5,
-assuming that {\tt sec} is 5. \apt{But the figure seems to show several states. Unclear!}
-Similar to \(\wbcf\), we define
+of values written to {\tt out}. In \cref{subfig:integrity} the states before
+and after the call differ in the value of {\tt sensitive}. \Cref{fig:variant}
+shows the states before and after the call, which disagree on the value at
+{\tt sensitive}. If we consider a
+variant of the original return state in which {\tt sensitive} is 0 (orange)
+as opposed to 42 (blue), that state will eventually output 1, while the actual
+execution outputs 5. This means that {\tt sensitive} is relevant.
+
+To be more explicit, similar to \(\wbcf\), we define
 \(\intProp\) as a predicate on states that holds if
 all relevant sealed addresses in \(\mach\) are the same as after step 5.
 We require that \(\intProp\) hold on the state following the matching return,
-which is reached by step 9. Here {\tt sensitive} has obviously changed, but is it relevant?
-\apt{Rest of this paragraph is still not very clear, especially in (non-?)relation to the figure.}
-Consider a variant state in which {\tt sensitive} has any other value, % arbitrarily choosing
-say 43. As execution continues after the return
-from the original state, it passes the {\tt if}-test on {\tt sensitive}, whereas the execution
-from the variant does not, resulting in differing outputs. Therefore {\tt sensitive} \emph{is} relevant,
-so \(\intProp\) does not hold, and integrity has indeed been violated.
+which is reached by step 9. Here {\tt sensitive} has obviously changed, but we
+just saw that it is relevant.
 
 \paragraph*{Caller Confidentiality}
 
@@ -987,14 +985,14 @@ As we saw in the examples, we must consider both the observable events
 that the callee produces during the call and the changes that the callee makes to the state that might
 affect the caller after the callee returns.
 
-Consider the state after step 5,
-% APT: trying to remove mysterious state notation:
-% Consider the state \(\mach\) after step 5, whose context is \((V_2,\sigma)\),
-5with the attacker code from \cref{subfig:direct}. We take a variant state over the set of elements that are
-\(\sealed\) in \(V_2\) (see \cref{fig:variant2}).
-If we take a trace of execution from each state until it returns,
-the traces may differ, in this case outputting 5 (the original value of {\tt secret}) and
-4 \apt{3???} (its value in the variant) respectively. This is a violation of
+Consider the state after step 5, shown at the top of \cref{fig:variant2},
+with the attacker code from \cref{subfig:direct} and the assumption that
+{\tt secret} has the value 5. We take a variant state over
+the set of elements that are \(\sealed\) in \(V_2\) (orange), and compare it to the
+original (blue). During the execution, the value of {\tt secret} is written
+to the output, and the information leak is evidenced by the fact that the
+outputs do not agree---the original outputs 5, while the variant outputs 3.
+This is a violation of
 {\it internal confidentiality} (formalized in \cref{tab:props}, line 3a).
 
 \newcommand{\leftbox}[1][]{\genbox{20pt}{\leftvariant}{#1}}
@@ -1089,18 +1087,18 @@ extracted and placed in {\tt a0}, the return value register.
   \caption{Return-time Confidentiality Violation}
   \label{fig:variant3}
 \end{figure}
-%
-In this case, {\tt a0} has changed during the call, {\em and}
-the return states do not agree on its value. We can therefore deduce that
-it carries some information derived from the original varied elements. By
-contrast, the sealed stack frame has not changed during the call, so the
-fact that it varies between the return states represents that the initial
-states disagreed, not a leak.
-\apt{Last sentence still quite mysterious.}
+
+At the end of the call, we can deduce that every element on which
+the variant states disagree must carry some information derived from
+the original varied elements. In most cases, that is because the element
+is one of the original varied elements and has not changed during the
+call, which does not represent a leak. But in the case of {\tt a0}, it
+has changed during the call, {\em and} the return states do not agree
+on its value. This represents data that has been leaked, and should
+not be used to affect future execution.
 Unless {\tt a0} happens to be irrelevant to the caller, this example
 is a violation of what we term {\it return-time confidentiality}
 (formalized in \cref{tab:props}, line 3b).
-\sna{Consider connections to robust declassification. Low priority.}
 
 Structurally, return-time confidentiality resembles integrity, but now dealing with
 variants. We begin with a state immediately following
@@ -1201,8 +1199,7 @@ Each state element (memory word or register) is given a \emph{security class}
 \(l \in \{\public, \object, \sealed, \unsealed\}\).
 A \emph{view} \(V \in \mathit{VIEW}\) maps elements to security classes.
 For any security class \(l\), we write \(l(V)\)
-to denote the set of elements \(\component\) such that \(V ~ \component = l\).\apt{Did you ever use this?
-  I've edited some places to do do.}
+to denote the set of elements \(\component\) such that \(V ~ \component = l\).
 The {\it initial view} \(V_0\) maps all stack locations to \(\unsealed\),
 all other locations to \(\public\), and registers based on which set they
 belong to: \(\sealed\) for callee-saved, \(\unsealed\) for caller-saved except for those
@@ -1249,16 +1246,20 @@ Note that \(Op\) takes as its first argument the state {\it before} the step.
                {\(V' = V \llbracket \addr \mapsto \unsealed \mid \addr \in \components \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{dealloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
     %
-    \judgmentbr{\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
-                 \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
-              {\(V'' = V' \llbracket \addr \mapsto \sealed | \addr \in \object(V')\rrbracket\)}
-               {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}})
-                 ~ (V,\sigma) = (V'',V::\sigma)\)}
+    \judgment{\(V' = V \left\llbracket
+      k \mapsto
+      \begin{cases}
+        \unsealed & \textnormal{if } k \in CLR \\
+        \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
+        \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } k \in \object(V') \\
+        V(k) & \textnormal{otherwise} \\
+      \end{cases}\right\rrbracket\)}
+             {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}})
+               ~ (V,\sigma) = (V',V::\sigma)\)}
     %
     \judgment{}
              {\(Op ~ \mach ~ \mathbf{return} ~ (\_, (V,\sigma')) = (V, \sigma')\)}
-             \caption{Basic Operations\apt{This was absolutely full of problems. Please triple-check my changes.
-             And do we really need two-stage calculation in the call rule, or was that just to avoid type-setting issues?}}
+             \caption{Basic Operations\apt{...Do we really need two-stage calculation in the call rule, or was that just to avoid type-setting issues?}\sna{The latter. I took a stab at trying to avoid it, but I'm ambivalent about  that ``cases'' style here.}}
   \label{fig:basicops}
 \end{figure}
 
@@ -1289,7 +1290,7 @@ coinductively by these rules:
               {\(d \hookrightarrow (\mach,(V,\sigma)) = \notfinished{\obs}{\obsT}\)}
 
 \noindent
-When \(d = 0\), the trace will always be infinite\apt{why? remind us about machine not halting (if that is the reason)?}; in this case we
+When \(d = 0\), the trace will always be infinite because the machine never halts; in this case we
 omit \(d\) and just write \(\hookrightarrow s\).
 
 Two event traces $\obsT_1$ and $\obsT_2$ are {\em similar},
@@ -1297,7 +1298,7 @@ written \(\obsT_1 \eqsim \obsT_2\), if the sequence of non-silent events
 is the same. That is, we compare up to deletion of \(\tau\) events.
 Note that this results in an infinite silent trace being similar to
 any trace. So, a trace that silently diverges due to a failstop will
-fulfill this property \apt{what property?} vacuously.
+be vacuously similar to all other traces.
 
 \begin{minipage}{.4\columnwidth}
   \judgment{}{\(\obsT \eqsim \obsT\)}
@@ -1408,7 +1409,7 @@ respectively. Once again, \(\Uparrow\) is coinductive.
     & \(\textnormal{ for all calls } (\mach,(V,\sigma)) \stepstounder{} (\mach',(V',\sigma'))\) \\
     %
     \rowcolor{black!20}
-    & & & \(\textnormal{ \hspace{0.8in}} \land \mach''[\PCname] = \mach[\PCname]+4\) & \\
+    & & & \(\textnormal{ \hspace{0.8in}} \land \mach''[\PCname] = \mach[\PCname]+\mathit{sz}\) & where \(\mathit{sz}\) is the size of one instruction \\
     %
     \rowcolor{black!10}
     2
@@ -1454,7 +1455,7 @@ respectively. Once again, \(\Uparrow\) is coinductive.
     & \(\textnormal{ where } (\mach' ~ \cintProp ~ \nach') \triangleq
     \mach' \parallel \bar{\Diamond}(\mach,\nach,\mach',\nach')\) & \\
   \end{tabular}
-  \caption{Properties\apt{The hardwired +4 is a little sad, but oh well.}}
+  \caption{Properties}
   \label{tab:props}
 \end{table*}
 
@@ -1547,44 +1548,41 @@ as \(\object\) and seal everything else (\cref{sfig:stkargs}).
 Using this mechanism, a call-by-value argument passed on the stack at an \(\SP\)-relative offset
 is specified by the triple \((\SP, \mathit{off}, \mathit{sz})\).
 In this case, only the immediate callee gains access to the argument location.
-A C++-style call-by-reference argument % where the reference is
-passed in \(\reg\)
-is instead specified by \((\reg, 0, \mathit{sz})\), which allows
-the reference to be passed further down the stack.\apt{Last sentence is completely mysterious.}
+A C++-style call-by-reference argument where the reference is passed in \(\reg\)
+is instead specified by the triple \((\reg, 0, \mathit{sz})\). Such a call-by-reference
+argument could be passed through multiple calls, provided that it is in \(\overline{sa}\)
+each time.
 
-\apt{This needs light revision to reflect fact that Capabilities section is now on same page, not much later!}
-If the address of an object is taken directly and passed as a
-pointer, we simply classify the object as ``public'' and give it no protection against
-access by other functions. We extend the \(\mathbf{alloc}\) operation
-with a boolean flag, where {\bf t} indicates
+Absent the more sophisticated capability model (below), if the address of an object
+is taken directly and passed as a pointer, we simply classify the object as ``public''
+and give it no protection against access by other functions.
+We extend the \(\mathbf{alloc}\) operation with a boolean flag, where {\bf t} indicates
 that the allocation is public, and {\bf f} that it is private.
 If space for multiple objects is allocated in a single step,
 that step can make multiple allocation operations, each labeled appropriately.
 Public objects are labeled \(\public\) rather than \(\object\), so they are
 never sealed at a call (\cref{sfig:publicalloc}).
-Providing more fine-grained control over sharing is desirable, but
-seems to require a considerably more complex model; \cref{app:ptr} describes one
-approach, based on capabilities.
-
+Providing more fine-grained control over sharing is desirable, but requires a considerably
+more complex model. This simple model is included in our testing; we describe
+an untested approach based on capabilities below.
 
 \begin{figure*}
   \begin{subfigure}{0.4\textwidth}
     \[\mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach \triangleq
     \{\mach[\reg]+i | \mathit{off} \leq i < \mathit{off+sz}\}\]
 
-    \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
-                 \{\addr \mid V ~ \addr = \unsealed\}\)}
+    \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \unsealed(V)\)}
                {\(V' = V \llbracket \addr \mapsto \sealed \mid \addr \in \components \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{f} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
 
     \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
-                 \{\addr \mid V ~ \addr = \unsealed\}\)}
+                 \unsealed(V)\)}
                {\(V' = V \llbracket \addr \mapsto \public \mid \addr \in \components \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{t} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
     %
     \judgmentbr{\(b = \mach[\SP] + \mathit{off}\)}
                {\(V' = V \llbracket \addr \mapsto \unsealed |
-                 b \leq a < b+\mathit{sz} \land V ~ \addr = \object \rrbracket\)}
+                 b \leq a < b+\mathit{sz} \land \addr \in \object(V) \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{dealloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
 
     \caption{Memory Allocation}
@@ -1595,15 +1593,27 @@ approach, based on capabilities.
     \[\mathit{passed} ~ \overline{sa} ~ \mach = \bigcup_{(\reg,\mathit{off},\mathit{sz}) \in \overline{sa}}
     \mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach\]
     %
-    \judgmentbr{\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
-                 \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
-               {\(V'' = V'\llbracket \addr \mapsto \sealed | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \rrbracket\)}
-               {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
-                 ~ (V,\sigma) = (V'',V::\sigma)\)}
+    \judgment{\(V' = V \left\llbracket
+      k \mapsto
+      \begin{cases}
+        \unsealed & \textnormal{if } k \in CLR \\
+        \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
+        \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } \\
+        & k \in \object(V) - \mathit{passed} ~ \overline{sa} ~ \mach \\
+        V(k) & \textnormal{otherwise} \\
+      \end{cases}\right\rrbracket\)}
+             {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
+               ~ (V,\sigma) = (V',V::\sigma)\)}
     %
-    \judgmentbr{\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
-                 \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
-               {\(V'' = V'\llbracket \addr \mapsto \unsealed | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \rrbracket\)}
+    \judgment{\(V' = V \left\llbracket
+      k \mapsto
+      \begin{cases}
+        \unsealed & \textnormal{if } k \in CLR \\
+        \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
+        \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } \\
+        & k \in \object(V) - \mathit{passed} ~ \overline{sa} ~ \mach \\
+        V(k) & \textnormal{otherwise} \\
+      \end{cases}\right\rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{tail call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
                  ~ (V,\sigma) = (V',\sigma)\)}
     %
@@ -1613,7 +1623,7 @@ approach, based on capabilities.
     \caption{Calls with Argument Passing on the Stack}
     \label{sfig:stkargs}
   \end{subfigure}
-  \caption{Operations supporting tail calls and argument passing on stack.\apt{This needs similar edits to the previous operations figure. In particular, same question about the $V''$ in call and tailcall.}}
+  \caption{Operations supporting tail calls and argument passing on stack.}
   \label{fig:advops}
 \end{figure*}
 
@@ -1657,47 +1667,57 @@ of a pointer from one element to another, and one which clears the provenance
 
 In addition to the normal call stack, our security context will carry a map \(\rho\) from
 elements to memory regions, represented as a base and a bound \(\context = (V, \sigma, \rho)\).
-Existing operations are extended to preserve the value of \(\rho\), and the new operations
-work as follows\apt{Put these and tweaked call rule into a separate figure in the same style as the existing two}:
+Most existing operations are extended to preserve the value of \(\rho\), while the new operations
+and the call operation work as seen in \cref{fig:capops}.
 
-\judgmentbr[Promote]
-           {\(\psi = \mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},\mathit{sz})\)}
-           {\(\rho' = \rho[\reg_{dst} \mapsto \mathit{range} ~ \reg_{base} ~ \mathit{off} ~ \mathit{sz}]\)}
-           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+\begin{figure*}
+  \begin{minipage}{0.5\textwidth}
+    \judgmentbr[Promote]
+               {\(\psi = \mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},\mathit{sz})\)}
+               {\(\rho' = \rho[\reg_{dst} \mapsto \mathit{range} ~ \reg_{base} ~ \mathit{off} ~ \mathit{sz}]\)}
+               {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+               %
+    \judgment[Clear]
+             {\(\psi = \mathbf{clear} ~ \component\)}
+             {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho[\component \mapsto \emptyset])\)}
+  \end{minipage}
+  \begin{minipage}{0.5\textwidth}
+    \judgmentbr[Propagate]
+               {\(\psi = \mathbf{propagate} ~ \component_{src} ~ \component_{dst}\)}
+               {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
+               {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+               %
+    \[\begin{split}
+    & \mathit{capped} ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{\component\} \cup \mathit{capped} ~ \components' ~ \rho \textnormal{ where} \\
+    & \components' = \{\component' |\rho[\component] = (\mathit{base},\mathit{bound})
+    \land \mathit{base} \leq \component' < \mathit{bound}\} \\
+    \end{split}\]
 
-\judgmentbr[Propagate]
-           {\(\psi = \mathbf{propagate} ~ \component_{src} ~ \component_{dst}\)}
-           {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
-           {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+  \end{minipage}
+  \begin{minipage}{1\textwidth}
+    \vspace{\abovedisplayskip}
+    \judgment{\(V' = V \left\llbracket
+      k \mapsto
+      \begin{cases}
+        \unsealed & \textnormal{if } k \in CLR \\
+        \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
+        \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } k \in \object(V) - (\mathit{passed} ~ \overline{sa} ~ \mach \cup \mathit{capped} ~ \overline{\reg_{args}} ~ \rho) \\
+        V(k) & \textnormal{otherwise} \\
+      \end{cases}\right\rrbracket\)}
+             {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V',V::\sigma,\rho)\)}
 
-\judgment[Clear]
-         {\(\psi = \mathbf{clear} ~ \component\)}
-         {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho[\component \mapsto \emptyset])\)}
-
-We now have a notion of provenance, and must integrate it into the definition of
-stack safety. We essentially generalize the above notion of passing: we will consider
+  \end{minipage}
+    
+\caption{Operations supporting provenance-based protection of passed objects}
+\label{fig:capops}
+\end{figure*}
+         
+This essentially generalizes the above notion of passing: we will consider
 a caller to have intentionally passed an object if that object is reachable by
-a capability that has been passed to the callee. This includes capabilities passed
-indirectly, by being stored in an object that is in turn passed. Formally, we call
-this set \(\mathit{capped}\), and define it recursively:
-%
-\[\begin{split}
-& \mathit{capped} ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{\component\} \cup \mathit{capped} ~ \components' ~ \rho \textnormal{ where} \\
-& \components' = \{\component' |\rho[\component] = (\mathit{base},\mathit{bound})
-\land \mathit{base} \leq \component' < \mathit{bound}\} \\
-\end{split}\]
-
-We then tweak the call operation to seal only objects that are in \(\mathit{capped}\), or
-the previously defined \(\mathit{passed}\).
-
-\judgmentbrbrbr[]
-               {\(\psi = \mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa}\)}
-               {\(V' = V \llbracket \reg \mapsto \unsealed | \reg \in \mathit{CLR} \rrbracket
-                 \llbracket \reg \mapsto \public | \reg \in \overline{\reg_{args}} \rrbracket\)}
-               {\(\components = \{\addr | V' ~ \addr = \object \land \addr \not \in (\mathit{passed} ~ \overline{sa} ~ \mach) \cup (\mathit{capped} ~ \overline{\reg_{args}} ~ \rho) \}\)}
-               {\(V'' = V'\llbracket \components \mapsto \sealed \rrbracket\)}
-               {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) =
-                 (V'',V::\sigma,\rho)\)}
+a capability that has been passed to the callee. Reachability includes capabilities passed
+indirectly, by being stored in an object that is in turn passed. We call
+the set of reachable addresses \(\mathit{capped}\). The call operation in this setting
+will seal only objects that are neither in \(\mathit{capped}\) nor the previously defined \(\mathit{passed}\).
 
 In the resulting property, once an object is sealed (because its
 capability has not been passed to a callee), subsequent nested calls can never unseal it.
@@ -1795,10 +1815,8 @@ the semantics of the enforcement-augmented machine.
 However, while there are no fundamental barriers to producing such a proof,
 it would be considerable work to carry out for a full ISA like RISC-V and
 complex enforcement mechanisms like Roessler and DeHon's micro-policies.
-We therefore choose to systematically \emph{test} their micro-policies.
-Our primary testing targets are the eager {\em Depth Isolation}
-and the {\em Lazy Per-Activation Tagging and Clearing} micro-policies.\apt{Reads
-  awkwardly coming just after last section.}
+We therefore choose to systematically \emph{test} their {\em Depth Isolation}
+and {\em Lazy Per-Activation Tagging and Clearing} micro-policies.
 
 We use a Coq specification of the RISC-V architecture~\cite{Bourgeat2021AMF},
 extend it with a runtime monitor implementing a stack safety micro-policy,
@@ -1863,6 +1881,7 @@ values. The post-call variant would execute alongside the ``primary''
 execution until the test is finished. This results in tracking a number
 of variant executions that is linear in the total number of calls!
 
+\sna{Maybe a quick example or even two would be of benefit here.}
 For better performance, we instead maintain a single ``post-call taint''
 execution that executes in parallel with the original. Everytime a function returns
 with elements containing tainted data\apt{I don't understand what that is}, the test process sets those elements
@@ -1943,7 +1962,7 @@ our set of mutations as {\em HEADER\_NO\_INIT}.
   \hline
 \end{tabular}
 \vspace*{1em}
-\caption{MTTF for finding bugs in erroneous policy enforcement mechanisms\apt{what does the horizontal line mean?}}
+\caption{MTTF for finding bugs in erroneous \(DI\) (top) and \(LTC\) (bottom) micro-policies}
 \vspace*{-2em}
 \label{tab:bug-table}
 \end{table}
@@ -1962,10 +1981,6 @@ equivalent to its counterpart in depth isolation,
 and a version where stores succeed but fails to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
 It turns out that {\em PER\_DEPTH\_TAG} is a comparatively subtle bug,
 taking longer to catch.
-
-Our properties allow us to identify an enforcement mechanism as
-not really stack safe, and to validate a possible fix.\apt{This paragraph
-  comes as a bit of a non-sequitur here.}
 
 %% I don't think this discussion is relevant here
 %% Unfortunately, Lazy Per-activation Tagging and Clearing
@@ -2070,8 +2085,6 @@ only tested.
 \section{Future Work}
 \label{sec:future}
 
-\sna{Look into wasm compilation per reviewer 1. Low priority.}
-
 We plan to test our properties against multiple enforcement mechanisms.
 The top priority is capability machines, namely 
 CHERI \cite{DBLP:conf/sp/WatsonWNMACDDGL15}, a modern architecture designed
@@ -2120,11 +2133,13 @@ the model in \cref{app:ptr} for arbitrary memory-safe pointer sharing.
 \subsubsection*{Acknowledgements}
 
 We thank the reviewers for their comments, CHR Chhak and Allison Naaktgeboren for
-feedback during the writing process, and A\"ina Linn Georges for her enthusiastic reception
-of our early work.\apt{would consider rephrasing that last.}
+feedback during the writing process, and A\"ina Linn Georges for significant technical
+feedback and encouragement.
 
 This work was supported by the National Science Foundation under Grant No. 2048499, Specifying and Verifying Secure Compilation of C Code to Tagged Hardware;
-and by Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) as part of the Excellence Strategy of the German Federal and State Governments, EXC 2092 CASA -- 390781972.\apt{Benjamin?}{Leo?}
+by Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) as part of the Excellence Strategy of the German Federal and State Governments, EXC 2092 CASA -- 390781972;
+and by NSF award \#2145649, CAREER: Fuzzing Formal Specifications.
+\apt{Benjamin?}
 
 \bibliographystyle{IEEEtran}
 \bibliography{bcp.bib,local.bib}
