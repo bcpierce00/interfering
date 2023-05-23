@@ -25,7 +25,7 @@ Import ListNotations.
 
 Require Import ExtLib.Structures.Monad. Import MonadNotation. Open Scope monad_scope.
 
-Definition trace := true.
+Definition trace := false.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
 
@@ -715,7 +715,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
       (args ++ refs ++
          [(
              Jal ra (offset - (4*(Z.of_nat (length args))) - (4*(Z.of_nat (length refs)))),
-             [Tinstr; Tcall],
+             [Tinstr; if tail then Ttailcall else Tcall],
              f,
              ops
          )]
@@ -806,13 +806,13 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
            We are likely to write to our frame, but will not read it.
            We are likely to read from function arguments in memory (TODO)
            and use register arguments. *)
-            '(ooff,offs') <- (match offs with
-                     | [] => ret (None, [])
-                     | off::offs' => pick <- elems_ off offs;;
-                                     ret (Some pick, List.remove Z.eq_dec off offs)
-                     end);;
-            seq <- genLocalWrite m fprof true false ooff;;
-            ret (seq, initialize offs')
+        match offs with
+        | [] => exception "Empty init list"
+        | off::offs' =>
+            pick <- elems_ off offs;;
+            seq <- genLocalWrite m fprof true false (Some pick);;
+            ret (seq, initialize (List.remove Z.eq_dec off offs))
+        end
     (* ROB: right now all we do during initialization is write from registers to locals.
        But once you have genArgRead, it would be great to also do some reads from the stack args,
        which we could then use to initialize locals in future steps.
@@ -821,13 +821,14 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         (* We are in the bulk of execution. We will make reads and
            writes, primarily in the stack frame, as well as outside
            of the stack entirely. *)
-        seq <- freq [(5, genLocalWrite m fprof false false None);
+        seq <- freq [(5, res <- genArith i t m cm f;;
+                         ret [res]);
+                     (5, genLocalWrite m fprof false false None);
                      (5, genLocalRead m fprof);
                      (1, genPtrWrite m fprof true);
-                     (1, genPtrRead m fprof true);
-                     (5, res <- genArith i t m cm f;;
-                         ret [res])];;
-        ret (seq,s)
+                     (1, genPtrRead m fprof true)
+                ];;
+        ret (seq,compute)
     (* ROB: likewise, adding genArgRead in here. *)
     | call f', Some fprof =>
         (* We are preparing to call f. We will tend to choose f's
@@ -868,20 +869,16 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
            attacker becomes a dumb attacker, which will just start trying
            things without regard to the tags. Anything goes! *)
         seq <- freq [(1,
-                       let spVal' := wtoz spVal in
-                       let minImm := (spVal' - stackLo i)%Z in
-                       let maxImm := (stackHi i - spVal)%Z in
-                       imm' <- (genImm (maxImm - minImm));;
-                       let imm := (minImm + imm')%Z in
+                       let minImm := (-10)%Z in
+                       let maxImm := 5%Z in
+                       imm <- (genImm (maxImm - minImm));;
                        rd <- (genTargetReg m);;
                        let instr := Lw rd sp imm in
                        ret [(instr, [Tinstr], f, noops)]);
                      (1,
-                       let spVal' := wtoz spVal in
-                       let minImm := (spVal' - stackLo i)%Z in
-                       let maxImm := (stackHi i - spVal)%Z in
-                       imm' <- (genImm (maxImm - minImm));;
-                       let imm := (minImm + imm')%Z in
+                       let minImm := (-10)%Z in
+                       let maxImm := 5%Z in
+                       imm <- (genImm (maxImm - minImm));;
                        rs <- (genTargetReg m);;
                        let instr := Sw sp rs imm in
                        ret [(instr, [Tinstr], f, noops)]);
@@ -969,7 +966,7 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
                      | tired => ret tired
                      | accomplice => ret compute
                      | smart_attacker => ret compute
-                     | dumb_attacker => freq_ (ret compute) [(3, ret dumb_attacker); (1, ret compute)]
+                     | dumb_attacker => ret tired
                      end;;
                    ret (s', (pred fFuel)::rest)
           end
@@ -1031,12 +1028,12 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
             (match its with
              | [] =>
                  (* There isn't. Generate an instruction sequence. *)
-                 '(its',functions') <- strat_options s li ti mp dataP codeP cm f functions;;
+                 '(its',s') <- strat_options s li ti mp dataP codeP cm f functions;;
                  match its' with
                  | it :: its'' =>
                      let '(_,_,_,ops) := it in
-                     '(s', funSteps') <- step_strat s functions f funSteps ops;;
-                     ("Steps left: " ++ show steps ++ ", Pending: " ++ show its ++ ", Gen: " ++
+                     '(s', funSteps') <- step_strat s' functions f funSteps ops;;
+                     ("Steps left: " ++ show steps ++ " Strat: " ++ show s ++ ", Pending: " ++ show its ++ ", Gen: " ++
                                      show it ++ ", " ++ show its'' ++ nl)%string !
                      ret (it, its'', s', funSteps')
                  | _ => exception "EmptyInstrSeq"

@@ -56,7 +56,7 @@ Notation " 'get' X <- A , B ; C" := (match A with
 Notation " 'iff' B , X <- A ; C" := (X <- (if B then A else ret X) ;; C)
                                       (at level 60, X at level 60, A at level 60, B at level 200, C at level 200).
 
-Definition trace := false.
+Definition trace := true.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
 
@@ -120,7 +120,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
 
   (* END HACK *)
 
-  Definition defFuel := 42%nat.
+  Definition defFuel := 100%nat.
 
   Derive Show for Element.
 
@@ -158,6 +158,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   Definition op_call (op : Operation) : bool :=
     match op with
     | Call _ _ _ => true
+    | Tailcall _ _ _ => true
     | _ => false
     end.
 
@@ -180,7 +181,8 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
 
   (* to test conditions, first check the depth, then collect any witnesses
      and eliminate conditions that have been checked *)
-  Fixpoint check_conds (conds:list Condition) (m:State) :=
+  Fixpoint check_conds (conds:list Condition) (m:State)
+    : list (nat * (State -> list Element)) * list Element :=
     match conds with
     | [] => ([],[])
     | (depth,test)::conds' =>
@@ -206,6 +208,9 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
       | O => collect "Out-of-Fuel" true
       | S fuel' =>
           let '(m', ctx', _ops, obs) := cstep (m, ctx) cm in
+          if weq (projw m' PC) (projw m PC)
+          then collect "Failstop" true
+          else
           (* Take a step of the shadow state *)
           let '(n',_,obs') := step n cm in
           (* Test that we made the same observations *)
@@ -224,8 +229,8 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
             if ops_call ops
             then let test := gen m' ctx' cm in (* Before/after call? *)
                  (depthOf ctx, test) :: conds'
-            else conds in
-          aux fuel' m' ctx' n'' conds'
+            else conds' in
+          aux fuel' m' ctx' n'' conds''
   end
   in
   aux fuel m ctx n conds.
@@ -532,7 +537,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
 
 End TestPropsRISCVSimple.
 
-Extract Constant defNumTests => "1".
+Extract Constant defNumTests => "1000".
 
 (* Print Assumptions TestPropsRISCVSimple.prop_lazyConfidentiality. *)
 Time QuickCheck TestPropsRISCVSimple.prop_laziestIntegrity.

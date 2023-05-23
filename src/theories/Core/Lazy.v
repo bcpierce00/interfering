@@ -330,9 +330,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
       | [Tpc pcdepth], _, [Tstack memdepth Knormal] =>
           Some (p <| regtags := map.put (regtags p) rd [] |>)
       | [Tpc pcdepth], _, [Tstack memdepth Krelarg] =>
-          if Nat.eqb pcdepth (S memdepth) || Nat.eqb pcdepth memdepth
-          then Some (p <| regtags := map.put (regtags p) rd [] |>)
-          else ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
+          Some (p <| regtags := map.put (regtags p) rd [] |>)
       | [Tpc pcdepth], _, [Tstack memdepth (Krefarg memid)] =>
           if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
           else match trs with
@@ -449,7 +447,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     | _ => None
     end.
 
-  Definition v:version := PER_DEPTH_TAG.
+  Definition v:version := LOAD_NO_CHECK.
 
   Definition pstep (m : MachineState) (p : PolicyState) : option PolicyState :=
     let pc := getPc m in
