@@ -1238,25 +1238,35 @@ Note that \(Op\) takes as its first argument the state {\it before} the step.
     \[\mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach \triangleq
     \{\mach[\reg]+i | \mathit{off} \leq i < \mathit{off+sz}\}\]
 
-  \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \unsealed(V)\)}
-             {\(V' = V \llbracket \addr \mapsto \object \mid \addr \in \components \rrbracket\)}
-             {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
-    %
-    \judgmentbr{\(\components = \mathit{range}~ \SP ~ \mathit{off} ~ \mathit {sz} ~ \mach \cap \object(V)\)}
+    \judgmentbr[~Alloc]
+               {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \unsealed(V)\)}
+               {\(V' = V \llbracket \addr \mapsto \object \mid \addr \in \components \rrbracket\)}
+               {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
+               
+    \vspace{\abovedisplayskip}
+
+    \judgmentbr[~Dealloc]
+               {\(\components = \mathit{range}~ \SP ~ \mathit{off} ~ \mathit {sz} ~ \mach \cap \object(V)\)}
                {\(V' = V \llbracket \addr \mapsto \unsealed \mid \addr \in \components \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{dealloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
-    %
-    \judgment{\(V' = \lambda \component .
-      \begin{cases}
-        \unsealed & \textnormal{if } k \in CLR \\
-        \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
-        \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } k \in \object(V) \\
-        V(k) & \textnormal{otherwise} \\
-      \end{cases}\)}
+
+    \vspace{\abovedisplayskip}
+    
+    \judgment[~Call]
+             {\(V' = \lambda \component .
+               \begin{cases}
+                 \unsealed & \textnormal{if } k \in CLR \\
+                 \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
+                 \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } k \in \object(V) \\
+                 V(k) & \textnormal{otherwise} \\
+               \end{cases}\)}
              {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}})
                ~ (V,\sigma) = (V',V::\sigma)\)}
-    %
-    \judgment{}
+
+    \vspace{\abovedisplayskip}             
+    
+    \judgment[~Return]
+             {}
              {\(Op ~ \mach ~ \mathbf{return} ~ (\_, (V,\sigma')) = (V, \sigma')\)}
              \caption{Basic Operations}
   \label{fig:basicops}
@@ -1280,13 +1290,17 @@ We write \(d \hookrightarrow s\) for the trace of execution from a state \(s\)
 up to the first point where the stack depth is smaller than \(d\), defined
 coinductively by these rules:
 
-\judgment{\(|\sigma| < d\)}
+\judgment[~Done]
+         {\(|\sigma| < d\)}
          {\(d \hookrightarrow (\mach,(V,\sigma)) = \tau\)}
 
-\judgmentthree{\((\mach,(V,\sigma)) \stepstounder{\overline{\psi},\obs} (\mach',\context')\)}
-              {\(|\sigma| \geq d\)}
-              {\(d \hookrightarrow (\mach',\context') = \obsT\)}
-              {\(d \hookrightarrow (\mach,(V,\sigma)) = \notfinished{\obs}{\obsT}\)}
+\vspace{\abovedisplayskip}
+         
+\judgmenttwobrlong[~Step]
+                  {\(|\sigma| \geq d\)}
+                  {\(d \hookrightarrow (\mach',\context') = \obsT\)}
+                  {\((\mach,(V,\sigma)) \stepstounder{\overline{\psi},\obs} (\mach',\context')\)}
+                  {\(d \hookrightarrow (\mach,(V,\sigma)) = \notfinished{\obs}{\obsT}\)}
 
 \noindent
 When \(d = 0\), the trace will always be infinite because the machine never halts; in this case we
@@ -1300,19 +1314,22 @@ any trace. So, a trace that silently diverges due to a failstop will
 be vacuously similar to all other traces.
 
 \begin{minipage}{.4\columnwidth}
-  \judgment{}{\(\obsT \eqsim \obsT\)}
+  \judgment[~SimRefl]{}{\(\obsT \eqsim \obsT\)}
 \end{minipage}
 \begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
+  \judgment[~SimEvent]
+           {\(\obsT_1 \eqsim \obsT_2\)}
            {\(\notfinished{\obs}{\obsT_1} \eqsim \notfinished{\obs}{\obsT_2}\)}
 \end{minipage}
 
 \begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
+  \judgment[~SimLeft]
+           {\(\obsT_1 \eqsim \obsT_2\)}
            {\(\notfinished{\tau}{\obsT_1} \eqsim \obsT_2\)}
 \end{minipage}
-\begin{minipage}{.4\columnwidth}
-  \judgment{\(\obsT_1 \eqsim \obsT_2\)}
+\begin{minipage}{.5\columnwidth}
+  \judgment[~SimRight]
+           {\(\obsT_1 \eqsim \obsT_2\)}
            {\(\obsT_1 \eqsim \notfinished{\tau}{\obsT_2}\)}
 \end{minipage}
 
@@ -1359,12 +1376,16 @@ where \(P\) is a predicate on machine states. This is a coinductive relation
 similar to ``weak until'' in temporal logic---it also holds if the program never
 returns from depth \(d\).
 
-\judgmenttwo[Returned]
+\vspace{\abovedisplayskip}
+
+\judgmenttwo[~Returned]
             {\(|\sigma| < d\)}
             {\(P ~ \mach\)}
             {\((d \uparrow P) ~ (\mach, (V,\sigma))\)}
 
-\judgmenttwobrlong[Step]
+\vspace{\abovedisplayskip}            
+            
+\judgmenttwobrlong[~Step]
                   {\(|\sigma| \geq d\)}
                   {\((d \uparrow P) ~ (\mach', \context')\)}
                   {\((\mach, (V,\sigma)) \stepstounder{\overline{\psi},\obs} (\mach', \context')\)}
@@ -1375,19 +1396,20 @@ Similarly, we give a analogous binary relation for use in confidentiality. We de
 first states that return from depth \(d\) after \((\mach,\context)\) and \((\mach',\context')\),
 respectively. Once again, \(\Uparrow\) is coinductive.
 
-\judgmentthree[Returned]
+\vspace{\abovedisplayskip}
+\judgmentthree[~Returned]
               {\(|\sigma_1| < d\)}
               {\(|\sigma_2| < d\)}
               {\(\mach_1 ~ R ~ \mach_2\)}
               {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
-\judgmenttwobrlong[Left]
+\judgmenttwobrlong[~Left]
                   {\(|\sigma_1| \geq d\)}
                   {\((\mach_1,(V_1,\sigma_1)) \stepstounder{\overline{\psi},\obs} (\mach_1',\context_1')\)}
                   {\((\mach_1',\context_1') ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
                   {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2,(V_2,\sigma_2))\)}
 
-\judgmenttwobrlong[Right]
+\judgmenttwobrlong[~Right]
                   {\(|\sigma_2| \geq d\)}
                   {\((\mach_2,(V_2,\sigma_2)) \stepstounder{\overline{\psi},\obs} (\mach_2',\context_2')\)}
                   {\((\mach_1,(V_1,\sigma_1)) ~ (d \Uparrow R) ~ (\mach_2',\context_2')\)}
@@ -1591,7 +1613,7 @@ an untested approach based on capabilities below.
     \label{sfig:publicalloc}
   \end{subfigure}
   \begin{subfigure}{0.52\textwidth}
-    %
+    
     \[\mathit{push} ~ V ~ \overline{\reg} ~ K \triangleq \lambda k .
     \begin{cases}
       \unsealed & \textnormal{if } k \in CLR \\
@@ -1601,16 +1623,18 @@ an untested approach based on capabilities below.
       V(k) & \textnormal{otherwise} \\
     \end{cases}      
     \]
-    %
+    
     \[\mathit{passed} ~ \overline{sa} ~ \mach \triangleq \bigcup_{(\reg,\mathit{off},\mathit{sz}) \in \overline{sa}}
     \mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach\]
-    %
+    
     \judgmenttwo[~Call]
         {\(\components = \mathit{passed} ~ \overline{sa} ~ \mach\)}
         {\(V' = \mathit{push} ~ V ~ \overline{\reg_{args}} ~ \components\)}
         {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
           ~ (V,\sigma) = (V',V::\sigma)\)}
-    %
+
+    \vspace{\abovedisplayskip}
+        
     \judgmenttwo[~Tailcall]
         {\(\components = \mathit{passed} ~ \overline{sa} ~ \mach\)}
         {\(V' = \mathit{push} ~ V ~ \overline{\reg_{args}} ~ \components\)}
@@ -1671,20 +1695,26 @@ and the call operation work as seen in \cref{fig:capops}.
     \judgment[Promote]
              {\(\rho' = \rho[\reg_{dst} \mapsto \mathit{range} ~ \reg_{base} ~ \mathit{off} ~ \mathit{sz}]\)}
              {\(Op ~ \mach ~ (\mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},\mathit{sz})) ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
-             %
+             
+    \vspace{\abovedisplayskip}
+             
     \judgment[Clear]
              {\(\rho' = \rho[\component \mapsto \emptyset]\)}
              {\(Op ~ \mach ~ (\mathbf{clear} ~ \component) ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
-             %
+             
+    \vspace{\abovedisplayskip}
+             
     \judgment[Propagate]
              {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
              {\(Op ~ \mach ~ (\mathbf{propagate} ~ \component_{src} ~ \component_{dst}) ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
-               %
+             
+    \vspace{\abovedisplayskip}
 
     \[\mathit{reach} ~ \component ~ \rho \triangleq \{\component' | \mathit{base} \leq \component' < \mathit{bound}
     \textnormal{ where } \rho[\component] = (\mathit{base},\mathit{bound})\}\]
 
     \[\mathit{reach}^* ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{ \component \} \cup \mathit{reach}^* ~ (\mathit{reach} ~ \component ~ \rho) ~ \rho\]
+    \vspace{\abovedisplayskip}
 
     \vspace{\abovedisplayskip}
     \judgmentthree[\sc Call]
