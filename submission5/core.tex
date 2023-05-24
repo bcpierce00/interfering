@@ -215,18 +215,20 @@ Some of the other mechanisms listed above should also be amenable to strong
 formal guarantees.  In particular, Roessler and DeHon
 \cite{DBLP:conf/sp/RoesslerD18} present an array of tag-based
 micro-policies~\cite{pump_oakland2015} for stack safety that aim to offer
-universal protection.  But the reasoning involved is somewhat subtle.
-Their most realistic micro-policy, called Lazy
-Tagging and Clearing ({\LTC}\bcp{does it have to be italic?}), makes an interesting performance
-trade-off: it allows function activations to write improperly into one
-another's stack frames, but ensures that the owner of the corrupted
-memory cannot access it afterward.
+universal protection.  But the reasoning involved can be subtle:
+they include micro-policy optimizations, Lazy Tagging and Lazy Clearing
+(likely to be deployed together, which we hereafter refer to as Lazy
+Tagging and Clearing, or LTC). LTC allows function activations to write
+improperly into one another's stack frames, but ensures that the owner of
+the corrupted memory cannot access it afterward, avoiding expensive
+clearings of the stack frame.
 %
 Under this policy, one function activation {\em can} corrupt another's
 memory---just not in ways that affect observable behavior.
-Therefore, {\LTC} would not fulfill Georges et al.'s property
-(adapted to the tagged setting).  But {\LTC} does
-arguably enforce stack safety.  A looser, more observational
+Therefore, LTC would not fulfill Georges et al.'s property
+(adapted to the tagged setting).  But LTC does arguably enforce stack safety,
+or as Roessler and DeHon describe it informally, a sort of data-flow
+integrity tied to the stack. A looser, more observational
 definition of stack safety is needed to fit this situation.
 
 We propose here a formal characterization of stack safety based on
@@ -242,7 +244,7 @@ together with the
 Skorstengaard et al.~\cite{SkorstengaardSTKJFP}.
 
 Our properties are stated abstractly in the hope that they can also be
-applied to other enforcement mechanisms besides \LTC.
+applied to other enforcement mechanisms besides LTC.
 %
 However, it does not seem feasible to give
 a universal definition of stack safety
@@ -269,52 +271,28 @@ atop the hardware stack.
 
 Thus, any low-level treatment of stack safety must begin by asking:
 which high-level features are supported in a given
-setting using the stack, and what are their
-security requirements? Different answers will beget different properties.
-\bcp{There's an awkward conceptual transition here: We pose a question
-(``which high-level features are supported in a given
-setting using the stack, and what are their
-security requirements'') but then we don't seem to be going ahead and
-answering it.  I suggest adding a sentence here that answers the
-question directly, then a paragraph break.} \bcp{Though, actually, the
-next sentence repeats points that have already been made above.  Maybe
-better to just delete it and find a new transition to the sentence
-after.}
-We identify and define five security requirements that a system might try
-to enforce upon a function call: well-bracketed control flow, and the
-integrity and confidentiality of each of the caller and the callee.
-%
-We apply these first to a simple system
-with very few features, then to a more realistic one supporting
+setting using the stack, and how does their presence influence
+the expectation of well-bracketed control flow, confidentiality,
+and integrity? We begin with a simple system
+with very few features, then move to a more realistic one supporting
 tail-call elimination, argument passing on the stack, and callee-save
-registers.
+registers. Our properties are factored so that the basic structure
+of each of our five properties remains constant while the presence or
+absence of different features leads to subtler differences in how
+they behave.
 
 We demonstrate the usefulness of our properties for distinguishing
 between correct and
 incorrect enforcement using
 QuickChick~\cite{Denes:VSL2014,Pierce:SF4}, a property-based
 random testing tool for Coq.
-Indeed, we find that the published version of {\LTC} is flawed in
+Indeed, we find that the published version of LTC is flawed in
 a way that undermines both integrity and confidentiality; after
-correcting this flaw, {\LTC} satisfies all our
-properties.  Further, we modify {\LTC} to protect the features of
+correcting this flaw, LTC satisfies all of our
+properties.  Further, we modify LTC to protect the features of
 our more realistic system and apply
 random testing to validate this extended protection mechanism against
 the extended properties.
-
-%We generate random programs, using the features of our
-%more realistic system, and check that the stack safety {\em micro-policies}
-%of Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}
-%correctly detect the ones that attempt to violate one of our properties.
-
-%Furthermore, we
-%check that the testing framework is able to generate counterexamples
-%that violate our properties but are \emph{not} halted by incorrect
-%variants of the enforcement mechanisms---including the original {\LTC}!
-% SNA: we talk about this in the testing section, and it's a "best practice" for
-% PBT, but not really a contribution in and of itself
-
-%\subsection{Contributions}
 
 In summary, we offer the following contributions:
 
@@ -372,9 +350,9 @@ an (abstract) stack of function activations, each associated with a {\em view}
 that maps each machine {\em state element} (memory location or register)
 to a {\em security class} (active, sealed, etc.) specifying how the activation
 can access the element.
-The action of a security-relevant operation on the context is defined by a set
-of rules that characterize how particular machine code sequences are used
-to implement the function abstraction in terms of the stack and registers.\bcp{OK?}
+The action of a security-relevant operation on the context is defined by a function
+that characterizes how the operation's underling machine code ought to
+implement the function abstraction in terms of the stack and registers.
 
 Given the security classes of the elements of the machine state, we
 define high-level
@@ -409,12 +387,8 @@ enforcement mechanisms such as hardware
 tags~\cite{pump_hasp2014,Gollapudi+23} or
 capabilities~\cite{Woodruff+14}, we
 assume that the behavior of these mechanisms is incorporated into the basic
-step semantics of the machine, but we keep the enforcement state
-unchanged when constructing variant states\bcp{As a reader, I wonder
-  ``How would they do that?  Seems like they are saying the tag
-  enforcement or whatever is just part of the basic machine step
-  relation and we can't see it, but then going on to place a
-  requirement on it. How would such a requirement be phrased, formally?''}.
+step semantics of the machine, with a notion of ``compatible'' states that
+share security behavior that may be defined based on the enforcement mechanism.
 Failstop behavior by enforcement mechanisms is modeled as stepping to the same state
 (and thus silently diverging).
 %% \sna{I think that the payload concept is too nitty-gritty for this section.
@@ -506,9 +480,9 @@ The remaining operations are needed for the capability-based model in
   \end{tabular}
 \end{center}
 \caption{Security-relevant operations and their parameters, with the
-  sections where
-  they are first used.  \bcp{Say what the gray levels mean.}}
-  \label{tab:psi}
+  sections where they are first defined or used. Entries in light grey do not appear in
+  our examples, but are part of our testing. Dark grey entries are not tested.}
+\label{tab:psi}
 \end{table}
 
 \paragraph*{Views and Security Classes}
@@ -558,17 +532,12 @@ call is not marked as such, then the caller's data might not be
 protected from the callee; conversely, marking too many operations as
 calls may cause otherwise safe programs to be rejected.
 
-We do not assume that low-level code adheres to any fixed\bcp{single?
-(I think we do assume that the calling convention is fixed in any
-particular instance of our framework, no?)} calling
+We do not assume that low-level code adheres to any single calling
 convention or is being used to implement any particular
 source-language constructs.
 Indeed, if the source language is C, then high-level programs might
 contain undefined behavior, in which case they might be compiled to
-arbitrary machine code. A given enforcement mechanism or target
-architecture might place additional constraints, particularly on
-call and return sequences.\bcp{Not sure that last sentence is helpful.}
-
+arbitrary machine code.
 
 %tend to assume
 %implicitly that callee-saved registers have their values maintained by whichever compiler
@@ -609,11 +578,11 @@ In particular, the function's first argument and its
 return value are both passed in {\tt a0}.
 Memory is byte addressed, and the stack grows towards
 lower addresses. We assume that {\tt main} begins at address 0 and its
-callee {\tt f} at address 100.  \bcp{What are alloc(-20,20) and
-  dealloc(0,20)? What is $\varepsilon$ in call $\varepsilon$?  Also, readers who don't have the RISCV ISA at their
-fingertips may wonder what all the instructions actually do.  We
-should (if it's true) explicitly say that they don't need to worry
-about the details.}
+callee {\tt f} at address 100. The annotations in the right-hand column are
+security-relevant operations, described further below.
+The assembly is a simplified but otherwise typical compilation of the
+source code into RISC-V; its details are less important than the positions
+of the security-relevant operations.
 
 \begin{figure}
   \newcommand{\figonebox}[1][]{\genbox{30pt}{blue!20}{#1}}
@@ -1749,15 +1718,16 @@ On the other hand, an object that is passed via a pointer may be passed on indef
 
 We implement and test two micro-policies inspired by
 Roessler and DeHon~\cite{DBLP:conf/sp/RoesslerD18}:
-{\em Depth Isolation} (\(DI\)) and {\em Lazy Tagging and Clearing} ({\LTC}).
-Their precise connection to Roessler and DeHon's work is discussed below.
+{\em Depth Isolation} without lazy optimizations (DI) and with both
+Lazy Tagging and Lazy Clearing optimizations (LTC).
+(The connection between our properties and Roessler and DeHon's work is discussed below.)
 They share a common structure: each function activation is assigned a ``color'' \(n\)
 representing its identity. Stack locations belonging to that activation are
 tagged \(\tagStackDepth{n}\), and while the activation is running, the tag on the
 program counter (PC tag) is \(\tagPCDepth{n}\). Stack locations not part of
 any activation are tagged \(\tagNoDepth\).
 
-In \(DI\), \(n\) always corresponds to the depth of the stack when
+In DI, \(n\) always corresponds to the depth of the stack when
 the function is called. A function must initialize its entire frame upon entry
 in order to tag it, and then clear the frame before returning.
 During normal execution, the micro-policy rules only permit load and
@@ -1765,7 +1735,7 @@ store operations when the target memory is tagged {\em with the same depth}
 as the current {\PCname} tag, or, for store operations, if the target memory
 is tagged \(\tagNoDepth\).
 
-In {\LTC}, a function neither initializes the frame at entry nor clears it at exist;
+In LTC, a function neither initializes the frame at entry nor clears it at exist;
 instead, it simply sets each location's tag to the PC tag when that location is written. It does
 not check if those writes are legal! If the PC tag is \(\tagPCDepth{n}\),
 then any stack location that recieves a store will be tagged \(\tagStackDepth{n}\).
@@ -1781,11 +1751,7 @@ to guarantee that the full sequence executes from the beginning---no jumping int
 
 \paragraph*{Applicability to Roessler \& DeHon~\cite{DBLP:conf/sp/RoesslerD18}:}
 
-For Roessler and DeHon (henceforward \emph{R\&D}), Lazy Tagging and Lazy Clearing are both optimizations that
-can be applied to their Depth Isolation policy. Our version of {\LTC}
-corresponds to Depth Isolation with both optimizations applied. How closely
-do our properties correspond to the specifications of their policies?
-
+Roessler and DeHon (henceforward \emph{R\&D})
 R\&D differentiate between memory safety policies (without lazy optimization)
 and {\em data-flow integrity} policies (with lazy optimization). Our properties
 are phrased in terms of data flow, and we apply them to both optimized and non-optimized
@@ -1809,7 +1775,7 @@ that was previously written by an earlier activation at the same depth, it will
 violate callee confidentiality. If that location was in a caller's frame,
 it also violates caller integrity and confidentiality.
 
-R\&D propose addressing the dangling-pointer issue by
+They propose addressing the dangling-pointer issue by
 tracking both the depth of the current activation and the static identity
 of the active function. This would not eliminate all instances of this issue, but it
 would require the confidentiality-violating activation to be of the same
@@ -1822,10 +1788,10 @@ issue entirely---and does in our tests.
 R\&D do not need to protect registers, since they include the compiler in their
 trusted computing base, but we target threat models that do not.
 In particular, \(\clri\) requires callee-saved
-registers to be saved and restored properly. We extend \(DI\) and {\LTC}
+registers to be saved and restored properly. We extend DI and LTC
 so that callee-saved registers are also tagged with the color of the
 function that is using them. In \(DI\) they are tagged as part of the entry
-sequence, while in {\LTC} they are tagged when a value is placed in them.
+sequence, while in LTC they are tagged when a value is placed in them.
 
 \section{Validation through Random Testing}
 \label{sec:testing}
@@ -1983,7 +1949,7 @@ our set of mutations as {\em HEADER\_NO\_INIT}.
   \hline
 \end{tabular}
 \vspace*{1em}
-\caption{MTTF for finding bugs in erroneous \(DI\) (top) and {\LTC} (bottom) micro-policies}
+\caption{MTTF for finding bugs in erroneous micro-policies: DI (top) and LTC (bottom)}
 \vspace*{-2em}
 \label{tab:bug-table}
 \end{table}
@@ -1995,7 +1961,7 @@ The mean-time-to-failure (MTTF) and average number of tests for various bugs can
 it took to find the failure. Experiments were run in a desktop
 machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
 
-For {\LTC}, the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
+For LTC, the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
 fails in testing, in cases where data is leaked between sequential calls.
 To round out our mutation testing we also check {\em LOAD\_NO\_CHECK\_LT},
 equivalent to its counterpart in depth isolation,
