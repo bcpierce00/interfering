@@ -205,7 +205,7 @@ the flexibility available in creating gadget chains''
 \cite{Shanbhogue+19}, not to categorically rule out attacks. Other
 mechanisms, such as SoftBound~\cite{NagarakatteZMZ09} and code-pointer
 integrity~\cite{Kuznetsov+14}, do aim for stronger guarantees, but not
-typically\bcp{do we need that word?} formal ones.  To our knowledge, the sole
+formal ones.  To our knowledge, the sole
 line of work making a formal claim to protect stack safety is the
 study of secure calling conventions by Skorstengaard et
 al.~\cite{SkorstengaardSTKJFP} and Georges et
@@ -230,19 +230,7 @@ arguably enforce stack safety.  A looser, more observational
 definition of stack safety is needed to fit this situation.
 
 We propose here a formal characterization of stack safety based on
-the intuition of protecting function activations
-(both registers and stack frames)\bcp{Can we delete that parenthetical
-remark?  I think it distracts more than it clarifies.}
-from each other and
-%\bcp{Aren't other formal definitions based on the same intuition?}%
-%% \sna{Two differences we're trying to get across. First, protecting
-%%   functions vs. protecting stack frames: we bring registers into
-%%   the story because it isn't just about the stack as a data structure.
-%%   Second: describing security in terms of functions' high-level
-%%   security goals (f is trying to extract a secret) rather than
-%%   describing operationally what they can and can't do (as the CHERI
-%%   folks do.)}%
-%% \bcp{Both useful!  But neither comes across, at least not very clearly.}%
+the intuition of protecting function activations from each other and
 using the tools of language-based
 security~\cite{sabelfeld2003language} to treat function activations as
 security principals.  We decompose stack safety into a family of
@@ -405,7 +393,7 @@ flagging corruption of values only when it can actually impact visible behavior.
 
 We introduce these properties by example in \cref{sec:example} and
 formally in \cref{sec:formal}. In the remainder
-of this section we introduce the underlying \bcp{semantic?} framework
+of this section we introduce the underlying semantic framework
 in more detail.
 
 \paragraph*{Machine Model}
@@ -434,8 +422,7 @@ Failstop behavior by enforcement mechanisms is modeled as stepping to the same s
 %%   as an address. In the tag world, it happens to coincide with a natural instance
 %%   of our variant-compatibility relation.}
 
-\paragraph*{Security Semantics and Property Structure}\bcp{Delete
-  ``and Property Structure''?}
+\paragraph*{Security Semantics}
 A security semantics extends the core machine model
 with additional context about the identities of current and pending
 functions (which act as security principals) and about their security
@@ -450,9 +437,7 @@ or as relations on traces of future execution
 (hyper-properties).
 
 Security-relevant operations abstract over the implementation details of the
-actions they take. In this paper, each operation corresponds to a
-single underlying machine instruction\bcp{That sentence is opaque.}.
-Since the same machine instruction may be used by compilers for
+actions they take. Since the same machine instruction may be used by compilers for
 different purposes, we assume that the compiler or another trusted
 source has provided
 labels to identify the security-relevant purpose of each instruction,
@@ -467,17 +452,14 @@ instructions might also be used for other things.
 These considerations lead to an annotated version of the
 machine transition function, written \(\mach \xrightarrow{\bar{\psi},
   \obs} \mach'\), where \(\mach\) and \(\mach\) are machine states, \(\obs\) is
-an optional external\bcp{observable?} event, and \(\bar{\psi}\) is a
-list of security-relevant operations\bcp{that bit is not completely
-  clear---e.g., why a list?  because the same
-machine step can do several distinct security-revevant things}.
+an optional externally observable event, and \(\overline{\psi}\) is a
+list of security-relevant operations---necessary because a single step might
+perform multiple simultaneous operations.
 %
 This is then lifted into a transition between pairs of machine states
-and contexts
-by applying a set of operation-specific rules\bcp{why is it a set of
-  rules rather than a single transition function?} that, given a
-state and associated state, yield a new context corresponding to
-the new state calculated by the ordinary transition relation on states.
+and contexts by applying a transition function parameterized by the operation.
+We will decompose this function into rules associated with each operation and introduce
+them as needed.
 %
 The most important of these rules describe call and return operations.
 A call pushes a new view onto the context stack and changes the class of the
@@ -792,10 +774,8 @@ steps of the program.  (The formal details of the security semantics are describ
 \cref{sec:formal}, and the context evolution rules are formalized in \cref{fig:basicops}.)
 Execution begins at the start of {\tt main}, with the program counter
 (\(\PCname\)) set to zero and the stack pointer (\(\SP\)) at address 1000.
-State transitions are numbered and labeled with a list of security operations, written
-\(\downarrow \overline{\psi}\), between steps. We write \(\emplist\)
-for empty lists.  \bcp{Is it ever anything other than empty or a
-  singleton?}
+State transitions are numbered and may be labeled with a security operation, written
+\(\downarrow \psi\), between steps.
 
 The initial view \(V_0\) maps all stack addresses below \(\SP\) to \(\unsealed\) and the remainder of
 memory to \(\public\). The sole used argument register, {\tt a0}, is mapped to \(\object\);
@@ -819,7 +799,7 @@ We use \(V\llbracket\ldots\rrbracket\) to denote updates to \(V\).
     0 & 1000 & \(V_0, \emplist\)
     \\
     \cline{1-3}
-    \multicolumn{3}{l}{\multirow{2}{*}{\(1 \Big\downarrow [\mathbf{alloc} ~ (-20,20)]\)}} & \\
+    \multicolumn{3}{l}{\multirow{2}{*}{\(1 \Big\downarrow \mathbf{alloc} ~ (-20,20)\)}} & \\
     \multicolumn{3}{l}{} &
     \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\objbox} \!\! \objbox \objbox \objbox \objbox}_\object
@@ -832,11 +812,11 @@ We use \(V\llbracket\ldots\rrbracket\) to denote updates to \(V\).
     4 & 980 & \(V_1 = V_0 \llbracket 980..999 \mapsto \object\rrbracket, \emplist\) &
     \\
     \cline{1-3}
-    \multicolumn{3}{l}{\multirow{2}{*}{2-4 \(\Big\downarrow \emplist\)}} \\ \multicolumn{3}{l}{} \\
+    \multicolumn{3}{l}{\multirow{2}{*}{2-4 \(\Big\downarrow\)}} \\ \multicolumn{3}{l}{} \\
     \cline{1-3}
     16 & 980 & \(V_1, \emplist\) & \\
     \cline{1-3}
-    \multicolumn{3}{l}{\multirow{2}{*}{\(5 \Big\downarrow [\mathbf{call} ~ 100 ~ \emplist]\)}} & \\
+    \multicolumn{3}{l}{\multirow{2}{*}{\(5 \Big\downarrow \mathbf{call} ~ 100 ~ \emplist\)}} & \\
     \multicolumn{3}{l}{} &
     \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\sealbox} \!\! \sealbox \sealbox \sealbox \sealbox}_\sealed
@@ -848,11 +828,11 @@ We use \(V\llbracket\ldots\rrbracket\) to denote updates to \(V\).
     \cline{1-3}
     100 & 980 & \(V_2 = V_1 \llbracket 980..999 \mapsto \sealed, \mathtt{a0} \mapsto \unsealed\rrbracket,[V_1]\) & \\
     \cline{1-3}
-    \multicolumn{3}{l}{\multirow{2}{*}{6-8 \(\Big\downarrow \emplist\)}} \\ \multicolumn{3}{l}{} \\
+    \multicolumn{3}{l}{\multirow{2}{*}{6-8 \(\Big\downarrow\)}} \\ \multicolumn{3}{l}{} \\
     \cline{1-3}
     112 & 980 & \(V_2,[V_1]\) \\
     \cline{1-3}
-    \multicolumn{3}{l}{\multirow{2}{*}{\(9 \Big\downarrow [\mathbf{return}]\)}} & \\
+    \multicolumn{3}{l}{\multirow{2}{*}{\(9 \Big\downarrow \mathbf{return}\)}} & \\
     \multicolumn{3}{l}{} & \multirow{3}{*}{\(\underbrace{\dots \freebox \freebox \freebox \freebox \freebox}_\unsealed
       \! \underbrace{\stackrel{\stackrel{\SP}{\downarrow}}{\objbox} \!\! \objbox \objbox \objbox \objbox}_\object
       \! \underbrace{\pubbox \pubbox \pubbox \dots}_\public
@@ -915,7 +895,7 @@ correct \(\SP = 980\). In this scenario, given the layout of {\tt main}'s frame,
 \vspace{\abovedisplayskip}
 
 \noindent
-{\tt main}'s attempt to read {\tt sensitive} will\bcp{may?} instead
+{\tt main}'s attempt to read {\tt sensitive} may instead
 read part of the return address, and its attempt to output
 {\tt res} will instead output {\tt secret}.
 
@@ -1299,20 +1279,19 @@ Note that \(Op\) takes as its first argument the state {\it before} the step.
                {\(V' = V \llbracket \addr \mapsto \unsealed \mid \addr \in \components \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{dealloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
     %
-    \judgment{\(V' = V \left\llbracket
-      k \mapsto
+    \judgment{\(V' = \lambda \component .
       \begin{cases}
         \unsealed & \textnormal{if } k \in CLR \\
         \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
         \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } k \in \object(V') \\
         V(k) & \textnormal{otherwise} \\
-      \end{cases}\right\rrbracket\)}
+      \end{cases}\)}
              {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}})
                ~ (V,\sigma) = (V',V::\sigma)\)}
     %
     \judgment{}
              {\(Op ~ \mach ~ \mathbf{return} ~ (\_, (V,\sigma')) = (V, \sigma')\)}
-             \caption{Basic Operations\apt{...Do we really need two-stage calculation in the call rule, or was that just to avoid type-setting issues?}\sna{The latter. I took a stab at trying to avoid it, but I'm ambivalent about  that ``cases'' style here.}}
+             \caption{Basic Operations}
   \label{fig:basicops}
 \end{figure}
 
@@ -1462,7 +1441,7 @@ respectively. Once again, \(\Uparrow\) is coinductive.
     & \(\textnormal{ for all calls } (\mach,(V,\sigma)) \stepstounder{} (\mach',(V',\sigma'))\) \\
     %
     \rowcolor{black!20}
-    & & & \(\textnormal{ \hspace{0.8in}} \land \mach''[\PCname] = \mach[\PCname]+\mathit{sz}\) & where \(\mathit{sz}\) is the size of one instruction \\
+    & & & \(\textnormal{ \hspace{0.8in}} \land \mach''[\PCname] = \mach[\PCname]+\mathit{sz}\) & \textnormal{ where} \(\mathit{sz}\) is the size of instruction at \(\mach[\PCname]\) \\
     %
     \rowcolor{black!10}
     2
@@ -1625,7 +1604,7 @@ an untested approach based on capabilities below.
     \{\mach[\reg]+i | \mathit{off} \leq i < \mathit{off+sz}\}\]
 
     \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \unsealed(V)\)}
-               {\(V' = V \llbracket \addr \mapsto \sealed \mid \addr \in \components \rrbracket\)}
+               {\(V' = V \llbracket \addr \mapsto \object \mid \addr \in \components \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{f} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
 
     \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
@@ -1633,9 +1612,8 @@ an untested approach based on capabilities below.
                {\(V' = V \llbracket \addr \mapsto \public \mid \addr \in \components \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{t} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
     %
-    \judgmentbr{\(b = \mach[\SP] + \mathit{off}\)}
-               {\(V' = V \llbracket \addr \mapsto \unsealed |
-                 b \leq a < b+\mathit{sz} \land \addr \in \object(V) \rrbracket\)}
+    \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \object(V)\)}
+               {\(V' = V \llbracket \addr \mapsto \unsealed | \addr \in \components \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{dealloc} ~ \mathit{off, sz}) ~ (V,\sigma) = (V',\sigma)\)}
 
     \caption{Memory Allocation}
@@ -1643,35 +1621,30 @@ an untested approach based on capabilities below.
   \end{subfigure}
   \begin{subfigure}{0.6\textwidth}
     %
-    \[\mathit{passed} ~ \overline{sa} ~ \mach = \bigcup_{(\reg,\mathit{off},\mathit{sz}) \in \overline{sa}}
+    \[\mathit{push} ~ V ~ \overline{\reg} ~ K \triangleq \lambda k .
+    \begin{cases}
+      \unsealed & \textnormal{if } k \in CLR \\
+      \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
+      \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } \\
+      & k \in \object(V) - \components \\
+      V(k) & \textnormal{otherwise} \\
+    \end{cases}      
+    \]
+    %
+    \[\mathit{passed} ~ \overline{sa} ~ \mach \triangleq \bigcup_{(\reg,\mathit{off},\mathit{sz}) \in \overline{sa}}
     \mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach\]
     %
-    \judgment{\(V' = V \left\llbracket
-      k \mapsto
-      \begin{cases}
-        \unsealed & \textnormal{if } k \in CLR \\
-        \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
-        \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } \\
-        & k \in \object(V) - \mathit{passed} ~ \overline{sa} ~ \mach \\
-        V(k) & \textnormal{otherwise} \\
-      \end{cases}\right\rrbracket\)}
-             {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
-               ~ (V,\sigma) = (V',V::\sigma)\)}
+    \judgmenttwo[\sc Call]
+        {\(\components = \mathit{passed} ~ \overline{sa} ~ \mach\)}
+        {\(V' = \mathit{push} ~ V ~ \overline{\reg_{args}} ~ \components\)}
+        {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
+          ~ (V,\sigma) = (V',V::\sigma)\)}
     %
-    \judgment{\(V' = V \left\llbracket
-      k \mapsto
-      \begin{cases}
-        \unsealed & \textnormal{if } k \in CLR \\
-        \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
-        \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } \\
-        & k \in \object(V) - \mathit{passed} ~ \overline{sa} ~ \mach \\
-        V(k) & \textnormal{otherwise} \\
-      \end{cases}\right\rrbracket\)}
-               {\(Op ~ \mach ~ (\mathbf{tail call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
-                 ~ (V,\sigma) = (V',\sigma)\)}
-    %
-    \judgment{\(\sigma = (V,\addr_{ret},\addr_{sp})::\sigma'\)}
-             {\(Op ~ \mach ~ \mathbf{return} ~ (\_, \sigma) = (V, \sigma')\)}
+    \judgmenttwo[\sc Tailcall]
+        {\(\components = \mathit{passed} ~ \overline{sa} ~ \mach\)}
+        {\(V' = \mathit{push} ~ V ~ \overline{\reg_{args}} ~ \components\)}
+        {\(Op ~ \mach ~ (\mathbf{tail call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
+          ~ (V,\sigma) = (V',\sigma)\)}
 
     \caption{Calls with Argument Passing on the Stack}
     \label{sfig:stkargs}
@@ -1696,7 +1669,7 @@ than \(\sealed\) to express this. In \cref{tab:props}, we replace
 % RB: could shorten "in terms of"
 ``call targets'' with ``call or tail call targets'' in \(\clrc\), \(\clec\), and \(\clei\).
 
-\subsection{Provenance, Capabilities, and Protecting Objects}
+\section{Provenance, Capabilities, and Protecting Objects}
 \label{app:ptr}
 
 Lastly, what if we want to express a finer-grained notion of safety, in which
@@ -1724,45 +1697,40 @@ Most existing operations are extended to preserve the value of \(\rho\), while t
 and the call operation work as seen in \cref{fig:capops}.
 
 \begin{figure*}
-  \begin{minipage}{0.5\textwidth}
-    \judgmentbr[Promote]
-               {\(\psi = \mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},\mathit{sz})\)}
-               {\(\rho' = \rho[\reg_{dst} \mapsto \mathit{range} ~ \reg_{base} ~ \mathit{off} ~ \mathit{sz}]\)}
-               {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
-               %
+    \judgment[Promote]
+             {\(\rho' = \rho[\reg_{dst} \mapsto \mathit{range} ~ \reg_{base} ~ \mathit{off} ~ \mathit{sz}]\)}
+             {\(Op ~ \mach ~ (\mathbf{promote} ~ \reg_{dst} ~ (\reg_{base},\mathit{off},\mathit{sz})) ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+             %
     \judgment[Clear]
-             {\(\psi = \mathbf{clear} ~ \component\)}
-             {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho[\component \mapsto \emptyset])\)}
-  \end{minipage}
-  \begin{minipage}{0.5\textwidth}
-    \judgmentbr[Propagate]
-               {\(\psi = \mathbf{propagate} ~ \component_{src} ~ \component_{dst}\)}
-               {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
-               {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+             {\(\rho' = \rho[\component \mapsto \emptyset]\)}
+             {\(Op ~ \mach ~ (\mathbf{clear} ~ \component) ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
+             %
+    \judgment[Propagate]
+             {\(\rho' = \rho[\component_{dst} \mapsto \rho[\component_{src}]]\)}
+             {\(Op ~ \mach ~ (\mathbf{propagate} ~ \component_{src} ~ \component_{dst}) ~ (V,\sigma,\rho) = (V,\sigma,\rho')\)}
                %
-    \[\begin{split}
-    & \mathit{capped} ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{\component\} \cup \mathit{capped} ~ \components' ~ \rho \textnormal{ where} \\
-    & \components' = \{\component' |\rho[\component] = (\mathit{base},\mathit{bound})
-    \land \mathit{base} \leq \component' < \mathit{bound}\} \\
-    \end{split}\]
 
-  \end{minipage}
-  \begin{minipage}{1\textwidth}
+    \[\mathit{reach} ~ \component ~ \rho \triangleq \{\component' | \mathit{base} \leq \component' < \mathit{bound}
+    \textnormal{ where } \rho[\component] = (\mathit{base},\mathit{bound})\}\]
+
+    \[\mathit{reach}^* ~ \components ~ \rho \triangleq \bigcup_{\component \in \components} \{ \component \} \cup \mathit{reach}^* ~ (\mathit{reach} ~ \component ~ \rho) ~ \rho\]
+
     \vspace{\abovedisplayskip}
-    \judgment{\(V' = V \left\llbracket
-      k \mapsto
-      \begin{cases}
-        \unsealed & \textnormal{if } k \in CLR \\
-        \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
-        \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } k \in \object(V) - (\mathit{passed} ~ \overline{sa} ~ \mach \cup \mathit{capped} ~ \overline{\reg_{args}} ~ \rho) \\
-        V(k) & \textnormal{otherwise} \\
-      \end{cases}\right\rrbracket\)}
-             {\(Op ~ \mach ~ \psi ~ (V,\sigma,\rho) = (V',V::\sigma,\rho)\)}
+    \judgmentthree[\sc Call]
+        {\(\components = \mathit{passed} ~ \overline{sa} ~ \cup ~ \overline{\reg_{args}}\)}
+        {\(\components' = \mathit{reach}^* ~ \components ~ \rho\)}
+        {\(V' = \mathit{push} ~ V ~ \overline{\reg_{args}} ~ K'\)}
+        {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{\mathit{target}} ~ \overline{\reg_{args}} ~ \overline{sa}) ~ (V,\sigma,\rho) = (V',V::\sigma,\rho)\)}
 
-  \end{minipage}
+    \vspace{\abovedisplayskip}
+    \judgmentthree[\sc Tailcall]
+        {\(\components = \mathit{passed} ~ \overline{sa} ~ \cup ~ \overline{\reg_{args}}\)}
+        {\(\components' = \mathit{reach}^* ~ \components ~ \rho\)}
+        {\(V' = \mathit{push} ~ V ~ \overline{\reg_{args}} ~ K'\)}
+        {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{\mathit{target}} ~ \overline{\reg_{args}} ~ \overline{sa}) ~ (V,\sigma,\rho) = (V',V::\sigma,\rho)\)}
 
-\caption{Operations supporting provenance-based protection of passed objects}
-\label{fig:capops}
+    \caption{Operations supporting provenance-based protection of passed objects}
+    \label{fig:capops}
 \end{figure*}
 
 This essentially generalizes the above notion of passing: we will consider
