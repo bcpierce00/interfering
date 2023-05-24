@@ -1587,7 +1587,7 @@ Providing more fine-grained control over sharing is desirable, but requires a co
 more complex model. This simple model is included in our testing; we describe
 an untested approach based on capabilities below.
 
-\begin{figure*}
+\begin{figure*}[h]
   \begin{subfigure}{0.48\textwidth}
     \judgmentbr[~AllocF]
         {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \unsealed(V)\)}
@@ -1925,7 +1925,7 @@ needs to enforce that the tag on the location being read
 is $\tagStackDepth{n}$ for some number $n$ and that the tag of the
 current $\PCname$ is $\tagPCDepth{n}$ for the same depth $n$. We can relax
 that restriction by omitting the check (bug {\em
-  LOAD\_NO\_CHECK\_DI}).
+  LOAD\_NO\_CHECK}).
 %
 Similarly, when storing to a stack location, the correct micro-policy
 needs to ensure that the tag on the memory location is either
@@ -1939,6 +1939,17 @@ bug where the initial function's frame included space allocated for its
 return address, but this uninitialized (and therefore \(\tagNoDepth\)-tagged)
 space was treated as private data but left unprotected. We added this to
 our set of mutations as {\em HEADER\_NO\_INIT}.
+
+For LTC, the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
+fails in testing, in cases where data is leaked between sequential calls.
+To round out our mutation testing we also check {\em LOAD\_NO\_CHECK},
+equivalent to its counterpart in depth isolation,
+and a version where stores succeed but fails to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
+
+The mean-time-to-failure (MTTF) and average number of tests for various bugs can be found in
+\cref{tab:bug-table}, along with the average number of tests
+it took to find the failure. Experiments were run in a desktop
+machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
 %(the original was written in C++
 %and targeted ARM machine code;
 %\bcp{right?}\leo{yeah}
@@ -1985,21 +1996,6 @@ our set of mutations as {\em HEADER\_NO\_INIT}.
 \vspace*{-2em}
 \label{tab:bug-table}
 \end{table}
-
-\subsection{Results}
-
-The mean-time-to-failure (MTTF) and average number of tests for various bugs can be found in
-\cref{tab:bug-table}, along with the average number of tests
-it took to find the failure. Experiments were run in a desktop
-machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
-
-For LTC, the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
-fails in testing, in cases where data is leaked between sequential calls.
-To round out our mutation testing we also check {\em LOAD\_NO\_CHECK},
-equivalent to its counterpart in depth isolation,
-and a version where stores succeed but fails to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
-It turns out that {\em PER\_DEPTH\_TAG} is a comparatively subtle bug,
-taking longer to catch.
 
 \section{Related Work}
 \label{sec:relwork}
