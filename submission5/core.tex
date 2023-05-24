@@ -1749,7 +1749,7 @@ while performing the usual tasks of saving/restoring the return address to/from
 the stack and adjusting the stack pointer. A blessed sequence uses further tags
 to guarantee that the full sequence executes from the beginning---no jumping into the middle.
 
-\paragraph*{Applicability to Roessler \& DeHon~\cite{DBLP:conf/sp/RoesslerD18}:}
+\paragraph*{Applicability to Roessler \& DeHon~\cite{DBLP:conf/sp/RoesslerD18}}
 
 Roessler and DeHon (henceforward \emph{R\&D})
 R\&D differentiate between memory safety policies (without lazy optimization)
@@ -2004,19 +2004,48 @@ The authors define stack safety as overlay semantics and related stack
 safety properties, phrased in terms of logical relations instead of trace
 properties.
 %
-Originally, they describe ``local state encapsulation''~\cite{SkorstengaardSTKJFP}
+Originally, they define an informal notion of stack safety as the combination of WBCF
+and ``local state encapsulation''~\cite{SkorstengaardSTKJFP},
+and describe the latter
 in terms of integrity only (but it has confidentiality, equivalent
-to \(\clri\) {\em and} \(\clrc\)). Their latest
+to \(\clri\) {\em and} \(\clrc\)).
+%
+StkTokens \cite{SkorstengaardSTKJFP} makes this conception of stack safety
+explicit through an overlay semantics
+%(that internalizes the semantics of the calling convention and is proved fully
+%abstract w.r.t. the concrete machine executing the actual calling convention).
+%This overlay manipulates an abstract call stack whose elements are frames. A
+%function call creates a new stack frame off of a capability representing the
+%available stack space, and a function return merges the corresponding frame
+%back into the stack capability. It is assumed that components do not leave any
+%capabilities on the stack when they return.
+which (1) on call mints new a stack frame from a capability representing the
+available stack space, and (2) on return merges the current frame back into the
+stack capability, under the assumption that there are no capabilities left on
+the stack.
+
+Their latest
 paper \cite{Georges22:TempsDesCerises} was inspired by the properties presented
 in this paper to extend their formalism to include confidentiality. When
 checking if our properties applied to their old calling convention, they noted that
 it did not enforce \(\clec\), and made sure that their new version
-would in addition to building it into their formalism
-\cite{Georges22:personalcommunication}. This demonstrates the benefit of our
+would in addition to building it into their formalism.\footnote{A. L. Georges,
+personal communication.}
+%\cite{Georges22:personalcommunication}.
+%
+To do so, they redesign the overlay semantics to actually pop stack frames on
+return and have them disappear from the stack.
+%
+This demonstrates the benefit of our
 choice to explicitly state properties in security terms: specifying security
 is hard, and when the spec takes the form of a ``correct by
 construction'' machine, it is easy to neglect a non-obvious security
 requirement.
+
+% \cite{Georges22:TempsDesCerises} revisits this design and modifies the
+% overlay in an interesting way to actually pop stack frames on return and have
+% them disappear from the stack rather than be merged back into it. It thus
+% realizes callee confidentiality (and no dangling stack pointers).
 
 In terms of direct feature comparison with Georges et al.~\cite{Georges22:TempsDesCerises} (the most
 recent work in the line), with the addition of confidentiality to their formalism, we
@@ -2124,7 +2153,8 @@ feedback during the writing process, and A\"ina Linn Georges for significant tec
 feedback and encouragement.
 
 This work was supported by the National Science Foundation under Grant No. 2048499, Specifying and Verifying Secure Compilation of C Code to Tagged Hardware;
-by Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) as part of the Excellence Strategy of the German Federal and State Governments, EXC 2092 CASA -- 390781972;
+by ERC Starting Grant SECOMP (715753), Efficient Formally Secure Compilers to a Tagged Architecture;
+by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) as part of the Excellence Strategy of the German Federal and State Governments, EXC 2092 CASA -- 390781972;
 by NSF award \#2145649, CAREER: Fuzzing Formal Specifications,
 by
 NSF award \#1955610, Bringing Python Up To Speed,
