@@ -1566,24 +1566,31 @@ more complex model. This simple model is included in our testing; we describe
 an untested approach based on capabilities below.
 
 \begin{figure*}
-  \begin{subfigure}{0.4\textwidth}
-    \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \unsealed(V)\)}
-               {\(V' = V \llbracket \addr \mapsto \object \mid \addr \in \components \rrbracket\)}
-               {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{f} ~ (\mathit{off, sz})) ~ (V,\sigma) = (V',\sigma)\)}
-
-    \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
+  \begin{subfigure}{0.48\textwidth}
+    \judgmentbr[~AllocF]
+        {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \unsealed(V)\)}
+        {\(V' = V \llbracket \addr \mapsto \object \mid \addr \in \components \rrbracket\)}
+        {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{f} ~ (\mathit{off, sz})) ~ (V,\sigma) = (V',\sigma)\)}
+        
+    \vspace{\abovedisplayskip}
+        
+    \judgmentbr[~AllocT]
+               {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap
                  \unsealed(V)\)}
                {\(V' = V \llbracket \addr \mapsto \public \mid \addr \in \components \rrbracket\)}
                {\(Op ~ \mach ~ (\mathbf{alloc} ~ \mathbf{t} ~ (\mathit{off, sz})) ~ (V,\sigma) = (V',\sigma)\)}
+
+    \vspace{\abovedisplayskip}
     
-    \judgmentbr{\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \object(V)\)}
-               {\(V' = V \llbracket \addr \mapsto \unsealed | \addr \in \components \rrbracket\)}
-               {\(Op ~ \mach ~ (\mathbf{dealloc} ~ (\mathit{off, sz})) ~ (V,\sigma) = (V',\sigma)\)}
+    \judgmentbr[~Dealloc]
+        {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \object(V)\)}
+        {\(V' = V \llbracket \addr \mapsto \unsealed | \addr \in \components \rrbracket\)}
+        {\(Op ~ \mach ~ (\mathbf{dealloc} ~ (\mathit{off, sz})) ~ (V,\sigma) = (V',\sigma)\)}
 
     \caption{Memory Allocation}
     \label{sfig:publicalloc}
   \end{subfigure}
-  \begin{subfigure}{0.6\textwidth}
+  \begin{subfigure}{0.52\textwidth}
     %
     \[\mathit{push} ~ V ~ \overline{\reg} ~ K \triangleq \lambda k .
     \begin{cases}
@@ -1598,13 +1605,13 @@ an untested approach based on capabilities below.
     \[\mathit{passed} ~ \overline{sa} ~ \mach \triangleq \bigcup_{(\reg,\mathit{off},\mathit{sz}) \in \overline{sa}}
     \mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach\]
     %
-    \judgmenttwo[\sc Call]
+    \judgmenttwo[~Call]
         {\(\components = \mathit{passed} ~ \overline{sa} ~ \mach\)}
         {\(V' = \mathit{push} ~ V ~ \overline{\reg_{args}} ~ \components\)}
         {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
           ~ (V,\sigma) = (V',V::\sigma)\)}
     %
-    \judgmenttwo[\sc Tailcall]
+    \judgmenttwo[~Tailcall]
         {\(\components = \mathit{passed} ~ \overline{sa} ~ \mach\)}
         {\(V' = \mathit{push} ~ V ~ \overline{\reg_{args}} ~ \components\)}
         {\(Op ~ \mach ~ (\mathbf{tail call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
@@ -1958,17 +1965,11 @@ machine equipped with i7-4790K CPU @ 4.0GHz with 32GB RAM.
 
 For LTC, the original micro-policy, implemented as {\em PER\_DEPTH\_TAG},
 fails in testing, in cases where data is leaked between sequential calls.
-To round out our mutation testing we also check {\em LOAD\_NO\_CHECK\_LT},
+To round out our mutation testing we also check {\em LOAD\_NO\_CHECK},
 equivalent to its counterpart in depth isolation,
 and a version where stores succeed but fails to propagate the PC tag, {\em STORE\_NO\_UPDATE}.
 It turns out that {\em PER\_DEPTH\_TAG} is a comparatively subtle bug,
 taking longer to catch.
-
-%% I don't think this discussion is relevant here
-%% Unfortunately, Lazy Per-activation Tagging and Clearing
-%% puts severe pressure on the tag cache, so it may not be usable in practice.
-%% However, we conjecture that no lazy scheme can be fully stack safe
-%% without using unique per-activation identifiers.
 
 \section{Related Work}
 \label{sec:relwork}
