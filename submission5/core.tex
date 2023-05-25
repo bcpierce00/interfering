@@ -1588,7 +1588,7 @@ more complex model. This simple model is included in our testing; we describe
 an untested approach based on capabilities below.
 
 \begin{figure*}[h]
-  \begin{subfigure}{0.48\textwidth}
+  \begin{subfigure}{\textwidth}
     \judgmentbr[~AllocF]
         {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \unsealed(V)\)}
         {\(V' = V \llbracket \addr \mapsto \object \mid \addr \in \components \rrbracket\)}
@@ -1605,29 +1605,31 @@ an untested approach based on capabilities below.
     \vspace{\abovedisplayskip}
     
     \judgmentbr[~Dealloc]
-        {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap \object(V)\)}
+        {\(\components = \mathit{range} ~ \SP ~ \mathit{off} ~ \mathit{sz} ~ \mach \cap (\object(V) \cup \public(V))\)}
         {\(V' = V \llbracket \addr \mapsto \unsealed | \addr \in \components \rrbracket\)}
         {\(Op ~ \mach ~ (\mathbf{dealloc} ~ (\mathit{off, sz})) ~ (V,\sigma) = (V',\sigma)\)}
 
     \caption{Memory Allocation}
     \label{sfig:publicalloc}
   \end{subfigure}
-  \begin{subfigure}{0.52\textwidth}
+  \begin{subfigure}{\textwidth}
+
+    \begin{minipage}{0.4\textwidth}
+      \[\mathit{push} ~ V ~ \overline{\reg} ~ K \triangleq \lambda k .
+      \begin{cases}
+        \unsealed & \textnormal{if } k \in CLR \\
+        \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
+        \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } \\
+        & k \in \object(V) - \components \\
+        V(k) & \textnormal{otherwise} \\
+      \end{cases}      
+      \]
     
-    \[\mathit{push} ~ V ~ \overline{\reg} ~ K \triangleq \lambda k .
-    \begin{cases}
-      \unsealed & \textnormal{if } k \in CLR \\
-      \public & \textnormal{if } k \in \overline{\reg_{\mathit{args}}} \\
-      \sealed & \textnormal{if } k \in \WORDS \textnormal{ and } \\
-      & k \in \object(V) - \components \\
-      V(k) & \textnormal{otherwise} \\
-    \end{cases}      
-    \]
-    
-    \[\mathit{passed} ~ \overline{sa} ~ \mach \triangleq \bigcup_{(\reg,\mathit{off},\mathit{sz}) \in \overline{sa}}
-    \mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach\]
-    
-    \judgmenttwo[~Call]
+      \[\mathit{passed} ~ \overline{sa} ~ \mach \triangleq \bigcup_{(\reg,\mathit{off},\mathit{sz}) \in \overline{sa}}
+      \mathit{range} ~ \reg ~ \mathit{off} ~ \mathit{sz} ~ \mach\]
+    \end{minipage}
+    \begin{minipage}{0.6\textwidth}    
+      \judgmenttwo[~Call]
         {\(\components = \mathit{passed} ~ \overline{sa} ~ \mach\)}
         {\(V' = \mathit{push} ~ V ~ \overline{\reg_{args}} ~ \components\)}
         {\(Op ~ \mach ~ (\mathbf{call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
@@ -1640,6 +1642,7 @@ an untested approach based on capabilities below.
         {\(V' = \mathit{push} ~ V ~ \overline{\reg_{args}} ~ \components\)}
         {\(Op ~ \mach ~ (\mathbf{tail call} ~ \addr_{target} ~ \overline{\reg_{args}} ~ \overline{sa})
           ~ (V,\sigma) = (V',\sigma)\)}
+    \end{minipage}
 
     \caption{Calls with Argument Passing on the Stack}
     \label{sfig:stkargs}
