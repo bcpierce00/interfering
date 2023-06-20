@@ -61,10 +61,8 @@ Module RISCV <: Machine.
      {| show x := show (word.signed x) |}.
 
   Definition wlt : Word -> Word -> bool := Z.ltb.
-  (*  Parameter wlt : Word -> Word -> bool. *)
 
   Definition weq : Word -> Word -> bool := Z.eqb.
-  (* Parameter weq : Word -> Word -> bool. *)
 
   Definition WordEqDec : forall (w1 w2 : Word), {w1 = w2} + {w1 <> w2} := Z.eq_dec.
 
@@ -75,23 +73,9 @@ Module RISCV <: Machine.
     apply Z.eqb_eq.
   Qed.
 
-  (* Lemma not_weq_implies_neq : *)
-  (*   forall w1 w2, *)
-  (*     weq w1 w2 = false -> w1 <> w2. *)
-  (* Proof.  *)
-  (*   intros w1 w2 HEqb HEq. unfold weq in *. *)
-  (*   apply Z.eqb_eq in HEq. *)
-  (*   rewrite HEq in HEqb. *)
-  (*   congruence. *)
-  (* Qed. *)
-
   Definition wle (w1 w2: Word) : bool :=
     orb (wlt w1 w2) (weq w1 w2).
 
-  (*
-    Parameter wplus : Word -> nat -> Word.
-    Parameter wminus : Word -> nat -> Word.
-   *)
   Definition wplus (w : Word) (n : Z) : Word :=
     w + n.
 
@@ -106,18 +90,6 @@ Module RISCV <: Machine.
     lia.
   Qed.
 
-  (* Definition wtoa (w:Word) : option Addr := Some w. *)
-
-  (* Definition alt := wlt. *)
-  (* Definition aeq := weq. *)
-  (* Definition AddrEqDec := WordEqDec. *)
-  (* Definition aeq_implies_eq := weq_implies_eq. *)
-  (* Definition not_aeq_implies_neq := not_weq_implies_neq. *)
-  (* Definition ale := wle. *)
-  (* Definition aplus := wplus. *)
-  (* Definition aplus_neq := wplus_neq. *)
-  (* Definition aminus := wminus. *)
-  
   Definition Register : Type := Word.
 
   Definition Zero := 0.
@@ -173,20 +145,8 @@ Module RISCV <: Machine.
     | _, _ => false
     end.
 
-  (* Axiom keqb_implies_eq : *)
-  (*   forall k1 k2, *)
-  (*     keqb k1 k2 = true -> k1 = k2. *)
-  (* Axiom not_keqb_implies_neq : *)
-  (*   forall k1 k2, *)
-  (*     keqb k1 k2 = false -> k1 <> k2. *)
-
-  (* A Value is a Word. *)
-  (* Definition Value : Type := Word. *)
-  (* Definition vtow (v : Value) : Word := v. *)
-
   (* We use a risc-v machine as our machine state *)
   Definition MachineState := RiscvMachine.
-
 
   (* Project what we care about from the RiscV state. *)
   Definition proj (m:  MachineState) (k: Element):  Word :=
@@ -276,18 +236,6 @@ Module RISCV <: Machine.
     | _, _ => false
     end.
 
-  (* Definition w32_eqb (w1 w2 : w32) : bool := *)
-  (*   let l1 := HList.tuple.to_list w1 in *)
-  (*   let l2 := HList.tuple.to_list w2 in *)
-  (*   let l12 := List.combine l1 l2 in *)
-  (*   forallb (fun '(b1, b2) => Byte.eqb b1 b2) l12. *)
-
-  (* Definition memAddr_eqb (mem mem' : DefaultMemImpl32.Mem) (addr : word32) : bool := *)
-  (*   match loadWord mem addr, loadWord mem' addr with *)
-  (*   | Some w, Some w' => w32_eqb w w' *)
-  (*   | _, _ => false *)
-  (*   end. *)
-
   Definition listify1 {A} (m : Zkeyed_map A)
     : list (Z * A) :=
     List.rev (map.fold (fun acc z v => (z,v) :: acc) nil m).
@@ -309,18 +257,9 @@ Module RISCV <: Machine.
   
   Definition StackID := nat.
 
-  (* Definition EntryMap := Addr -> bool. *)
 
   Definition StackMap := Addr -> option StackID.
 
-  (* Inductive CodeAnnotation := *)
-  (* | call *)
-  (* | retrn *)
-  (* | yield *)
-  (* | scall (f: MachineState -> Addr -> bool) *)
-  (* | normal *)
-  (* . *)
-  
   (* Stack ID of stack pointer *)
   Definition activeStack (sm: StackMap) (m: MachineState) :
     option StackID :=
@@ -335,18 +274,6 @@ Module RISCV <: Machine.
     | None, None => true
     | _, _ => false
     end.
-
-  (* Definition justRet (mc m: MachineState) : Prop := *)
-  (*   proj m PC = wplus (proj mc PC) 4 /\ proj m (Reg SP) = proj mc (Reg SP). *)
-
-  (* Definition justRet_dec mc m : {justRet mc m} + {~ justRet mc m}. *)
-  (* Proof. *)
-  (*   unfold justRet. *)
-  (*   destruct (WordEqDec (proj m PC) (wplus (proj mc PC) 4)); *)
-  (*     destruct (WordEqDec (proj m (Reg SP)) (proj mc (Reg SP))); *)
-  (*     try solve [left; auto]; *)
-  (*     right; intros [? ?]; auto. *)
-  (* Qed. *)
 
   Inductive Operation : Type :=
   | Call (f:FunID) (reg_args:list Register) (stk_args:list (Register*Z*Z))
@@ -565,18 +492,6 @@ Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
     | _, _ => false
     end.
 
-  (* Definition w32_eqb (w1 w2 : w32) : bool := *)
-  (*   let l1 := HList.tuple.to_list w1 in *)
-  (*   let l2 := HList.tuple.to_list w2 in *)
-  (*   let l12 := List.combine l1 l2 in *)
-  (*   forallb (fun '(b1, b2) => Byte.eqb b1 b2) l12. *)
-
-  (* Definition memAddr_eqb (mem mem' : DefaultMemImpl32.Mem) (addr : word32) : bool := *)
-  (*   match loadWord mem addr, loadWord mem' addr with *)
-  (*   | Some w, Some w' => w32_eqb w w' *)
-  (*   | _, _ => false *)
-  (*   end. *)
-
   Definition listify1 {A} (m : Zkeyed_map A)
     : list (Z * A) :=
     List.rev (map.fold (fun acc z v => (z,v) :: acc) nil m).
@@ -593,18 +508,8 @@ Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
   
   Definition StackID := nat.
 
-  (* Definition EntryMap := Addr -> bool. *)
-
   Definition StackMap := Addr -> option StackID.
 
-  (* Inductive CodeAnnotation := *)
-  (* | call *)
-  (* | retrn *)
-  (* | yield *)
-  (* | scall (f: MachineState -> Addr -> bool) *)
-  (* | normal *)
-  (* . *)
-  
   (* Stack ID of stack pointer *)
   Definition activeStack (sm: StackMap) (m: MachineState) :
     option StackID :=
@@ -619,18 +524,6 @@ Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
     | None, None => true
     | _, _ => false
     end.
-
-  (* Definition justRet (mc m: MachineState) : Prop := *)
-  (*   proj m PC = wplus (proj mc PC) 4 /\ proj m (Reg SP) = proj mc (Reg SP). *)
-
-  (* Definition justRet_dec mc m : {justRet mc m} + {~ justRet mc m}. *)
-  (* Proof. *)
-  (*   unfold justRet. *)
-  (*   destruct (WordEqDec (proj m PC) (wplus (proj mc PC) 4)); *)
-  (*     destruct (WordEqDec (proj m (Reg SP)) (proj mc (Reg SP))); *)
-  (*     try solve [left; auto]; *)
-  (*     right; intros [? ?]; auto. *)
-  (* Qed. *)
 
   Inductive Operation : Type :=
   | Call (f:FunID) (reg_args:list Register) (stk_args:list (Register*Z*Z))
