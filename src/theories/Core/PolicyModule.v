@@ -1,5 +1,7 @@
 From StackSafety Require Import MachineModule.
 
+Import ZArith.
+  
 Module Type TagPolicy (M : Machine).
   Import M.
   
@@ -23,6 +25,6 @@ Module Type TagPolicy (M : Machine).
     | None => (m,p,nil,Tau)
     end.
 
-  Parameter WFInitMPState : MPState -> Prop.
+  Parameter tagify_head : Z -> list (instr * list Operation) -> list (instr * Tag * list Operation).
 
 End TagPolicy.

@@ -20,6 +20,8 @@ Require Import riscv.Platform.Run.
 Require Import riscv.Utility.Monads.
 Require Import riscv.Utility.MonadNotations.
 Require Import riscv.Utility.MkMachineWidth.
+Require Import riscv.Utility.Encode.
+Require Import riscv.Utility.InstructionCoercions. Open Scope ilist_scope.
 Require Import coqutil.Map.Interface.
 Require Import coqutil.Word.LittleEndian.
 Require Import riscv.Utility.Words32Naive.
@@ -326,6 +328,39 @@ Module RISCV <: Machine.
       | None => (s', [], Tau)
       end.
 
+  Definition instr := InstructionI.
+
+  Definition r0 : Register := 0.
+  Definition ra : Register := 1.
+  Definition sp : Register := 2.
+  Definition a0 : Register := 10.
+  Definition a1 : Register := 11.
+  
+  Definition minReg : Register := 10.
+  Definition noRegs : nat := 3%nat.
+  Definition maxReg : Register := minReg + Z.of_nat noRegs - 1.
+  (* TEMP: Keep argument register(s), in particular those used to pass arguments
+     by reference, separate from the rest. This eases bookkeeping if we
+     keep them immutable, like e.g. SP. A single register for now. *)
+  Definition argReg : Register := maxReg.
+
+  Definition minCalleeReg : Register := 18.
+  Definition noCalleeRegs : nat := 3%nat.
+  Definition maxCalleeReg : Register := minCalleeReg + Z.of_nat noCalleeRegs - 1.
+  
+  Definition head (sz : Z) :=
+    [(* regular entry sequence *)
+      (Sw sp ra 0, []);
+      (Addi sp sp sz, [Alloc 0 (4*sz)]);
+      (* nop/late entry for tail calls *)
+      (Addi r0 r0 0, []);
+      (* spill callee-saved registers (currently fixed sequence)
+         HACK one word above frame lower bound  *)
+      (Sw sp minCalleeReg ((-4*sz) + 12), []);
+      (Sw sp (minCalleeReg + 1) ((-4*sz) + 8), []);
+      (Sw sp (minCalleeReg + 2) ((-4*sz) + 4), [])
+    ].
+  
 End RISCV.
 
 Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
@@ -587,5 +622,10 @@ Module RISCVTagged (P : TagPolicy RISCV) <: Machine.
   Definition step (m : MachineState) : MachineState * list Operation * Observation :=
     let '(m',ops,obs) := mpstep m in
     (m',map coercion4 ops, coercion3 obs).
-    
+
+  Definition instr : Type := instr * Tag.
+
+  Definition head (sz : Z) : list (instr * list Operation) :=
+    map (fun '(a,b,c) => (a,b,map coercion4 c)) (tagify_head sz (head sz)).
+
 End RISCVTagged.

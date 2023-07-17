@@ -1,6 +1,5 @@
 From StackSafety Require Import MachineModule PolicyModule CtxModule TestingModules
-     DefaultLayout Lazy
-     PrintRISCVTagSimple GenRISCVTagSimple.
+     DefaultLayoutLazy DefaultLayoutEager Lazy PrintLazy GenLazy Eager PrintEager GenEager.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -60,13 +59,11 @@ Definition trace := true.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
 
-(* NOTE Not concentrating on eager properties at the moment, focusing changes on
-   lazy properties (not including lockstep integrity). *)
-Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
-  Import RISCVLazyOrig.
-  Import TagPolicyLazyOrig.
-  Import RISCVDef.
-  Import PM.
+Module TestProps (M : Machine) (L : LayoutInfo M) (G : Gen M L) (P : Printing M L): TestProps M L.
+  Import M.
+  Import L.
+  Import G.
+  Import P.
   
   (* FIXME: The current stepping functions always return an empty list
      of operations. We try to work around this by moving up the code map
@@ -80,9 +77,9 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   (* Obtain operations from code map, wrap around given (defective) step
      functions and update contexts if applicable. Use only wrappers in the
      properties until a proper fix is implemented. *)
-
+  
   Definition get_ops (m : MachineState) (cm : CodeMap_Impl) : list Operation :=
-    match (CodeMap_fromImpl cm) (word.unsigned (getPc (fst m))) with
+    match (CodeMap_fromImpl cm) (projw m PC) with
     | Some ops => ops
     | None => [] (* shouldn't happen, but delegating error handling now *)
     end.
@@ -92,22 +89,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     let ops := get_ops m cm in
     let '(m', _ (* always empty! *), obs) := step m in
     (m', ops, obs).
-
-  Definition uncoercion4 (op : Operation) : RISCVMachine.RISCV.Operation :=
-    match op with
-    | Call f reg_args stk_args => RISCVMachine.RISCV.Call f reg_args stk_args
-    | Tailcall f reg_args stk_args => RISCVMachine.RISCV.Call f reg_args stk_args
-    | Return => RISCVMachine.RISCV.Return
-    | Alloc off sz => RISCVMachine.RISCV.Alloc off sz
-    | Dealloc off sz => RISCVMachine.RISCV.Dealloc off sz
-    end.
-
-  Definition mpstep (m : MPState) (cm : CodeMap_Impl)
-    : MPState * list RISCVMachine.RISCV.Operation * RISCVMachine.RISCV.Observation :=
-    let ops := get_ops m cm in
-    let '(m', _ (* always empty! *), obs) := mpstep m in
-    (m', map uncoercion4 ops, obs).
-
+  
   Derive Show for Sec.
 
   Definition cstep (m : State) (cm : CodeMap_Impl)
@@ -115,26 +97,26 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     let ops := get_ops (fst m) cm in
     let '(m', _ (* always empty! *), obs) := cstep m in
     let m'_fix :=
-      (fst m', fold_left (GenRISCVLazyOrig.PM.op (fst m)) ops (snd m')) in
+      (fst m', fold_left (PM.op (fst m)) ops (snd m')) in
     (m'_fix, ops, obs).
 
   (* END HACK *)
 
   Definition defFuel := 100%nat.
 
-  Derive Show for Element.
+(*  Derive Show for Element. *)
 
   Definition sameDifferenceP (m m' n n' : MachineState) k :=
-    if (orb (negb (Z.eqb (projw m k) (projw m' k)))
-            (negb (Z.eqb (projw n k) (projw n' k)))) then
-      Z.eqb (projw m' k) (projw n' k) 
+    if (orb (negb (weq (projw m k) (projw m' k)))
+            (negb (weq (projw n k) (projw n' k)))) then
+      weq (projw m' k) (projw n' k) 
     else true.
 
   (* Lifting of Z.eqb, ignoring tags *)
-  Definition Value_equivb (v1 v2 : Value) : bool :=
+(*  Definition Value_equivb (v1 v2 : Value) : bool :=
     let '(w1, t1) := v1 in
     let '(w2, t2) := v2 in
-    Z.eqb w1 w2.
+    Z.eqb w1 w2.*)
 
   (* Depends on deleted code from TestSubroutineSimple *)
   Definition integrityComponent (c : Ctx) (k : Element) :=
@@ -218,9 +200,9 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
           (* If we could step, verify that the new state satisfies all
              active tests, and accumulate witnesses to violations *)
           let '(conds', witnesses) := check_conds conds (m', ctx') in
-          n'' <- (GenRISCVLazyOrig.genVariantByList witnesses n');;
+          n'' <- (genVariantByList witnesses n');;
           (* Check the code map at the current PC (this should never fail) *)
-          get ops <- (CodeMap_fromImpl cm) (word.unsigned (getPc (fst m))), "Bad-PC";
+          get ops <- (CodeMap_fromImpl cm) (projw m PC), "Bad-PC";
           (* Recurse on the new state, where if the instruction
              corresponds to a call (assuming a well-formed code map
              without nonsensical lists of operations) a new test is
@@ -241,7 +223,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
     | [] => []
     | k :: ks' =>
         if integrityComponent c k then
-          if Value_equivb (proj m k) (proj m' k)
+          if weq (projw m k) (projw m' k)
           then walk ks' cm m c m'
           else k::(walk ks' cm m c m')
         else walk ks' cm m c m'
@@ -254,20 +236,20 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
      [p], [ctx] are the state at the time of instantiation (old [mcall],
      [ctxcall]). The recursive structure of [prop_laziestStackIntegrity] is now
      handled by the tester as well. *)
-  Definition cond_laziestStackIntegrity
+  Definition cond_Integrity
     (m : MachineState) (ctx : Ctx) (cm : CodeMap_Impl)
     : State -> list Element :=
     fun '(m',_) =>
       walk (getElements m') cm m ctx m'.
 
   (* The top-level properties are now simple instantiations *)
-  Fixpoint prop_laziestStackIntegrity'
-    fuel (i : LayoutInfo) m (cm : CodeMap_Impl) ctx : Checker.Checker :=
-    step_tester cm i fuel m ctx m [] cond_laziestStackIntegrity.
+  Definition test_Integrity
+           fuel (i : LayoutInfo) m (cm : CodeMap_Impl) ctx : Checker.Checker :=
+    step_tester cm i fuel m ctx m [] cond_Integrity.
 
-  Definition prop_laziestIntegrity :=
-    forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
-                      (prop_laziestStackIntegrity' defFuel defLayoutInfo m cm initCtx)).
+  Definition prop_Integrity :=
+    forAll genMach (fun '(m,cm) =>
+                      (test_Integrity defFuel defLayoutInfo m cm initCtx)).
 
   (* From above, only operating on MPCState *)
   Definition cond_confidentiality (m m' n n' : State) : list Element :=
@@ -281,8 +263,6 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   Definition Deferred : Type := nat * State * BinCondition.
 
   (*Definition Witness : Type := Element * nat * nat.*)
-
-  Derive Show for Element.
 
   (*Instance show_witness : Show Witness :=
     {| show := (fun '(e,f,i) => "(" ++ show e ++ show f ++ show i ++ ")") |}%string.
@@ -323,8 +303,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
   Definition variant_frame (fuel : nat) (m : State) : G (nat * State * BinCondition) :=
     let '(ms, cs) := m in
     let secret := List.filter (fun k => confidentialityComponent cs k) (getElements ms) in
-    ("Generating variant for: " ++ show secret ++ nl) !
-    (ns <- GenRISCVLazyOrig.genVariantByList secret ms;;
+    (ns <- genVariantByList secret ms;;
     let n := (ns, cs) in
     let test := (fun m' n' => cond_confidentiality m m' n n') in
     ret (fuel, n, (depthOf cs, test))).
@@ -347,7 +326,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
         let compare o :=
           match o with
           | None => true
-          | Some (e',_) => event_eqb e e'
+          | Some (e',_) => obs_eqb (Out e) (Out e')
           end in
         let chop := map next traces in
         if forallb compare chop
@@ -366,7 +345,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
       match fuel with
       | O => collect "Out-of-Fuel" true
       | S fuel' =>
-          get ops <- (CodeMap_fromImpl cm) (word.unsigned (getPc (fst (fst m)))), ("Bad-PC: " ++ show (proj (fst m) PC) ++ nl);
+          get ops <- (CodeMap_fromImpl cm) (projw (fst m) PC), ("Bad-PC" (*++ show (proj (fst m) PC)*) ++ nl);
           (* Take a step in the primary and the shadow states *)
           let '(m', _ops, obs) := cstep m cm in
           if weq (projw (fst m') PC) (projw (fst m) PC)
@@ -377,7 +356,7 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
           let d' := depthOf (snd m') in
           let tr' := obs::tr in
           (* Check the observations *)
-          check (obs_eqb obs obs'), "External Violation: " ++ show obs ++ "/" ++ show obs' ++ " at " ++ show (proj (fst m) PC) ++ nl;
+          check (obs_eqb obs obs'), "External Violation: " ++ show obs ++ "/" ++ show obs' (*++ " at " ++ show (proj (fst m) PC)*) ++ nl;
           (* If we just made a call, push a new variant *)
           iff (ops_call ops), stk <- mcons (variant_frame fuel' m') stk;
           if (d' <? d)%nat
@@ -391,204 +370,26 @@ Module TestPropsRISCVSimple : TestProps RISCVLazyOrig RISCVDef.
                (* Collect witnesses *)
                let witnesses := seq.flatten (map fst results) in
                (* Update the shadow state *)
-               n'' <- GenRISCVLazyOrig.genVariantByList witnesses n';;
-               ("New shadow variants: " ++ show (map (fun k => (k, proj n'' k)) witnesses) ++ nl) !
+               n'' <- genVariantByList witnesses n';;
+               (*("New shadow variants: " ++ show (map (fun k => (k, proj n'' k)) witnesses) ++ nl) !*)
                (aux fuel' m' n'' stk'' tr')
           else aux fuel' m' n' stk tr'
   end in
   aux fuel m n [] [].
   
-  Fixpoint prop_lazyStackConfidentiality
-    fuel (i : LayoutInfo) m (cm : CodeMap_Impl) ctx : Checker.Checker :=
+  Definition test_Confidentiality
+           fuel (i : LayoutInfo) m (cm : CodeMap_Impl) ctx : Checker.Checker :=
     confidentiality_tester cm i fuel (m, ctx) m.
 
-  (* cex03 will ordinarily pass if n'' is computed based on n', but testing the
-     same example repeatedly will cause it to fail
+  Definition prop_Confidentiality :=
+    forAll genMach (fun '(m,cm) =>
+                      (test_Confidentiality defFuel defLayoutInfo m cm initCtx)).
 
-     cex02 will also pass with this change
+End TestProps.
 
-     in this case genMach still finds counterexamples, which tend to be more
-     complex
-
-     after policy and property adjustments:
-
-     cex02 fails due to reuse at the same level between executions
-
-     the innocuous cex03 passes
-
-     genMach still finds longer counterexamples, such as cex04, where the
-     variant gets stuck (and therefore out of sync) due to step_until_done
-     selecting (most of) the code memory as witness and mutating it into
-     non-instructions *)
-
-  Definition cex05 : G (MachineState * CodeMap_Impl) :=
-    GenRISCVLazyOrig.ex_gen
-      [(   0, Addi 2 2 12,  [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       (   4, Sw 2 9 (-4),  [Tinstr],        Some [] );
-       (   8, Jal 1 264,    [Tinstr; Tcall], Some [(Call 4%nat [] [])] );
-       (  12, Jal 1 208,    [Tinstr; Tcall], Some [(Call 3%nat [] [])] );
-       (  16, Jal 1 368,    [Tinstr; Tcall], Some [(Call 7%nat [] [])] );
-       (  20, Jal 1 344,    [Tinstr; Tcall], Some [(Call 6%nat [] [])] );
-       (  24, Jal 1 304,    [Tinstr; Tcall], Some [(Call 5%nat [] [])] );
-       (  28, Jal 1 124,    [Tinstr; Tcall], Some [(Call 2%nat [] [])] );
-       (  32, Jal 1 52,     [Tinstr; Tcall], Some [(Call 1%nat [] [])] );
-       (  36, Jal 1 312,    [Tinstr; Tcall], Some [(Call 5%nat [] [])] ); (* ! *)
-       (* f1 *)
-       (  84, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       (  88, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       (  92, Lw 9 2 (-8),    [Tinstr],        Some [] );
-       (  96, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
-       ( 100, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       ( 104, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
-       (* f2 *)
-       ( 152, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 156, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       ( 160, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
-       ( 164, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       ( 168, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
-       (* f3 *)
-       ( 220, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 224, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       ( 228, Sw 2 10 (-8),   [Tinstr],        Some [] ); (* ??? *)
-       ( 232, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
-       ( 236, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       ( 240, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
-       (* f4 *)
-       ( 272, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 276, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       ( 280, Sw 2 0 (-4),    [Tinstr],        Some [] );
-       ( 284, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
-       ( 288, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       ( 292, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
-       (* f5 *)
-       ( 328, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 332, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       ( 336, Lw 8 2 (-8),    [Tinstr],        Some [] ); (* ??? *)
-       ( 340, Addi 9 10 464,  [Tinstr],        Some [] );
-       ( 344, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
-       ( 348, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       ( 352, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
-       (* f6 *)
-       ( 364, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 368, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       ( 372, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
-       ( 376, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       ( 380, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
-       (* f7 *)
-       ( 384, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 388, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       ( 392, Sw 2 0 (-20),   [Tinstr],        Some [] );
-       ( 396, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
-       ( 400, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       ( 404, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
-      [(  8, 16, [] );
-       (  9,  4, [] );
-       ( 10, 40, [] )].
-
-  (* The generated example fails (frequently, but not always) because calls are
-     not annotated with registers carrying information across calls, i.e.,
-     acting as parameters (missing information added here). This is to be
-     expected, given that irrelevant registers will be mutated and different
-     runs will result in different traces. *)
-  Definition cex06 : G (MachineState * CodeMap_Impl) :=
-    GenRISCVLazyOrig.ex_gen
-      [(   0, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       (   4, Jal 1 128,      [Tinstr; Tcall], Some [(Call 2%nat [10 (* added *)] [])] );
-       (   8, Jal 1 68,       [Tinstr; Tcall], Some [(Call 1%nat [] [])] );
-       (  12, Jal 1 272,      [Tinstr; Tcall], Some [(Call 4%nat [10 (* added *)] [])] );
-       (  16, Jal 1 220,      [Tinstr; Tcall], Some [(Call 3%nat [10 (* added *)] [])] );
-       (* f1 *)
-       (  76, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       (  80, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       (  84, Lw 8 2 (-4),    [Tinstr],        Some [] );
-       (  88, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
-       (  92, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       (  96, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
-       (* f2 *)
-       ( 132, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 136, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       ( 140, Add 9 1 10,     [Tinstr],        Some [] );
-       ( 144, Sw 2 10 (-4),   [Tinstr],        Some [] );
-       ( 148, Lw 10 2 (-4),   [Tinstr],        Some [] );
-       ( 152, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
-       ( 156, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       ( 160, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
-       (* f3 *)
-       ( 236, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 240, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       ( 244, Lw 10 2 (-8),   [Tinstr],        Some [] ); (* ??? *)
-       (* ( XXX, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *) *)
-       (* ( XXX, Lw 1 2 0,       [Tinstr; Tr2],   Some [] ); *)
-       (* ( XXX, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] ); *)
-       (* f4 *)
-       ( 284, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
-       ( 288, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
-       ( 292, Lw 10 2 (-4),   [Tinstr],        Some [] );
-       ( 296, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
-       ( 300, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
-       ( 304, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
-      [(  8, 24, [] );
-       (  9, 28, [] );
-       ( 10, 40, [] )].
-
-  Definition prop_lazyConfidentiality :=
-    forAll GenRISCVLazyOrig.genMach (fun '(m,cm) =>
-                      (prop_lazyStackConfidentiality defFuel defLayoutInfo m cm initCtx)).
-
-End TestPropsRISCVSimple.
+Module TestPropsLazy := TestProps RISCVLazyOrig RISCVLazyDef GenRISCVLazyOrig PrintRISCVLazyOrig.
+Module TestPropsEager := TestProps RISCVEagerOrig RISCVEagerDef GenRISCVEagerOrig PrintRISCVEagerOrig.
 
 Extract Constant defNumTests => "1000".
 
-(* Print Assumptions TestPropsRISCVSimple.prop_lazyConfidentiality. *)
-Time QuickCheck TestPropsRISCVSimple.prop_laziestIntegrity.
-
-(* Print Assumptions TestPropsRISCVSimple.prop_lazyConfidentiality. *)
-(*Time QuickCheck TestPropsRISCVSimple.prop_lazyConfidentiality.*)
-
-(* Import TestRISCVEager. *)
-(* Import TestRISCVEagerNLC. *)
-(* Import TestRISCVEagerNSC. *)
-(* Import TestRISCVEagerNI. *)
-
-(* Mutations marked "Fails" are expected to fail, and do! *)
-(* Three trials with each mutation for averaging *)
-(*Time QuickCheck TestRISCVEagerNLC.prop_confidentiality. (* Fails *)
-Time QuickCheck TestRISCVEagerNLC.prop_confidentiality.
-Time QuickCheck TestRISCVEagerNLC.prop_confidentiality. *)
-
-(*Time QuickCheck TestRISCVEagerNSC.prop_integrity. (* Fails *)
-Time QuickCheck TestRISCVEagerNSC.prop_integrity.
-Time QuickCheck TestRISCVEagerNSC.prop_integrity.*)
-
-(*Time QuickCheck TestRISCVEagerNI.prop_integrity. (* Fails *)
-Time QuickCheck TestRISCVEagerNI.prop_integrity.
-Time QuickCheck TestRISCVEagerNI.prop_integrity.*)
-
-(*Time QuickCheck TestRISCVEager.prop_integrity.
-(* Confidentiality hangs sometimes -- better to test it in
-   smaller batches (~500) and kill it when needed.
-   How we managed to make coq code diverge...
-Time QuickCheck TestRISCVEager.prop_confidentiality.*) *)
-
-(* Import TestRISCVLazyOrig. *)
-(* Import TestRISCVLazyNoDepth. *)
-(* Import TestRISCVLazyNoCheck. *)
-(* Import TestRISCVLazyFixed. *)
-
-(*Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity. (* Fails *)
-Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.
-Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.
-Time QuickCheck TestRISCVLazyOrig.prop_laziestIntegrity.*)
-
-(*Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality. (* Fails *)
-Time QuickCheck TestRISCVLazyNoCheck.prop_confidentiality.
-Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *)
-Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.*)
-
-(*Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality. (* Fails *)
-Time QuickCheck TestRISCVLazyNoDepth.prop_confidentiality.
-Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity. (* Fails *)
-Time QuickCheck TestRISCVLazyNoCheck.prop_laziestIntegrity.*)
-
-(*Time QuickCheck TestRISCVLazyFixed.prop_confidentiality.
-Time QuickCheck TestRISCVLazyFixed.prop_laziestIntegrity.*)
+Time QuickCheck TestPropsEager.prop_Integrity.

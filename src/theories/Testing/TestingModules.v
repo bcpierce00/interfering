@@ -35,7 +35,7 @@ Module Type Printing (M : Machine) (LI : LayoutInfo M).
   Instance ShowObsType : Show Event :=
     {| show o := printObsType o |}.
   Derive Show for Observation.
-
+  
   Parameter printPC : MachineState -> string.
   
   Parameter printComponent : Element -> MachineState ->
@@ -51,7 +51,7 @@ Module Type Printing (M : Machine) (LI : LayoutInfo M).
 End Printing.
 
 Module Type TestProps (M : Machine) (LI : LayoutInfo M).
-  Parameter prop_laziestIntegrity : Checker.
-  Parameter prop_lazyConfidentiality : Checker.
+  Parameter prop_Integrity : Checker.
+  Parameter prop_Confidentiality : Checker.
 End TestProps.
 

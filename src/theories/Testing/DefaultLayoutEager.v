@@ -54,4 +54,4 @@ Module DefaultLayout (M:Machine) <: LayoutInfo M.
                 end.
 End DefaultLayout.
 
-Module RISCVDef := DefaultLayout RISCVEagerOrig.
+Module RISCVEagerDef := DefaultLayout RISCVEagerOrig.

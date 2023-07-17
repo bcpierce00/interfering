@@ -159,10 +159,10 @@ Require Import Coq.Lists.List. Import ListNotations.
 
 End PrintRISCVLazyFixed.*)
 
-Module PrintRISCVEagerOrig : Printing RISCVEagerOrig RISCVDef.
+Module PrintRISCVEagerOrig : Printing RISCVEagerOrig RISCVEagerDef.
   Import RISCVEagerOrig.
   Import TagPolicyEagerOrig.
-  Import RISCVDef.
+  Import RISCVEagerDef.
   Import PM.
 
   Definition printObsType (o:Event) :=

@@ -54,4 +54,4 @@ Module DefaultLayout (M:Machine) <: LayoutInfo M.
                 end.
 End DefaultLayout.
 
-Module RISCVDef := DefaultLayout RISCVLazyOrig.
+Module RISCVLazyDef := DefaultLayout RISCVLazyOrig.

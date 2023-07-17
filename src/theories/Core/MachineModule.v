@@ -41,7 +41,7 @@ Module Type Machine.
   
   Parameter wplus_neq : forall w (z : Z),
       (z > 0)%Z -> w <> wplus w z.
-
+  
   Parameter Register : Type.
 
   Parameter RA : Register.
@@ -148,6 +148,11 @@ Module Type Machine.
 
   (* A Machine State can step to a new Machine State plus an Observation. *)
   Parameter step : MachineState -> MachineState * (list Operation) * Observation.
+
+  Parameter instr : Type.
+  
+  (* Call header sequence for generation *)
+  Parameter head : Z -> list (instr * list Operation).
   
 End Machine.
 

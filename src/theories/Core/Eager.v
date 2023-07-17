@@ -42,6 +42,13 @@ Definition trace := false.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
 
+Inductive version :=
+| NORMAL
+| LOAD_NO_CHECK
+| STORE_NO_CHECK
+| HEADER_NO_INIT
+.
+
 Module TagPolicyEagerOrig <: TagPolicy RISCV.
   Import RISCV.
   Module PM := MachineModule.Properties RISCV.
@@ -68,6 +75,7 @@ Module TagPolicyEagerOrig <: TagPolicy RISCV.
   | Th1
   | Th2
   | Th3 (* noop/entry point for tail calls *)
+  | Tinit (n m : nat)
   | Tinstr
   | Tpc (n : nat)
   | Trai (* initial tag for return address *)
@@ -80,7 +88,6 @@ Module TagPolicyEagerOrig <: TagPolicy RISCV.
   | Tsetarg
   | Tref (d id : nat)
   .
-
   Definition tag_eqb (t1 t2 : myTag) : bool :=
     match t1, t2 with
     | Tcall, Tcall
@@ -95,6 +102,7 @@ Module TagPolicyEagerOrig <: TagPolicy RISCV.
     | Tsp, Tsp
     | Trai, Trai
     | Tsetarg, Tsetarg => true
+    | Tinit n1 m1, Tinit n2 m2 => Nat.eqb n1 n2 && Nat.eqb m1 m2
     | Tref d1 id1, Tref d2 id2 => Nat.eqb d1 d2 && Nat.eqb id1 id2
     | Tpc n1, Tpc n2 => Nat.eqb n1 n2
     | Tstack n1 k1, Tstack n2 k2 => Nat.eqb n1 n2 && stackKind_eqb k1 k2
@@ -218,9 +226,12 @@ Module TagPolicyEagerOrig <: TagPolicy RISCV.
       | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Th3] |>)
       | _, _, _ => ("Failstop in ImmArith: Th2" ++ nl) ! None
       end
-    | [Tinstr; Th3] =>
+    | [Tinstr; Th3; Tinit O m] =>
       match tpc, trs, trd with
-      | [Tpc depth; Th3], _, _ => Some (p <| pctags := [Tpc depth] |>)
+      | [Tpc depth; Th3], _, _ =>
+          if Nat.ltb O m
+          then Some (p <| pctags := [Tpc depth; Tinit (S O) m] |>)
+          else Some (p <| pctags := [Tpc depth] |>)
       | _, _, _ => ("Failstop in ImmArith: I@" ++ show tinstr ++ " pc@" ++ show tpc ++ " rs@" ++ show trs ++ " rd@" ++ show trd ++ nl) ! None
       end
     | [Tinstr; Tr1] =>
@@ -309,6 +320,43 @@ Module TagPolicyEagerOrig <: TagPolicy RISCV.
     | _ => ("Failstop on Load: no tag!" ++ nl) ! None
     end.
 
+  Definition policyLoadNoCheck (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : option PolicyState :=
+    tinstr <- map.get (memtags p) (word.unsigned pc);
+    let addr := word.unsigned rsdata + imm in
+    taddr <- map.get (memtags p) addr;
+    let tpc := pctags p in
+    trs <- map.get (regtags p) rs;
+    match tinstr with
+    | [Tinstr] =>
+      match tpc, trs, taddr with
+      | [Tpc pcdepth], _, [Tstack memdepth Knormal] =>
+          Some (p <| regtags := map.put (regtags p) rd [] |>)
+      | [Tpc pcdepth], _, [Tstack memdepth Krelarg] =>
+          Some (p <| regtags := map.put (regtags p) rd [] |>)
+      | [Tpc pcdepth], _, [Tstack memdepth (Krefarg memid)] =>
+          if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
+          else match trs with
+               | [Tref refdepth refid] =>
+                   if Nat.eqb refdepth memdepth && Nat.eqb refid memid
+                   then Some (p <| regtags := map.put (regtags p) rd [] |>)
+                   else ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
+               | _ => ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
+               end
+      | _, _, _ =>
+        ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
+      end
+    | [Tinstr; Tr2] =>
+      (*trace ("r2" ++ nl)*)
+      match tpc, trs, taddr with
+      | [Tpc depth; Tr2], [Tsp], [Tpc _]
+      | [Tpc depth; Tr2], [Tsp], [Trai] =>
+          Some (p <| pctags := [Tpc depth; Tr3] |>
+                   <| regtags := map.put (regtags p) rd taddr |>)
+      | _, _, _ => ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl) ! None
+      end
+    | _ => ("Failstop on Load: no tag!" ++ nl) ! None
+    end.
+  
   Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
     tinstr <- map.get (memtags p) (word.unsigned pc);
     let addr := word.unsigned rddata + imm in
@@ -355,15 +403,78 @@ Module TagPolicyEagerOrig <: TagPolicy RISCV.
                      <| memtags := map.put (memtags p) addr trs |>)
         | _, _, _ => ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " rd@" ++ show trd ++ nl) ! None
         end
+    | [Tinstr; Tinit n m] =>
+        match tpc, trs, trd with
+        | [Tpc depth; Tinit n m], _, _ =>
+            if Nat.ltb n m
+            then Some (p <| pctags := [Tpc depth; Tinit (S n) m] |>)
+            else Some (p <| pctags := [Tpc depth] |>)
+        | _, _, _ => ("Failstop in Store: I@" ++ show tinstr ++ " pc@" ++ show tpc ++ " rs@" ++ show trs ++ " rd@" ++ show trd ++ nl) ! None
+        end
     | _ => ("Failstop on Store" ++ nl) ! None
     end.
 
+  Definition policyStoreNoCheck (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
+    tinstr <- map.get (memtags p) (word.unsigned pc);
+    let addr := word.unsigned rddata + imm in
+    tmem <- map.get (memtags p) addr;
+    let tpc := pctags p in
+    trs <- map.get (regtags p) rs;
+    trd <- map.get (regtags p) rd;
+    match tinstr with
+    | [Tinstr] =>
+      match tpc, trs, tmem with
+      | [Tpc memdepth], [], [] =>
+          Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth Knormal] |>)
+      | [Tpc memdepth], [], [Tstack stkdepth _] =>
+          Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth Knormal] |>)
+      | _, [Tref refdepth refid], [] =>
+          Some (p <| memtags := map.put (memtags p) addr [Tstack refdepth (Krefarg refid)] |>)
+      | _, [Tref refdepth refid], [Tstack stkdepth _] =>
+          Some (p <| memtags := map.put (memtags p) addr [Tstack refdepth (Krefarg refid)] |>)
+      | _, _, _ => ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
+      end
+    | [Tinstr; Tvar id] =>
+        match tpc, tmem with
+        | [Tpc memdepth], []
+        | [Tpc memdepth], [Tstack _ _] =>
+            Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth (Krefarg id)] |>)         
+        |  _, _ => ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
+      end
+    | [Tinstr; Tsetarg] =>
+        match tpc, trs, tmem with
+        | [Tpc memdepth], [], []
+        | [Tpc memdepth], [], [Tstack _ _]
+          => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth Krelarg] |>)
+        | _, _, _ => ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl) ! None
+        end
+    | [Tinstr; Th1] =>
+        match tpc, trs, trd with
+        | [Tpc depth; Th1], [Tpc _], [Tsp]
+        | [Tpc depth; Th1], [Trai], [Tsp]
+          => Some (p <| pctags := [Tpc depth; Th2] |>
+                     <| memtags := map.put (memtags p) addr trs |>)
+        | _, _, _ => ("Failstop on Store: I@" ++ show tinstr ++ " PC@" ++ show tpc ++ " rs@" ++ show trs ++ " rd@" ++ show trd ++ nl) ! None
+        end
+    | [Tinstr; Tinit n m] =>
+        match tpc, trs, trd with
+        | [Tpc depth; Tinit n m], _, _ =>
+            if Nat.ltb n m
+            then Some (p <| pctags := [Tpc depth; Tinit (S n) m] |>)
+            else Some (p <| pctags := [Tpc depth] |>)
+        | _, _, _ => ("Failstop in Store: I@" ++ show tinstr ++ " pc@" ++ show tpc ++ " rs@" ++ show trs ++ " rd@" ++ show trd ++ nl) ! None
+        end
+    | _ => ("Failstop on Store" ++ nl) ! None
+    end.
+  
   Definition decodeI (w : w32) : option InstructionI :=
     match decode RV32IM (LittleEndian.combine 4 w) with
     | IInstruction i => Some i
     | _ => None
     end.
 
+  Definition v:version := NORMAL.
+  
   Definition pstep (m : MachineState) (p : PolicyState) : option PolicyState :=
     let pc := getPc m in
     w <- loadWord (getMem m) pc;
@@ -384,10 +495,16 @@ Module TagPolicyEagerOrig <: TagPolicy RISCV.
       => policyJalr p pc rd rs
     | Lb rd rs imm | Lh rd rs imm | Lw rd rs imm | Lbu rd rs imm | Lhu rd rs imm
       => rsdata <- map.get (getRegs m) rs;
-         policyLoad p pc rsdata rd rs imm
+         match v with
+         | LOAD_NO_CHECK => policyLoadNoCheck p pc rsdata rd rs imm
+         | _ => policyLoad p pc rsdata rd rs imm
+         end
     | Sb rd rs imm | Sh rd rs imm | Sw rd rs imm
        => rddata <- map.get (getRegs m) rd;
-          policyStore p pc rddata rd rs imm
+         match v with
+         | STORE_NO_CHECK => policyStoreNoCheck p pc rddata rd rs imm
+         | _ => policyStore p pc rddata rd rs imm
+         end
     | _ => None
   end.
 
@@ -399,827 +516,35 @@ Module TagPolicyEagerOrig <: TagPolicy RISCV.
         (m',p',ops,o)
     | None => (m,p,nil,Tau)
     end.
-  
-  (* TODO: More interesting well-formedness condition *)
-  Definition WFInitMPState (mp:MPState) := True.
 
+  Definition nop : instr := Add 0 0 0.
+
+  Fixpoint init_frame (max:nat) (words : list ((*offset*) Z * (*index*) nat)) :
+    list (instr * Tag * list Operation) :=
+    match words with
+    | [] => []
+    | (off,index)::rest =>
+        (Sw sp r0 off, [Tinstr; Tinit index max], [])::init_frame max rest
+    end.
+
+  Fixpoint init_by_words (wds:nat) :=
+    match wds with
+    | O => []
+    | S n => init_by_words n ++ [(-4*(Z.of_nat n), wds)]
+    end.
+  
+  Definition tagify_head (sz_wds : Z) (header : list (RISCV.instr * list RISCV.Operation)) : list (instr * Tag * list Operation) :=
+    let wds := Z.to_nat sz_wds in
+    [(nth_default nop (map fst header) 0, [Tinstr; Th1],   nth_default [] (map snd header) 0);
+     (nth_default nop (map fst header) 1, [Tinstr; Th2],   nth_default [] (map snd header) 1);
+     (nth_default nop (map fst header) 2, [Tinstr; Th3], nth_default [] (map snd header) 2)]
+    ++
+    init_frame wds (init_by_words wds)
+    ++
+    [(nth_default nop (map fst header) 3, [Tinstr], nth_default [] (map snd header) 3);
+     (nth_default nop (map fst header) 4, [Tinstr], nth_default [] (map snd header) 4);
+     (nth_default nop (map fst header) 5, [Tinstr], nth_default [] (map snd header) 5)].
+  
 End TagPolicyEagerOrig.
 
 Module RISCVEagerOrig := RISCVTagged TagPolicyEagerOrig.
-
-(*Module TagPolicyLazyNoCheck (M : RISCV) <: Policy M.
-  Import M.
-  
-  (* TODO: More interesting state/abstract *)
-  Inductive Tag : Type :=
-  | Tcall
-  | Th1
-  | Th2
-  | Tinstr
-  | Tpc (n : nat)
-  | Tr1
-  | Tr2
-  | Tr3
-  | Tsp
-  | Tstack (n : nat)
-  .
-
-  Definition tag_eqb (t1 t2 :  Tag) : bool :=
-    match t1, t2 with
-    | Tcall, Tcall
-    | Th1, Th1
-    | Th2, Th2
-    | Tinstr, Tinstr
-    | Tr1, Tr1
-    | Tr2, Tr2
-    | Tr3, Tr3
-    | Tsp, Tsp => true
-    | Tpc n1, Tpc n2
-    | Tstack n1, Tstack n2 => Nat.eqb n1 n2
-    | _, _ => false
-    end.
-
-  Definition tag_neqb (t1 t2 :  Tag) : bool :=
-    negb (tag_eqb t1 t2).
-
-  Definition TagSet : Type := list Tag.
-  Definition TagMap : Type := Zkeyed_map TagSet.
-
-  Derive Show for Tag.
-  Derive Show for InstructionI.
-
-  Fixpoint printTagSet (ts : TagSet) :=
-    match ts with
-    | t :: ts => (show t ++ printTagSet ts)%string
-    | [] => ""
-    end.
-
-  Instance ShowTagSet : Show TagSet :=
-    {| show ts := printTagSet ts |}.
-
-  (* Map of memory tags *)
-  Record myPolicyState : Type :=
-    {
-    nextid: nat;
-    pctags: TagSet;
-    regtags: TagMap;
-    memtags: TagMap;
-    }.
-
-  Definition PolicyState := myPolicyState.
-
-  Instance etaPolicyState : Settable _ :=
-    settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
-
-  (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
-    match k with
-    | Mem a =>
-      match map.get (memtags p) a with
-      | Some t => t
-      | _ => nil
-      end
-    | Reg r =>
-      match map.get (regtags p) r with
-      | Some t => t
-      | _ => nil
-      end
-    | PC => pctags p
-    end.
-
-  (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
-  Definition MPState : Type := MachineState * PolicyState.
-  Definition ms (mp : MPState) := fst mp.
-  Definition ps (mp : MPState) := snd mp.
-
-  (* TODO: Real policy. *)
-  (* ...
-     TODO: Use [MonadNotations] *)
-
-  (* Definition callTags := [Tinstr; Tcall]. *)
-
-  (* TODO: Monadic syntax *)
-  Definition policyArith (p : PolicyState) (pc : word) (rd rs1 rs2 : Z) : option PolicyState :=
-    let tpc := pctags p in
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    trs1 <- map.get (regtags p) rs1;
-    trs2 <- map.get (regtags p) rs2;
-    trd <- map.get (regtags p) rd;
-    match tinstr, tpc, trd with
-    | [Tinstr], [Tpc _], [] =>
-      if (negb (existsb (tag_eqb Tsp) trs1))
-         && negb (existsb (tag_eqb Tsp) trs2)
-          then Some p
-          else trace ("Failstop in Arith" ++ nl) None
-    | _, _, _ => (*trace ("Failstop in Arith" ++ nl)*) None
-    end.
-
-  Definition policyBranch (p : PolicyState) (pc : word) (rs1 rs2 : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    trs1 <- map.get (regtags p) rs1;
-    trs2 <- map.get (regtags p) rs2;
-    match tinstr, existsb (tag_eqb Tsp) trs1, existsb (tag_eqb Tsp) trs2 with
-    | [Tinstr], false, false => Some p
-    | _, _, _ => (*trace ("Failstop in Branch" ++ nl)*) None
-    end.
-
-  Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let tpc := pctags p in
-    trs <- map.get (regtags p) rs;
-    trd <- map.get (regtags p) rd;
-    match tinstr with
-    | [Tinstr] =>
-      match existsb (tag_eqb Tsp) trs, existsb (tag_eqb Tsp) trd with
-      | false, false => Some (p <| regtags := map.put (regtags p) rd [] |>)
-      | _, _ => (*trace ("Failstop in ImmArith: just instr" ++ nl)*) None
-      end
-    | [Tinstr; Th2] =>
-      match tpc, trs, trd with
-      | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Th2" ++ nl)*) None
-      end
-    | [Tinstr; Tr1] =>
-      (*trace ("r1" ++ nl)*)
-      match tpc, trs, trd with
-      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Tr1" ++ nl)*) None
-      end
-    | _ => (*trace ("Failstop in ImmArith: no tag" ++ nl)*) None
-    end.
-
-  Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState :=
-    match pctags p, map.get (memtags p) (word.unsigned pc) with
-    | [Tpc old], Some [Tinstr; Tcall] =>
-      let newid := S (nextid p) in (* TODO: This is not next but last! *)
-      Some (p <| nextid := newid |>
-              <| pctags := [Tpc newid; Th1] |>
-              <| regtags := map.put (regtags p) rd [Tpc old] |>)
-    | _, _ => (*trace ("Failstop on Jal" ++ nl)*) None
-    end.
-
-  Definition policyJalr (p : PolicyState) (pc : word) (rd rs : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let tpc := pctags p in
-    ttarget <- map.get (regtags p) rs;
-    treturn <- map.get (regtags p) rd;
-    match tinstr with
-    | [Tinstr] =>
-      match tpc, ttarget, treturn with
-      | [Tpc _], [], [] => Some p
-      | _, _, _ => (*trace ("Failstop on Jalr" ++ nl)*) None
-      end
-    | [Tinstr; Tr3] =>
-      (*trace ("r3" ++ nl)*)
-      match tpc, ttarget with
-      | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
-                                           <| regtags := map.put (regtags p) rd [] |>)
-      | _, _ => (*trace ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
-                                               ++ " rd@" ++ show treturn ++ nl)*) None
-      end
-    | _ => (*trace ("Failstop on Jalr" ++ nl)*) None
-    end.
-
-  Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let addr := word.unsigned rsdata + imm in
-    taddr <- map.get (memtags p) addr;
-    let tpc := pctags p in
-    trs <- map.get (regtags p) rs;
-    match tinstr with
-    | [Tinstr] =>
-      match tpc, taddr with
-      | [Tpc pcdepth], [Tstack memdepth] =>
-        Some (p <| regtags := map.put (regtags p) rd [] |>)
-      | _, _ =>
-        (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
-      end
-    | [Tinstr; Tr2] =>
-      (*trace ("r2" ++ nl)*)
-      match tpc, trs, taddr with
-      | [Tpc depth; Tr2], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr3] |>
-                                                    <| regtags := map.put (regtags p) rd taddr |>)
-      | _, _, _ => (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
-      end
-    | _ => (*trace ("Failstop on Load: no tag!" ++ nl)*) None
-    end.
-
-  Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let addr := word.unsigned rddata + imm in
-    tmem <- map.get (memtags p) addr;
-    let tpc := pctags p in
-    trs <- map.get (regtags p) rs;
-    trd <- map.get (regtags p) rd;
-    match tinstr with
-    | [Tinstr] =>
-      match tpc, trs, tmem with
-      | [Tpc memdepth], [], []
-      | [Tpc memdepth], [], [Tstack _]
-        => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth] |>)
-      | _, _, _ => (*trace ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
-      end
-    | [Tinstr; Th1] =>
-      match tpc, trs, trd with
-      | [Tpc depth; Th1], [Tpc od], [Tsp] => Some (p <| pctags := [Tpc depth; Th2] |>
-                                                     <| memtags := map.put (memtags p) addr [Tpc od] |>)
-      | _, _, _ => (*trace ("Failstop on h1 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
-      end
-  | _ => (*trace ("Failstop on Store" ++ nl)*) None
-  end.
-
-  Definition decodeI (w : w32) : option InstructionI :=
-    match decode RV32IM (LittleEndian.combine 4 w) with
-    | IInstruction i => Some i
-    | _ => None
-    end.
-
-  Definition pstep (mp : MPState) : option PolicyState :=
-    let '(m, p) := mp in
-    let pc := getPc m in
-    w <- loadWord (getMem m) pc;
-    i <- decodeI w;
-    match i with
-    | Add  rd rs1 rs2 | Sub rd rs1 rs2 | Sll rd rs1 rs2 | Slt rd rs1 rs2
-    | Sltu rd rs1 rs2 | Xor rd rs1 rs2 | Or  rd rs1 rs2 | Srl rd rs1 rs2
-    | Sra  rd rs1 rs2 | And rd rs1 rs2
-      => policyArith p pc rd rs1 rs2
-    | Beq  rs1 rs2 _ | Bne  rs1 rs2 _ | Blt rs1 rs2 _ | Bge rs1 rs2 _
-    | Bltu rs1 rs2 _ | Bgeu rs1 rs2 _ => policyBranch p pc rs1 rs2
-    | Addi rd rs _ | Slti rd rs _ | Sltiu rd rs _ | Xori rd rs _ | Ori rd rs _
-    | Andi rd rs _ | Slli rd rs _ | Srli  rd rs _ | Srai rd rs _
-      => policyImmArith p pc rd rs
-    | Jal rd _
-      => policyJal p pc rd
-    | Jalr rd rs _
-      => policyJalr p pc rd rs
-    | Lb rd rs imm | Lh rd rs imm | Lw rd rs imm | Lbu rd rs imm | Lhu rd rs imm
-      => rsdata <- map.get (getRegs m) rs;
-         policyLoad p pc rsdata rd rs imm
-    | Sb rd rs imm | Sh rd rs imm | Sw rd rs imm
-       => rddata <- map.get (getRegs m) rd;
-          policyStore p pc rddata rd rs imm
-    | _ => None
-  end.
-
-  Definition mpstep (mp : MPState)
-    : option (MPState * list Operation * Observation) :=
-    p' <- pstep mp;
-    match step (ms mp) with
-    | (m', t, o) => Some (m', p', t, o)
-    end.
-
-  Axiom mpstepCompat :
-    forall m p t o m' p',
-      mpstep (m,p) = Some (m',p',t,o) ->
-      step m = (m',t,o).
-
-  (* TODO: More interesting well-formedness condition *)
-  Definition WFInitMPState (mp:MPState) := True.
-
-End TagPolicyLazyNoCheck.
-
-Module TagPolicyLazyNoDepth (M : RISCV) <: Policy M.
-  Import M.
-  
-  (* TODO: More interesting state/abstract *)
-  Inductive Tag : Type :=
-  | Tcall
-  | Th1
-  | Th2
-  | Tinstr
-  | Tpc (n : nat)
-  | Tr1
-  | Tr2
-  | Tr3
-  | Tsp
-  | Tstack (n : nat)
-  .
-
-  Definition tag_eqb (t1 t2 :  Tag) : bool :=
-    match t1, t2 with
-    | Tcall, Tcall
-    | Th1, Th1
-    | Th2, Th2
-    | Tinstr, Tinstr
-    | Tr1, Tr1
-    | Tr2, Tr2
-    | Tr3, Tr3
-    | Tsp, Tsp => true
-    | Tpc n1, Tpc n2
-    | Tstack n1, Tstack n2 => Nat.eqb n1 n2
-    | _, _ => false
-    end.
-
-  Definition tag_neqb (t1 t2 :  Tag) : bool :=
-    negb (tag_eqb t1 t2).
-
-  Definition TagSet : Type := list Tag.
-  Definition TagMap : Type := Zkeyed_map TagSet.
-
-  Derive Show for Tag.
-  Derive Show for InstructionI.
-
-  Fixpoint printTagSet (ts : TagSet) :=
-    match ts with
-    | t :: ts => (show t ++ printTagSet ts)%string
-    | [] => ""
-    end.
-
-  Instance ShowTagSet : Show TagSet :=
-    {| show ts := printTagSet ts |}.
-
-  (* Map of memory tags *)
-  Record myPolicyState : Type :=
-    {
-    nextid: nat;
-    pctags: TagSet;
-    regtags: TagMap;
-    memtags: TagMap;
-    }.
-
-  Definition PolicyState := myPolicyState.
-
-  Instance etaPolicyState : Settable _ :=
-    settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
-
-  (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
-    match k with
-    | Mem a =>
-      match map.get (memtags p) a with
-      | Some t => t
-      | _ => nil
-      end
-    | Reg r =>
-      match map.get (regtags p) r with
-      | Some t => t
-      | _ => nil
-      end
-    | PC => pctags p
-    end.
-
-  (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
-  Definition MPState : Type := MachineState * PolicyState.
-  Definition ms (mp : MPState) := fst mp.
-  Definition ps (mp : MPState) := snd mp.
-
-  (* TODO: Real policy. *)
-  (* ...
-     TODO: Use [MonadNotations] *)
-
-  (* Definition callTags := [Tinstr; Tcall]. *)
-
-  (* TODO: Monadic syntax *)
-  Definition policyArith (p : PolicyState) (pc : word) (rd rs1 rs2 : Z) : option PolicyState :=
-    let tpc := pctags p in
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    trs1 <- map.get (regtags p) rs1;
-    trs2 <- map.get (regtags p) rs2;
-    trd <- map.get (regtags p) rd;
-    match tinstr, tpc, trd with
-    | [Tinstr], [Tpc _], [] =>
-      if (negb (existsb (tag_eqb Tsp) trs1))
-         && negb (existsb (tag_eqb Tsp) trs2)
-          then Some p
-          else trace ("Failstop in Arith" ++ nl) None
-    | _, _, _ => (*trace ("Failstop in Arith" ++ nl)*) None
-    end.
-
-  Definition policyBranch (p : PolicyState) (pc : word) (rs1 rs2 : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    trs1 <- map.get (regtags p) rs1;
-    trs2 <- map.get (regtags p) rs2;
-    match tinstr, existsb (tag_eqb Tsp) trs1, existsb (tag_eqb Tsp) trs2 with
-    | [Tinstr], false, false => Some p
-    | _, _, _ => (*trace ("Failstop in Branch" ++ nl)*) None
-    end.
-
-  Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let tpc := pctags p in
-    trs <- map.get (regtags p) rs;
-    trd <- map.get (regtags p) rd;
-    match tinstr with
-    | [Tinstr] =>
-      match existsb (tag_eqb Tsp) trs, existsb (tag_eqb Tsp) trd with
-      | false, false => Some (p <| regtags := map.put (regtags p) rd [] |>)
-      | _, _ => (*trace ("Failstop in ImmArith: just instr" ++ nl)*) None
-      end
-    | [Tinstr; Th2] =>
-      match tpc, trs, trd with
-      | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Th2" ++ nl)*) None
-      end
-    | [Tinstr; Tr1] =>
-      (*trace ("r1" ++ nl)*)
-      match tpc, trs, trd with
-      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Tr1" ++ nl)*) None
-      end
-    | _ => (*trace ("Failstop in ImmArith: no tag" ++ nl)*) None
-    end.
-
-  Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState :=
-    match pctags p, map.get (memtags p) (word.unsigned pc) with
-    | [Tpc old], Some [Tinstr; Tcall] =>
-      let newid := S (nextid p) in (* TODO: This is not next but last! *)
-      Some (p <| pctags := [Tpc newid; Th1] |>
-              <| regtags := map.put (regtags p) rd [Tpc old] |>)
-    | _, _ => (*trace ("Failstop on Jal" ++ nl)*) None
-    end.
-
-  Definition policyJalr (p : PolicyState) (pc : word) (rd rs : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let tpc := pctags p in
-    ttarget <- map.get (regtags p) rs;
-    treturn <- map.get (regtags p) rd;
-    match tinstr with
-    | [Tinstr] =>
-      match tpc, ttarget, treturn with
-      | [Tpc _], [], [] => Some p
-      | _, _, _ => (*trace ("Failstop on Jalr" ++ nl)*) None
-      end
-    | [Tinstr; Tr3] =>
-      (*trace ("r3" ++ nl)*)
-      match tpc, ttarget with
-      | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
-                                           <| regtags := map.put (regtags p) rd [] |>)
-      | _, _ => (*trace ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
-                                               ++ " rd@" ++ show treturn ++ nl)*) None
-      end
-    | _ => (*trace ("Failstop on Jalr" ++ nl)*) None
-    end.
-
-  Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let addr := word.unsigned rsdata + imm in
-    taddr <- map.get (memtags p) addr;
-    let tpc := pctags p in
-    trs <- map.get (regtags p) rs;
-    match tinstr with
-    | [Tinstr] =>
-      match tpc, taddr with
-      | [Tpc pcdepth], [Tstack memdepth] =>
-        Some (p <| regtags := map.put (regtags p) rd [] |>)
-      | _, _ =>
-        (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
-      end
-    | [Tinstr; Tr2] =>
-      (*trace ("r2" ++ nl)*)
-      match tpc, trs, taddr with
-      | [Tpc depth; Tr2], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr3] |>
-                                                    <| regtags := map.put (regtags p) rd taddr |>)
-      | _, _, _ => (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
-      end
-    | _ => (*trace ("Failstop on Load: no tag!" ++ nl)*) None
-    end.
-
-  Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let addr := word.unsigned rddata + imm in
-    tmem <- map.get (memtags p) addr;
-    let tpc := pctags p in
-    trs <- map.get (regtags p) rs;
-    trd <- map.get (regtags p) rd;
-    match tinstr with
-    | [Tinstr] =>
-      match tpc, trs, tmem with
-      | [Tpc memdepth], [], []
-      | [Tpc memdepth], [], [Tstack _]
-        => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth] |>)
-      | _, _, _ => (*trace ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
-      end
-    | [Tinstr; Th1] =>
-      match tpc, trs, trd with
-      | [Tpc depth; Th1], [Tpc od], [Tsp] => Some (p <| pctags := [Tpc depth; Th2] |>
-                                                     <| memtags := map.put (memtags p) addr [Tpc od] |>)
-      | _, _, _ => (*trace ("Failstop on h1 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
-      end
-  | _ => (*trace ("Failstop on Store" ++ nl)*) None
-  end.
-
-  Definition decodeI (w : w32) : option InstructionI :=
-    match decode RV32IM (LittleEndian.combine 4 w) with
-    | IInstruction i => Some i
-    | _ => None
-    end.
-
-  Definition pstep (mp : MPState) : option PolicyState :=
-    let '(m, p) := mp in
-    let pc := getPc m in
-    w <- loadWord (getMem m) pc;
-    i <- decodeI w;
-    match i with
-    | Add  rd rs1 rs2 | Sub rd rs1 rs2 | Sll rd rs1 rs2 | Slt rd rs1 rs2
-    | Sltu rd rs1 rs2 | Xor rd rs1 rs2 | Or  rd rs1 rs2 | Srl rd rs1 rs2
-    | Sra  rd rs1 rs2 | And rd rs1 rs2
-      => policyArith p pc rd rs1 rs2
-    | Beq  rs1 rs2 _ | Bne  rs1 rs2 _ | Blt rs1 rs2 _ | Bge rs1 rs2 _
-    | Bltu rs1 rs2 _ | Bgeu rs1 rs2 _ => policyBranch p pc rs1 rs2
-    | Addi rd rs _ | Slti rd rs _ | Sltiu rd rs _ | Xori rd rs _ | Ori rd rs _
-    | Andi rd rs _ | Slli rd rs _ | Srli  rd rs _ | Srai rd rs _
-      => policyImmArith p pc rd rs
-    | Jal rd _
-      => policyJal p pc rd
-    | Jalr rd rs _
-      => policyJalr p pc rd rs
-    | Lb rd rs imm | Lh rd rs imm | Lw rd rs imm | Lbu rd rs imm | Lhu rd rs imm
-      => rsdata <- map.get (getRegs m) rs;
-         policyLoad p pc rsdata rd rs imm
-    | Sb rd rs imm | Sh rd rs imm | Sw rd rs imm
-       => rddata <- map.get (getRegs m) rd;
-          policyStore p pc rddata rd rs imm
-    | _ => None
-  end.
-
-  Definition mpstep (mp : MPState)
-    : option (MPState * list Operation * Observation) :=
-    p' <- pstep mp;
-    match step (ms mp) with
-    | (m', t, o) => Some (m', p', t, o)
-    end.
-
-  Axiom mpstepCompat :
-    forall m p t o m' p',
-      mpstep (m,p) = Some (m',p',t,o) ->
-      step m = (m',t,o).
-
-  (* TODO: More interesting well-formedness condition *)
-  Definition WFInitMPState (mp:MPState) := True.
-
-End TagPolicyLazyNoDepth.
-
-Module TagPolicyLazyFixed (M : RISCV) <: Policy M.
-  Import M.
-  
-  (* TODO: More interesting state/abstract *)
-  Inductive Tag : Type :=
-  | Tcall
-  | Th1
-  | Th2
-  | Tinstr
-  | Tpc (n : nat)
-  | Tr1
-  | Tr2
-  | Tr3
-  | Tsp
-  | Tstack (n : nat)
-  .
-
-  Definition tag_eqb (t1 t2 :  Tag) : bool :=
-    match t1, t2 with
-    | Tcall, Tcall
-    | Th1, Th1
-    | Th2, Th2
-    | Tinstr, Tinstr
-    | Tr1, Tr1
-    | Tr2, Tr2
-    | Tr3, Tr3
-    | Tsp, Tsp => true
-    | Tpc n1, Tpc n2
-    | Tstack n1, Tstack n2 => Nat.eqb n1 n2
-    | _, _ => false
-    end.
-
-  Definition tag_neqb (t1 t2 :  Tag) : bool :=
-    negb (tag_eqb t1 t2).
-
-  Definition TagSet : Type := list Tag.
-  Definition TagMap : Type := Zkeyed_map TagSet.
-
-  Derive Show for Tag.
-  Derive Show for InstructionI.
-
-  Fixpoint printTagSet (ts : TagSet) :=
-    match ts with
-    | t :: ts => (show t ++ printTagSet ts)%string
-    | [] => ""
-    end.
-
-  Instance ShowTagSet : Show TagSet :=
-    {| show ts := printTagSet ts |}.
-
-  (* Map of memory tags *)
-  Record myPolicyState : Type :=
-    {
-    nextid: nat;
-    pctags: TagSet;
-    regtags: TagMap;
-    memtags: TagMap;
-    }.
-
-  Definition PolicyState := myPolicyState.
-
-  Instance etaPolicyState : Settable _ :=
-    settable! Build_myPolicyState <nextid; pctags; regtags; memtags>.
-
-  (* Project what we care about from the RiscV state. *)
-  Definition pproj (p:  PolicyState) (k: Element):  TagSet :=
-    match k with
-    | Mem a =>
-      match map.get (memtags p) a with
-      | Some t => t
-      | _ => nil
-      end
-    | Reg r =>
-      match map.get (regtags p) r with
-      | Some t => t
-      | _ => nil
-      end
-    | PC => pctags p
-    end.
-
-  (* TODO: Rename MPState to State and MPTrace to Trace, mp -> t *)
-  Definition MPState : Type := MachineState * PolicyState.
-  Definition ms (mp : MPState) := fst mp.
-  Definition ps (mp : MPState) := snd mp.
-
-  (* TODO: Real policy. *)
-  (* ...
-     TODO: Use [MonadNotations] *)
-
-  (* Definition callTags := [Tinstr; Tcall]. *)
-
-  (* TODO: Monadic syntax *)
-  Definition policyArith (p : PolicyState) (pc : word) (rd rs1 rs2 : Z) : option PolicyState :=
-    let tpc := pctags p in
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    trs1 <- map.get (regtags p) rs1;
-    trs2 <- map.get (regtags p) rs2;
-    trd <- map.get (regtags p) rd;
-    match tinstr, tpc, trd with
-    | [Tinstr], [Tpc _], [] =>
-      if (negb (existsb (tag_eqb Tsp) trs1))
-         && negb (existsb (tag_eqb Tsp) trs2)
-          then Some p
-          else trace ("Failstop in Arith" ++ nl) None
-    | _, _, _ => (*trace ("Failstop in Arith" ++ nl)*) None
-    end.
-
-  Definition policyBranch (p : PolicyState) (pc : word) (rs1 rs2 : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    trs1 <- map.get (regtags p) rs1;
-    trs2 <- map.get (regtags p) rs2;
-    match tinstr, existsb (tag_eqb Tsp) trs1, existsb (tag_eqb Tsp) trs2 with
-    | [Tinstr], false, false => Some p
-    | _, _, _ => (*trace ("Failstop in Branch" ++ nl)*) None
-    end.
-
-  Definition policyImmArith (p : PolicyState) (pc : word) (rd rs (*imm*) : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let tpc := pctags p in
-    trs <- map.get (regtags p) rs;
-    trd <- map.get (regtags p) rd;
-    match tinstr with
-    | [Tinstr] =>
-      match existsb (tag_eqb Tsp) trs, existsb (tag_eqb Tsp) trd with
-      | false, false => Some (p <| regtags := map.put (regtags p) rd [] |>)
-      | _, _ => (*trace ("Failstop in ImmArith: just instr" ++ nl)*) None
-      end
-    | [Tinstr; Th2] =>
-      match tpc, trs, trd with
-      | [Tpc depth; Th2], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Th2" ++ nl)*) None
-      end
-    | [Tinstr; Tr1] =>
-      (*trace ("r1" ++ nl)*)
-      match tpc, trs, trd with
-      | [Tpc depth], [Tsp], [Tsp] => Some (p <| pctags := [Tpc depth; Tr2] |>)
-      | _, _, _ => (*trace ("Failstop in ImmArith: Tr1" ++ nl)*) None
-      end
-    | _ => (*trace ("Failstop in ImmArith: no tag" ++ nl)*) None
-    end.
-
-  Definition policyJal (p : PolicyState) (pc : word) (rd : Z) : option PolicyState :=
-    match pctags p, map.get (memtags p) (word.unsigned pc) with
-    | [Tpc old], Some [Tinstr; Tcall] =>
-      let newid := S (nextid p) in (* TODO: This is not next but last! *)
-      Some (p <| nextid := newid |>
-              <| pctags := [Tpc newid; Th1] |>
-              <| regtags := map.put (regtags p) rd [Tpc old] |>)
-    | _, _ => (*trace ("Failstop on Jal" ++ nl)*) None
-    end.
-
-  Definition policyJalr (p : PolicyState) (pc : word) (rd rs : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let tpc := pctags p in
-    ttarget <- map.get (regtags p) rs;
-    treturn <- map.get (regtags p) rd;
-    match tinstr with
-    | [Tinstr] =>
-      match tpc, ttarget, treturn with
-      | [Tpc _], [], [] => Some p
-      | _, _, _ => (*trace ("Failstop on Jalr" ++ nl)*) None
-      end
-    | [Tinstr; Tr3] =>
-      (*trace ("r3" ++ nl)*)
-      match tpc, ttarget with
-      | [Tpc _; Tr3], [Tpc old] => Some (p <| pctags := [Tpc old] |>
-                                           <| regtags := map.put (regtags p) rd [] |>)
-      | _, _ => (*trace ("Failstop on Jalr: pc@" ++ show tpc ++ " rs@" ++ show ttarget
-                                               ++ " rd@" ++ show treturn ++ nl)*) None
-      end
-    | _ => (*trace ("Failstop on Jalr" ++ nl)*) None
-    end.
-
-  Definition policyLoad (p : PolicyState) (pc rsdata : word) (rd rs imm : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let addr := word.unsigned rsdata + imm in
-    taddr <- map.get (memtags p) addr;
-    let tpc := pctags p in
-    trs <- map.get (regtags p) rs;
-    match tinstr with
-    | [Tinstr] =>
-      match tpc, taddr with
-      | [Tpc pcdepth], [Tstack memdepth] =>
-        if Nat.eqb pcdepth memdepth then Some (p <| regtags := map.put (regtags p) rd [] |>)
-        else (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
-      | _, _ =>
-        (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
-      end
-    | [Tinstr; Tr2] =>
-      (*trace ("r2" ++ nl)*)
-      match tpc, trs, taddr with
-      | [Tpc depth; Tr2], [Tsp], [Tpc _] => Some (p <| pctags := [Tpc depth; Tr3] |>
-                                                    <| regtags := map.put (regtags p) rd taddr |>)
-      | _, _, _ => (*trace ("Failstop on Load: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show taddr ++ nl)*) None
-      end
-    | _ => (*trace ("Failstop on Load: no tag!" ++ nl)*) None
-    end.
-
-  Definition policyStore (p : PolicyState) (pc rddata : word) (rd rs imm : Z) : option PolicyState :=
-    tinstr <- map.get (memtags p) (word.unsigned pc);
-    let addr := word.unsigned rddata + imm in
-    tmem <- map.get (memtags p) addr;
-    let tpc := pctags p in
-    trs <- map.get (regtags p) rs;
-    trd <- map.get (regtags p) rd;
-    match tinstr with
-    | [Tinstr] =>
-      match tpc, trs, tmem with
-      | [Tpc memdepth], [], []
-      | [Tpc memdepth], [], [Tstack _]
-        => Some (p <| memtags := map.put (memtags p) addr [Tstack memdepth] |>)
-      | _, _, _ => (*trace ("Failstop on Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
-      end
-    | [Tinstr; Th1] =>
-      match tpc, trs, trd with
-      | [Tpc depth; Th1], [Tpc od], [Tsp] => Some (p <| pctags := [Tpc depth; Th2] |>
-                                                     <| memtags := map.put (memtags p) addr [Tpc od] |>)
-      | _, _, _ => (*trace ("Failstop on h1 Store: PC@" ++ show tpc ++ " rs@" ++ show trs ++ " addr@" ++ show tmem ++ nl)*) None
-      end
-  | _ => (*trace ("Failstop on Store" ++ nl)*) None
-  end.
-
-  Definition decodeI (w : w32) : option InstructionI :=
-    match decode RV32IM (LittleEndian.combine 4 w) with
-    | IInstruction i => Some i
-    | _ => None
-    end.
-
-  Definition pstep (mp : MPState) : option PolicyState :=
-    let '(m, p) := mp in
-    let pc := getPc m in
-    w <- loadWord (getMem m) pc;
-    i <- decodeI w;
-    match i with
-    | Add  rd rs1 rs2 | Sub rd rs1 rs2 | Sll rd rs1 rs2 | Slt rd rs1 rs2
-    | Sltu rd rs1 rs2 | Xor rd rs1 rs2 | Or  rd rs1 rs2 | Srl rd rs1 rs2
-    | Sra  rd rs1 rs2 | And rd rs1 rs2
-      => policyArith p pc rd rs1 rs2
-    | Beq  rs1 rs2 _ | Bne  rs1 rs2 _ | Blt rs1 rs2 _ | Bge rs1 rs2 _
-    | Bltu rs1 rs2 _ | Bgeu rs1 rs2 _ => policyBranch p pc rs1 rs2
-    | Addi rd rs _ | Slti rd rs _ | Sltiu rd rs _ | Xori rd rs _ | Ori rd rs _
-    | Andi rd rs _ | Slli rd rs _ | Srli  rd rs _ | Srai rd rs _
-      => policyImmArith p pc rd rs
-    | Jal rd _
-      => policyJal p pc rd
-    | Jalr rd rs _
-      => policyJalr p pc rd rs
-    | Lb rd rs imm | Lh rd rs imm | Lw rd rs imm | Lbu rd rs imm | Lhu rd rs imm
-      => rsdata <- map.get (getRegs m) rs;
-         policyLoad p pc rsdata rd rs imm
-    | Sb rd rs imm | Sh rd rs imm | Sw rd rs imm
-       => rddata <- map.get (getRegs m) rd;
-          policyStore p pc rddata rd rs imm
-    | _ => None
-  end.
-
-  Definition mpstep (mp : MPState)
-    : option (MPState * list Operation * Observation) :=
-    p' <- pstep mp;
-    match step (ms mp) with
-    | (m', t, o) => Some (m', p', t, o)
-    end.
-
-  Axiom mpstepCompat :
-    forall m p t o m' p',
-      mpstep (m,p) = Some (m',p',t,o) ->
-      step m = (m',t,o).
-
-  (* TODO: More interesting well-formedness condition *)
-  Definition WFInitMPState (mp:MPState) := True.
-
-End TagPolicyLazyFixed.
-*)

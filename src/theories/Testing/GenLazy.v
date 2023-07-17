@@ -1,5 +1,5 @@
 From StackSafety Require Import MachineModule PolicyModule TestingModules
-     RISCVMachine Lazy DefaultLayout PrintRISCVTagSimple.
+     RISCVMachine Lazy DefaultLayoutLazy PrintLazy.
 
 From QuickChick Require Import QuickChick.
 Import QcNotation.
@@ -29,33 +29,16 @@ Definition trace := false.
 Notation " S '!' A " := (if trace then Show.trace (S)%string A else A)
                           (at level 60).
 
-Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
+Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVLazyDef.
   Import RISCVLazyOrig.
   Import TagPolicyLazyOrig.
-  Import RISCVDef.
+  Import RISCVLazyDef.
   Module PM := PM.
   Import PM.
   Import PrintRISCVLazyOrig.
 
   Definition maxFuel := 100%nat.
   Definition funMaxFuel := 10%nat.
-
-  Definition r0 : Register := 0.
-  Definition ra : Register := 1.
-  Definition sp : Register := 2.
-  Definition a0 : Register := 10.
-  
-  Definition minReg : Register := 10.
-  Definition noRegs : nat := 3%nat.
-  Definition maxReg : Register := minReg + Z.of_nat noRegs - 1.
-  (* TEMP: Keep argument register(s), in particular those used to pass arguments
-     by reference, separate from the rest. This eases bookkeeping if we
-     keep them immutable, like e.g. SP. A single register for now. *)
-  Definition argReg : Register := maxReg.
-
-  Definition minCalleeReg : Register := 18.
-  Definition noCalleeRegs : nat := 3%nat.
-  Definition maxCalleeReg : Register := minCalleeReg + Z.of_nat noCalleeRegs - 1.
 
   Definition noops : list Operation := [].
   
@@ -219,106 +202,6 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
 
   Definition frameSizeBytes (fp : FunctionProfile) : Z :=
     4 * frameSizeWords fp.
-
-  Definition groupRegisters (i : LayoutInfo) (t : TagInfo)
-             (mp : MachineState)
-             (dataP codeP : TagSet -> bool)
-    : RegInfo :=
-    let (m,p) := mp in
-    let regs := getRegs m in
-    let tags := regtags p in
-
-    (* Given range limits (low / high) for when something
-       is valid, calculate the immediates involved. *)
-    let getInfo (regTagP : TagSet -> bool) lo hi rID rVal rTag :=
-        if andb (regTagP rTag) (rVal <=? hi) then
-          let minToAdd :=
-              if rVal <=? lo then lo - rVal else 0 in
-          Some {| pID := rID; pVal := rVal
-                ; pMinImm := minToAdd
-                ; pMaxImm := hi - rVal
-                ; pTag := rTag 
-               |}
-        else None
-    in
-
-    let noSp p t :=
-        andb (p t) (negb (existsb (tag_eqb Tsp) t)) in
-    let getDataInfo :=
-        getInfo (noSp dataP) (stackLo i) (stackHi i) in 
-    let getCodeInfo :=
-        getInfo (noSp codeP) (instLo i) (instHi i) in
-    let isStackLoc p t :=
-        (*      trace ("Testing Loc: " ++ show t ++ nl)%string *)
-        (
-          andb (p t) (match t with
-                      | [Tstack _ _] => true
-                      | _ => false
-                      end)) in
-    let loadLocs :=
-        List.fold_right
-          (fun (i : Z) '(acc1,acc2) =>
-             match pctags p, map.get (memtags p) i with
-             | [Tpc pcdepth], Some (cons (Tstack depth _) nil) =>
-               (* TODO: Likely to load bad stuff? *)
-               if Nat.leb pcdepth depth  then 
-                 (i :: acc1, acc2)
-               else (acc1, i::acc2)
-             | _, _ => (acc1, acc2)
-             end
-          ) (nil,nil) (Zseq (stackLo i) (stackHi i)) in
-                         
-    let getLoadInfo proj (regTagP : TagSet -> bool)
-                    rID rVal rTag :=
-        (*      trace ("Getting load info: " ++ show rID ++ " " ++ show (regTagP rTag) ++ " " ++ show loadLocs ++ nl)%string *)
-        (if (regTagP rTag) then
-           List.map (fun loc =>
-                       {| pID := rID; pVal := rVal
-                        ; pMinImm := 0
-                        ; pMaxImm :=  loc - rVal
-                        ; pTag := rTag 
-                       |}) (proj loadLocs)
-         else nil)
-    in
-    let processRegs f :=
-        List.fold_right
-          (fun '(rID, rVal, rTag) acc =>
-             (*           trace ("Processing: " ++ show (rID, rVal, rTag) ++ nl)*) (
-               match f rID (word.signed rVal) rTag with
-               | Some pi =>
-                 pi :: acc
-               | None => acc
-               end)) nil (listify2 regs tags) in
-    
-    let processRegsList f :=
-        List.fold_right
-          (fun '(rID, rVal, rTag) acc =>
-             (*           trace ("Processing: " ++ show (rID, rVal, rTag) ++ nl)%string *)
-             (
-               if Z.eqb rID 2 then
-                 f rID (word.signed rVal) rTag ++ acc
-                   
-               else acc
-                   
-          )) nil (listify2 regs tags) in
-
-    let dataRegs := processRegs getDataInfo in
-    let loadRegs := processRegsList (getLoadInfo fst dataP) in
-    let badRegs  := processRegsList (getLoadInfo snd dataP) in  
-    let codeRegs := processRegs getCodeInfo in
-    let arithRegs :=
-        List.fold_right
-          (fun '(rID, rVal, rTag) acc =>
-             if noSp (fun _ => true) rTag then
-               {| aID := rID |} :: acc
-             else acc) nil (listify2 regs tags) in
-  
-    {| codePtr := codeRegs
-     ; dataPtr := dataRegs
-     ; arith   := arithRegs
-     ; loadPtr := loadRegs
-     ; badPtr  := badRegs                  
-    |}.
 
   Definition genImm (n : Z) : G Z :=
     if (n >=? 0)
@@ -644,6 +527,21 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
   Definition main : FunctionProfile :=
     mkfunprofile O 0 (Some 8) [] 0 [] [(3%positive,Lsecret)] 0.
 
+    Fixpoint split3 (xs:list (instr * list Operation)) :=
+    match xs with
+    | [] => ([],[],[])
+    | (inst,t,ops)::xs' =>
+        let '(insts,ts,opss) := split3 xs' in
+        (inst::insts,t::ts,ops::opss)
+    end.
+
+  Fixpoint add_addr {X:Type} (xs:list X) (base:Z) : list (Z*X) :=
+    match xs with
+    | [] => []
+    | x::xs' =>
+        (base, x)::add_addr xs' (base+4)
+    end.
+  
   Fixpoint genFuns (n : nat) (m : MachineState) : G (MachineState * (list FunctionProfile) * CodeMap_Impl) :=
     match n with
     | O => ret (m, [], map.empty)
@@ -651,32 +549,11 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
         let base := (Z.of_nat n) * 1000 in
         '(m',fps,cm) <- (genFuns n m);;
         fp <- (if n =? O then ret main else genFun n (base))%nat;;
-        let sz := frameSizeBytes fp in
-        let m'' := setInstrs [(* regular entry sequence *)
-                              (base,   Sw sp ra 0);
-                              (base+4, Addi sp sp sz);
-                              (* nop/late entry for tail calls *)
-                              (base+8, Addi r0 r0 0);
-                              (* spill callee-saved registers (currently fixed sequence)
-                                 HACK one word above frame lower bound  *)
-                              (base+12, Sw sp minCalleeReg (-sz + 12));
-                              (base+16, Sw sp (minCalleeReg + 1) (-sz + 8));
-                              (base+20, Sw sp (minCalleeReg + 2) (-sz + 4))
-                              (* (later) initialize spilled registers? *)
-                             ] m' in
-        let m''' := setMemTags [(base,    [Tinstr; Th1]);
-                                (base+4,  [Tinstr; Th2]);
-                                (base+8,  [Tinstr; Th3]);
-                                (base+12, [Tinstr]);
-                                (base+16, [Tinstr]);
-                                (base+20, [Tinstr])] m'' in
-        let cm' := map.putmany_of_list [(base,    Some []);
-                                        (base+4,  Some [Alloc 0 sz]);
-                                        (base+8,  Some []);
-                                        (base+12, Some []);
-                                        (base+16, Some []);
-                                        (base+20, Some [])]
-                                       cm in
+        let sz := frameSizeWords fp in
+        let '(insts,ts,opss) := split3 (head sz) in
+        let m'' := setInstrs (add_addr insts base) m' in
+        let m''' := setMemTags (add_addr ts base) m'' in
+        let cm' := map.putmany_of_list (add_addr (map Some opss) base) cm in
         ret (m''', fp::fps, cm')
     end.
 
@@ -1303,4 +1180,110 @@ Module GenRISCVLazyOrig <: Gen RISCVLazyOrig RISCVDef.
        (  9, 28, [] );
        ( 10, 12, [] )].
 
+
+  Definition cex05 : G (MachineState * CodeMap_Impl) :=
+    GenRISCVLazyOrig.ex_gen
+      [(   0, Addi 2 2 12,  [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (   4, Sw 2 9 (-4),  [Tinstr],        Some [] );
+       (   8, Jal 1 264,    [Tinstr; Tcall], Some [(Call 4%nat [] [])] );
+       (  12, Jal 1 208,    [Tinstr; Tcall], Some [(Call 3%nat [] [])] );
+       (  16, Jal 1 368,    [Tinstr; Tcall], Some [(Call 7%nat [] [])] );
+       (  20, Jal 1 344,    [Tinstr; Tcall], Some [(Call 6%nat [] [])] );
+       (  24, Jal 1 304,    [Tinstr; Tcall], Some [(Call 5%nat [] [])] );
+       (  28, Jal 1 124,    [Tinstr; Tcall], Some [(Call 2%nat [] [])] );
+       (  32, Jal 1 52,     [Tinstr; Tcall], Some [(Call 1%nat [] [])] );
+       (  36, Jal 1 312,    [Tinstr; Tcall], Some [(Call 5%nat [] [])] ); (* ! *)
+       (* f1 *)
+       (  84, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       (  88, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (  92, Lw 9 2 (-8),    [Tinstr],        Some [] );
+       (  96, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 100, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 104, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f2 *)
+       ( 152, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 156, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 160, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 164, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 168, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f3 *)
+       ( 220, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 224, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 228, Sw 2 10 (-8),   [Tinstr],        Some [] ); (* ??? *)
+       ( 232, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 236, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 240, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f4 *)
+       ( 272, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 276, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 280, Sw 2 0 (-4),    [Tinstr],        Some [] );
+       ( 284, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 288, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 292, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f5 *)
+       ( 328, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 332, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 336, Lw 8 2 (-8),    [Tinstr],        Some [] ); (* ??? *)
+       ( 340, Addi 9 10 464,  [Tinstr],        Some [] );
+       ( 344, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 348, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 352, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f6 *)
+       ( 364, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 368, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 372, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 376, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 380, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f7 *)
+       ( 384, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 388, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 392, Sw 2 0 (-20),   [Tinstr],        Some [] );
+       ( 396, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 400, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 404, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
+      [(  8, 16, [] );
+       (  9,  4, [] );
+       ( 10, 40, [] )].
+
+  Definition cex06 : G (MachineState * CodeMap_Impl) :=
+    GenRISCVLazyOrig.ex_gen
+      [(   0, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (   4, Jal 1 128,      [Tinstr; Tcall], Some [(Call 2%nat [10 (* added *)] [])] );
+       (   8, Jal 1 68,       [Tinstr; Tcall], Some [(Call 1%nat [] [])] );
+       (  12, Jal 1 272,      [Tinstr; Tcall], Some [(Call 4%nat [10 (* added *)] [])] );
+       (  16, Jal 1 220,      [Tinstr; Tcall], Some [(Call 3%nat [10 (* added *)] [])] );
+       (* f1 *)
+       (  76, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       (  80, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       (  84, Lw 8 2 (-4),    [Tinstr],        Some [] );
+       (  88, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       (  92, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       (  96, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f2 *)
+       ( 132, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 136, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 140, Add 9 1 10,     [Tinstr],        Some [] );
+       ( 144, Sw 2 10 (-4),   [Tinstr],        Some [] );
+       ( 148, Lw 10 2 (-4),   [Tinstr],        Some [] );
+       ( 152, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 156, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 160, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] );
+       (* f3 *)
+       ( 236, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 240, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 244, Lw 10 2 (-8),   [Tinstr],        Some [] ); (* ??? *)
+       (* ( XXX, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *) *)
+       (* ( XXX, Lw 1 2 0,       [Tinstr; Tr2],   Some [] ); *)
+       (* ( XXX, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] ); *)
+       (* f4 *)
+       ( 284, Sw 2 1 0,       [Tinstr; Th1],   Some [] ); (* header *)
+       ( 288, Addi 2 2 12,    [Tinstr; Th2],   Some [(Alloc 0 12)] );
+       ( 292, Lw 10 2 (-4),   [Tinstr],        Some [] );
+       ( 296, Addi 2 2 (-12), [Tinstr; Tr1],   Some [(Dealloc 0 12)] ); (* footer *)
+       ( 300, Lw 1 2 0,       [Tinstr; Tr2],   Some [] );
+       ( 304, Jalr 1 1 0,     [Tinstr; Tr3],   Some [Return] )]
+      [(  8, 24, [] );
+       (  9, 28, [] );
+       ( 10, 40, [] )].
+  
 End GenRISCVLazyOrig.

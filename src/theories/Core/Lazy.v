@@ -447,7 +447,7 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
     | _ => None
     end.
 
-  Definition v:version := LOAD_NO_CHECK.
+  Definition v:version := PER_DEPTH_TAG.
 
   Definition pstep (m : MachineState) (p : PolicyState) : option PolicyState :=
     let pc := getPc m in
@@ -495,8 +495,17 @@ Module TagPolicyLazyOrig <: TagPolicy RISCV.
         (m',p',ops,o)
     | None => (m,p,nil,Tau)
     end.
+
+  Definition nop : instr := Add 0 0 0.
   
-  Definition WFInitMPState (mp:MPState) := True.
+  Definition tagify_head (sz : Z) (header : list (instr * list Operation)) :
+    list (instr * Tag * list Operation) :=
+    [(nth_default nop (map fst header) 0, [Tinstr; Th1], nth_default [] (map snd header) 0);
+     (nth_default nop (map fst header) 1, [Tinstr; Th2], nth_default [] (map snd header) 1);
+     (nth_default nop (map fst header) 2, [Tinstr; Th3], nth_default [] (map snd header) 2);
+     (nth_default nop (map fst header) 3, [Tinstr], nth_default [] (map snd header) 3);
+     (nth_default nop (map fst header) 4, [Tinstr], nth_default [] (map snd header) 4);
+     (nth_default nop (map fst header) 5, [Tinstr], nth_default [] (map snd header) 5)].
 
 End TagPolicyLazyOrig.
 
